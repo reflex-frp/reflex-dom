@@ -1,0 +1,41 @@
+Name: reflex-dom
+Version: 0.1
+Synopsis: Glitch-free Functional Reactive Programming
+Description: Reflex is a Functional Reactive Programming implementation that provides strong guarantees of deterministic execution and scalable runtime performance
+License: AllRightsReserved
+License-file: LICENSE
+Author: Ryan Trinkle
+Maintainer: ryan.trinkle@gmail.com
+Stability: Experimental
+Category: FRP
+Build-type: Simple
+Cabal-version: >=1.2
+
+library
+  hs-source-dirs: src
+  build-depends:
+    base,
+    reflex,
+    dependent-map,
+    dependent-sum,
+    mtl,
+    transformers,
+    containers,
+    these,
+    lens,
+    ghcjs-dom,
+    safe,
+    text,
+    bytestring
+
+  exposed-modules:
+    Reflex.Dom
+    Reflex.Dom.Class
+    Reflex.Dom.Internal
+    Reflex.Dom.Widget
+    Reflex.Dom.Widget.Basic
+    Reflex.Dom.Widget.Input
+
+  other-extensions: TemplateHaskell
+  ghc-prof-options: -fprof-auto
+  ghc-options: -threaded -Wall -fwarn-tabs -funbox-strict-fields -O2
