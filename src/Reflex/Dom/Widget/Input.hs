@@ -96,3 +96,22 @@ textInput = input' "text" never (constDyn $ Map.empty)
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
 
+data Checkbox t
+  = Checkbox { _checkbox_checked :: Dynamic t Bool
+             }
+
+checkbox :: MonadWidget t m => Bool -> Map String String -> m (Checkbox t)
+checkbox checked attrs = do
+  let mkSelf = do
+        doc <- askDocument
+        Just e <- liftIO $ liftM (fmap castToHTMLInputElement) $ documentCreateElement doc "input"
+        liftIO $ elementSetAttribute e "type" "checkbox"
+        iforM_ attrs $ \attr value -> liftIO $ elementSetAttribute e attr value
+        if checked == True then liftIO $ elementSetAttribute e "checked" "true" else return ()
+        eChange <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
+        return (e, eChange)
+  (e,eChange) <- mkSelf
+  p <- askParent
+  liftIO $ nodeAppendChild p (Just e)
+  dValue <- holdDyn checked eChange
+  return $ Checkbox dValue
