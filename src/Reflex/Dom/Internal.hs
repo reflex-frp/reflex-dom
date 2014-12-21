@@ -155,9 +155,9 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
     postBuild --TODO: This should be run some other way; it seems to cause strictness problems when recursion crosses parent/child boundaries
     return (result, voidAction)
 
-performEvent_ = Widget . addVoidAction
+performEvent_ = addVoidAction
 
-performEvent e = Widget $ do
+performEvent e = do
   (e, reTrigger) <- newEventWithTriggerRef
   --TODO: Actually perform the event
   return e
