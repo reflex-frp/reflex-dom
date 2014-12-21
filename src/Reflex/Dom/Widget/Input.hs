@@ -96,6 +96,53 @@ textInput = input' "text" never (constDyn $ Map.empty)
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
 
+data Dropdown t k
+  = Dropdown { _dropdown_value :: Dynamic t k
+             }
+
+--TODO
+dropdown :: (MonadWidget t m, Show k, Read k) => Dynamic t (Map k String) -> m (Dropdown t (Maybe k))
+dropdown dOptions = do
+  el "div" $ text "dropdown"
+  return $ Dropdown (constDyn Nothing)
+
+--dropdown :: forall t m k. (MonadWidget t m, Show k, Read k) => Dynamic t (Map k String) -> m (Dropdown t (Maybe k))
+--dropdown dOptions = do
+--  let triggerChange (e, reChangeTrigger) runFrame = do
+--        v <- htmlSelectElementGetValue e
+--        readRef reChangeTrigger >>= mapM_ (\eChangeTrigger -> runFrame $ DMap.singleton eChangeTrigger $ readMay v)
+--  let mkSelf = do
+--        doc <- askDocument
+--        Just e <- liftIO $ liftM (fmap castToHTMLSelectElement) $ documentCreateElement doc "select"
+--        liftIO $ elementSetAttribute e "class" "form-control"
+--        runFrame <- askRunFrame
+--        reChangeTrigger <- newRef Nothing
+--        eChange <- newEventWithTrigger $ \eChangeTrigger -> do
+--          writeRef reChangeTrigger $ Just eChangeTrigger
+--          unsubscribe <- liftIO $ elementOnchange e $ liftIO $ triggerChange (e, reChangeTrigger) runFrame
+--          return $ do
+--            writeRef reChangeTrigger Nothing
+--            liftIO unsubscribe
+--        return ((e, reChangeTrigger), eChange)
+--  eCreated <- performEvent . fmap (const mkSelf) =<< getEInit
+--  dState <- holdDyn Nothing $ fmap (Just . (^. _1)) eCreated
+--  putEChildren $ fmap ((:[]) . toNode . fst . (^. _1)) eCreated
+--  let updateOptions :: Map k String -> Maybe (HTMLSelectElement, Ref h (Maybe (EventTrigger t (Maybe k)))) -> h ()
+--      updateOptions options = maybe (return ()) $ \myState@(selectElement, _) -> do
+--        doc <- askDocument
+--        liftIO $ htmlElementSetInnerHTML selectElement ""
+--        iforM_ options $ \k optionText -> do
+--          Just optionElement <- liftIO $ liftM (fmap castToHTMLOptionElement) $ documentCreateElement doc "option"
+--          liftIO $ elementSetAttribute optionElement "value" $ show k
+--          _ <- setInnerText optionElement optionText
+--          liftIO $ nodeAppendChild selectElement $ Just optionElement
+--        runFrame <- askRunFrame
+--        liftIO $ triggerChange myState runFrame
+--  performEvent_ . updated =<< combineDyn updateOptions dOptions dState
+--  eChange <- liftM switch $ hold never $ fmap (^. _2) eCreated
+--  dValue <- holdDyn Nothing eChange
+--  return $ Dropdown dValue
+
 data Checkbox t
   = Checkbox { _checkbox_checked :: Dynamic t Bool
              }
