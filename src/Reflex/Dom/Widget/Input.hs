@@ -6,8 +6,15 @@ import Reflex.Dom.Widget.Basic
 
 import Reflex
 import Data.Map (Map)
+import GHCJS.DOM.Document
 import GHCJS.DOM.HTMLInputElement
+import GHCJS.DOM.Node
+import GHCJS.DOM.Element
 import Data.Monoid
+import Data.Map as Map
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Lens
 
 input' :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextInput t)
 input' inputType eSetValue dAttrs = do
@@ -82,3 +89,10 @@ data TextInput t
               , _textInput_hasFocus :: Dynamic t Bool
               , _textInput_element :: Dynamic t (Maybe HTMLInputElement)
               }
+
+textInput :: MonadWidget t m => m (TextInput t)
+textInput = input' "text" never (constDyn $ Map.empty)
+
+textInputGetEnter :: Reflex t => TextInput t -> Event t ()
+textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
+
