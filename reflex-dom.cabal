@@ -26,7 +26,8 @@ library
     ghcjs-dom,
     safe,
     text,
-    bytestring
+    bytestring,
+    data-default
 
   exposed-modules:
     Reflex.Dom

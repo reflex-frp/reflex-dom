@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances #-}
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
@@ -26,37 +26,45 @@ import Data.Monoid
 import Data.These
 import Data.Align
 
-type Attributes = Map String String
+type AttributeMap = Map String String
 
 data El t
-  = El { _el_element :: Dynamic t (Maybe HTMLElement)
+  = El { _el_element :: HTMLElement
        , _el_clicked :: Event t ()
        , _el_keypress :: Event t Int
        }
 
-buildElement :: MonadWidget t m => String -> Either Attributes (Dynamic t Attributes) -> m a -> m (HTMLElement, a)
-buildElement elementTag attrs child = do
+class Attributes m a where
+  addAttributes :: IsElement e => a -> e -> m ()
+
+instance MonadIO m => Attributes m AttributeMap where
+  addAttributes curAttrs e = liftIO $ imapM_ (elementSetAttribute e) curAttrs
+
+instance MonadWidget t m => Attributes m (Dynamic t AttributeMap) where
+  addAttributes attrs e = do
+    schedulePostBuild $ do
+      curAttrs <- sample $ current attrs
+      liftIO $ imapM_ (elementSetAttribute e) curAttrs
+    addVoidAction $ flip fmap (updated attrs) $ \newAttrs -> liftIO $ do
+      oldAttrs <- maybe (return Set.empty) namedNodeMapGetNames =<< elementGetAttributes e
+      forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
+      imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
+
+buildEmptyElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m HTMLElement
+buildEmptyElement elementTag attrs = do
   doc <- askDocument
   p <- askParent
   Just e <- liftIO $ documentCreateElement doc elementTag
-  either addStaticAttributes addDynamicAttributes attrs e
+  addAttributes attrs e
   _ <- liftIO $ nodeAppendChild p $ Just e
---  result <- local (widgetEnvParent .~ toNode e) $ unWidget child
+  return $ castToHTMLElement e
+
+-- We need to decide what type of attrs we've got statically, because it will often be a recursively defined value, in which case inspecting it will lead to a cycle
+buildElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m a -> m (HTMLElement, a)
+buildElement elementTag attrs child = do
+  e <- buildEmptyElement elementTag attrs
   result <- subWidget (toNode e) child
-  return (castToHTMLElement e, result) --TODO: events --TODO: Element doesn't need to be Dynamic or Maybe
-
-addStaticAttributes :: (MonadIO m, IsElement e) => Attributes -> e -> m ()
-addStaticAttributes curAttrs e = liftIO $ imapM_ (elementSetAttribute e) curAttrs
-
-addDynamicAttributes :: (MonadWidget t m, IsElement e) => Dynamic t Attributes -> e -> m ()
-addDynamicAttributes attrs e = do
-  schedulePostBuild $ do
-    curAttrs <- sample $ current attrs
-    liftIO $ imapM_ (elementSetAttribute e) curAttrs
-  addVoidAction $ flip fmap (updated attrs) $ \newAttrs -> liftIO $ do
-    oldAttrs <- maybe (return Set.empty) namedNodeMapGetNames =<< elementGetAttributes e
-    forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
-    imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
+  return (e, result)
 
 namedNodeMapGetNames :: IsNamedNodeMap self => self -> IO (Set String)
 namedNodeMapGetNames self = do
@@ -95,6 +103,7 @@ dyn child = do
   childVoidAction <- hold never newChildVoidAction
   addVoidAction $ switch childVoidAction
   doc <- askDocument
+  runWidget <- getRunWidget
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
         result <- runWidget df c
@@ -120,6 +129,7 @@ listWithKey vals mkChild = do
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
   children <- hold Map.empty newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
+  runWidget <- getRunWidget
   let buildChild df k v = runWidget df $ do
         childStart <- text' ""
         result <- mkChild k =<< holdDyn v (fmapMaybe (Map.lookup k) (updated vals))
@@ -200,34 +210,34 @@ wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreate
 wrapElement e = do
   clicked <- wrapDomEvent e elementOnclick (return ())
   keypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
-  return $ El (constDyn $ Just e) clicked keypress  
+  return $ El e clicked keypress  
 
 elDynAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag (Right attrs) child
+  (e, result) <- buildElement elementTag attrs child
   e' <- wrapElement e
   return (e', result)
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m a
 elAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag (Left attrs) child
+  (_, result) <- buildElement elementTag attrs child
   return result
 
 {-# INLINABLE el' #-}
 --el' :: forall t m a. MonadWidget t m => String -> m a -> m (El t, a)
-el' tag child = elAttr' tag Map.empty child
+el' tag child = elAttr' tag (Map.empty :: AttributeMap) child
 
 {-# INLINABLE elAttr' #-}
 --elAttr' :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m (El t, a)
 elAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag (Left attrs) child
+  (e, result) <- buildElement elementTag attrs child
   e' <- wrapElement e
   return (e', result)
 
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m a
 elDynAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag (Right attrs) child
+  (_, result) <- buildElement elementTag attrs child
   return result
 
 {-# INLINABLE el #-}

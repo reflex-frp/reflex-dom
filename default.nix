@@ -1,6 +1,6 @@
 { cabal, dependentMap, ghcjsDom, lens
 , mtl, reflex, safe, text, these
-, transformers
+, transformers, dataDefault
 }:
 
 cabal.mkDerivation (self: {
@@ -17,6 +17,7 @@ cabal.mkDerivation (self: {
     ghcjsDom
     safe
     text
+    dataDefault
   ];
   meta = {
     description = "Functional Reactive DOM widgets";

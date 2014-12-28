@@ -149,18 +149,13 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
   addVoidAction a = Widget $ widgetStateVoidActions %= (a:)
   subWidget n child = Widget $ local (widgetEnvParent .~ toNode n) $ unWidget child
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
-  runWidget rootElement w = do
-    (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
-    let voidAction = mergeWith (>>) voidActions
-    postBuild --TODO: This should be run some other way; it seems to cause strictness problems when recursion crosses parent/child boundaries
-    return (result, voidAction)
+  getRunWidget = return runWidget
 
-performEvent_ = addVoidAction
-
-performEvent e = do
-  (e, reTrigger) <- newEventWithTriggerRef
-  --TODO: Actually perform the event
-  return e
+runWidget rootElement w = do
+  (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
+  let voidAction = mergeWith (>>) voidActions
+  postBuild --TODO: This should be run some other way; it seems to cause strictness problems when recursion crosses parent/child boundaries
+  return (result, voidAction)
 
 holdOnStartup :: MonadWidget t m => a -> WidgetHost m a -> m (Behavior t a)
 holdOnStartup a0 ma = do

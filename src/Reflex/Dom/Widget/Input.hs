@@ -1,27 +1,54 @@
-{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances #-}
 module Reflex.Dom.Widget.Input where
 
 import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 
 import Reflex
+import Reflex.Host.Class
 import Data.Map (Map)
 import GHCJS.DOM.Document
 import GHCJS.DOM.HTMLInputElement
 import GHCJS.DOM.Node
 import GHCJS.DOM.Element
+import GHCJS.DOM.HTMLSelectElement
+import GHCJS.DOM.EventM
+import GHCJS.DOM.UIEvent
 import Data.Monoid
 import Data.Map as Map
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
+import Data.Default
+import Data.Maybe
+import Safe
+import Data.Dependent.Sum (DSum (..))
 
 input' :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextInput t)
 input' inputType eSetValue dAttrs = do
+  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" inputType) dAttrs
+  performEvent_ $ fmap (liftIO . htmlInputElementSetValue e) eSetValue
+  eChange <- wrapDomEvent e elementOninput $ liftIO $ htmlInputElementGetValue e
+  postGui <- askPostGui
+  runWithActions <- askRunWithActions
+  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
+    unsubscribeOnblur <- liftIO $ elementOnblur e $ liftIO $ do
+      postGui $ runWithActions [eChangeFocusTrigger :=> False]
+    unsubscribeOnfocus <- liftIO $ elementOnfocus e $ liftIO $ do
+      postGui $ runWithActions [eChangeFocusTrigger :=> True]
+    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
+  dFocus <- holdDyn False eChangeFocus
+  eKeypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  eKeydown <- wrapDomEvent e elementOnkeydown $ liftIO . uiEventGetKeyCode =<< event
+  eKeyup <- wrapDomEvent e elementOnkeyup $ liftIO . uiEventGetKeyCode =<< event
+  dValue <- holdDyn "" $ leftmost [eSetValue, eChange]
+  return $ TextInput dValue eKeypress eKeydown eKeyup dFocus e
+
+{-  
   dSetValue <- holdDyn "" eSetValue
   dynText =<< combineDyn (\v a -> "Input placeholder: " <> show (inputType, v, a)) dSetValue dAttrs
   return $ TextInput (constDyn "") never never never (constDyn False) (constDyn Nothing)
-{-
+
 input' inputType eSetValue dAttrs = do
   dEffectiveAttrs <- mapDyn (Map.insert "type" inputType) dAttrs
   let mkSelf (initialValue, initialAttrs) = do
@@ -58,28 +85,6 @@ input' inputType eSetValue dAttrs = do
   eKeyup <- liftM switch $ hold never $ fmap (^. _5) eCreated
   return $ TextInput dValue eKeypress eKeydown eKeyup dFocus dMyElement
 -}
-checkboxView :: MonadWidget t m => Dynamic t (Map String String) -> Dynamic t Bool -> m (Event t ())
-checkboxView dAttrs dValue = do
-  dynText =<< mapDyn (\x -> if x then "X" else "_") dValue
-  return never
-{-
-checkboxView dAttrs dValue = do
-  dEffectiveAttrs <- mapDyn (Map.insert "type" "checkbox") dAttrs
-  let mkSelf (initialValue, initialAttrs) = do
-        doc <- askDocument
-        Just e <- liftIO $ liftM (fmap castToHTMLInputElement) $ documentCreateElement doc "input"
-        iforM_ initialAttrs $ \attr value -> liftIO $ elementSetAttribute e attr value
-        liftIO $ htmlInputElementSetChecked e initialValue
-        eClicked <- wrapDomEvent e elementOnclick preventDefault
-        return (e, eClicked)
-  dInitial <- combineDyn (,) dValue dEffectiveAttrs
-  eCreated <- performEvent . fmap mkSelf . tagDyn dInitial =<< getEInit
-  putEChildren $ fmap ((:[]) . toNode . (^. _1)) eCreated
-  dElement <- holdDyn Nothing $ fmap (Just . (^. _1)) eCreated
-  performEvent_ . updated =<< combineDyn (\me a -> forM_ me $ \e -> liftIO $ setElementAttributes e a) dElement dEffectiveAttrs
-  performEvent_ . updated =<< combineDyn (\v me -> maybe (return ()) (\e -> liftIO $ htmlInputElementSetChecked e v) me) dValue dElement
-  liftM switch $ hold never $ fmap (^. _2) eCreated
--}
 
 data TextInput t
   = TextInput { _textInput_value :: Dynamic t String
@@ -87,7 +92,7 @@ data TextInput t
               , _textInput_keydown :: Event t Int
               , _textInput_keyup :: Event t Int
               , _textInput_hasFocus :: Dynamic t Bool
-              , _textInput_element :: Dynamic t (Maybe HTMLInputElement)
+              , _textInput_element :: HTMLInputElement
               }
 
 textInput :: MonadWidget t m => m (TextInput t)
@@ -96,69 +101,88 @@ textInput = input' "text" never (constDyn $ Map.empty)
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
 
-data Dropdown t k
-  = Dropdown { _dropdown_value :: Dynamic t k
+{-
+type family Controller sm t a where
+  Controller Edit t a = (a, Event t a) -- Initial value and setter
+  Controller View t a = Dynamic t a -- Value (always)
+
+type family Output sm t a where
+  Output Edit t a = Dynamic t a -- Value (always)
+  Output View t a = Event t a -- Requested changes
+
+data CheckboxConfig sm t
+   = CheckboxConfig { _checkbox_input :: Controller sm t Bool
+                    , _checkbox_attributes :: Attributes
+                    }
+
+instance Reflex t => Default (CheckboxConfig Edit t) where
+  def = CheckboxConfig (False, never) mempty
+
+data Checkbox sm t
+  = Checkbox { _checkbox_output :: Output sm t Bool
              }
 
---TODO
-dropdown :: (MonadWidget t m, Show k, Read k) => Dynamic t (Map k String) -> m (Dropdown t (Maybe k))
-dropdown dOptions = do
-  el "div" $ text "dropdown"
-  return $ Dropdown (constDyn Nothing)
+data StateMode = Edit | View
 
---dropdown :: forall t m k. (MonadWidget t m, Show k, Read k) => Dynamic t (Map k String) -> m (Dropdown t (Maybe k))
---dropdown dOptions = do
---  let triggerChange (e, reChangeTrigger) runFrame = do
---        v <- htmlSelectElementGetValue e
---        readRef reChangeTrigger >>= mapM_ (\eChangeTrigger -> runFrame $ DMap.singleton eChangeTrigger $ readMay v)
---  let mkSelf = do
---        doc <- askDocument
---        Just e <- liftIO $ liftM (fmap castToHTMLSelectElement) $ documentCreateElement doc "select"
---        liftIO $ elementSetAttribute e "class" "form-control"
---        runFrame <- askRunFrame
---        reChangeTrigger <- newRef Nothing
---        eChange <- newEventWithTrigger $ \eChangeTrigger -> do
---          writeRef reChangeTrigger $ Just eChangeTrigger
---          unsubscribe <- liftIO $ elementOnchange e $ liftIO $ triggerChange (e, reChangeTrigger) runFrame
---          return $ do
---            writeRef reChangeTrigger Nothing
---            liftIO unsubscribe
---        return ((e, reChangeTrigger), eChange)
---  eCreated <- performEvent . fmap (const mkSelf) =<< getEInit
---  dState <- holdDyn Nothing $ fmap (Just . (^. _1)) eCreated
---  putEChildren $ fmap ((:[]) . toNode . fst . (^. _1)) eCreated
---  let updateOptions :: Map k String -> Maybe (HTMLSelectElement, Ref h (Maybe (EventTrigger t (Maybe k)))) -> h ()
---      updateOptions options = maybe (return ()) $ \myState@(selectElement, _) -> do
---        doc <- askDocument
---        liftIO $ htmlElementSetInnerHTML selectElement ""
---        iforM_ options $ \k optionText -> do
---          Just optionElement <- liftIO $ liftM (fmap castToHTMLOptionElement) $ documentCreateElement doc "option"
---          liftIO $ elementSetAttribute optionElement "value" $ show k
---          _ <- setInnerText optionElement optionText
---          liftIO $ nodeAppendChild selectElement $ Just optionElement
---        runFrame <- askRunFrame
---        liftIO $ triggerChange myState runFrame
---  performEvent_ . updated =<< combineDyn updateOptions dOptions dState
---  eChange <- liftM switch $ hold never $ fmap (^. _2) eCreated
---  dValue <- holdDyn Nothing eChange
---  return $ Dropdown dValue
+--TODO: There must be a more generic way to get this witness and allow us to case on the type-level StateMode
+data StateModeWitness (sm :: StateMode) where
+  EditWitness :: StateModeWitness Edit
+  ViewWitness :: StateModeWitness View
+
+class HasStateModeWitness (sm :: StateMode) where
+  stateModeWitness :: StateModeWitness sm
+
+instance HasStateModeWitness Edit where
+  stateModeWitness = EditWitness
+
+instance HasStateModeWitness View where
+  stateModeWitness = ViewWitness
+-}
 
 data Checkbox t
-  = Checkbox { _checkbox_checked :: Dynamic t Bool
+  = Checkbox { _checkbox_value :: Dynamic t Bool
              }
 
+--TODO: Make attributes possibly dynamic
+-- | Create an editable checkbox
+--   Note: if the "type" or "checked" attributes are provided as attributes, they will be ignored
 checkbox :: MonadWidget t m => Bool -> Map String String -> m (Checkbox t)
 checkbox checked attrs = do
-  let mkSelf = do
-        doc <- askDocument
-        Just e <- liftIO $ liftM (fmap castToHTMLInputElement) $ documentCreateElement doc "input"
-        liftIO $ elementSetAttribute e "type" "checkbox"
-        iforM_ attrs $ \attr value -> liftIO $ elementSetAttribute e attr value
-        if checked == True then liftIO $ elementSetAttribute e "checked" "true" else return ()
-        eChange <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
-        return (e, eChange)
-  (e,eChange) <- mkSelf
-  p <- askParent
-  liftIO $ nodeAppendChild p (Just e)
+  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" $ Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") attrs
+  eChange <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
   dValue <- holdDyn checked eChange
   return $ Checkbox dValue
+
+checkboxView :: MonadWidget t m => Dynamic t (Map String String) -> Dynamic t Bool -> m (Event t Bool)
+checkboxView dAttrs dValue = do
+  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "checkbox") dAttrs
+  eClicked <- wrapDomEvent e elementOnclick $ do
+    preventDefault
+    liftIO $ htmlInputElementGetChecked e
+  performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e v) $ updated dValue
+  return eClicked
+
+data Dropdown t k
+   = Dropdown { _dropdown_value :: Dynamic t k
+              }
+
+--TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
+--TODO: Don't bake in any CSS classes
+-- | Create a dropdown box
+--   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
+dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
+dropdown k0 options = do
+  (eRaw, _) <- elAttr' "select" ("class" =: "form-control") $ do
+    optionsWithDefault <- mapDyn (`Map.union` (k0 =: "")) options
+    listWithKey optionsWithDefault $ \k v -> do
+      elAttr "option" ("value" =: show k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
+  let e = castToHTMLSelectElement $ _el_element eRaw
+  eChange <- wrapDomEvent e elementOnchange $ do
+    kStr <- liftIO $ htmlSelectElementGetValue e
+    return $ readMay kStr
+  let readKey opts mk = fromMaybe k0 $ do
+        k <- mk
+        guard $ Map.member k opts
+        return k
+  dValue <- combineDyn readKey options =<< holdDyn (Just k0) eChange
+  return $ Dropdown dValue

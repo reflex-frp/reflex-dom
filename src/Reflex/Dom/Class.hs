@@ -58,7 +58,7 @@ class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger 
   subWidget :: Node -> m a -> m a
   schedulePostBuild :: WidgetHost m () -> m ()
   addVoidAction :: Event t (WidgetHost m ()) -> m ()
-  runWidget :: IsNode n => n -> m a -> WidgetHost m (a, Event t (WidgetHost m ()))
+  getRunWidget :: IsNode n => m (n -> m a -> WidgetHost m (a, Event t (WidgetHost m ())))
 
 class Monad m => HasDocument m where
   askDocument :: m HTMLDocument
@@ -92,6 +92,19 @@ instance MonadWidget t m => MonadWidget t (ReaderT r m) where
     lift $ subWidget n $ runReaderT w r
   schedulePostBuild = lift . schedulePostBuild
   addVoidAction = lift . addVoidAction
+  getRunWidget = do
+    r <- ask
+    runWidget <- lift getRunWidget
+    return $ \rootElement w -> runWidget rootElement $ runReaderT w r
+
+performEvent_ = addVoidAction
+
+performEvent e = do
+  (eResult, reResultTrigger) <- newEventWithTriggerRef
+  addVoidAction $ ffor e $ \o -> do
+    result <- o
+    runFrameWithTriggerRef reResultTrigger result
+  return eResult
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
