@@ -51,6 +51,7 @@ class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger 
       , MonadIO (WidgetHost m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO
+      , MonadFix m
       ) => MonadWidget t m | m -> t where
   type WidgetHost m :: * -> *
   type GuiAction m :: * -> *

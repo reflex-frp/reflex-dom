@@ -136,6 +136,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
          , MonadIO m, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
+         , MonadFix m
          ) => MonadWidget t (Widget t (Gui t h m)) where
   type WidgetHost (Widget t (Gui t h m)) = Gui t h m
   type GuiAction (Widget t (Gui t h m)) = h
