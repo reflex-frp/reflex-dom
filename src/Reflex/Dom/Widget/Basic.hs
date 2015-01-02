@@ -164,6 +164,15 @@ listWithKey vals mkChild = do
     runFrameWithTriggerRef newChildrenTriggerRef newState
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
+selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k) => Dynamic t k -> Dynamic t (Map k v) -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -> m (Event t k)
+selectViewListWithKey_ selection vals mkChild = do
+  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
+  selectChild <- listWithKey vals $ \k v -> do
+    selected <- getDemuxed selectionDemux k
+    selectSelf <- mkChild k v selected
+    return $ fmap (const k) selectSelf
+  liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+
 --------------------------------------------------------------------------------
 -- Basic DOM manipulation helpers
 --------------------------------------------------------------------------------
