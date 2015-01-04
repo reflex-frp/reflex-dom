@@ -107,6 +107,15 @@ performEvent e = do
     runFrameWithTriggerRef reResultTrigger result
   return eResult
 
+performEventAsync :: forall t m a. MonadWidget t m => Event t ((a -> IO ()) -> WidgetHost m ()) -> m (Event t a)
+performEventAsync e = do
+  (eResult, reResultTrigger) <- newEventWithTriggerRef
+  addVoidAction $ ffor e $ \o -> do
+    postGui <- askPostGui
+    runWithActions <- askRunWithActions
+    o $ \a -> postGui $ mapM_ (\t -> runWithActions [t :=> a]) =<< readRef reResultTrigger
+  return eResult
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 {-
