@@ -1,6 +1,8 @@
 {-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances #-}
 module Reflex.Dom.Widget.Input where
 
+import Prelude hiding (forM_)
+
 import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 
@@ -16,13 +18,15 @@ import GHCJS.DOM.EventM
 import GHCJS.DOM.UIEvent
 import Data.Monoid
 import Data.Map as Map
-import Control.Monad
+import Control.Monad hiding (forM_)
 import Control.Monad.IO.Class
 import Control.Lens
 import Data.Default
 import Data.Maybe
 import Safe
 import Data.Dependent.Sum (DSum (..))
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.Foldable
 
 input' :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextInput t)
 input' inputType eSetValue dAttrs = do
@@ -159,6 +163,9 @@ checkboxView dAttrs dValue = do
   eClicked <- wrapDomEvent e elementOnclick $ do
     preventDefault
     liftIO $ htmlInputElementGetChecked e
+  schedulePostBuild $ do
+    v <- sample $ current dValue
+    when v $ liftIO $ htmlInputElementSetChecked e True
   performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e v) $ updated dValue
   return eClicked
 
@@ -168,6 +175,7 @@ data Dropdown t k
 
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
 --TODO: Don't bake in any CSS classes
+--TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
 dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
@@ -185,4 +193,18 @@ dropdown k0 options = do
         guard $ Map.member k opts
         return k
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) eChange
+  return $ Dropdown dValue
+
+--TODO: Get rid of Show k and Read k by indexing the possible values ourselves
+dropdown' :: forall k t m. (MonadWidget t m, Eq k, Show k, Read k) => k -> NonEmpty (k, String) -> m (Dropdown t k)
+dropdown' k0 ks = do
+  (eRaw, _) <- elAttr' "select" ("class" =: "form-control") $ do
+    forM_ ks $ \(k, name) -> do
+      elAttr "option" ("value" =: show k <> if k == k0 then "selected" =: "selected" else mempty) $ text name
+  let e = castToHTMLSelectElement $ _el_element eRaw
+  eChange <- wrapDomEvent e elementOnchange $ do
+    kStr <- liftIO $ htmlSelectElementGetValue e
+    return $ readMay kStr
+  let readKey mk = fromMaybe k0 mk
+  dValue <- mapDyn readKey =<< holdDyn (Just k0) eChange
   return $ Dropdown dValue

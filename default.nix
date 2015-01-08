@@ -1,6 +1,6 @@
 { cabal, dependentMap, ghcjsDom, lens
 , mtl, reflex, safe, text, these
-, transformers, dataDefault
+, transformers, dataDefault, semigroups
 }:
 
 cabal.mkDerivation (self: {
@@ -18,6 +18,7 @@ cabal.mkDerivation (self: {
     safe
     text
     dataDefault
+    semigroups
   ];
   meta = {
     description = "Functional Reactive DOM widgets";

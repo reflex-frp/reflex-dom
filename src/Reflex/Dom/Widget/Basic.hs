@@ -26,6 +26,8 @@ import Data.Monoid
 import Data.These
 import Data.Align
 
+import Data.Maybe
+
 type AttributeMap = Map String String
 
 data El t
@@ -94,40 +96,62 @@ dynText s = do
     liftIO $ nodeSetNodeValue n curS
   addVoidAction $ fmap (liftIO . nodeSetNodeValue n) $ updated s
 
-dyn :: -- (Reflex t, MonadHold t m, MonadSample t m, HasDocument m, MonadIO m, HasPostGui t h m, ReflexHost t, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO) =>
-       MonadWidget t m => Dynamic t (m a) -> m ()
+--TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
+dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   startPlaceholder <- text' ""
   endPlaceholder <- text' ""
-  (newChildVoidAction, newChildVoidActionTriggerRef) <- newEventWithTriggerRef
-  childVoidAction <- hold never newChildVoidAction
+  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
+  childVoidAction <- hold never $ fmap snd newChildBuilt
   addVoidAction $ switch childVoidAction
   doc <- askDocument
   runWidget <- getRunWidget
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
         result <- runWidget df c
-        runFrameWithTriggerRef newChildVoidActionTriggerRef $ snd result
+        runFrameWithTriggerRef newChildBuiltTriggerRef result
         Just p <- liftIO $ nodeGetParentNode endPlaceholder
         liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
         return ()
   schedulePostBuild $ do
     c <- sample $ current child
     build c
-  addVoidAction $ flip fmap (updated child) $ \newChild -> do
+  addVoidAction $ ffor (updated child) $ \newChild -> do
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
     build newChild
-  return ()
+  return $ fmap fst newChildBuilt
+
+widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
+widgetHold child0 newChild = do
+  startPlaceholder <- text' ""
+  result0 <- child0
+  endPlaceholder <- text' ""
+  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
+  childVoidAction <- hold never $ fmap snd newChildBuilt
+  addVoidAction $ switch childVoidAction
+  doc <- askDocument
+  runWidget <- getRunWidget
+  let build c = do
+        Just df <- liftIO $ documentCreateDocumentFragment doc
+        result <- runWidget df c
+        runFrameWithTriggerRef newChildBuiltTriggerRef result
+        Just p <- liftIO $ nodeGetParentNode endPlaceholder
+        liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+        return ()
+  addVoidAction $ ffor newChild $ \c -> do
+    liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
+    build c
+  holdDyn result0 $ fmap fst newChildBuilt
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
-  --forall t h m k v a. (Show k, Ord k, Reflex t, MonadHold t m, MonadSample t m, HasDocument m, MonadIO m, HasPostGui t h m, ReflexHost t, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO) => Dynamic t (Map k v) -> (k -> Dynamic t v -> Widget t m a) -> Widget t m (Dynamic t (Map k a))
 listWithKey vals mkChild = do
   doc <- askDocument
   startPlaceholder <- text' ""
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
-  children <- hold Map.empty newChildren
+--  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
+  children <- hold Map.empty $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
   runWidget <- getRunWidget
   let buildChild df k v = runWidget df $ do
@@ -148,9 +172,11 @@ listWithKey vals mkChild = do
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
     newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       This ((_, (start, end)), _) -> do
+        liftIO $ putStrLn "Deleting item"
         liftIO $ deleteBetweenInclusive start end
         return Nothing
       That v -> do
+        liftIO $ putStrLn "Creating item"
         Just df <- liftIO $ documentCreateDocumentFragment doc
         s <- buildChild df k v
         let placeholder = case Map.lookupGT k curState of
@@ -160,8 +186,12 @@ listWithKey vals mkChild = do
         liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       These state _ -> do
+        liftIO $ putStrLn "Leaving item unchanged"
         return $ Just state
+    liftIO $ putStrLn "Triggering newChildren"
+    liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
+    liftIO $ putStrLn "Triggering newChildren done"
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k) => Dynamic t k -> Dynamic t (Map k v) -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -> m (Event t k)

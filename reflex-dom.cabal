@@ -27,7 +27,8 @@ library
     safe,
     text,
     bytestring,
-    data-default
+    data-default,
+    semigroups
 
   exposed-modules:
     Reflex.Dom
