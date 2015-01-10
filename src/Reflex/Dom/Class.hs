@@ -57,6 +57,7 @@ class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger 
   type GuiAction m :: * -> *
   askParent :: m Node
   subWidget :: Node -> m a -> m a
+  liftWidgetHost :: WidgetHost m a -> m a --TODO: Is this a good idea?
   schedulePostBuild :: WidgetHost m () -> m ()
   addVoidAction :: Event t (WidgetHost m ()) -> m ()
   getRunWidget :: IsNode n => m (n -> m a -> WidgetHost m (a, Event t (WidgetHost m ())))
@@ -91,6 +92,7 @@ instance MonadWidget t m => MonadWidget t (ReaderT r m) where
   subWidget n w = do
     r <- ask
     lift $ subWidget n $ runReaderT w r
+  liftWidgetHost = lift . liftWidgetHost
   schedulePostBuild = lift . schedulePostBuild
   addVoidAction = lift . addVoidAction
   getRunWidget = do
