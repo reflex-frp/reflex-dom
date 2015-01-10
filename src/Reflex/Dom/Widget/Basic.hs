@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo #-}
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
@@ -150,7 +150,7 @@ listWithKey vals mkChild = do
   startPlaceholder <- text' ""
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
---  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
+  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
   children <- hold Map.empty $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
   runWidget <- getRunWidget
@@ -304,3 +304,4 @@ dynHtml ds = do
   putEChildren $ fmap ((:[]) . toNode) eCreated
 
 -}
+
