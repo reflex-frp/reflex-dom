@@ -312,4 +312,15 @@ dynHtml ds = do
   putEChildren $ fmap ((:[]) . toNode) eCreated
 
 -}
+data Link t
+  = Link { _link_clicked :: Event t ()
+         }
+
+linkClass :: MonadWidget t m => String -> String -> m (Link t)
+linkClass s c = do
+  (l,_) <- elAttr' "a" ("class" =: c) $ text s
+  return $ Link $ _el_clicked l
+
+link :: MonadWidget t m => String -> m (Link t)
+link s = linkClass s ""
 
