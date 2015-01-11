@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo #-}
+
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
@@ -25,6 +26,8 @@ import Control.Lens
 import Data.Monoid
 import Data.These
 import Data.Align
+
+import GHCJS.Types
 
 import Data.Maybe
 
@@ -102,7 +105,9 @@ dyn child = do
   startPlaceholder <- text' ""
   endPlaceholder <- text' ""
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  childVoidAction <- hold never $ fmap snd newChildBuilt
+  let e = fmap snd newChildBuilt --TODO: Get rid of this hack
+  childVoidAction <- hold never e
+  performEvent_ $ fmap (const $ return ()) e --TODO: Get rid of this hack
   addVoidAction $ switch childVoidAction
   doc <- askDocument
   runWidget <- getRunWidget
@@ -207,13 +212,16 @@ selectViewListWithKey_ selection vals mkChild = do
 -- Basic DOM manipulation helpers
 --------------------------------------------------------------------------------
 
+instance Eq (JSRef a) where
+  (==) = eqRef
+
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenExclusive s e = do
   Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   let go = do
         Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-        done <- nodeIsEqualNode s $ Just x
-        when (not done) $ do
+--        done <- nodeIsEqualNode s $ Just x
+        when (unNode (toNode s) /= unNode (toNode x)) $ do
           nodeRemoveChild currentParent $ Just x
           go
   go
