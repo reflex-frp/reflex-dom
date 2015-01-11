@@ -28,9 +28,10 @@ import Data.Dependent.Sum (DSum (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Foldable
 
-input' :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextInput t)
-input' inputType eSetValue dAttrs = do
+input' :: MonadWidget t m => String -> String -> Event t String -> Dynamic t (Map String String) -> m (TextInput t)
+input' inputType initial eSetValue dAttrs = do
   e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" inputType) dAttrs
+  liftIO $ htmlInputElementSetValue e initial
   performEvent_ $ fmap (liftIO . htmlInputElementSetValue e) eSetValue
   eChange <- wrapDomEvent e elementOninput $ liftIO $ htmlInputElementGetValue e
   postGui <- askPostGui
@@ -100,7 +101,7 @@ data TextInput t
               }
 
 textInput :: MonadWidget t m => m (TextInput t)
-textInput = input' "text" never (constDyn $ Map.empty)
+textInput = input' "text" "" never (constDyn $ Map.empty)
 
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
@@ -220,7 +221,7 @@ searchInput initial results = searchInput' initial results searchInputResultsLis
 
 searchInput' :: forall t m a k. (MonadWidget t m, Ord k) => Map k (String, a) -> Event t (Map k (String, a)) -> (Dynamic t (Map k (String, a)) -> m (Event t (String, a))) -> m (Event t String, Event t (String, a))
 searchInput' initial results listBuilder = do
-  rec input <- input' "text" eSetValue $ constDyn $ Map.fromList [("class", "form-control"), ("placeholder", "Search")]
+  rec input <- input' "text" "" eSetValue $ constDyn $ Map.fromList [("class", "form-control"), ("placeholder", "Search")]
       dResults <- holdDyn initial $ leftmost [eClearResults, results]
       eMadeChoice <- listBuilder dResults
       let eSetValue = fmap fst eMadeChoice
