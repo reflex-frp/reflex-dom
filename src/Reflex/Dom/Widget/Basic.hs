@@ -312,6 +312,7 @@ dynHtml ds = do
   putEChildren $ fmap ((:[]) . toNode) eCreated
 
 -}
+
 data Link t
   = Link { _link_clicked :: Event t ()
          }
@@ -323,4 +324,13 @@ linkClass s c = do
 
 link :: MonadWidget t m => String -> m (Link t)
 link s = linkClass s ""
+
+newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
+
+workflowView :: forall t m a. MonadWidget t m => Workflow t m a -> m (Event t a)
+workflowView w0 = do
+  rec eResult <- dyn =<< mapDyn unWorkflow =<< holdDyn w0 eReplace
+      eReplace <- liftM switch $ hold never $ fmap snd eResult
+      eResult `seq` eReplace `seq` return ()
+  return $ fmap fst eResult
 
