@@ -334,3 +334,49 @@ workflowView w0 = do
       eResult `seq` eReplace `seq` return ()
   return $ fmap fst eResult
 
+divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
+divClass = elAttr "div" . Map.singleton "class"
+
+dtdd :: forall t m a. MonadWidget t m => String -> m a -> m a
+dtdd h w = do
+  el "dt" $ text h
+  el "dd" $ w
+
+blank :: forall t m. MonadWidget t m => m ()
+blank = return ()
+
+tableDynAttr :: forall t m r k v. (MonadWidget t m, Show k, Ord k) => String -> [(String, k -> Dynamic t r -> m v)] -> Dynamic t (Map k r) -> (k -> m (Dynamic t (Map String String))) -> m (Dynamic t (Map k (El t, [v])))
+tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zoom: 1; overflow: auto; background: white;") $ do
+    elAttr "table" (Map.singleton "class" klass) $ do
+      el "thead" $ el "tr" $ do
+        mapM (\(h, _) -> el "th" $ text h) cols
+      el "tbody" $ do
+        listWithKey dRows (\k r -> do
+          dAttrs <- rowAttrs k
+          elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
+
+--TODO preselect a tab on open
+tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
+tabDisplay ulClass activeClass tabItems = do
+  rec dCurrentTab <- holdDyn Nothing (updated dTabClicks)
+      dTabClicks :: Dynamic t (Maybe k) <- elAttr "ul" (Map.singleton "class" ulClass) $ do
+        tabClicksList :: [Event t k] <- (liftM Map.elems) $ imapM (\k (s,_) -> headerBarLink s k =<< mapDyn (== (Just k)) dCurrentTab) tabItems
+        let eTabClicks :: Event t k = leftmost tabClicksList
+        holdDyn Nothing $ fmap Just eTabClicks :: m (Dynamic t (Maybe k))
+  divClass "" $ do
+    let dTabs :: Dynamic t (Map k (String, m ())) = constDyn tabItems
+    listWithKey dTabs (\k dTab -> do
+      dAttrs <- mapDyn (\sel -> do
+        let t1 = listToMaybe $ Map.keys tabItems
+        if sel == Just k || (sel == Nothing && t1 == Just k) then Map.empty else Map.singleton "style" "display:none;") dCurrentTab 
+      elDynAttr "div" dAttrs $ dyn =<< mapDyn snd dTab)
+    return ()
+  where
+    headerBarLink :: (MonadWidget t m, Ord k) => String -> k -> Dynamic t Bool -> m (Event t k)
+    headerBarLink x k dBool = do
+      dAttributes <- mapDyn (\b -> if b then Map.singleton "class" activeClass else Map.empty) dBool
+      elDynAttr "li" dAttributes $ do
+        a <- link x
+        return $ fmap (const k) (_link_clicked a)
+
+
