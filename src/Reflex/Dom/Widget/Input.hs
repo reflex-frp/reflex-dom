@@ -170,6 +170,16 @@ checkboxView dAttrs dValue = do
   performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e v) $ updated dValue
   return eClicked
 
+checkboxWithLabel :: forall t m. MonadWidget t m => String -> m (Checkbox t)
+checkboxWithLabel l = checkboxWithLabelAttrs l Map.empty
+
+checkboxWithLabelAttrs :: forall t m. MonadWidget t m => String -> Map String String -> m (Checkbox t)
+checkboxWithLabelAttrs l attrs = elAttr "label" attrs $ do
+  c <- checkbox False Map.empty
+  text $ " " <> l
+  return c
+
+
 data Dropdown t k
    = Dropdown { _dropdown_value :: Dynamic t k
               }
