@@ -46,7 +46,7 @@ input' inputType initial eSetValue dAttrs = do
   eKeypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
   eKeydown <- wrapDomEvent e elementOnkeydown $ liftIO . uiEventGetKeyCode =<< event
   eKeyup <- wrapDomEvent e elementOnkeyup $ liftIO . uiEventGetKeyCode =<< event
-  dValue <- holdDyn "" $ leftmost [eSetValue, eChange]
+  dValue <- holdDyn initial $ leftmost [eSetValue, eChange]
   return $ TextInput dValue eKeypress eKeydown eKeyup dFocus e
 
 {-  
