@@ -212,9 +212,6 @@ selectViewListWithKey_ selection vals mkChild = do
 -- Basic DOM manipulation helpers
 --------------------------------------------------------------------------------
 
-instance Eq (JSRef a) where
-  (==) = eqRef
-
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenExclusive s e = do
   Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
