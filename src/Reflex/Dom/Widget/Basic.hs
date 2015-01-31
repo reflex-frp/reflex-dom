@@ -27,8 +27,6 @@ import Data.Monoid
 import Data.These
 import Data.Align
 
-import GHCJS.Types
-
 import Data.Maybe
 
 type AttributeMap = Map String String
@@ -269,7 +267,6 @@ deleteBetweenExclusive s e = do
   Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   let go = do
         Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
---        done <- nodeIsEqualNode s $ Just x
         when (unNode (toNode s) /= unNode (toNode x)) $ do
           nodeRemoveChild currentParent $ Just x
           go
@@ -281,8 +278,7 @@ deleteBetweenInclusive s e = do
   let go = do
         Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
         nodeRemoveChild currentParent $ Just x
-        done <- nodeIsEqualNode s $ Just x
-        when (not done) go
+        when (unNode (toNode s) /= unNode (toNode x)) go
   go
   nodeRemoveChild currentParent $ Just e
 
