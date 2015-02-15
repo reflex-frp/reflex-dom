@@ -53,7 +53,7 @@ data GuiEnv t h
             }
 
 --TODO: Poorly named
-newtype Gui t h m a = Gui { unGui :: ReaderT (GuiEnv t h) m a } deriving (Functor, Monad, MonadIO, MonadFix)
+newtype Gui t h m a = Gui { unGui :: ReaderT (GuiEnv t h) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
 
 runGui :: Gui t h m a -> GuiEnv t h -> m a
 runGui (Gui g) env = runReaderT g env
