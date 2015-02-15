@@ -1,28 +1,24 @@
-{ cabal, dependentMap, ghcjsDom, lens
+{ mkDerivation, dependent-map, ghcjs-dom, lens
 , mtl, reflex, safe, text, these
-, transformers, dataDefault, semigroups
+, transformers, data-default, semigroups
 }:
 
-cabal.mkDerivation (self: {
+mkDerivation {
   pname = "reflex-dom";
   version = "0.1";
   src = ./.;
   buildDepends = [
     reflex
-    dependentMap
+    dependent-map
     mtl
     transformers
     these
     lens
-    ghcjsDom
+    ghcjs-dom
     safe
     text
-    dataDefault
+    data-default
     semigroups
   ];
-  meta = {
-    description = "Functional Reactive DOM widgets";
-    license = self.stdenv.lib.licenses.unfree;
-    platforms = self.ghc.meta.platforms;
-  };
-})
+  license = null;
+}
