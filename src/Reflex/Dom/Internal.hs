@@ -172,6 +172,13 @@ mainWidget w = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body w
 
+mainWidgetWithHead h b = runWebGUI $ \webView -> do
+  Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
+  Just head <- liftM (fmap castToHTMLElement) $ documentGetHead doc
+  attachWidget head h
+  Just body <- documentGetBody doc
+  attachWidget body b
+
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just head <- liftM (fmap castToHTMLElement) $ documentGetHead doc
