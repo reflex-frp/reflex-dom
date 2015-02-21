@@ -35,6 +35,7 @@ data El t
   = El { _el_element :: HTMLElement
        , _el_clicked :: Event t ()
        , _el_keypress :: Event t Int
+       , _el_scrolled :: Event t Int
        }
 
 class Attributes m a where
@@ -250,7 +251,8 @@ wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreate
 wrapElement e = do
   clicked <- wrapDomEvent e elementOnclick (return ())
   keypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
-  return $ El e clicked keypress  
+  scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
+  return $ El e clicked keypress scrolled
 
 elDynAttr' elementTag attrs child = do
   (e, result) <- buildElement elementTag attrs child
