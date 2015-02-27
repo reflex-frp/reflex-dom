@@ -144,6 +144,7 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
   --TODO: Use types to separate cohorts of possibly-recursive events/behaviors
   -- | Schedule an action to occur after the current cohort has been built; this is necessary because Behaviors built in the current cohort may not be read until after it is complete
   --schedulePostBuild :: Monad m => m () -> WidgetInternal t m ()
+  liftWidgetHost = Widget . lift . lift
   schedulePostBuild a = Widget $ widgetStatePostBuild %= (a>>) --TODO: Can this >> be made strict?
 
   --addVoidAction :: Monad m => Event t (m ()) -> WidgetInternal t m ()
