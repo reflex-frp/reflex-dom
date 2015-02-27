@@ -6,7 +6,7 @@
 mkDerivation {
   pname = "reflex-dom";
   version = "0.1";
-  src = ./.;
+  src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
   buildDepends = [
     reflex
     dependent-map
