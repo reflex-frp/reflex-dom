@@ -122,6 +122,12 @@ performEventAsync e = do
     o $ \a -> postGui $ mapM_ (\t -> runWithActions [t :=> a]) =<< readRef reResultTrigger
   return eResult
 
+getPostBuild :: MonadWidget t m => m (Event t ())
+getPostBuild = do
+  (e, trigger) <- newEventWithTriggerRef
+  schedulePostBuild $ runFrameWithTriggerRef trigger ()
+  return e
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 {-
