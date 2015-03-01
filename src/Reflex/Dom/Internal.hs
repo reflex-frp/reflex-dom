@@ -150,6 +150,13 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
   --addVoidAction :: Monad m => Event t (m ()) -> WidgetInternal t m ()
   addVoidAction a = Widget $ widgetStateVoidActions %= (a:)
   subWidget n child = Widget $ local (widgetEnvParent .~ toNode n) $ unWidget child
+  subWidgetWithVoidActions n child = Widget $ do
+    oldActions <- use widgetStateVoidActions
+    widgetStateVoidActions .= []
+    result <- local (widgetEnvParent .~ toNode n) $ unWidget child
+    actions <- use widgetStateVoidActions
+    widgetStateVoidActions .= oldActions
+    return (result, mergeWith (>>) actions)
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
   getRunWidget = return runWidget
 
