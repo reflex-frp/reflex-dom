@@ -144,6 +144,16 @@ instance HasStateModeWitness View where
   stateModeWitness = ViewWitness
 -}
 
+data CheckboxConfig t
+   = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
+                    , _checkboxConfig_attributes :: Map String String
+                    }
+
+instance Reflex t => Default (CheckboxConfig t) where
+  def = CheckboxConfig { _checkboxConfig_setValue = never
+                       , _checkboxConfig_attributes = Map.empty
+                       }
+
 data Checkbox t
   = Checkbox { _checkbox_value :: Dynamic t Bool
              }
@@ -151,11 +161,12 @@ data Checkbox t
 --TODO: Make attributes possibly dynamic
 -- | Create an editable checkbox
 --   Note: if the "type" or "checked" attributes are provided as attributes, they will be ignored
-checkbox :: MonadWidget t m => Bool -> Map String String -> m (Checkbox t)
-checkbox checked attrs = do
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" $ Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") attrs
-  eChange <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
-  dValue <- holdDyn checked eChange
+checkbox :: MonadWidget t m => Bool -> CheckboxConfig t -> m (Checkbox t)
+checkbox checked config = do
+  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" $ Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") (_checkboxConfig_attributes config)
+  eClick <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
+  performEvent_ $ fmap (liftIO . htmlInputElementSetChecked e) $ _checkboxConfig_setValue config
+  dValue <- holdDyn checked $ leftmost [_checkboxConfig_setValue config, eClick]
   return $ Checkbox dValue
 
 checkboxView :: MonadWidget t m => Dynamic t (Map String String) -> Dynamic t Bool -> m (Event t Bool)
@@ -175,7 +186,7 @@ checkboxWithLabel l = checkboxWithLabelAttrs l Map.empty
 
 checkboxWithLabelAttrs :: forall t m. MonadWidget t m => String -> Map String String -> m (Checkbox t)
 checkboxWithLabelAttrs l attrs = elAttr "label" attrs $ do
-  c <- checkbox False Map.empty
+  c <- checkbox False def
   text $ " " <> l
   return c
 

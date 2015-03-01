@@ -6,6 +6,7 @@ import Reflex.Dom.Class
 
 import Reflex
 import Reflex.Host.Class
+import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -198,7 +199,7 @@ listWithKey vals mkChild = do
     liftIO $ putStrLn "Triggering newChildren done"
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
-listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
+listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
 listWithKey' initialVals valsChanged mkChild = do
   doc <- askDocument
   startPlaceholder <- text' ""
@@ -206,20 +207,23 @@ listWithKey' initialVals valsChanged mkChild = do
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
 --  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
   runWidget <- getRunWidget
-  let buildChild :: DocumentFragment -> k -> v -> WidgetHost m ((a, (Text, Text)), Event t (WidgetHost m ()))
-      buildChild df k v = runWidget df $ do
+  let childValChangedSelector :: EventSelector t (Const2 k v)
+      childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
+      buildChild :: DocumentFragment -> k -> v -> WidgetHost m ((a, (Text, Text)), Event t (WidgetHost m ()))
+      buildChild df k v = runWidget df $ wrapChild k v
+      wrapChild k v = do
         childStart <- text' ""
-        result <- mkChild k v
+        result <- mkChild k v $ select childValChangedSelector $ Const2 k
         childEnd <- text' ""
         return (result, (childStart, childEnd))
   Just df <- liftIO $ documentCreateDocumentFragment doc
-  initialState <- liftWidgetHost $ iforM initialVals $ buildChild df
-  children <- hold initialState $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
-  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
+  initialState <- iforM initialVals $ \k v -> subWidgetWithVoidActions (toNode df) $ wrapChild k v --Note: we have to use subWidgetWithVoidActions rather than runWidget here, because running post-build actions during build can cause not-yet-constructed values to be read
+  children <- holdDyn initialState $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
+  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
   Just p <- liftIO $ nodeGetParentNode endPlaceholder
   liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
-    curState <- sample children
+    curState <- sample $ current children
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
     newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       These ((_, (start, end)), _) Nothing -> do -- Deleting child
@@ -248,7 +252,7 @@ listWithKey' initialVals valsChanged mkChild = do
     liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
     liftIO $ putStrLn "Triggering newChildren done"
-  holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
+  mapDyn (fmap (fst . fst)) children
 
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k) => Dynamic t k -> Dynamic t (Map k v) -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -> m (Event t k)
 selectViewListWithKey_ selection vals mkChild = do
@@ -306,6 +310,7 @@ wrapElement e = do
   scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
   return $ El e clicked keypress scrolled
 
+elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttr' elementTag attrs child = do
   (e, result) <- buildElement elementTag attrs child
   e' <- wrapElement e
@@ -318,11 +323,11 @@ elAttr elementTag attrs child = do
   return result
 
 {-# INLINABLE el' #-}
---el' :: forall t m a. MonadWidget t m => String -> m a -> m (El t, a)
+el' :: forall t m a. MonadWidget t m => String -> m a -> m (El t, a)
 el' tag child = elAttr' tag (Map.empty :: AttributeMap) child
 
 {-# INLINABLE elAttr' #-}
---elAttr' :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m (El t, a)
+elAttr' :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m (El t, a)
 elAttr' elementTag attrs child = do
   (e, result) <- buildElement elementTag attrs child
   e' <- wrapElement e
