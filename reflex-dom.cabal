@@ -30,6 +30,11 @@ library
     data-default,
     semigroups
 
+  if impl(ghcjs)
+    cpp-options: -D__GHCJS__
+    build-depends:
+      ghcjs-base
+
   exposed-modules:
     Reflex.Dom
     Reflex.Dom.Class
@@ -37,6 +42,7 @@ library
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
+    Reflex.Dom.Xhr
 
   other-extensions: TemplateHaskell
   ghc-prof-options: -fprof-auto
