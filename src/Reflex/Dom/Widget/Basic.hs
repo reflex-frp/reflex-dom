@@ -352,6 +352,13 @@ elClass tag c child = elAttr tag ("class" =: c) child
 
 list dm mkChild = listWithKey dm (\_ dv -> mkChild dv)
 
+elDynHtml' :: MonadWidget t m => String -> Dynamic t String -> m (El t)
+elDynHtml' elementTag html = do
+  e <- buildEmptyElement elementTag (Map.empty :: Map String String)
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
+  wrapElement e
+
 {-
 
 --TODO: Update dynamically
@@ -434,4 +441,9 @@ tabDisplay ulClass activeClass tabItems = do
         a <- link x
         return $ fmap (const k) (_link_clicked a)
 
-
+-- | Place an element into the DOM and wrap it with Reflex event handlers.  Note: undefined behavior may result if the element is placed multiple times, removed from the DOM after being placed, or in other situations.  Don't use this unless you understand the internals of MonadWidget.
+unsafePlaceElement :: MonadWidget t m => HTMLElement -> m (El t)
+unsafePlaceElement e = do
+  p <- askParent
+  liftIO $ nodeAppendChild p $ Just e
+  wrapElement e
