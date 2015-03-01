@@ -338,6 +338,9 @@ elDynAttr elementTag attrs child = do
 el :: forall t m a. MonadWidget t m => String -> m a -> m a
 el tag child = elAttr tag Map.empty child
 
+elClass :: forall t m a. MonadWidget t m => String -> String -> m a -> m a
+elClass tag c child = elAttr tag ("class" =: c) child
+
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
 --------------------------------------------------------------------------------
@@ -382,7 +385,7 @@ workflowView w0 = do
   return $ fmap fst eResult
 
 divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
-divClass = elAttr "div" . Map.singleton "class"
+divClass = elClass "div"
 
 dtdd :: forall t m a. MonadWidget t m => String -> m a -> m a
 dtdd h w = do
