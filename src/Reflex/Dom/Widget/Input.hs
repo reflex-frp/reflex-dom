@@ -11,6 +11,7 @@ import Reflex.Host.Class
 import Data.Map (Map)
 import GHCJS.DOM.Document
 import GHCJS.DOM.HTMLInputElement
+import GHCJS.DOM.HTMLTextAreaElement
 import GHCJS.DOM.Node
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLSelectElement
@@ -105,6 +106,18 @@ textInput = input' "text" "" never (constDyn $ Map.empty)
 
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
+
+data TextArea t
+  = TextArea { _textArea_value :: Dynamic t String
+             , _textArea_element :: HTMLTextAreaElement
+             }
+
+textArea :: MonadWidget t m => String -> Event t String -> Map String String -> m (TextArea t)
+textArea initial eSet attrs = do
+  e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
+  ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
+  v <- holdDyn "" ev
+  return $ TextArea v e
 
 {-
 type family Controller sm t a where
