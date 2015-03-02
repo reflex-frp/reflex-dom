@@ -254,6 +254,59 @@ listWithKey' initialVals valsChanged mkChild = do
     liftIO $ putStrLn "Triggering newChildren done"
   mapDyn (fmap (fst . fst)) children
 
+--TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
+listViewWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
+listViewWithKey vals mkChild = do
+  doc <- askDocument
+  startPlaceholder <- text' ""
+  endPlaceholder <- text' ""
+  (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
+  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
+  children <- hold Map.empty $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
+  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
+  runWidget <- getRunWidget
+  let buildChild df k v = runWidget df $ do
+        childStart <- text' ""
+        result <- mkChild k =<< holdDyn v (fmapMaybe (Map.lookup k) (updated vals))
+        childEnd <- text' ""
+        return (result, (childStart, childEnd))
+  schedulePostBuild $ do
+    Just df <- liftIO $ documentCreateDocumentFragment doc
+    curVals <- sample $ current vals
+    initialState <- iforM curVals $ buildChild df
+    runFrameWithTriggerRef newChildrenTriggerRef initialState --TODO: Do all these in a single runFrame
+    Just p <- liftIO $ nodeGetParentNode endPlaceholder
+    liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+    return ()
+  addVoidAction $ flip fmap (updated vals) $ \newVals -> do
+    curState <- sample children
+    --TODO: Should we remove the parent from the DOM first to avoid reflows?
+    newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
+      This ((_, (start, end)), _) -> do
+        liftIO $ putStrLn "Deleting item"
+        liftIO $ deleteBetweenInclusive start end
+        return Nothing
+      That v -> do
+        liftIO $ putStrLn "Creating item"
+        Just df <- liftIO $ documentCreateDocumentFragment doc
+        s <- buildChild df k v
+        let placeholder = case Map.lookupGT k curState of
+              Nothing -> endPlaceholder
+              Just (_, ((_, (start, _)), _)) -> start
+        Just p <- liftIO $ nodeGetParentNode placeholder
+        liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        return $ Just s
+      These state _ -> do
+        liftIO $ putStrLn "Leaving item unchanged"
+        return $ Just state
+    liftIO $ putStrLn "Triggering newChildren"
+    liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
+    runFrameWithTriggerRef newChildrenTriggerRef newState
+    liftIO $ putStrLn "Triggering newChildren done"
+  return $ switch $ fmap (mergeMap . fmap (fst . fst)) children
+
+--TODO: Deduplicate the various list*WithKey* implementations
+
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k) => Dynamic t k -> Dynamic t (Map k v) -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -> m (Event t k)
 selectViewListWithKey_ selection vals mkChild = do
   let selectionDemux = demux selection -- For good performance, this value must be shared across all children
