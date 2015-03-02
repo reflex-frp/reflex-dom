@@ -5,10 +5,12 @@ module Reflex.Dom.Xhr where
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Aeson
 import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.String.Conv
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.Foreign
@@ -51,7 +53,7 @@ newXMLHttpRequest req cb = do
   xhr <- xmlHttpRequestNew
   let c = _xhrRequest_config req
   xmlHttpRequestOpen
-    xhr 
+    xhr
     (_xhrRequest_method req)
     (_xhrRequest_url req)
     True
@@ -74,4 +76,19 @@ performRequestAsync :: MonadWidget t m => Event t XhrRequest -> m (Event t XhrRe
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
   liftIO $ newXMLHttpRequest r cb
   return ()
+
+getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
+getAndDecode url = do
+  r <- performRequestAsync $ fmap (\x -> XhrRequest "GET" x def) url
+  return $ fmap decodeXhrResponse r
+
+decodeText :: FromJSON a => Text -> Maybe a
+decodeText = decode . toS
+
+decodeJSString :: FromJSON a => JSString -> Maybe a
+decodeJSString = decodeText . fromJSString
+
+decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
+decodeXhrResponse = join . fmap decodeJSString . _xhrResponse_body
+
 #endif
