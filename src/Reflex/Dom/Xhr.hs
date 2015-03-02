@@ -82,6 +82,11 @@ getAndDecode url = do
   r <- performRequestAsync $ fmap (\x -> XhrRequest "GET" x def) url
   return $ fmap decodeXhrResponse r
 
+getMay :: MonadWidget t m => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))
+getMay f e = do
+    e' <- f (fmapMaybe id e)
+    return $ leftmost [fmap Just e', fmapMaybe (maybe (Just Nothing) (const Nothing)) e]
+
 decodeText :: FromJSON a => Text -> Maybe a
 decodeText = decode . toS
 
