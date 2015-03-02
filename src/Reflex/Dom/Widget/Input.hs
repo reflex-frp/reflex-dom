@@ -112,7 +112,7 @@ data TextArea t
              , _textArea_element :: HTMLTextAreaElement
              }
 
-textArea :: MonadWidget t m => String -> Event t String -> Map String String -> m (TextArea t)
+textArea :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextArea t)
 textArea initial eSet attrs = do
   e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
