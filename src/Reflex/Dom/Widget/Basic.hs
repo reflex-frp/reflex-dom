@@ -129,9 +129,10 @@ dyn child = do
 widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold child0 newChild = do
   startPlaceholder <- text' ""
-  result0 <- child0
+  result0 <- child0 -- I'm pretty sure this is wrong; the void actions should get removed when the child is swapped out
   endPlaceholder <- text' ""
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
+  performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
   childVoidAction <- hold never $ fmap snd newChildBuilt
   addVoidAction $ switch childVoidAction
   doc <- askDocument
