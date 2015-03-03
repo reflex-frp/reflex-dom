@@ -110,14 +110,24 @@ textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else No
 data TextArea t
   = TextArea { _textArea_value :: Dynamic t String
              , _textArea_element :: HTMLTextAreaElement
+             , _textArea_hasFocus :: Dynamic t Bool
              }
 
 textArea :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextArea t)
 textArea initial eSet attrs = do
   e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
+  postGui <- askPostGui
+  runWithActions <- askRunWithActions
+  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
+    unsubscribeOnblur <- liftIO $ elementOnblur e $ liftIO $ do
+      postGui $ runWithActions [eChangeFocusTrigger :=> False]
+    unsubscribeOnfocus <- liftIO $ elementOnfocus e $ liftIO $ do
+      postGui $ runWithActions [eChangeFocusTrigger :=> True]
+    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
+  f <- holdDyn False eChangeFocus
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
   v <- holdDyn "" ev
-  return $ TextArea v e
+  return $ TextArea v e f
 
 {-
 type family Controller sm t a where
