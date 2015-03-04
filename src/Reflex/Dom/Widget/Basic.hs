@@ -99,6 +99,9 @@ dynText s = do
     liftIO $ nodeSetNodeValue n curS
   addVoidAction $ fmap (liftIO . nodeSetNodeValue n) $ updated s
 
+display :: (MonadWidget t m, Show a) => Dynamic t a -> m ()
+display a = dynText =<< mapDyn show a
+
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
@@ -257,7 +260,10 @@ listWithKey' initialVals valsChanged mkChild = do
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listViewWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
-listViewWithKey vals mkChild = do
+listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
+
+listViewWithKey' :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
+listViewWithKey' vals mkChild = do
   doc <- askDocument
   startPlaceholder <- text' ""
   endPlaceholder <- text' ""
@@ -304,7 +310,7 @@ listViewWithKey vals mkChild = do
     liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
     liftIO $ putStrLn "Triggering newChildren done"
-  return $ switch $ fmap (mergeMap . fmap (fst . fst)) children
+  return $ fmap (fmap (fst . fst)) children
 
 --TODO: Deduplicate the various list*WithKey* implementations
 
