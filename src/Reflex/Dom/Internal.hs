@@ -160,11 +160,11 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
   getRunWidget = return runWidget
 
+runWidget :: (Monad m, Reflex t, IsNode n) => n -> Widget t (Gui t h m) a -> WidgetHost (Widget t (Gui t h m)) (a, WidgetHost (Widget t (Gui t h m)) (), Event t (WidgetHost (Widget t (Gui t h m)) ()))
 runWidget rootElement w = do
   (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
   let voidAction = mergeWith (>>) voidActions
-  postBuild --TODO: This should be run some other way; it seems to cause strictness problems when recursion crosses parent/child boundaries
-  return (result, voidAction)
+  return (result, postBuild, voidAction)
 
 holdOnStartup :: MonadWidget t m => a -> WidgetHost m a -> m (Behavior t a)
 holdOnStartup a0 ma = do
@@ -205,7 +205,10 @@ attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this 
               sequence =<< readEvent voidAction
             runHostFrame $ runGui (sequence_ voidActionNeeded) guiEnv
       Just df <- liftIO $ documentCreateDocumentFragment doc
-      (result, voidAction) <- runHostFrame $ runGui (runWidget df w) guiEnv
+      (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
+        (result, postBuild, voidAction) <- runWidget df w
+        postBuild
+        return (result, voidAction)
       liftIO $ htmlElementSetInnerHTML rootElement ""
       liftIO $ nodeAppendChild rootElement $ Just df
       subscribeEvent voidAction --TODO: Should be unnecessary

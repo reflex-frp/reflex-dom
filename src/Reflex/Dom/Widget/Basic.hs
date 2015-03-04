@@ -14,6 +14,7 @@ import qualified Data.Set as Set
 import Data.Dependent.Sum (DSum (..))
 import Control.Monad.Trans
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Ref
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
@@ -116,8 +117,9 @@ dyn child = do
   runWidget <- getRunWidget
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        result <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef result
+        (result, postBuild, voidActions) <- runWidget df c
+        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+        postBuild
         Just p <- liftIO $ nodeGetParentNode endPlaceholder
         liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
         return ()
@@ -142,8 +144,9 @@ widgetHold child0 newChild = do
   runWidget <- getRunWidget
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        result <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef result
+        (result, postBuild, voidActions) <- runWidget df c
+        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+        postBuild
         Just p <- liftIO $ nodeGetParentNode endPlaceholder
         liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
         return ()
@@ -171,15 +174,18 @@ listWithKey vals mkChild = do
   schedulePostBuild $ do
     Just df <- liftIO $ documentCreateDocumentFragment doc
     curVals <- sample $ current vals
-    initialState <- iforM curVals $ buildChild df
-    runFrameWithTriggerRef newChildrenTriggerRef initialState --TODO: Do all these in a single runFrame
+    initialState <- iforM curVals $ \k v -> do
+      (result, postBuild, voidAction) <- buildChild df k v
+      return ((result, voidAction), postBuild)
+    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
+    sequence $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
   addVoidAction $ flip fmap (updated vals) $ \newVals -> do
     curState <- sample children
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
-    newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
+    (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       This ((_, (start, end)), _) -> do
         liftIO $ putStrLn "Deleting item"
         liftIO $ deleteBetweenInclusive start end
@@ -187,7 +193,9 @@ listWithKey vals mkChild = do
       That v -> do
         liftIO $ putStrLn "Creating item"
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        s <- buildChild df k v
+        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
+        let s = (childResult, childVoidAction)
+        modify (>>childPostBuild)
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
@@ -200,6 +208,7 @@ listWithKey vals mkChild = do
     liftIO $ putStrLn "Triggering newChildren"
     liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
+    postBuild
     liftIO $ putStrLn "Triggering newChildren done"
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
@@ -213,7 +222,6 @@ listWithKey' initialVals valsChanged mkChild = do
   runWidget <- getRunWidget
   let childValChangedSelector :: EventSelector t (Const2 k v)
       childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
-      buildChild :: DocumentFragment -> k -> v -> WidgetHost m ((a, (Text, Text)), Event t (WidgetHost m ()))
       buildChild df k v = runWidget df $ wrapChild k v
       wrapChild k v = do
         childStart <- text' ""
@@ -229,21 +237,25 @@ listWithKey' initialVals valsChanged mkChild = do
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
     curState <- sample $ current children
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
-    newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
+    (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       These ((_, (start, end)), _) Nothing -> do -- Deleting child
         liftIO $ deleteBetweenInclusive start end
         return Nothing
       These ((_, (start, end)), _) (Just v) -> do -- Replacing existing child
         liftIO $ deleteBetweenExclusive start end
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        s <- buildChild df k v
+        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
+        let s = (childResult, childVoidAction)
+        modify (>>childPostBuild)
         Just p <- liftIO $ nodeGetParentNode end
         liftIO $ nodeInsertBefore p (Just df) (Just end)
         return $ Just s
       That Nothing -> return Nothing -- Deleting non-existent child
       That (Just v) -> do -- Creating new child
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        s <- buildChild df k v
+        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
+        let s = (childResult, childVoidAction)
+        modify (>>childPostBuild)
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
@@ -255,6 +267,7 @@ listWithKey' initialVals valsChanged mkChild = do
     liftIO $ putStrLn "Triggering newChildren"
     liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
+    postBuild
     liftIO $ putStrLn "Triggering newChildren done"
   mapDyn (fmap (fst . fst)) children
 
@@ -280,15 +293,18 @@ listViewWithKey' vals mkChild = do
   schedulePostBuild $ do
     Just df <- liftIO $ documentCreateDocumentFragment doc
     curVals <- sample $ current vals
-    initialState <- iforM curVals $ buildChild df
-    runFrameWithTriggerRef newChildrenTriggerRef initialState --TODO: Do all these in a single runFrame
+    initialState <- iforM curVals $ \k v -> do
+      (result, postBuild, voidAction) <- buildChild df k v
+      return ((result, voidAction), postBuild)
+    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
+    sequence $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
   addVoidAction $ flip fmap (updated vals) $ \newVals -> do
     curState <- sample children
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
-    newState <- liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
+    (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       This ((_, (start, end)), _) -> do
         liftIO $ putStrLn "Deleting item"
         liftIO $ deleteBetweenInclusive start end
@@ -296,7 +312,9 @@ listViewWithKey' vals mkChild = do
       That v -> do
         liftIO $ putStrLn "Creating item"
         Just df <- liftIO $ documentCreateDocumentFragment doc
-        s <- buildChild df k v
+        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
+        let s = (childResult, childVoidAction)
+        modify (>>childPostBuild)
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
@@ -309,6 +327,7 @@ listViewWithKey' vals mkChild = do
     liftIO $ putStrLn "Triggering newChildren"
     liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
+    postBuild
     liftIO $ putStrLn "Triggering newChildren done"
   return $ fmap (fmap (fst . fst)) children
 
