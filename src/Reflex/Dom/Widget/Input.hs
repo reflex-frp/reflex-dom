@@ -219,13 +219,12 @@ data Dropdown t k
               }
 
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
---TODO: Don't bake in any CSS classes
 --TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
-dropdown k0 options = do
-  (eRaw, _) <- elAttr' "select" ("class" =: "form-control") $ do
+dropdownDynAttr :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => Dynamic t (Map String String) -> k -> Dynamic t (Map k String) -> m (Dropdown t k)
+dropdownDynAttr attrs k0 options = do
+  (eRaw, _) <- elDynAttr' "select" attrs $ do
     optionsWithDefault <- mapDyn (`Map.union` (k0 =: "")) options
     listWithKey optionsWithDefault $ \k v -> do
       elAttr "option" ("value" =: show k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
@@ -239,6 +238,9 @@ dropdown k0 options = do
         return k
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) eChange
   return $ Dropdown dValue
+
+dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
+dropdown = dropdownDynAttr (constDyn Map.empty)
 
 --TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 dropdown' :: forall k t m. (MonadWidget t m, Eq k, Show k, Read k) => k -> NonEmpty (k, String) -> m (Dropdown t k)
