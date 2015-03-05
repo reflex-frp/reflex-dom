@@ -237,7 +237,7 @@ dropdownDynAttr attrs k0 setK options = do
         k <- mk
         guard $ Map.member k opts
         return k
-  dValue <- combineDyn readKey options =<< holdDyn (Just k0) eChange
+  dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue
 
 dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
