@@ -222,13 +222,14 @@ data Dropdown t k
 --TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdownDynAttr :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => Dynamic t (Map String String) -> k -> Dynamic t (Map k String) -> m (Dropdown t k)
-dropdownDynAttr attrs k0 options = do
+dropdownDynAttr :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => Dynamic t (Map String String) -> k -> Event t k -> Dynamic t (Map k String) -> m (Dropdown t k)
+dropdownDynAttr attrs k0 setK options = do
   (eRaw, _) <- elDynAttr' "select" attrs $ do
     optionsWithDefault <- mapDyn (`Map.union` (k0 =: "")) options
     listWithKey optionsWithDefault $ \k v -> do
       elAttr "option" ("value" =: show k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
   let e = castToHTMLSelectElement $ _el_element eRaw
+  performEvent_ $ fmap (liftIO . htmlSelectElementSetValue e . show) setK
   eChange <- wrapDomEvent e elementOnchange $ do
     kStr <- liftIO $ htmlSelectElementGetValue e
     return $ readMay kStr
@@ -240,7 +241,7 @@ dropdownDynAttr attrs k0 options = do
   return $ Dropdown dValue
 
 dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => k -> Dynamic t (Map k String) -> m (Dropdown t k)
-dropdown = dropdownDynAttr (constDyn Map.empty)
+dropdown k = dropdownDynAttr (constDyn Map.empty) k never
 
 --TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 dropdown' :: forall k t m. (MonadWidget t m, Eq k, Show k, Read k) => k -> NonEmpty (k, String) -> m (Dropdown t k)
