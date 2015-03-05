@@ -18,7 +18,7 @@ import Control.Monad.State
 import Control.Monad.Ref
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM (event, Signal)
+import GHCJS.DOM.EventM (event, Signal, EventM)
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLElement
@@ -370,14 +370,17 @@ deleteBetweenInclusive s e = do
 -- Adapters
 --------------------------------------------------------------------------------
 
---TODO: Get rid of extra version of this function
-wrapDomEvent element elementOnevent getValue = do
+wrapDomEvent :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (e -> EventM event e () -> IO (IO ())) -> EventM event e a -> m (Event t a)
+wrapDomEvent element elementOnevent getValue = wrapDomEventMaybe element elementOnevent $ liftM Just getValue
+
+wrapDomEventMaybe :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (e -> EventM event e () -> IO (IO ())) -> EventM event e (Maybe a) -> m (Event t a)
+wrapDomEventMaybe element elementOnevent getValue = do
   postGui <- askPostGui
   runWithActions <- askRunWithActions
   e <- newEventWithTrigger $ \et -> do
         unsubscribe <- {-# SCC "a" #-} liftIO $ {-# SCC "b" #-} elementOnevent element $ {-# SCC "c" #-} do
-          v <- {-# SCC "d" #-} getValue
-          liftIO $ postGui $ runWithActions [et :=> v]
+          mv <- {-# SCC "d" #-} getValue
+          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
         return $ liftIO $ do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
