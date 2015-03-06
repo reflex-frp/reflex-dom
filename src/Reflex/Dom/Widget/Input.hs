@@ -257,6 +257,12 @@ dropdown' k0 ks = do
   dValue <- mapDyn readKey =<< holdDyn (Just k0) eChange
   return $ Dropdown dValue
 
+listDropdown :: (MonadWidget t m) => Dynamic t [a] -> (a -> String) -> Dynamic t (Map String String) -> String -> m (Dynamic t (Maybe a))
+listDropdown xs f attrs defS = do
+  m <- mapDyn (Map.fromList . zip [(1::Int)..]) xs
+  sel <- liftM _dropdown_value $ dropdownDynAttr attrs 0 never =<< mapDyn ((Map.insert 0 defS) . Map.map f) m
+  combineDyn Map.lookup sel m
+
 --TODO Remove CSS Classes
 searchInputResult :: forall t m a. MonadWidget t m => Dynamic t (String, a) -> m (Event t (String, a))
 searchInputResult r = el "li" $ do
