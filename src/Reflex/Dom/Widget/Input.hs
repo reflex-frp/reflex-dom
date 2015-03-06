@@ -188,7 +188,7 @@ checkbox :: MonadWidget t m => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
   e <- liftM castToHTMLInputElement $ buildEmptyElement "input" $ Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") (_checkboxConfig_attributes config)
   eClick <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
-  performEvent_ $ fmap (liftIO . htmlInputElementSetChecked e) $ _checkboxConfig_setValue config
+  performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e $! v) $ _checkboxConfig_setValue config
   dValue <- holdDyn checked $ leftmost [_checkboxConfig_setValue config, eClick]
   return $ Checkbox dValue
 
@@ -201,7 +201,7 @@ checkboxView dAttrs dValue = do
   schedulePostBuild $ do
     v <- sample $ current dValue
     when v $ liftIO $ htmlInputElementSetChecked e True
-  performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e v) $ updated dValue
+  performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e $! v) $ updated dValue
   return eClicked
 
 checkboxWithLabel :: forall t m. MonadWidget t m => String -> m (Checkbox t)
