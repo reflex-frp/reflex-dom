@@ -2,6 +2,8 @@
 module Reflex.Dom.Xhr where
 
 #ifdef __GHCJS__
+import Control.Concurrent
+import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -75,6 +77,16 @@ newXMLHttpRequest req cb = do
 performRequestAsync :: MonadWidget t m => Event t XhrRequest -> m (Event t XhrResponse)
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
   liftIO $ newXMLHttpRequest r cb
+  return ()
+
+performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
+performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
+  liftIO $ do
+    resps <- forM rs $ \r -> do
+      resp <- newEmptyMVar
+      newXMLHttpRequest r $ putMVar resp
+      return resp
+    forkIO $ cb =<< forM resps takeMVar
   return ()
 
 getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
