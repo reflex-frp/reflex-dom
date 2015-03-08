@@ -139,7 +139,7 @@ widgetHold child0 newChild = do
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
   childVoidAction <- hold never $ fmap snd newChildBuilt
-  addVoidAction $ switch childVoidAction
+  addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
   doc <- askDocument
   runWidget <- getRunWidget
   let build c = do
@@ -147,10 +147,15 @@ widgetHold child0 newChild = do
         (result, postBuild, voidActions) <- runWidget df c
         runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
         postBuild
-        Just p <- liftIO $ nodeGetParentNode endPlaceholder
-        liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+        mp <- liftIO $ nodeGetParentNode endPlaceholder
+        case mp of
+          Nothing -> return () --TODO: Is this right?
+          Just p -> do
+            liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+            return ()
         return ()
   addVoidAction $ ffor newChild $ \c -> do
+    liftIO $ putStrLn "Clearing widgetHold"
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
     build c
   holdDyn result0 $ fmap fst newChildBuilt
@@ -348,13 +353,16 @@ selectViewListWithKey_ selection vals mkChild = do
 
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenExclusive s e = do
-  Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  let go = do
-        Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-        when (unNode (toNode s) /= unNode (toNode x)) $ do
-          nodeRemoveChild currentParent $ Just x
-          go
-  go
+  mCurrentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
+      let go = do
+            Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
+            when (unNode (toNode s) /= unNode (toNode x)) $ do
+              nodeRemoveChild currentParent $ Just x
+              go
+      go
 
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenInclusive s e = do
