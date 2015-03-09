@@ -124,6 +124,7 @@ textArea initial eSet attrs = do
     unsubscribeOnfocus <- liftIO $ elementOnfocus e $ liftIO $ do
       postGui $ runWithActions [eChangeFocusTrigger :=> True]
     return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
+  performEvent_ $ fmap (liftIO . htmlTextAreaElementSetValue e) eSet
   f <- holdDyn False eChangeFocus
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
   v <- holdDyn "" ev
