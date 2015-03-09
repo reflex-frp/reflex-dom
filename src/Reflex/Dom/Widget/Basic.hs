@@ -155,7 +155,6 @@ widgetHold child0 newChild = do
             return ()
         return ()
   addVoidAction $ ffor newChild $ \c -> do
-    liftIO $ putStrLn "Clearing widgetHold"
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
     build c
   holdDyn result0 $ fmap fst newChildBuilt
@@ -192,11 +191,9 @@ listWithKey vals mkChild = do
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
     (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       This ((_, (start, end)), _) -> do
-        liftIO $ putStrLn "Deleting item"
         liftIO $ deleteBetweenInclusive start end
         return Nothing
       That v -> do
-        liftIO $ putStrLn "Creating item"
         Just df <- liftIO $ documentCreateDocumentFragment doc
         (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
         let s = (childResult, childVoidAction)
@@ -208,13 +205,9 @@ listWithKey vals mkChild = do
         liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       These state _ -> do
-        liftIO $ putStrLn "Leaving item unchanged"
         return $ Just state
-    liftIO $ putStrLn "Triggering newChildren"
-    liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
     postBuild
-    liftIO $ putStrLn "Triggering newChildren done"
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
 listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
@@ -269,11 +262,8 @@ listWithKey' initialVals valsChanged mkChild = do
         return $ Just s
       This state -> do -- No change
         return $ Just state
-    liftIO $ putStrLn "Triggering newChildren"
-    liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
     postBuild
-    liftIO $ putStrLn "Triggering newChildren done"
   mapDyn (fmap (fst . fst)) children
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
@@ -311,11 +301,9 @@ listViewWithKey' vals mkChild = do
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
     (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       This ((_, (start, end)), _) -> do
-        liftIO $ putStrLn "Deleting item"
         liftIO $ deleteBetweenInclusive start end
         return Nothing
       That v -> do
-        liftIO $ putStrLn "Creating item"
         Just df <- liftIO $ documentCreateDocumentFragment doc
         (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
         let s = (childResult, childVoidAction)
@@ -327,13 +315,9 @@ listViewWithKey' vals mkChild = do
         liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       These state _ -> do
-        liftIO $ putStrLn "Leaving item unchanged"
         return $ Just state
-    liftIO $ putStrLn "Triggering newChildren"
-    liftIO $ putStrLn . ("newChildrenTriggerRef is Just? " <>) . show . isJust =<< readRef newChildrenTriggerRef
     runFrameWithTriggerRef newChildrenTriggerRef newState
     postBuild
-    liftIO $ putStrLn "Triggering newChildren done"
   return $ fmap (fmap (fst . fst)) children
 
 --TODO: Deduplicate the various list*WithKey* implementations
