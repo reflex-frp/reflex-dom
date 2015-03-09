@@ -197,7 +197,6 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
 attachWidget :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> IO a
 attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
-  liftIO $ putStrLn "Using Widget2"
   frames <- liftIO newChan
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions :: GuiEnv Spider SpiderHost
           runWithActions dm = do

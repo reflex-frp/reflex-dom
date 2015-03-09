@@ -167,7 +167,7 @@ listWithKey vals mkChild = do
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
-  children <- hold Map.empty $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
+  children <- hold Map.empty  newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
   runWidget <- getRunWidget
   let buildChild df k v = runWidget df $ do
@@ -228,7 +228,7 @@ listWithKey' initialVals valsChanged mkChild = do
         return (result, (childStart, childEnd))
   Just df <- liftIO $ documentCreateDocumentFragment doc
   initialState <- iforM initialVals $ \k v -> subWidgetWithVoidActions (toNode df) $ wrapChild k v --Note: we have to use subWidgetWithVoidActions rather than runWidget here, because running post-build actions during build can cause not-yet-constructed values to be read
-  children <- holdDyn initialState $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
+  children <- holdDyn initialState newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
   Just p <- liftIO $ nodeGetParentNode endPlaceholder
   liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
@@ -277,7 +277,7 @@ listViewWithKey' vals mkChild = do
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
-  children <- hold Map.empty $ traceEventWith (\x -> "newChildren: " <> show (Map.size x)) newChildren
+  children <- hold Map.empty newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
   runWidget <- getRunWidget
   let buildChild df k v = runWidget df $ do
