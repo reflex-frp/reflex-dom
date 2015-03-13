@@ -433,6 +433,13 @@ elDynHtml' elementTag html = do
   addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
   wrapElement e
 
+elDynHtmlAttr' :: MonadWidget t m => String -> Map String String -> Dynamic t String -> m (El t)
+elDynHtmlAttr' elementTag attrs html = do
+  e <- buildEmptyElement elementTag attrs
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
+  wrapElement e
+
 {-
 
 --TODO: Update dynamically
