@@ -1,6 +1,6 @@
 { mkDerivation, dependent-map, ghcjs-dom, lens
 , mtl, reflex, safe, text, these
-, transformers, data-default, semigroups, string-conv
+, transformers, data-default, semigroups
 }:
 
 mkDerivation {
@@ -19,7 +19,6 @@ mkDerivation {
     text
     data-default
     semigroups
-    string-conv
   ];
   license = null;
 }

@@ -8,13 +8,14 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
+import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.String.Conv
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Text.Encoding
 import GHCJS.Foreign
 import GHCJS.Types
 import GHCJS.DOM.XMLHttpRequest
@@ -100,7 +101,7 @@ getMay f e = do
     return $ leftmost [fmap Just e', fmapMaybe (maybe (Just Nothing) (const Nothing)) e]
 
 decodeText :: FromJSON a => Text -> Maybe a
-decodeText = decode . toS
+decodeText = decode . BL.fromStrict . encodeUtf8
 
 decodeJSString :: FromJSON a => JSString -> Maybe a
 decodeJSString = decodeText . fromJSString
