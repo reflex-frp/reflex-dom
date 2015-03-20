@@ -34,8 +34,7 @@ library
     cpp-options: -D__GHCJS__
     build-depends:
       aeson,
-      ghcjs-base,
-      string-conv
+      ghcjs-base
 
   exposed-modules:
     Reflex.Dom
