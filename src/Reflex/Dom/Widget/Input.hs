@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo, TemplateHaskell #-}
 module Reflex.Dom.Widget.Input where
 
 import Prelude hiding (forM_)
@@ -92,6 +92,10 @@ input' inputType eSetValue dAttrs = do
   return $ TextInput dValue eKeypress eKeydown eKeyup dFocus dMyElement
 -}
 
+class HasValue a where
+  type Value a :: *
+  value :: a -> Value a
+
 data TextInput t
   = TextInput { _textInput_value :: Dynamic t String
               , _textInput_keypress :: Event t Int
@@ -101,20 +105,41 @@ data TextInput t
               , _textInput_element :: HTMLInputElement
               }
 
+instance HasValue (TextInput t) where
+  type Value (TextInput t) = Dynamic t String
+  value = _textInput_value
+
 textInput :: MonadWidget t m => m (TextInput t)
 textInput = input' "text" "" never (constDyn $ Map.empty)
 
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
 
+data TextAreaConfig t
+  = TextAreaConfig { _textAreaConfig_initialValue :: String
+                   , _textAreaConfig_setValue :: Event t String
+                   , _textAreaConfig_attributes :: Dynamic t (Map String String)
+                   }
+
+instance Reflex t => Default (TextAreaConfig t) where
+  def = TextAreaConfig { _textAreaConfig_initialValue = ""
+                       , _textAreaConfig_setValue = never
+                       , _textAreaConfig_attributes = constDyn mempty
+                       }
+
 data TextArea t
   = TextArea { _textArea_value :: Dynamic t String
              , _textArea_element :: HTMLTextAreaElement
              , _textArea_hasFocus :: Dynamic t Bool
+             , _textArea_keypress :: Event t Int
              }
 
-textArea :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextArea t)
-textArea initial eSet attrs = do
+instance HasValue (TextArea t) where
+  type Value (TextArea t) = Dynamic t String
+  value = _textArea_value
+
+textArea :: MonadWidget t m => TextAreaConfig t -> m (TextArea t)
+textArea (TextAreaConfig initial eSet attrs) = do
   e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
   postGui <- askPostGui
   runWithActions <- askRunWithActions
@@ -127,8 +152,9 @@ textArea initial eSet attrs = do
   performEvent_ $ fmap (liftIO . htmlTextAreaElementSetValue e) eSet
   f <- holdDyn False eChangeFocus
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
-  v <- holdDyn "" ev
-  return $ TextArea v e f
+  v <- holdDyn "" $ leftmost [eSet, ev]
+  eKeypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  return $ TextArea v e f eKeypress
 
 {-
 type family Controller sm t a where
@@ -296,3 +322,24 @@ searchInputResultsList' results builder = do
   resultsList <- elDynAttr "ul" attrs $ builder results
   liftM switch $ hold never $ fmap (leftmost . Map.elems) (updated resultsList)
 
+liftM concat $ mapM makeLenses
+  [ ''TextAreaConfig
+  , ''TextArea
+  , ''TextInput
+  ]
+
+class HasAttributes a where
+  type Attrs a :: *
+  attributes :: Lens' a (Attrs a)
+
+instance HasAttributes (TextAreaConfig t) where
+  type Attrs (TextAreaConfig t) = Dynamic t (Map String String)
+  attributes = textAreaConfig_attributes
+
+class HasSetValue a where
+  type SetValue a :: *
+  setValue :: Lens' a (SetValue a)
+
+instance HasSetValue (TextAreaConfig t) where
+  type SetValue (TextAreaConfig t) = Event t String
+  setValue = textAreaConfig_setValue
