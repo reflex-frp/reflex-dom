@@ -16,6 +16,7 @@ import GHCJS.DOM.EventM
 import GHCJS.DOM.UIEvent
 import Data.Monoid
 import Data.Map as Map
+import Control.Lens
 import Control.Monad hiding (forM_)
 import Control.Monad.IO.Class
 import Data.Default
