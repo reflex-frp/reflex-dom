@@ -350,13 +350,17 @@ deleteBetweenExclusive s e = do
 
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenInclusive s e = do
-  Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  let go = do
-        Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-        nodeRemoveChild currentParent $ Just x
-        when (unNode (toNode s) /= unNode (toNode x)) go
-  go
-  nodeRemoveChild currentParent $ Just e
+  mCurrentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
+      let go = do
+            Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
+            nodeRemoveChild currentParent $ Just x
+            when (unNode (toNode s) /= unNode (toNode x)) go
+      go
+      nodeRemoveChild currentParent $ Just e
+      return ()
 
 --------------------------------------------------------------------------------
 -- Adapters
