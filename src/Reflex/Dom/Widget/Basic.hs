@@ -347,14 +347,17 @@ deleteBetweenExclusive s e = do
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenInclusive :: (IsNode start, IsNode end) => start -> end -> IO ()
 deleteBetweenInclusive s e = do
-  Just currentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  let go = do
-        Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-        _ <- nodeRemoveChild currentParent $ Just x
-        when (unNode (toNode s) /= unNode (toNode x)) go
-  go
-  _ <- nodeRemoveChild currentParent $ Just e
-  return ()
+  mCurrentParent <- nodeGetParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
+      let go = do
+            Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
+            _ <- nodeRemoveChild currentParent $ Just x
+            when (unNode (toNode s) /= unNode (toNode x)) go
+      go
+      _ <- nodeRemoveChild currentParent $ Just e
+      return ()
 
 --------------------------------------------------------------------------------
 -- Adapters
@@ -466,6 +469,11 @@ linkClass s c = do
 
 link :: MonadWidget t m => String -> m (Link t)
 link s = linkClass s ""
+
+button :: MonadWidget t m => String -> m (Event t ())
+button s = do
+  (e, _) <- el' "button" $ text s
+  return $ _el_clicked e
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
