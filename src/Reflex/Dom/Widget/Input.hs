@@ -1,18 +1,15 @@
 {-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo #-}
 module Reflex.Dom.Widget.Input where
 
-import Prelude hiding (forM_)
+import Prelude
 
 import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 
 import Reflex
 import Reflex.Host.Class
-import Data.Map (Map)
-import GHCJS.DOM.Document
 import GHCJS.DOM.HTMLInputElement
 import GHCJS.DOM.HTMLTextAreaElement
-import GHCJS.DOM.Node
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLSelectElement
 import GHCJS.DOM.EventM
@@ -21,7 +18,6 @@ import Data.Monoid
 import Data.Map as Map
 import Control.Monad hiding (forM_)
 import Control.Monad.IO.Class
-import Control.Lens
 import Data.Default
 import Data.Maybe
 import Safe
@@ -116,6 +112,7 @@ data TextArea t
 textArea :: MonadWidget t m => String -> Event t String -> Dynamic t (Map String String) -> m (TextArea t)
 textArea initial eSet attrs = do
   e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
+  liftIO $ htmlTextAreaElementSetValue e initial
   postGui <- askPostGui
   runWithActions <- askRunWithActions
   eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do

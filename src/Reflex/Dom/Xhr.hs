@@ -3,7 +3,6 @@ module Reflex.Dom.Xhr where
 
 #ifdef __GHCJS__
 import Control.Concurrent
-import Control.Concurrent.MVar
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -14,7 +13,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Text.Encoding
 import GHCJS.Foreign
 import GHCJS.Types
@@ -62,9 +60,9 @@ newXMLHttpRequest req cb = do
     True
     (fromMaybe "" $ _xhrRequestConfig_user c)
     (fromMaybe "" $ _xhrRequestConfig_password c)
-  iforM (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
+  iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
   maybe (return ()) (xmlHttpRequestSetResponseType xhr . toJSString) (_xhrRequestConfig_responseType c)
-  xmlHttpRequestOnreadystatechange xhr $ do
+  _ <- xmlHttpRequestOnreadystatechange xhr $ do
     readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
     if readyState == 4
         then do
@@ -77,15 +75,15 @@ newXMLHttpRequest req cb = do
 
 performRequestAsync :: MonadWidget t m => Event t XhrRequest -> m (Event t XhrResponse)
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
-  liftIO $ newXMLHttpRequest r cb
+  _ <- liftIO $ newXMLHttpRequest r cb
   return ()
 
 performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
 performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
-  liftIO $ do
+  _ <- liftIO $ do
     resps <- forM rs $ \r -> do
       resp <- newEmptyMVar
-      newXMLHttpRequest r $ putMVar resp
+      _ <- newXMLHttpRequest r $ putMVar resp
       return resp
     forkIO $ cb =<< forM resps takeMVar
   return ()

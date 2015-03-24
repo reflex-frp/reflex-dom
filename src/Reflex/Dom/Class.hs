@@ -7,34 +7,14 @@ import Reflex
 import Reflex.Host.Class
 
 import Control.Monad.Identity hiding (mapM, mapM_, forM, forM_, sequence)
-import Control.Lens hiding ((<|))
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Traversable
 import Data.Foldable
 import Control.Monad.Ref
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence)
 import Control.Monad.State hiding (mapM, mapM_, forM, forM_, sequence)
-import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
-import Data.IORef
-import Data.These
-import Data.Align
 import GHCJS.DOM.Types hiding (Event)
-import GHCJS.DOM.Document
-import GHCJS.DOM.Node
-import GHCJS.DOM.NamedNodeMap
-import GHCJS.DOM.Element
-import GHCJS.DOM.HTMLElement
-import GHCJS.DOM.HTMLInputElement
-import GHCJS.DOM.HTMLSelectElement
-import GHCJS.DOM.HTMLTextAreaElement
-import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM (event, preventDefault)
-import Data.Dependent.Map (DMap)
-import Safe
 
 -- | Alias for Data.Map.singleton
 (=:) :: k -> a -> Map k a
@@ -48,7 +28,7 @@ keycodeEscape = 27
 
 class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
       , HasDocument m
-      , MonadIO (WidgetHost m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
+      , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO
       , MonadFix m
@@ -106,8 +86,10 @@ instance MonadWidget t m => MonadWidget t (ReaderT r m) where
       (a, postBuild, voidActions) <- runWidget rootElement $ runReaderT w r
       return (a, postBuild, voidActions)
 
+performEvent_ :: MonadWidget t m => Event t (WidgetHost m ()) -> m ()
 performEvent_ = addVoidAction
 
+performEvent :: (MonadWidget t m, Ref m ~ Ref IO) => Event t (WidgetHost m a) -> m (Event t a)
 performEvent e = do
   (eResult, reResultTrigger) <- newEventWithTriggerRef
   addVoidAction $ ffor e $ \o -> do

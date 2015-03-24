@@ -8,43 +8,24 @@ import Reflex.Dom.Class
 import GHCJS.DOM
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
 import GHCJS.DOM.Node
-import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLElement
-import GHCJS.DOM.HTMLInputElement
-import GHCJS.DOM.NamedNodeMap
 import GHCJS.DOM.Document
-import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM (event, Signal (..))
 import Reflex.Class
-import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.Spider (Spider, SpiderHost (..))
-import qualified Reflex.Spider
 import Control.Lens
-import Control.Applicative
 import Control.Monad hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Ref
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Control.Concurrent
+import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
-import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
 import Data.Foldable
 import Data.Traversable
-import Data.IORef
-import Data.Align
-import Data.These
-import Data.ByteString (ByteString)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Monoid ((<>))
-
-import System.IO.Unsafe
 
 data GuiEnv t h
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
@@ -134,7 +115,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
   newEventWithTrigger = lift . newEventWithTrigger
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
-         , MonadIO m, Functor m
+         , MonadIO m, MonadIO h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
          , MonadFix m
          ) => MonadWidget t (Widget t (Gui t h m)) where
@@ -180,17 +161,19 @@ mainWidget w = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body w
 
+mainWidgetWithHead :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just head <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  attachWidget head h
+  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
+  attachWidget headElement h
   Just body <- documentGetBody doc
   attachWidget body b
 
+mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just head <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  htmlElementSetInnerHTML head $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
+  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
+  htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- documentGetBody doc
   attachWidget body w
 
@@ -201,21 +184,18 @@ attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this 
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions :: GuiEnv Spider SpiderHost
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
-              sequence =<< readEvent voidAction
+              sequence =<< readEvent voidActionHandle
             runHostFrame $ runGui (sequence_ voidActionNeeded) guiEnv
       Just df <- liftIO $ documentCreateDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
-        (result, postBuild, voidAction) <- runWidget df w
+        (r, postBuild, va) <- runWidget df w
         postBuild
-        return (result, voidAction)
+        return (r, va)
       liftIO $ htmlElementSetInnerHTML rootElement ""
-      liftIO $ nodeAppendChild rootElement $ Just df
-      subscribeEvent voidAction --TODO: Should be unnecessary
---  currentFrame <- liftIO $ newEmptyMVar
---  idleAdd (tryTakeMVar currentFrame >>= maybe (return ()) id >> return True) priorityLow --TODO: avoid wasting CPU here
---  forkIO $ forever $ putMVar currentFrame =<< readChan frames
+      _ <- liftIO $ nodeAppendChild rootElement $ Just df
+      voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
-  liftIO $ forkIO $ forever $ postGUISync =<< readChan frames -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe
+  _ <- liftIO $ forkIO $ forever $ postGUISync =<< readChan frames -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe
   return result
 
 --type MonadWidget t h m = (t ~ Spider, h ~ Gui Spider SpiderHost (HostFrame Spider), m ~ Widget t h, Monad h, MonadHold t h, HasDocument h, MonadSample t h, MonadRef h, MonadIO h, Functor (Event t), Functor h, Reflex t) -- Locking down these types seems to help a little in GHCJS, but not really in GHC
