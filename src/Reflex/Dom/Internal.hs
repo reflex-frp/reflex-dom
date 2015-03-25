@@ -1,11 +1,12 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TypeOperators, DeriveDataTypeable, PackageImports, TemplateHaskell, LambdaCase, ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TypeOperators, DeriveDataTypeable, PackageImports, TemplateHaskell, LambdaCase, ConstraintKinds, CPP #-}
 module Reflex.Dom.Internal where
 
 import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
 
+import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Class
 
-import GHCJS.DOM
+import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
 import GHCJS.DOM.Node
 import GHCJS.DOM.HTMLElement
@@ -17,7 +18,7 @@ import Control.Lens
 import Control.Monad hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Ref
-import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
+import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
 import Control.Concurrent
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
@@ -26,11 +27,13 @@ import Data.Traversable
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Monoid ((<>))
+import Reflex.Dom.Xhr.Foreign
 
 data GuiEnv t h
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
             , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
+            , _guiEnvWebView :: !WebView
             }
 
 --TODO: Poorly named
@@ -78,6 +81,12 @@ instance Monad m => HasDocument (Gui t h m) where
 
 instance HasDocument m => HasDocument (Widget t m) where
   askDocument = lift askDocument
+
+instance Monad m => HasWebView (Gui t h m) where
+  askWebView = Gui $ view guiEnvWebView
+
+instance HasWebView m => HasWebView (Widget t m) where
+  askWebView = lift askWebView
 
 instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h m) where
   askPostGui = Gui $ view guiEnvPostGui
@@ -159,15 +168,15 @@ mainWidget :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO 
 mainWidget w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just body <- documentGetBody doc
-  attachWidget body w
+  attachWidget body w webView
 
 mainWidgetWithHead :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  attachWidget headElement h
+  attachWidget headElement h webView
   Just body <- documentGetBody doc
-  attachWidget body b
+  attachWidget body b webView
 
 mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
@@ -175,13 +184,13 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
   htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- documentGetBody doc
-  attachWidget body w
+  attachWidget body w webView
 
-attachWidget :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> IO a
-attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+attachWidget :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> WebView -> IO a
+attachWidget rootElement w wv = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions :: GuiEnv Spider SpiderHost
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions wv :: GuiEnv Spider SpiderHost
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle

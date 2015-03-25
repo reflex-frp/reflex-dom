@@ -15,6 +15,7 @@ import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence)
 import Control.Monad.State hiding (mapM, mapM_, forM, forM_, sequence)
 import Data.Dependent.Sum (DSum (..))
 import GHCJS.DOM.Types hiding (Event)
+import GHCJS.DOM (WebView)
 
 -- | Alias for Data.Map.singleton
 (=:) :: k -> a -> Map k a
@@ -27,7 +28,7 @@ keycodeEscape :: Int
 keycodeEscape = 27
 
 class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
-      , HasDocument m
+      , HasDocument m, HasWebView m, HasWebView (WidgetHost m)
       , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO
@@ -51,6 +52,15 @@ instance HasDocument m => HasDocument (ReaderT r m) where
 
 instance HasDocument m => HasDocument (StateT r m) where
   askDocument = lift askDocument
+
+class Monad m => HasWebView m where
+  askWebView :: m WebView
+
+instance HasWebView m => HasWebView (ReaderT r m) where
+  askWebView = lift askWebView
+
+instance HasWebView m => HasWebView (StateT r m) where
+  askWebView = lift askWebView
 
 class (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h m | m -> t h where
   askPostGui :: m (h () -> IO ())

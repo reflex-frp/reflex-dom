@@ -28,13 +28,22 @@ library
     text,
     bytestring,
     data-default,
-    semigroups
+    semigroups,
+    aeson
 
   if impl(ghcjs)
+    hs-source-dirs: src-ghcjs
     cpp-options: -D__GHCJS__
     build-depends:
-      aeson,
       ghcjs-base
+  else
+    hs-source-dirs: src-ghc
+    build-tools: c2hs
+    build-depends:
+      glib >=0.13.0.0 && <0.14,
+      gtk >=0.13.0.0 && <0.14,
+      webkit >=0.13.0.0 && <0.14,
+      webkit-javascriptcore
 
   exposed-modules:
     Reflex.Dom
@@ -44,6 +53,9 @@ library
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
     Reflex.Dom.Xhr
+  other-modules:
+    Reflex.Dom.Internal.Foreign
+    Reflex.Dom.Xhr.Foreign
 
   other-extensions: TemplateHaskell
   ghc-prof-options: -fprof-auto
