@@ -32,10 +32,17 @@ import Data.Maybe
 type AttributeMap = Map String String
 
 data El t
-  = El { _el_element :: HTMLElement
-       , _el_clicked :: Event t ()
-       , _el_keypress :: Event t Int
-       , _el_scrolled :: Event t Int
+  = El { _el_element    :: HTMLElement
+       , _el_clicked    :: Event t ()
+       , _el_mousemove  :: Event t (Int, Int)
+       , _el_mousedown  :: Event t (Int, Int)
+       , _el_mouseup    :: Event t (Int, Int)
+       , _el_mouseenter :: Event t ()
+       , _el_mouseleave :: Event t ()
+       , _el_keypress   :: Event t Int
+       , _el_scrolled   :: Event t Int
+       , _el_focus      :: Event t ()
+       , _el_blur       :: Event t ()
        }
 
 class Attributes m a where
@@ -380,10 +387,17 @@ wrapDomEventMaybe element elementOnevent getValue = do
 
 wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
-  clicked <- wrapDomEvent e elementOnclick (return ())
-  keypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
-  scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
-  return $ El e clicked keypress scrolled
+  clicked    <- wrapDomEvent e elementOnclick (return ())
+  mousemove  <- wrapDomEvent e elementOnmousemove -- I think the funcions needed here
+  mousedown  <- wrapDomEvent e elementOnmousedown -- are mouseEventGetX
+  mouseup    <- wrapDomEvent e elementOnmouseup   -- and mouseEventGetY
+  mouseenter <- wrapDomEvent e elementOnmouseenter (return ())
+  mouseleave <- wrapDomEvent e elementOnmouseleave (return ())
+  keypress   <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  scrolled   <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
+  focus      <- wrapDomEvent e elementOnfocus (return ())
+  blur       <- wrapDomEvent e elementOnblur (return ())
+  return $ El e clicked mousemove mousedown mouseup mouseenter mouseleave keypress scrolled focus blur
 
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttr' elementTag attrs child = do
