@@ -1,4 +1,16 @@
-module Reflex.Dom.Xhr where
+module Reflex.Dom.Xhr
+  ( module Reflex.Dom.Xhr
+  , XMLHttpRequest
+  , xmlHttpRequestNew
+  , xmlHttpRequestOpen
+  , xmlHttpRequestSetRequestHeader
+  , xmlHttpRequestSetResponseType
+  , xmlHttpRequestOnreadystatechange
+  , xmlHttpRequestGetReadyState
+  , xmlHttpRequestGetResponseText
+  , responseTextToText
+  , xmlHttpRequestSend)
+where
 
 import Control.Concurrent
 import Control.Lens
