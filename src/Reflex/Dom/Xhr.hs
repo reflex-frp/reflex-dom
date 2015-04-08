@@ -1,4 +1,6 @@
 module Reflex.Dom.Xhr where
+
+import Control.Concurrent
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -74,15 +76,14 @@ performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
   _ <- newXMLHttpRequest r cb
   return ()
 
---performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
---performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
---  _ <- liftIO $ do
---    resps <- forM rs $ \r -> do
---      resp <- newEmptyMVar
---      _ <- newXMLHttpRequest r $ putMVar resp
---      return resp
---    forkIO $ cb =<< forM resps takeMVar
---  return ()
+performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
+performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
+  resps <- forM rs $ \r -> do
+    resp <- liftIO newEmptyMVar
+    _ <- newXMLHttpRequest r $ putMVar resp
+    return resp
+  _ <- liftIO $ forkIO $ cb =<< forM resps takeMVar
+  return ()
 
 getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
 getAndDecode url = do
