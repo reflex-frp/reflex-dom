@@ -27,7 +27,6 @@ import Data.Traversable
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Monoid ((<>))
-import Reflex.Dom.Xhr.Foreign
 
 data GuiEnv t h
    = GuiEnv { _guiEnvDocument :: !HTMLDocument

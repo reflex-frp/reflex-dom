@@ -1,5 +1,4 @@
 module Reflex.Dom.Xhr where
-import Control.Concurrent
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
