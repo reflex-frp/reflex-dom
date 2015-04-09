@@ -28,7 +28,7 @@ keycodeEscape :: Int
 keycodeEscape = 27
 
 class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
-      , HasDocument m, HasWebView m, HasWebView (WidgetHost m), MonadIORestore (WidgetHost m)
+      , HasDocument m, HasWebView m, HasWebView (WidgetHost m)
       , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO

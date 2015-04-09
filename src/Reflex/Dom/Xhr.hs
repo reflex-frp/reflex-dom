@@ -57,10 +57,10 @@ instance Default XhrRequestConfig where
 xhrRequest :: String -> String -> XhrRequestConfig -> XhrRequest
 xhrRequest = XhrRequest
 
-newXMLHttpRequest :: (HasWebView m, MonadIO m, MonadIORestore m) => XhrRequest -> (XhrResponse -> m a) -> m XMLHttpRequest
+newXMLHttpRequest :: (HasWebView m, MonadIO m, HasPostGui t h m) => XhrRequest -> (XhrResponse -> h ()) -> m XMLHttpRequest
 newXMLHttpRequest req cb = do
   wv <- askWebView
-  rst <- askRestore
+  postGui <- askPostGui
   liftIO $ do
     xhr <- xmlHttpRequestNew wv
     let c = _xhrRequest_config req
@@ -78,7 +78,7 @@ newXMLHttpRequest req cb = do
       if readyState == 4
           then do
             r <- liftIO $ xmlHttpRequestGetResponseText xhr
-            _ <- liftIO $ restore rst $ cb $ XhrResponse $ responseTextToText r
+            _ <- liftIO $ postGui $ cb $ XhrResponse $ responseTextToText r
             return ()
           else return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)

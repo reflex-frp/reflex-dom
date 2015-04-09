@@ -132,7 +132,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
   newEventWithTrigger = lift . newEventWithTrigger
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
-         , MonadIO m, MonadIO h, Functor m, MonadIORestore m
+         , MonadIO m, MonadIO h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
          , MonadFix m
          ) => MonadWidget t (Widget t (Gui t h m)) where
@@ -172,13 +172,13 @@ holdOnStartup a0 ma = do
     runFrameWithTriggerRef startupDoneTriggerRef a
   hold a0 startupDone
 
-mainWidget :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidget :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidget w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just body <- documentGetBody doc
   attachWidget body webView w
 
-mainWidgetWithHead :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidgetWithHead :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
@@ -186,7 +186,7 @@ mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body webView b
 
-mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
@@ -194,11 +194,35 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body webView w
 
-attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> IO a
-attachWidget rootElement wv w = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+
+instance MonadTrans WithWebView where
+  lift = WithWebView . lift
+
+instance MonadRef m => MonadRef (WithWebView m) where
+  type Ref (WithWebView m) = Ref m
+  newRef = lift . newRef
+  readRef = lift . readRef
+  writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (WithWebView m) where
+  atomicModifyRef r = lift . atomicModifyRef r
+
+deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView m)
+instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
+  fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
+  subscribeEvent = lift . subscribeEvent
+  runFrame = lift . runFrame
+  runHostFrame = lift . runHostFrame
+
+runWithWebView :: WithWebView m a -> WebView -> m a
+runWithWebView = runReaderT . unWithWebView
+
+attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
+attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions wv :: GuiEnv Spider SpiderHost
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle
