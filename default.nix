@@ -1,5 +1,5 @@
 { mkDerivation, dependent-map, ghcjs-dom, lens
-, mtl, reflex, safe, text, these
+, mtl, ref-tf, reflex, safe, text, these
 , transformers, data-default, semigroups, aeson
 , ghc, webkit-javascriptcore
 }:
@@ -20,6 +20,7 @@ mkDerivation {
     text
     data-default
     semigroups
+    ref-tf
     aeson
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkit-javascriptcore ]);
   license = null;

@@ -49,6 +49,8 @@ instance MonadRef m => MonadRef (Gui t h m) where
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (Gui t h m) where
   atomicModifyRef r f = lift $ atomicModifyRef r f
 
 instance MonadSample t m => MonadSample t (Gui t h m) where
@@ -117,6 +119,8 @@ instance MonadRef m => MonadRef (Widget t m) where
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (Widget t m) where
   atomicModifyRef r f = lift $ atomicModifyRef r f
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m) where
