@@ -28,7 +28,7 @@ keycodeEscape :: Int
 keycodeEscape = 27
 
 class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
-      , HasDocument m, HasWebView m, HasWebView (WidgetHost m)
+      , HasDocument m, HasWebView m, HasWebView (WidgetHost m), MonadIORestore (WidgetHost m)
       , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO
@@ -61,6 +61,17 @@ instance HasWebView m => HasWebView (ReaderT r m) where
 
 instance HasWebView m => HasWebView (StateT r m) where
   askWebView = lift askWebView
+
+newtype Restore m = Restore { restore :: forall a. m a -> IO a }
+
+class Monad m => MonadIORestore m where
+  askRestore :: m (Restore m)
+
+instance MonadIORestore m => MonadIORestore (ReaderT r m) where
+  askRestore = do
+    r <- ask
+    parentRestore <- lift askRestore
+    return $ Restore $ \a -> restore parentRestore $ runReaderT a r
 
 class (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h m | m -> t h where
   askPostGui :: m (h () -> IO ())

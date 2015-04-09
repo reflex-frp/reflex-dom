@@ -57,9 +57,10 @@ instance Default XhrRequestConfig where
 xhrRequest :: String -> String -> XhrRequestConfig -> XhrRequest
 xhrRequest = XhrRequest
 
-newXMLHttpRequest :: (HasWebView m, MonadIO m) => XhrRequest -> (XhrResponse -> IO a) -> m XMLHttpRequest
+newXMLHttpRequest :: (HasWebView m, MonadIO m, MonadIORestore m) => XhrRequest -> (XhrResponse -> m a) -> m XMLHttpRequest
 newXMLHttpRequest req cb = do
   wv <- askWebView
+  rst <- askRestore
   liftIO $ do
     xhr <- xmlHttpRequestNew wv
     let c = _xhrRequest_config req
@@ -77,7 +78,7 @@ newXMLHttpRequest req cb = do
       if readyState == 4
           then do
             r <- liftIO $ xmlHttpRequestGetResponseText xhr
-            _ <- liftIO $ cb $ XhrResponse $ responseTextToText r
+            _ <- liftIO $ restore rst $ cb $ XhrResponse $ responseTextToText r
             return ()
           else return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
@@ -85,14 +86,14 @@ newXMLHttpRequest req cb = do
 
 performRequestAsync :: (MonadWidget t m) => Event t XhrRequest -> m (Event t XhrResponse)
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
-  _ <- newXMLHttpRequest r cb
+  _ <- newXMLHttpRequest r $ liftIO . cb
   return ()
 
 performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
 performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
   resps <- forM rs $ \r -> do
     resp <- liftIO newEmptyMVar
-    _ <- newXMLHttpRequest r $ putMVar resp
+    _ <- newXMLHttpRequest r $ liftIO . putMVar resp
     return resp
   _ <- liftIO $ forkIO $ cb =<< forM resps takeMVar
   return ()

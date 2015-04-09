@@ -86,6 +86,11 @@ instance HasDocument m => HasDocument (Widget t m) where
 instance Monad m => HasWebView (Gui t h m) where
   askWebView = Gui $ view guiEnvWebView
 
+instance MonadIORestore m => MonadIORestore (Gui t h m) where
+  askRestore = Gui $ do
+    r <- askRestore
+    return $ Restore $ restore r . unGui
+
 instance HasWebView m => HasWebView (Widget t m) where
   askWebView = lift askWebView
 
@@ -127,7 +132,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
   newEventWithTrigger = lift . newEventWithTrigger
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
-         , MonadIO m, MonadIO h, Functor m
+         , MonadIO m, MonadIO h, Functor m, MonadIORestore m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
          , MonadFix m
          ) => MonadWidget t (Widget t (Gui t h m)) where
