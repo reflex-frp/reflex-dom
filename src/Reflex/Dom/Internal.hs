@@ -167,15 +167,15 @@ mainWidget :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO 
 mainWidget w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just body <- documentGetBody doc
-  attachWidget body w webView
+  attachWidget body webView w
 
 mainWidgetWithHead :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  attachWidget headElement h webView
+  attachWidget headElement webView h
   Just body <- documentGetBody doc
-  attachWidget body b webView
+  attachWidget body webView b
 
 mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
@@ -183,10 +183,10 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
   htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- documentGetBody doc
-  attachWidget body w webView
+  attachWidget body webView w
 
-attachWidget :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> WebView -> IO a
-attachWidget rootElement w wv = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> IO a
+attachWidget rootElement wv w = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions wv :: GuiEnv Spider SpiderHost
