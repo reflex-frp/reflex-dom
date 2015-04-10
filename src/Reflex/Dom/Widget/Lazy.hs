@@ -17,7 +17,7 @@ import GHCJS.DOM.Element
 virtualListWithSelection :: forall t m k v. (MonadWidget t m, Ord k)
   => Int -- ^ The height of the visible region in pixels
   -> Int -- ^ The height of each row in pixels
-  -> Int -- ^ The total number of items
+  -> Dynamic t Int -- ^ The total number of items
   -> Int -- ^ The index of the row to scroll to on initialization
   -> Event t Int -- ^ An 'Event' containing a row index. Used to scroll to the given index.
   -> String -- ^ The element tag for the list
@@ -28,10 +28,10 @@ virtualListWithSelection :: forall t m k v. (MonadWidget t m, Ord k)
   -> Dynamic t (Map k v) -- ^ The 'Map' of items
   -> m (Dynamic t (Int, Int), Event t k) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and an 'Event' of the selected key
 virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTag rowAttrs itemBuilder items = do
-  let totalHeightStyle = toHeightStyle $ rowPx * maxIndex
+  totalHeightStyle <- mapDyn (toHeightStyle . (*) rowPx) maxIndex
   rec (container, itemList) <- elAttr "div" outerStyle $ elAttr' "div" containerStyle $ do
         currentTop <- mapDyn (listWrapperStyle . fst) window
-        (_, lis) <- elAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ listWithKey itemsInWindow $ \k v -> do
+        (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ listWithKey itemsInWindow $ \k v -> do
             (li,_) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v
             return $ fmap (const k) (_el_clicked li)
         return lis
