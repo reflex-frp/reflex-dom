@@ -52,6 +52,7 @@ library
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
+    Reflex.Dom.Widget.Lazy
     Reflex.Dom.Xhr
   other-modules:
     Reflex.Dom.Internal.Foreign
