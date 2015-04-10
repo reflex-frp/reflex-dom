@@ -134,7 +134,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
          , MonadIO m, MonadIO h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
-         , MonadFix m
+         , MonadFix m, HasWebView h, HasPostGui t h h
          ) => MonadWidget t (Widget t (Gui t h m)) where
   type WidgetHost (Widget t (Gui t h m)) = Gui t h m
   type GuiAction (Widget t (Gui t h m)) = h
@@ -195,6 +195,22 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
   attachWidget body webView w
 
 newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+
+instance (Monad m) => HasWebView (WithWebView m) where
+  askWebView = WithWebView ask
+
+instance HasPostGui t h m => HasPostGui t (WithWebView h) (WithWebView m) where
+  askPostGui = do
+    postGui <- lift askPostGui
+    webView <- askWebView
+    return $ \h -> postGui $ runWithWebView h webView
+  askRunWithActions = do
+    runWithActions <- lift askRunWithActions
+    return $ lift . runWithActions
+
+instance HasPostGui Spider SpiderHost SpiderHost where
+  askPostGui = return $ \h -> liftIO $ runSpiderHost h
+  askRunWithActions = return fireEvents
 
 instance MonadTrans WithWebView where
   lift = WithWebView . lift
