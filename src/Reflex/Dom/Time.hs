@@ -17,6 +17,6 @@ tickLossy dt t0 = performEventAsync . fmap callAtNextInterval =<< getPostBuild
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ do
           t <- getCurrentTime
           let offset = t `diffUTCTime` t0
-              (n, delay) = offset `divMod'` dt
-          threadDelay $ ceiling $ delay * 1000000
+              (n, alreadyElapsed) = offset `divMod'` dt
+          threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
           cb n
