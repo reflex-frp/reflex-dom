@@ -29,8 +29,9 @@ library
     bytestring >=0.10.6.0 && <0.11,
     data-default >=0.5.3 && <0.6,
     semigroups >=0.16.1 && <0.17,
-    ref-tf,
-    aeson >=0.8.0.2 && <0.9
+    ref-tf == 0.4.*,
+    aeson >=0.8.0.2 && <0.9,
+    time >=1.5.0.1 && <1.6
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
@@ -54,6 +55,7 @@ library
     Reflex.Dom.Widget.Input
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Xhr
+    Reflex.Dom.Time
   other-modules:
     Reflex.Dom.Internal.Foreign
     Reflex.Dom.Xhr.Foreign
