@@ -378,10 +378,20 @@ wrapDomEventMaybe element elementOnevent getValue = do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
 
+getKeyEvent :: EventM UIEvent e Int
+getKeyEvent = do
+  e <- event
+  liftIO $ do
+    which <- uiEventGetWhich e
+    if which /= 0 then return which else do
+      charCode <- uiEventGetCharCode e
+      if charCode /= 0 then return charCode else
+        uiEventGetKeyCode e
+
 wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
   clicked <- wrapDomEvent e elementOnclick (return ())
-  keypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  keypress <- wrapDomEvent e elementOnkeypress getKeyEvent
   scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
   return $ El e clicked keypress scrolled
 

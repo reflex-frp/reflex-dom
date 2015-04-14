@@ -62,9 +62,9 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
       postGui $ runWithActions [eChangeFocusTrigger :=> True]
     return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
   dFocus <- holdDyn False eChangeFocus
-  eKeypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
-  eKeydown <- wrapDomEvent e elementOnkeydown $ liftIO . uiEventGetKeyCode =<< event
-  eKeyup <- wrapDomEvent e elementOnkeyup $ liftIO . uiEventGetKeyCode =<< event
+  eKeypress <- wrapDomEvent e elementOnkeypress getKeyEvent
+  eKeydown <- wrapDomEvent e elementOnkeydown getKeyEvent
+  eKeyup <- wrapDomEvent e elementOnkeyup getKeyEvent
   dValue <- holdDyn initial $ leftmost [eSetValue, eChange]
   return $ TextInput dValue eKeypress eKeydown eKeyup dFocus e
 
@@ -106,7 +106,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
   f <- holdDyn False eChangeFocus
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
   v <- holdDyn "" $ leftmost [eSet, ev]
-  eKeypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  eKeypress <- wrapDomEvent e elementOnkeypress getKeyEvent
   return $ TextArea v e f eKeypress
 
 data CheckboxConfig t
