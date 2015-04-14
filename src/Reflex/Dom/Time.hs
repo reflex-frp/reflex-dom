@@ -12,9 +12,9 @@ import Data.Time.Clock
 -- | Send events over time with the given basis time and interval
 --   If the system starts running behind, occurrences will be dropped rather than buffered
 --   Each occurrence of the resulting event will contain the index of the current interval, with 0 representing the basis time
-skippableIntervalsAround :: MonadWidget t m => UTCTime -> NominalDiffTime -> m (Event t Integer)
-skippableIntervalsAround t0 dt = performEventAsync . fmap callAtNextInterval =<< getPostBuild
-  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ do
+tickLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Event t Integer)
+tickLossy dt t0 = performEventAsync . fmap callAtNextInterval =<< getPostBuild
+  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ do
           t <- getCurrentTime
           let offset = t `diffUTCTime` t0
               (n, delay) = offset `divMod'` dt
