@@ -9,14 +9,37 @@ import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
 
+data TickInfo
+  = TickInfo { _tickinfo_lastUTC :: UTCTime
+             -- ^ UTC time immediately after the last tick.
+             , _tickinfo_n :: Integer
+             -- ^ Number of time periods since t0
+             , _tickinfo_alreadyElapsed :: NominalDiffTime
+             -- ^ Amount of time already elapsed in the current tick period.
+             }
+  deriving (Eq, Show)
+
+-- | Special case of tickLossyFrom that uses the post-build event to start the
+--   tick thread.
+tickLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
+tickLossy dt t0 = tickLossyFrom dt t0 =<< getPostBuild
+
 -- | Send events over time with the given basis time and interval
 --   If the system starts running behind, occurrences will be dropped rather than buffered
 --   Each occurrence of the resulting event will contain the index of the current interval, with 0 representing the basis time
-tickLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Event t Integer)
-tickLossy dt t0 = performEventAsync . fmap callAtNextInterval =<< getPostBuild
+tickLossyFrom
+    :: MonadWidget t m
+    => NominalDiffTime
+    -> UTCTime
+    -> Event t a
+    -- ^ Event that starts a tick generation thread.  Usually you want this to
+    -- be something like the result of getPostBuild that only fires once.  But
+    -- there could be uses for starting multiple timer threads.
+    -> m (Event t TickInfo)
+tickLossyFrom dt t0 e = performEventAsync $ fmap callAtNextInterval e
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ do
           t <- getCurrentTime
           let offset = t `diffUTCTime` t0
               (n, alreadyElapsed) = offset `divMod'` dt
           threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
-          cb n
+          cb $ TickInfo t n alreadyElapsed
