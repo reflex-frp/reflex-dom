@@ -134,3 +134,23 @@ xmlHttpRequestSetResponseType xhr t = do
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
 
+xmlHttpRequestGetStatus :: XMLHttpRequest -> IO Word
+xmlHttpRequestGetStatus xhr = do
+  let c = xhrContext xhr
+  script <- jsstringcreatewithutf8cstring "this.status"
+  s <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  d <- jsvaluetonumber c s nullPtr
+  return $ truncate d
+
+xmlHttpRequestGetStatusText :: XMLHttpRequest -> IO String
+xmlHttpRequestGetStatusText xhr = do
+  let c = xhrContext xhr
+  script <- jsstringgetmaximumutf8cstringsize "this.statusText"
+  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  j <- jsvaluetostringcopy c t nullPtr
+  l <- jsstringgetmaximumutf8cstringsize j
+  s <- allocaBytes (fromIntegral l) $ \ps -> do
+         _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
+         peekCString ps
+  return $ Just s
+

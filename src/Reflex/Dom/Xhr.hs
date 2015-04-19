@@ -1,15 +1,18 @@
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest
-  , xmlHttpRequestNew
-  , xmlHttpRequestOpen
-  , xmlHttpRequestSetRequestHeader
-  , xmlHttpRequestSetResponseType
-  , xmlHttpRequestOnreadystatechange
+  , responseTextToText
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
-  , responseTextToText
-  , xmlHttpRequestSend)
+  , xmlHttpRequestGetStatus
+  , xmlHttpRequestGetStatusText
+  , xmlHttpRequestNew
+  , xmlHttpRequestOnreadystatechange
+  , xmlHttpRequestOpen
+  , xmlHttpRequestSend
+  , xmlHttpRequestSetRequestHeader
+  , xmlHttpRequestSetResponseType
+  )
 where
 
 import Control.Concurrent
