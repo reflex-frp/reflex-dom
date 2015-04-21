@@ -10,14 +10,14 @@ import Data.Fixed
 import Data.Time.Clock
 
 data TickInfo
-  = TickInfo { _tickinfo_lastUTC :: UTCTime
+  = TickInfo { _tickInfo_lastUTC :: UTCTime
              -- ^ UTC time immediately after the last tick.
-             , _tickinfo_n :: Integer
+             , _tickInfo_n :: Integer
              -- ^ Number of time periods since t0
-             , _tickinfo_alreadyElapsed :: NominalDiffTime
+             , _tickInfo_alreadyElapsed :: NominalDiffTime
              -- ^ Amount of time already elapsed in the current tick period.
              }
-  deriving (Eq, Show)
+  deriving (Eq)
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.

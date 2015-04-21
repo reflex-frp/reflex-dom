@@ -1,7 +1,7 @@
 { mkDerivation, dependent-map, ghcjs-dom, lens
 , mtl, ref-tf, reflex, safe, text, these
 , transformers, data-default, semigroups, aeson
-, ghc, webkit-javascriptcore
+, ghc, webkitgtk3-javascriptcore
 }:
 
 mkDerivation {
@@ -22,6 +22,6 @@ mkDerivation {
     semigroups
     ref-tf
     aeson
-  ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkit-javascriptcore ]);
+  ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
   license = null;
 }

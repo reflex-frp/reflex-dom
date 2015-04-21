@@ -145,12 +145,11 @@ xmlHttpRequestGetStatus xhr = do
 xmlHttpRequestGetStatusText :: XMLHttpRequest -> IO String
 xmlHttpRequestGetStatusText xhr = do
   let c = xhrContext xhr
-  script <- jsstringgetmaximumutf8cstringsize "this.statusText"
+  script <- jsstringcreatewithutf8cstring "this.statusText"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
   j <- jsvaluetostringcopy c t nullPtr
   l <- jsstringgetmaximumutf8cstringsize j
   s <- allocaBytes (fromIntegral l) $ \ps -> do
          _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
          peekCString ps
-  return $ Just s
-
+  return s
