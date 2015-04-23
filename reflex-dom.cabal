@@ -15,7 +15,7 @@ library
   hs-source-dirs: src
   build-depends:
     base >= 4.7 && < 4.9,
-    reflex == 0.1.*,
+    reflex == 0.2.*,
     dependent-sum == 0.2.*,
     dependent-map == 0.1.*,
     semigroups == 0.16.*,
