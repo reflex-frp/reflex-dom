@@ -179,7 +179,7 @@ listWithKey vals mkChild = do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
     runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd initialState
+    sequence_ $ fmap snd $ Map.elems initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
@@ -287,7 +287,7 @@ listViewWithKey' vals mkChild = do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
     runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd initialState
+    sequence_ $ fmap snd $ Map.elems initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
@@ -373,7 +373,7 @@ wrapDomEventMaybe element elementOnevent getValue = do
   e <- newEventWithTrigger $ \et -> do
         unsubscribe <- {-# SCC "a" #-} liftIO $ {-# SCC "b" #-} elementOnevent element $ {-# SCC "c" #-} do
           mv <- {-# SCC "d" #-} getValue
-          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+          forM_ (maybeToList mv) $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
         return $ liftIO $ do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
