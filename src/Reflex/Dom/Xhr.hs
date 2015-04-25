@@ -17,7 +17,7 @@ where
 
 import Control.Concurrent
 import Control.Lens
-import Control.Monad
+import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
 import qualified Data.ByteString.Lazy as BL
@@ -27,7 +27,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
-import Data.Traversable as Traversable
+import Data.Traversable
 import Reflex
 import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Foreign
@@ -95,11 +95,11 @@ performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
 
 performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
 performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
-  resps <- Traversable.forM rs $ \r -> do
+  resps <- forM rs $ \r -> do
     resp <- liftIO newEmptyMVar
     _ <- newXMLHttpRequest r $ liftIO . putMVar resp
     return resp
-  _ <- liftIO $ forkIO $ cb =<< Traversable.forM resps takeMVar
+  _ <- liftIO $ forkIO $ cb =<< forM resps takeMVar
   return ()
 
 getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
