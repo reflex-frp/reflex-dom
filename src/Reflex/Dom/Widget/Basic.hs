@@ -4,6 +4,7 @@ module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
 
+import Prelude hiding (mapM, sequence)
 import Reflex
 import Reflex.Host.Class
 import Data.Functor.Misc
@@ -12,9 +13,10 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Dependent.Sum (DSum (..))
+import Data.Traversable
 import Control.Monad.Trans
-import Control.Monad.Reader
-import Control.Monad.State hiding (state)
+import Control.Monad.Reader hiding (forM, mapM, sequence)
+import Control.Monad.State hiding (state, forM, mapM, sequence)
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
 import GHCJS.DOM.EventM (event, EventM)
@@ -179,7 +181,7 @@ listWithKey vals mkChild = do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
     runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd $ Map.elems initialState
+    sequence $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
@@ -287,7 +289,7 @@ listViewWithKey' vals mkChild = do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
     runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd $ Map.elems initialState
+    sequence $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
@@ -373,7 +375,8 @@ wrapDomEventMaybe element elementOnevent getValue = do
   e <- newEventWithTrigger $ \et -> do
         unsubscribe <- {-# SCC "a" #-} liftIO $ {-# SCC "b" #-} elementOnevent element $ {-# SCC "c" #-} do
           mv <- {-# SCC "d" #-} getValue
-          forM_ (maybeToList mv) $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+          forM mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+          return ()
         return $ liftIO $ do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
