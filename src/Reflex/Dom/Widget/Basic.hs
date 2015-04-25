@@ -377,7 +377,6 @@ wrapDomEventMaybe element elementOnevent getValue = do
         unsubscribe <- {-# SCC "a" #-} liftIO $ {-# SCC "b" #-} elementOnevent element $ {-# SCC "c" #-} do
           mv <- {-# SCC "d" #-} getValue
           forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
-          return ()
         return $ liftIO $ do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
