@@ -490,11 +490,15 @@ button s = do
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
+workflow :: forall t m a. MonadWidget t m => Workflow t m a -> m (Dynamic t a)
+workflow w0 = do
+  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ fmap snd $ current eResult
+  mapDyn fst eResult
+
 workflowView :: forall t m a. MonadWidget t m => Workflow t m a -> m (Event t a)
 workflowView w0 = do
   rec eResult <- dyn =<< mapDyn unWorkflow =<< holdDyn w0 eReplace
       eReplace <- liftM switch $ hold never $ fmap snd eResult
-      eResult `seq` eReplace `seq` return ()
   return $ fmap fst eResult
 
 divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
