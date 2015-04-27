@@ -17,7 +17,7 @@ where
 
 import Control.Concurrent
 import Control.Lens
-import Control.Monad
+import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
 import qualified Data.ByteString.Lazy as BL
@@ -27,6 +27,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
+import Data.Traversable
 import Reflex
 import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Foreign
