@@ -105,7 +105,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
   performEvent_ $ fmap (liftIO . htmlTextAreaElementSetValue e) eSet
   f <- holdDyn False eChangeFocus
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
-  v <- holdDyn "" $ leftmost [eSet, ev]
+  v <- holdDyn initial $ leftmost [eSet, ev]
   eKeypress <- wrapDomEvent e elementOnkeypress getKeyEvent
   return $ TextArea v e f eKeypress
 
