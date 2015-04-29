@@ -7,6 +7,7 @@ import GHCJS.Foreign
 import GHCJS.Marshal
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Word
 import GHCJS.DOM.Types hiding (Text)
 import Control.Applicative ((<$>))
 import GHCJS.DOM.EventM
