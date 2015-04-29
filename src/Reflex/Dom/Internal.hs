@@ -246,7 +246,7 @@ attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TO
       Just df <- liftIO $ documentCreateDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
-        postBuild
+        postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
       liftIO $ htmlElementSetInnerHTML rootElement ""
       _ <- liftIO $ nodeAppendChild rootElement $ Just df
