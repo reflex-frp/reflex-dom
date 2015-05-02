@@ -3,6 +3,7 @@
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
+import Reflex.Dom.Internal.Foreign ()
 
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
 import Reflex
@@ -342,7 +343,7 @@ deleteBetweenExclusive s e = do
     Just currentParent -> do
       let go = do
             Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            when (unNode (toNode s) /= unNode (toNode x)) $ do
+            when (toNode s /= toNode x) $ do
               _ <- nodeRemoveChild currentParent $ Just x
               go
       go
@@ -357,7 +358,7 @@ deleteBetweenInclusive s e = do
       let go = do
             Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
             _ <- nodeRemoveChild currentParent $ Just x
-            when (unNode (toNode s) /= unNode (toNode x)) go
+            when (toNode s /= toNode x) go
       go
       _ <- nodeRemoveChild currentParent $ Just e
       return ()

@@ -12,6 +12,7 @@ import GHCJS.DOM.Types hiding (Text)
 import Control.Applicative ((<$>))
 import GHCJS.DOM.EventM
 import GHCJS.DOM
+import Data.Function
 
 prepareWebView :: WebView -> IO ()
 prepareWebView _ = return ()
@@ -32,10 +33,10 @@ castTo gtype objTypeName obj =
       | otherwise -> error $ "Cannot cast object to " ++ objTypeName
 
 
-newtype XMLHttpRequest = XMLHttpRequest (JSRef XMLHttpRequest) deriving (Eq)
+newtype XMLHttpRequest = XMLHttpRequest { unXMLHttpRequest :: JSRef XMLHttpRequest }
 
-unXMLHttpRequest :: XMLHttpRequest -> JSRef XMLHttpRequest
-unXMLHttpRequest (XMLHttpRequest o) = o
+instance Eq XMLHttpRequest where
+  (==) = eqRef `on` unXMLHttpRequest
 
 instance ToJSRef XMLHttpRequest where
   toJSRef = return . unXMLHttpRequest
@@ -62,10 +63,10 @@ gTypeXMLHttpRequest :: GType
 gTypeXMLHttpRequest = GType gTypeXMLHttpRequest'
 
 
-newtype XMLHttpRequestUpload = XMLHttpRequestUpload (JSRef XMLHttpRequestUpload) deriving (Eq)
+newtype XMLHttpRequestUpload = XMLHttpRequestUpload { unXMLHttpRequestUpload :: JSRef XMLHttpRequestUpload }
 
-unXMLHttpRequestUpload :: XMLHttpRequestUpload -> JSRef XMLHttpRequestUpload
-unXMLHttpRequestUpload (XMLHttpRequestUpload o) = o
+instance Eq XMLHttpRequestUpload where
+  (==) = eqRef `on` unXMLHttpRequestUpload
 
 instance ToJSRef XMLHttpRequestUpload where
   toJSRef = return . unXMLHttpRequestUpload
