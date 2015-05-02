@@ -61,7 +61,7 @@ xmlHttpRequestOpen xhr method url async user password = do
   return ()
 
 foreign import ccall "wrapper"
-  wrapper :: (Ptr OpaqueJSContext -> Ptr OpaqueJSValue -> Ptr OpaqueJSValue -> CULong -> Ptr JSValueRef -> Ptr JSValueRef -> IO (Ptr OpaqueJSValue)) -> IO (FunPtr (Ptr OpaqueJSContext -> Ptr OpaqueJSValue -> Ptr OpaqueJSValue -> CULong -> Ptr JSValueRef -> Ptr JSValueRef -> IO (Ptr OpaqueJSValue)))
+  wrapper :: JSObjectCallAsFunctionCallback' -> IO JSObjectCallAsFunctionCallback
 
 xmlHttpRequestOnreadystatechange :: XMLHttpRequest -> IO () -> IO ()
 xmlHttpRequestOnreadystatechange xhr userCallback = do
