@@ -1,11 +1,12 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TypeOperators, DeriveDataTypeable, PackageImports, TemplateHaskell, LambdaCase, ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TypeOperators, DeriveDataTypeable, PackageImports, TemplateHaskell, LambdaCase, ConstraintKinds, CPP #-}
 module Reflex.Dom.Internal where
 
 import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
 
+import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Class
 
-import GHCJS.DOM
+import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
 import GHCJS.DOM.Node
 import GHCJS.DOM.HTMLElement
@@ -17,8 +18,9 @@ import Control.Lens
 import Control.Monad hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Ref
-import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
+import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
 import Control.Concurrent
+import Control.Applicative
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
 import Data.Foldable
@@ -31,6 +33,7 @@ data GuiEnv t h
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
             , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
+            , _guiEnvWebView :: !WebView
             }
 
 --TODO: Poorly named
@@ -47,6 +50,8 @@ instance MonadRef m => MonadRef (Gui t h m) where
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (Gui t h m) where
   atomicModifyRef r f = lift $ atomicModifyRef r f
 
 instance MonadSample t m => MonadSample t (Gui t h m) where
@@ -79,6 +84,17 @@ instance Monad m => HasDocument (Gui t h m) where
 instance HasDocument m => HasDocument (Widget t m) where
   askDocument = lift askDocument
 
+instance Monad m => HasWebView (Gui t h m) where
+  askWebView = Gui $ view guiEnvWebView
+
+instance MonadIORestore m => MonadIORestore (Gui t h m) where
+  askRestore = Gui $ do
+    r <- askRestore
+    return $ Restore $ restore r . unGui
+
+instance HasWebView m => HasWebView (Widget t m) where
+  askWebView = lift askWebView
+
 instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h m) where
   askPostGui = Gui $ view guiEnvPostGui
   askRunWithActions = Gui $ view guiEnvRunWithActions
@@ -109,6 +125,8 @@ instance MonadRef m => MonadRef (Widget t m) where
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (Widget t m) where
   atomicModifyRef r f = lift $ atomicModifyRef r f
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m) where
@@ -117,7 +135,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
          , MonadIO m, MonadIO h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
-         , MonadFix m
+         , MonadFix m, HasWebView h, HasPostGui t h h
          ) => MonadWidget t (Widget t (Gui t h m)) where
   type WidgetHost (Widget t (Gui t h m)) = Gui t h m
   type GuiAction (Widget t (Gui t h m)) = h
@@ -155,33 +173,73 @@ holdOnStartup a0 ma = do
     runFrameWithTriggerRef startupDoneTriggerRef a
   hold a0 startupDone
 
-mainWidget :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidget :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidget w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just body <- documentGetBody doc
-  attachWidget body w
+  attachWidget body webView w
 
-mainWidgetWithHead :: Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidgetWithHead :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  attachWidget headElement h
+  attachWidget headElement webView h
   Just body <- documentGetBody doc
-  attachWidget body b
+  attachWidget body webView b
 
-mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) () -> IO ()
+mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
   htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- documentGetBody doc
-  attachWidget body w
+  attachWidget body webView w
 
-attachWidget :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider SpiderHost (HostFrame Spider)) a -> IO a
-attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+
+instance (Monad m) => HasWebView (WithWebView m) where
+  askWebView = WithWebView ask
+
+instance HasPostGui t h m => HasPostGui t (WithWebView h) (WithWebView m) where
+  askPostGui = do
+    postGui <- lift askPostGui
+    webView <- askWebView
+    return $ \h -> postGui $ runWithWebView h webView
+  askRunWithActions = do
+    runWithActions <- lift askRunWithActions
+    return $ lift . runWithActions
+
+instance HasPostGui Spider SpiderHost SpiderHost where
+  askPostGui = return $ \h -> liftIO $ runSpiderHost h
+  askRunWithActions = return fireEvents
+
+instance MonadTrans WithWebView where
+  lift = WithWebView . lift
+
+instance MonadRef m => MonadRef (WithWebView m) where
+  type Ref (WithWebView m) = Ref m
+  newRef = lift . newRef
+  readRef = lift . readRef
+  writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (WithWebView m) where
+  atomicModifyRef r = lift . atomicModifyRef r
+
+deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView m)
+instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
+  fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
+  subscribeEvent = lift . subscribeEvent
+  runFrame = lift . runFrame
+  runHostFrame = lift . runHostFrame
+
+runWithWebView :: WithWebView m a -> WebView -> m a
+runWithWebView = runReaderT . unWithWebView
+
+attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
+attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost) runWithActions :: GuiEnv Spider SpiderHost
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle
@@ -189,7 +247,7 @@ attachWidget rootElement w = runSpiderHost $ do --TODO: It seems to re-run this 
       Just df <- liftIO $ documentCreateDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
-        postBuild
+        postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
       liftIO $ htmlElementSetInnerHTML rootElement ""
       _ <- liftIO $ nodeAppendChild rootElement $ Just df

@@ -3,7 +3,9 @@
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
+import Reflex.Dom.Internal.Foreign ()
 
+import Prelude hiding (mapM, mapM_, sequence, sequence_)
 import Reflex
 import Reflex.Host.Class
 import Data.Functor.Misc
@@ -12,9 +14,11 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Dependent.Sum (DSum (..))
+import Data.Foldable
+import Data.Traversable
 import Control.Monad.Trans
-import Control.Monad.Reader
-import Control.Monad.State hiding (state)
+import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
+import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
 import GHCJS.DOM.EventM (event, EventM)
@@ -339,7 +343,7 @@ deleteBetweenExclusive s e = do
     Just currentParent -> do
       let go = do
             Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            when (unNode (toNode s) /= unNode (toNode x)) $ do
+            when (toNode s /= toNode x) $ do
               _ <- nodeRemoveChild currentParent $ Just x
               go
       go
@@ -354,7 +358,7 @@ deleteBetweenInclusive s e = do
       let go = do
             Just x <- nodeGetPreviousSibling e -- This can't be Nothing because we should hit 's' first
             _ <- nodeRemoveChild currentParent $ Just x
-            when (unNode (toNode s) /= unNode (toNode x)) go
+            when (toNode s /= toNode x) go
       go
       _ <- nodeRemoveChild currentParent $ Just e
       return ()
@@ -378,10 +382,20 @@ wrapDomEventMaybe element elementOnevent getValue = do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
 
+getKeyEvent :: EventM UIEvent e Int
+getKeyEvent = do
+  e <- event
+  liftIO $ do
+    which <- uiEventGetWhich e
+    if which /= 0 then return which else do
+      charCode <- uiEventGetCharCode e
+      if charCode /= 0 then return charCode else
+        uiEventGetKeyCode e
+
 wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
   clicked <- wrapDomEvent e elementOnclick (return ())
-  keypress <- wrapDomEvent e elementOnkeypress $ liftIO . uiEventGetKeyCode =<< event
+  keypress <- wrapDomEvent e elementOnkeypress getKeyEvent
   scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
   return $ El e clicked keypress scrolled
 
@@ -480,11 +494,15 @@ button s = do
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
+workflow :: forall t m a. MonadWidget t m => Workflow t m a -> m (Dynamic t a)
+workflow w0 = do
+  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ fmap snd $ current eResult
+  mapDyn fst eResult
+
 workflowView :: forall t m a. MonadWidget t m => Workflow t m a -> m (Event t a)
 workflowView w0 = do
   rec eResult <- dyn =<< mapDyn unWorkflow =<< holdDyn w0 eReplace
       eReplace <- liftM switch $ hold never $ fmap snd eResult
-      eResult `seq` eReplace `seq` return ()
   return $ fmap fst eResult
 
 divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
