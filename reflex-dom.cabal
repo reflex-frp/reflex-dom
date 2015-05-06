@@ -1,7 +1,7 @@
 Name: reflex-dom
 Version: 0.1
-Synopsis: Glitch-free Functional Reactive Programming
-Description: Reflex is a Functional Reactive Programming implementation that provides strong guarantees of deterministic execution and scalable runtime performance
+Synopsis: Glitch-free Functional Reactive Web Apps
+Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
