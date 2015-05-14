@@ -26,6 +26,7 @@ import Data.Dependent.Sum (DSum (..))
 
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t String
+               , _textInput_input :: Event t String
                , _textInput_keypress :: Event t Int
                , _textInput_keydown :: Event t Int
                , _textInput_keyup :: Event t Int
@@ -66,7 +67,7 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   eKeydown <- wrapDomEvent e elementOnkeydown getKeyEvent
   eKeyup <- wrapDomEvent e elementOnkeyup getKeyEvent
   dValue <- holdDyn initial $ leftmost [eSetValue, eChange]
-  return $ TextInput dValue eKeypress eKeydown eKeyup dFocus e
+  return $ TextInput dValue eChange eKeypress eKeydown eKeyup dFocus e
 
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
@@ -85,6 +86,7 @@ instance Reflex t => Default (TextAreaConfig t) where
 
 data TextArea t
    = TextArea { _textArea_value :: Dynamic t String
+              , _textArea_input :: Event t String
               , _textArea_element :: HTMLTextAreaElement
               , _textArea_hasFocus :: Dynamic t Bool
               , _textArea_keypress :: Event t Int
@@ -107,7 +109,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
   ev <- wrapDomEvent e elementOninput $ liftIO $ htmlTextAreaElementGetValue e
   v <- holdDyn initial $ leftmost [eSet, ev]
   eKeypress <- wrapDomEvent e elementOnkeypress getKeyEvent
-  return $ TextArea v e f eKeypress
+  return $ TextArea v ev e f eKeypress
 
 data CheckboxConfig t
     = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
@@ -121,6 +123,7 @@ instance Reflex t => Default (CheckboxConfig t) where
 
 data Checkbox t
    = Checkbox { _checkbox_value :: Dynamic t Bool
+              , _checkbox_change :: Event t Bool
               }
 
 --TODO: Make attributes possibly dynamic
@@ -133,7 +136,7 @@ checkbox checked config = do
   eClick <- wrapDomEvent e elementOnclick $ liftIO $ htmlInputElementGetChecked e
   performEvent_ $ fmap (\v -> liftIO $ htmlInputElementSetChecked e $! v) $ _checkboxConfig_setValue config
   dValue <- holdDyn checked $ leftmost [_checkboxConfig_setValue config, eClick]
-  return $ Checkbox dValue
+  return $ Checkbox dValue eClick
 
 checkboxView :: MonadWidget t m => Dynamic t (Map String String) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
@@ -149,6 +152,7 @@ checkboxView dAttrs dValue = do
 
 data Dropdown t k
     = Dropdown { _dropdown_value :: Dynamic t k
+               , _dropdown_change :: Event t k
                }
 
 data DropdownConfig t k
@@ -181,7 +185,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
         guard $ Map.member k opts
         return k
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
-  return $ Dropdown dValue
+  return $ Dropdown dValue (attachDynWith readKey options eChange)
 
 liftM concat $ mapM makeLenses
   [ ''TextAreaConfig
