@@ -1,3 +1,6 @@
+{-# LANGUAGe ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Time where
 
 import Reflex
@@ -78,6 +81,7 @@ poissonLossyFrom rnd rate t0 e = performEventAsync $ fmap callAtNextInterval e
           void $ cb $ TickInfo t n alreadyElapsed
           go nextGen cb
 
+
 -- | Send events with Poisson timing with the given basis and rate
 --   Each occurence of the resulting event will contain the index of
 --   the current interval, with 0 representing the basis time.
@@ -91,3 +95,50 @@ poissonLossy
   -- ^ Baseline time for events
   -> m (Event t TickInfo)
 poissonLossy rnd rate t0 = poissonLossyFrom rnd rate t0 =<< getPostBuild
+
+-- | Send events with inhomogeneous Poisson timing with the given basis
+--   and variable rate. Provide a maxRate that you expect to support.
+inhomogeneousPoissonFrom
+  :: (RandomGen g, MonadWidget t m)
+  => g
+  -> Behavior t Double
+  -> Double
+  -> UTCTime
+  -> Event t a
+  -> m (Event t TickInfo)
+inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
+  ticksWithRateRand <- performEventAsync $
+                       fmap callAtNextInterval e
+  return $ attachWithMaybe filterFun rate ticksWithRateRand
+
+  where
+
+    filterFun :: Double -> (TickInfo, Double) -> Maybe TickInfo
+    filterFun r (tInfo, p)
+      | r >= p    = Just tInfo
+      | otherwise = Nothing
+
+    callAtNextInterval _ cb = void $ liftIO $ forkIO $ go rnd cb
+
+    go lastGen cb = do
+      t <- getCurrentTime
+      let (u, nextGen)  = randomR (0,1) lastGen
+          (p :: Double, nextGen') = randomR (0,maxRate) nextGen
+          dt = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
+          offset = t `diffUTCTime` t0
+          (n, alreadyElapsed) = offset `divMod'` dt
+      threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
+      void $ cb $ (TickInfo t n alreadyElapsed, p)
+      go nextGen' cb
+
+-- | Send events with inhomogeneous Poisson timing with the given basis
+--   and variable rate. Provide a maxRate that you expect to support
+inhomogeneousPoisson
+  :: (RandomGen g, MonadWidget t m)
+  => g
+  -> Behavior t Double
+  -> Double
+  -> UTCTime
+  -> m (Event t TickInfo)
+inhomogeneousPoisson rnd rate maxRate t0 =
+  inhomogeneousPoissonFrom rnd rate maxRate t0 =<< getPostBuild
