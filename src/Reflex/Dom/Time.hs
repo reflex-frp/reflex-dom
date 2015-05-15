@@ -67,7 +67,7 @@ poissonLossyFrom
   -- Start sending events in response to the event parameter.
   -> m (Event t TickInfo)
 poissonLossyFrom rnd rate t0 e = performEventAsync $ fmap callAtNextInterval e
-  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ go rnd cb
+  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ go rnd cb
         go lastGen cb = do
           t <- getCurrentTime
           let (u, nextGen) = randomR (0,1) lastGen
