@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
+import System.Random
 
 data TickInfo
   = TickInfo { _tickInfo_lastUTC :: UTCTime
@@ -48,3 +49,45 @@ delay :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
   threadDelay $ ceiling $ dt * 1000000
   cb a
+
+-- | Send events with Poisson timing with the given basis and rate
+--   Each occurence of the resulting event will contain the index of
+--   the current interval, with 0 representing the basis time
+poissonLossyFrom
+  :: (RandomGen g, MonadWidget t m)
+  => g
+  -> Double
+  -- ^ Poisson event rate (Hz)
+  -> UTCTime
+  -- ^ Baseline time for events
+  -> Event t a
+  -- ^ Event that starts a tick generation thread. Usually you want this to
+  -- be something like the result of getPostBuild that only fires once. But
+  -- there could be uses for starting multiple timer threads.
+  -- Start sending events in response to the event parameter.
+  -> m (Event t TickInfo)
+poissonLossyFrom rnd rate t0 e = performEventAsync $ fmap callAtNextInterval e
+  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ go rnd cb
+        go lastGen cb = do
+          t <- getCurrentTime
+          let (u, nextGen) = randomR (0,1) lastGen
+              dt = realToFrac $ -1 * log(u)/rate :: NominalDiffTime
+              offset = t `diffUTCTime` t0
+              (n, alreadyElapsed) = offset `divMod'` dt
+          threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
+          void $ cb $ TickInfo t n alreadyElapsed
+          go nextGen cb
+
+-- | Send events with Poisson timing with the given basis and rate
+--   Each occurence of the resulting event will contain the index of
+--   the current interval, with 0 representing the basis time.
+--   Automatically begin sending events when the DOM is built
+poissonLossy
+  :: (RandomGen g, MonadWidget t m)
+  => g
+  -> Double
+  -- ^ Poisson event rate (Hz)
+  -> UTCTime
+  -- ^ Baseline time for events
+  -> m (Event t TickInfo)
+poissonLossy rnd rate t0 = poissonLossyFrom rnd rate t0 =<< getPostBuild
