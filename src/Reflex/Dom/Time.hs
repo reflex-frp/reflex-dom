@@ -69,17 +69,8 @@ poissonLossyFrom
   -- there could be uses for starting multiple timer threads.
   -- Start sending events in response to the event parameter.
   -> m (Event t TickInfo)
-poissonLossyFrom rnd rate t0 e = performEventAsync $ fmap callAtNextInterval e
-  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ go rnd cb
-        go lastGen cb = do
-          t <- getCurrentTime
-          let (u, nextGen) = randomR (0,1) lastGen
-              dt = realToFrac $ -1 * log(u)/rate :: NominalDiffTime
-              offset = t `diffUTCTime` t0
-              (n, alreadyElapsed) = offset `divMod'` dt
-          threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
-          void $ cb $ TickInfo t n alreadyElapsed
-          go nextGen cb
+poissonLossyFrom rnd rate t0 t =
+  inhomogeneousPoissonFrom rnd (current $ constDyn rate) rate t0 t
 
 
 -- | Send events with Poisson timing with the given basis and rate
