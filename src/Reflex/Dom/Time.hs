@@ -21,7 +21,7 @@ data TickInfo
              , _tickInfo_alreadyElapsed :: NominalDiffTime
              -- ^ Amount of time already elapsed in the current tick period.
              }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
@@ -98,29 +98,50 @@ inhomogeneousPoissonFrom
   -> Event t a
   -> m (Event t TickInfo)
 inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
+
+  -- Create a thread for producing homogeneous poisson events
+  -- along with random Doubles (usage of Double's explained below)
   ticksWithRateRand <- performEventAsync $
                        fmap callAtNextInterval e
+
+  -- Filter homogeneous events according to associated
+  -- random values and the current rate parameter
   return $ attachWithMaybe filterFun rate ticksWithRateRand
 
   where
 
+    -- Inhomogeneous poisson processes are built from faster
+    -- homogeneous ones by randomly dropping events from the
+    -- fast process. For each fast homogeneous event, choose
+    -- a uniform random sample from (0, rMax). If the
+    -- inhomogeneous rate at this moment is greater than the
+    -- random sample, then keep this event, otherwise drop it
     filterFun :: Double -> (TickInfo, Double) -> Maybe TickInfo
     filterFun r (tInfo, p)
       | r >= p    = Just tInfo
       | otherwise = Nothing
 
-    callAtNextInterval _ cb = void $ liftIO $ forkIO $ go rnd cb
+    callAtNextInterval _ cb = void $ liftIO $ forkIO $ go t0 rnd cb 0
 
-    go lastGen cb = do
+    go tTargetLast lastGen cb lastN = do
       t <- getCurrentTime
-      let (u, nextGen)  = randomR (0,1) lastGen
+
+      -- Generate random numbers for this poisson interval (u)
+      -- and sample-retention likelihood (p)
+      let (u, nextGen)            = randomR (0,1) lastGen
           (p :: Double, nextGen') = randomR (0,maxRate) nextGen
-          dt = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
-          offset = t `diffUTCTime` t0
-          (n, alreadyElapsed) = offset `divMod'` dt
-      threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
-      void $ cb $ (TickInfo t n alreadyElapsed, p)
-      go nextGen' cb
+
+      -- Inter-event interval is drawn from exponential
+      -- distribution accourding to u
+      let dt             = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
+          offset         = t `diffUTCTime` t0
+          nEvents        = lastN + 1
+          alreadyElapsed = diffUTCTime t tTargetLast
+          tTarget        = addUTCTime dt tTargetLast
+          thisDelay      = realToFrac $ diffUTCTime tTarget t :: Double
+      threadDelay $ ceiling $ thisDelay * 1000000
+      void $ cb $ (TickInfo t nEvents alreadyElapsed, p)
+      go tTarget nextGen' cb nEvents
 
 -- | Send events with inhomogeneous Poisson timing with the given basis
 --   and variable rate. Provide a maxRate that you expect to support
