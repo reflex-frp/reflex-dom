@@ -31,12 +31,14 @@ import Data.Traversable
 import Reflex
 import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Foreign
+import Data.Typeable
 
 data XhrRequest
    = XhrRequest { _xhrRequest_method :: String
                 , _xhrRequest_url :: String
                 , _xhrRequest_config :: XhrRequestConfig
                 }
+   deriving (Show, Read, Eq, Ord, Typeable)
 
 data XhrRequestConfig
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
@@ -45,10 +47,12 @@ data XhrRequestConfig
                       , _xhrRequestConfig_responseType :: Maybe String
                       , _xhrRequestConfig_sendData :: Maybe String
                       }
+   deriving (Show, Read, Eq, Ord, Typeable)
 
 data XhrResponse
    = XhrResponse { _xhrResponse_body :: Maybe Text
                  }
+   deriving (Show, Read, Eq, Ord, Typeable)
 
 instance Default XhrRequestConfig where
   def = XhrRequestConfig { _xhrRequestConfig_headers = Map.empty
