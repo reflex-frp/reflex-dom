@@ -18,7 +18,7 @@ data TickInfo
              , _tickInfo_alreadyElapsed :: NominalDiffTime
              -- ^ Amount of time already elapsed in the current tick period.
              }
-  deriving (Show, Read, Eq, Ord, Typeable)
+  deriving (Eq, Ord, Typeable)
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
