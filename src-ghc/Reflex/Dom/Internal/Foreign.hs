@@ -35,7 +35,6 @@ makeDefaultWebView userAgentKey main = do
     main webView
   wf <- webViewGetMainFrame webView
   webFrameLoadString wf "" Nothing "file:///"
-  main webView
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()
