@@ -13,6 +13,7 @@ import Data.Foldable
 import Control.Monad.Ref
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence)
 import Control.Monad.State hiding (mapM, mapM_, forM, forM_, sequence)
+import Control.Concurrent (forkIO)
 import Data.Dependent.Sum (DSum (..))
 import GHCJS.DOM.Types hiding (Event)
 import GHCJS.DOM (WebView)
@@ -127,6 +128,22 @@ performEventAsync e = do
     runWithActions <- askRunWithActions
     o $ \a -> postGui $ mapM_ (\t -> runWithActions [t :=> a]) =<< readRef reResultTrigger
   return eResult
+
+-- | Special case of 'asyncMapIO' for pure functions. Uses 'seq' to force the
+-- evaluation of the function before the event fires. This is similar to 'fmap',
+-- but evaluates the application in another thread.
+asyncMapSeq :: (MonadWidget t m) => (a -> b) -> Event t a -> m (Event t b)
+asyncMapSeq f = asyncMapIO fio
+    where fio x = return $! f x
+
+-- | Applies the IO function to the contents of Event. Evaluates the function in
+-- another thread. The resulting Event fires only when the IO function has
+-- finished evaluating. This may reorder resulting event firings relative to the
+-- original firings.
+asyncMapIO :: (MonadWidget t m) => (a -> IO b) -> Event t a -> m (Event t b)
+asyncMapIO f event = performEventAsync eActions
+     where eActions = fmap (forkApply f) event
+           forkApply f val callback = liftIO . void . forkIO $ f val >>= callback
 
 getPostBuild :: MonadWidget t m => m (Event t ())
 getPostBuild = do
