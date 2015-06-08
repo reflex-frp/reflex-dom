@@ -16,6 +16,7 @@ import Control.Monad.State hiding (mapM, mapM_, forM, forM_, sequence)
 import Data.Dependent.Sum (DSum (..))
 import GHCJS.DOM.Types hiding (Event)
 import GHCJS.DOM (WebView)
+import Control.Monad.Exception
 
 -- | Alias for Data.Map.singleton
 (=:) :: k -> a -> Map k a
@@ -27,9 +28,9 @@ keycodeEnter = 13
 keycodeEscape :: Int
 keycodeEscape = 27
 
-class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
+class ( Reflex t, MonadHold t m, MonadIO m, MonadAsyncException m, Functor m, MonadReflexCreateTrigger t m
       , HasDocument m, HasWebView m, HasWebView (WidgetHost m), HasWebView (GuiAction m)
-      , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
+      , MonadIO (WidgetHost m), MonadAsyncException (WidgetHost m), MonadIO (GuiAction m), MonadAsyncException (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, HasPostGui t (GuiAction m) (GuiAction m)
       , MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO

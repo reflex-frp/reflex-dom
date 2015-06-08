@@ -19,6 +19,7 @@ import Control.Monad hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Ref
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
+import Control.Monad.Exception
 import Control.Concurrent
 import Control.Applicative
 import Data.ByteString (ByteString)
@@ -37,7 +38,7 @@ data GuiEnv t h
             }
 
 --TODO: Poorly named
-newtype Gui t h m a = Gui { unGui :: ReaderT (GuiEnv t h) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+newtype Gui t h m a = Gui { unGui :: ReaderT (GuiEnv t h) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
 
 runGui :: Gui t h m a -> GuiEnv t h -> m a
 runGui (Gui g) env = runReaderT g env
@@ -108,7 +109,7 @@ type WidgetInternal t m a = ReaderT WidgetEnv (StateT (WidgetState t m) m) a
 instance MonadTrans (Widget t) where
   lift = Widget . lift . lift
 
-newtype Widget t m a = Widget { unWidget :: WidgetInternal t m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO)
+newtype Widget t m a = Widget { unWidget :: WidgetInternal t m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
 instance MonadSample t m => MonadSample t (Widget t m) where
   sample b = lift $ sample b
@@ -133,7 +134,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
   newEventWithTrigger = lift . newEventWithTrigger
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
-         , MonadIO m, MonadIO h, Functor m
+         , MonadIO m, MonadAsyncException m, MonadIO h, MonadAsyncException h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
          , MonadFix m, HasWebView h, HasPostGui t h h
          ) => MonadWidget t (Widget t (Gui t h m)) where
@@ -195,7 +196,7 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body webView w
 
-newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
 
 instance (Monad m) => HasWebView (WithWebView m) where
   askWebView = WithWebView ask

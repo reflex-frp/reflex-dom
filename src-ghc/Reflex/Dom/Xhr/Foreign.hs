@@ -12,13 +12,11 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 
-data XMLHttpRequest = XMLHttpRequest JSValueRef JSContextRef deriving (Eq, Ord)
-
-xhrContext :: XMLHttpRequest -> JSContextRef
-xhrContext (XMLHttpRequest _ c) = c
-
-xhrValue :: XMLHttpRequest -> JSValueRef
-xhrValue (XMLHttpRequest v _) = v
+data XMLHttpRequest
+   = XMLHttpRequest { xhrValue :: JSValueRef
+                    , xhrContext :: JSContextRef
+                    }
+   deriving (Eq, Ord)
 
 toJSObject :: JSContextRef -> [Ptr OpaqueJSValue] -> IO JSObjectRef
 toJSObject ctx args = do
@@ -28,18 +26,17 @@ toJSObject ctx args = do
     jsobjectsetproperty ctx o prop a 1 nullPtr
   return o
 
-toResponseType :: a -> a
-toResponseType = id
-
 responseTextToText :: Maybe String -> Maybe Text
 responseTextToText = fmap T.pack
 
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
+toResponseType :: a -> a
+toResponseType = id
+
 xmlHttpRequestNew :: WebView -> IO XMLHttpRequest
 xmlHttpRequestNew wv = do
-  --wv <- readIORef globalWebViewRef
   wf <- webViewGetMainFrame wv
   jsContext <- webFrameGetGlobalContext wf
   xhrScript <- jsstringcreatewithutf8cstring "new XMLHttpRequest()"
