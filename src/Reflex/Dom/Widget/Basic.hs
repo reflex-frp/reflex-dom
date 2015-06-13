@@ -105,8 +105,10 @@ dynText s = do
 display :: (MonadWidget t m, Show a) => Dynamic t a -> m ()
 display a = dynText =<< mapDyn show a
 
-fragmentBuilder :: MonadWidget t m => m (m a -> WidgetHost m (a, WidgetHost m (), Event t (WidgetHost m ())))
-fragmentBuilder = do
+type BuildInFragment t m a = m a -> WidgetHost m (a, WidgetHost m (), Event t (WidgetHost m ()))
+
+getBuildInFragment :: MonadWidget t m => m (BuildInFragment t m a)
+getBuildInFragment = do
   doc <- askDocument
   runWidget <- getRunWidget
   
@@ -127,44 +129,46 @@ runVoidActions :: MonadWidget t m => Event t (WidgetHost m ()) -> Event t (Event
 runVoidActions initial e = do
   childVoidAction <- hold initial e
   performEvent_ $ fmap (const $ return ()) e --TODO: Get rid of this hack
-  addVoidAction $ switch childVoidAction
+  addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
 
   
-widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
-widgetHold child0 child = do
-  
-  runInFragment <- fragmentBuilder
-  (result0, postBuild0, voidActions0) <- liftWidgetHost $ runInFragment child0    
-  schedulePostBuild postBuild0
-  
+widgetBuilder :: MonadWidget t m => Event t (WidgetHost m ()) ->  BuildInFragment t m a -> m (m a -> WidgetHost m (), Event t a)
+widgetBuilder voidActions0 buildInFragment = do
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  runVoidActions voidActions0 $ fmap snd newChildBuilt
-  
-  addVoidAction $ ffor child $ \newChild -> do
-    (result, postBuild, voidActions) <- runInFragment newChild
-    runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
-    postBuild
-    
-  holdDyn result0 (fmap fst newChildBuilt)
-  
---TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'? 
-dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
-dyn child = do
-  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  runVoidActions never $ fmap snd newChildBuilt
+  runVoidActions voidActions0 $ fmap snd newChildBuilt  
 
-  runInFragment <- fragmentBuilder
   let build newChild = do
-        (result, postBuild, voidActions) <- runInFragment newChild
+        (result, postBuild, voidActions) <- buildInFragment newChild
         runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
         postBuild
     
+  return (build, fmap fst newChildBuilt)    
+   
+dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
+dyn child = do
+  (build, newChildBuilt) <- getBuildInFragment >>= widgetBuilder never
   addVoidAction $ fmap build (updated child)
   schedulePostBuild $ do
     c <- sample $ current child
     build c    
+  return newChildBuilt 
+  
+widgetSwitch :: MonadWidget t m => Event t (m a) -> m (Event t a)
+widgetSwitch child = do
+  (build, newChildBuilt) <- getBuildInFragment >>= widgetBuilder never
+  addVoidAction $ fmap build child
+  return newChildBuilt 
 
-  return $ fmap fst newChildBuilt  
+widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
+widgetHold child0 child = do
+  buildInFragment <- getBuildInFragment
+  (result0, postBuild0, voidActions0) <- liftWidgetHost $ buildInFragment child0    
+  schedulePostBuild postBuild0
+  
+  (build, newChildBuilt) <-  widgetBuilder voidActions0 buildInFragment
+  addVoidAction $ fmap build child
+  holdDyn result0 newChildBuilt  
+  
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
