@@ -30,38 +30,38 @@ import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Monoid ((<>))
 
-data GuiEnv t h
+data GuiEnv t h x
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
             , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
-            , _guiEnvWebView :: !WebView
+            , _guiEnvWebView :: !(WebViewSingleton x)
             }
 
 --TODO: Poorly named
-newtype Gui t h m a = Gui { unGui :: ReaderT (GuiEnv t h) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
+newtype Gui t h x m a = Gui { unGui :: ReaderT (GuiEnv t h x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
 
-runGui :: Gui t h m a -> GuiEnv t h -> m a
+runGui :: Gui t h x m a -> GuiEnv t h x -> m a
 runGui (Gui g) env = runReaderT g env
 
-instance MonadTrans (Gui t h) where
+instance MonadTrans (Gui t h x) where
   lift = Gui . lift
 
-instance MonadRef m => MonadRef (Gui t h m) where
-  type Ref (Gui t h m) = Ref m
+instance MonadRef m => MonadRef (Gui t h x m) where
+  type Ref (Gui t h x m) = Ref m
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
 
-instance MonadAtomicRef m => MonadAtomicRef (Gui t h m) where
+instance MonadAtomicRef m => MonadAtomicRef (Gui t h x m) where
   atomicModifyRef r f = lift $ atomicModifyRef r f
 
-instance MonadSample t m => MonadSample t (Gui t h m) where
+instance MonadSample t m => MonadSample t (Gui t h x m) where
   sample b = lift $ sample b
 
-instance MonadHold t m => MonadHold t (Gui t h m) where
+instance MonadHold t m => MonadHold t (Gui t h x m) where
   hold a0 e = lift $ hold a0 e
 
-instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (Gui t h m) where
+instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (Gui t h x m) where
   newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
 
 data WidgetEnv
@@ -79,24 +79,26 @@ liftM concat $ mapM makeLenses
   , ''GuiEnv
   ]
 
-instance Monad m => HasDocument (Gui t h m) where
+instance Monad m => HasDocument (Gui t h x m) where
   askDocument = Gui $ view guiEnvDocument
 
 instance HasDocument m => HasDocument (Widget t m) where
   askDocument = lift askDocument
 
-instance Monad m => HasWebView (Gui t h m) where
+instance Monad m => HasWebView (Gui t h x m) where
+  type WebViewPhantom (Gui t h x m) = x
   askWebView = Gui $ view guiEnvWebView
 
-instance MonadIORestore m => MonadIORestore (Gui t h m) where
+instance MonadIORestore m => MonadIORestore (Gui t h x m) where
   askRestore = Gui $ do
     r <- askRestore
     return $ Restore $ restore r . unGui
 
 instance HasWebView m => HasWebView (Widget t m) where
+  type WebViewPhantom (Widget t m) = WebViewPhantom m
   askWebView = lift askWebView
 
-instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h m) where
+instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h x m) where
   askPostGui = Gui $ view guiEnvPostGui
   askRunWithActions = Gui $ view guiEnvRunWithActions
 
@@ -134,12 +136,12 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m)
   newEventWithTrigger = lift . newEventWithTrigger
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
-         , MonadIO m, MonadAsyncException m, MonadIO h, MonadAsyncException h, Functor m
+         , MonadIO m, MonadIO h, Functor m
          , ReflexHost t, MonadReflexCreateTrigger t m, MonadSample t m, MonadHold t m
          , MonadFix m, HasWebView h, HasPostGui t h h
-         ) => MonadWidget t (Widget t (Gui t h m)) where
-  type WidgetHost (Widget t (Gui t h m)) = Gui t h m
-  type GuiAction (Widget t (Gui t h m)) = h
+         ) => MonadWidget t (Widget t (Gui t h x m)) where
+  type WidgetHost (Widget t (Gui t h x m)) = Gui t h x m
+  type GuiAction (Widget t (Gui t h x m)) = h
   askParent = Widget $ view widgetEnvParent
   --TODO: Use types to separate cohorts of possibly-recursive events/behaviors
   -- | Schedule an action to occur after the current cohort has been built; this is necessary because Behaviors built in the current cohort may not be read until after it is complete
@@ -160,7 +162,7 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
   getRunWidget = return runWidget
 
-runWidget :: (Monad m, Reflex t, IsNode n) => n -> Widget t (Gui t h m) a -> WidgetHost (Widget t (Gui t h m)) (a, WidgetHost (Widget t (Gui t h m)) (), Event t (WidgetHost (Widget t (Gui t h m)) ()))
+runWidget :: (Monad m, Reflex t, IsNode n) => n -> Widget t (Gui t h x m) a -> WidgetHost (Widget t (Gui t h x m)) (a, WidgetHost (Widget t (Gui t h x m)) (), Event t (WidgetHost (Widget t (Gui t h x m)) ()))
 runWidget rootElement w = do
   (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
   let voidAction = mergeWith (>>) voidActions
@@ -174,34 +176,36 @@ holdOnStartup a0 ma = do
     runFrameWithTriggerRef startupDoneTriggerRef a
   hold a0 startupDone
 
-mainWidget :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
-mainWidget w = runWebGUI $ \webView -> do
+mainWidget :: (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
+mainWidget w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just body <- documentGetBody doc
-  attachWidget body webView w
+  attachWidget body webViewSing w
 
-mainWidgetWithHead :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
-mainWidgetWithHead h b = runWebGUI $ \webView -> do
+--TODO: The x's should be unified here
+mainWidgetWithHead :: (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
+mainWidgetWithHead h b = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  attachWidget headElement webView h
+  attachWidget headElement webViewSing h
   Just body <- documentGetBody doc
-  attachWidget body webView b
+  attachWidget body webViewSing b
 
-mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
-mainWidgetWithCss css w = runWebGUI $ \webView -> do
+mainWidgetWithCss :: ByteString -> (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
+mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
   Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
   htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- documentGetBody doc
-  attachWidget body webView w
+  attachWidget body webViewSing w
 
-newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
+newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
 
-instance (Monad m) => HasWebView (WithWebView m) where
+instance (Monad m) => HasWebView (WithWebView x m) where
+  type WebViewPhantom (WithWebView x m) = x
   askWebView = WithWebView ask
 
-instance HasPostGui t h m => HasPostGui t (WithWebView h) (WithWebView m) where
+instance HasPostGui t h m => HasPostGui t (WithWebView x h) (WithWebView x m) where
   askPostGui = do
     postGui <- lift askPostGui
     webView <- askWebView
@@ -214,33 +218,34 @@ instance HasPostGui Spider SpiderHost SpiderHost where
   askPostGui = return $ \h -> liftIO $ runSpiderHost h
   askRunWithActions = return fireEvents
 
-instance MonadTrans WithWebView where
+instance MonadTrans (WithWebView x) where
   lift = WithWebView . lift
 
-instance MonadRef m => MonadRef (WithWebView m) where
-  type Ref (WithWebView m) = Ref m
+instance MonadRef m => MonadRef (WithWebView x m) where
+  type Ref (WithWebView x m) = Ref m
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
 
-instance MonadAtomicRef m => MonadAtomicRef (WithWebView m) where
+instance MonadAtomicRef m => MonadAtomicRef (WithWebView x m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView m)
-instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
+deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m)
+
+instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   subscribeEvent = lift . subscribeEvent
   runFrame = lift . runFrame
   runHostFrame = lift . runHostFrame
 
-runWithWebView :: WithWebView m a -> WebView -> m a
+runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
 runWithWebView = runReaderT . unWithWebView
 
-attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
+attachWidget :: forall e x a. (IsHTMLElement e) => e -> WebViewSingleton x -> Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) a -> IO a
 attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView x SpiderHost) x
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle

@@ -14,7 +14,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
-                    , xhrContext :: JSContextRef
+                    , xhrContext :: JSContextRef --TODO: Get rid of this
                     }
    deriving (Eq, Ord)
 

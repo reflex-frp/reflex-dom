@@ -28,9 +28,9 @@ keycodeEnter = 13
 keycodeEscape :: Int
 keycodeEscape = 27
 
-class ( Reflex t, MonadHold t m, MonadIO m, MonadAsyncException m, Functor m, MonadReflexCreateTrigger t m
+class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger t m
       , HasDocument m, HasWebView m, HasWebView (WidgetHost m), HasWebView (GuiAction m)
-      , MonadIO (WidgetHost m), MonadAsyncException (WidgetHost m), MonadIO (GuiAction m), MonadAsyncException (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
+      , MonadIO (WidgetHost m), MonadIO (GuiAction m), Functor (WidgetHost m), MonadSample t (WidgetHost m)
       , HasPostGui t (GuiAction m) (WidgetHost m), HasPostGui t (GuiAction m) m, HasPostGui t (GuiAction m) (GuiAction m)
       , MonadRef m, MonadRef (WidgetHost m)
       , Ref m ~ Ref IO, Ref (WidgetHost m) ~ Ref IO --TODO: Eliminate this reliance on IO
@@ -55,13 +55,22 @@ instance HasDocument m => HasDocument (ReaderT r m) where
 instance HasDocument m => HasDocument (StateT r m) where
   askDocument = lift askDocument
 
+-- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
+newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
+
+withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
+withWebViewSingleton wv f = f $ WebViewSingleton wv
+
 class Monad m => HasWebView m where
-  askWebView :: m WebView
+  type WebViewPhantom m :: *
+  askWebView :: m (WebViewSingleton (WebViewPhantom m))
 
 instance HasWebView m => HasWebView (ReaderT r m) where
+  type WebViewPhantom (ReaderT r m) = WebViewPhantom m
   askWebView = lift askWebView
 
 instance HasWebView m => HasWebView (StateT r m) where
+  type WebViewPhantom (StateT r m) = WebViewPhantom m
   askWebView = lift askWebView
 
 newtype Restore m = Restore { restore :: forall a. m a -> IO a }

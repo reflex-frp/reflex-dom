@@ -20,6 +20,7 @@ library
   hs-source-dirs: src
   build-depends:
     base >= 4.7 && < 4.9,
+    template-haskell,
     reflex == 0.2.*,
     dependent-sum == 0.2.*,
     dependent-map == 0.1.*,
@@ -35,7 +36,7 @@ library
     text == 1.2.*,
     bytestring == 0.10.*,
     data-default == 0.5.*,
-    aeson == 0.8.*,
+    aeson >= 0.8 && < 0.10,
     time == 1.5.*,
     exception-transformers == 0.4.*,
     directory == 1.2.*
@@ -44,7 +45,8 @@ library
     hs-source-dirs: src-ghcjs
     cpp-options: -D__GHCJS__
     build-depends:
-      ghcjs-base
+      ghcjs-base,
+      hashable == 1.2.*
   else
     hs-source-dirs: src-ghc
     build-depends:
@@ -52,6 +54,8 @@ library
       gtk3 == 0.13.*,
       webkitgtk3 == 0.13.*,
       webkitgtk3-javascriptcore == 0.13.*
+    pkgconfig-depends:
+      webkitgtk-3.0 >= 1.8
 
   exposed-modules:
     Reflex.Dom
@@ -63,6 +67,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Xhr
     Reflex.Dom.Time
+    Foreign.JavaScript.TH
   other-modules:
     Reflex.Dom.Internal.Foreign
     Reflex.Dom.Xhr.Foreign

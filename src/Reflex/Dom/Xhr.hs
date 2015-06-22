@@ -70,7 +70,7 @@ newXMLHttpRequest req cb = do
   wv <- askWebView
   postGui <- askPostGui
   liftIO $ do
-    xhr <- xmlHttpRequestNew wv
+    xhr <- xmlHttpRequestNew $ unWebViewSingleton wv
     let c = _xhrRequest_config req
     xmlHttpRequestOpen
       xhr

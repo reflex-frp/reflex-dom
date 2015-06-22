@@ -32,7 +32,6 @@ castTo gtype objTypeName obj =
                   -> unsafeCastGObject gobj
       | otherwise -> error $ "Cannot cast object to " ++ objTypeName
 
-
 newtype XMLHttpRequest = XMLHttpRequest { unXMLHttpRequest :: JSRef XMLHttpRequest }
 
 instance Eq XMLHttpRequest where

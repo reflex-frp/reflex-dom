@@ -2,6 +2,7 @@
 , mtl, ref-tf, reflex, safe, text, these
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
+, webkitgtk24x
 }:
 
 mkDerivation {
@@ -24,5 +25,6 @@ mkDerivation {
     aeson
     exception-transformers
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
+  pkgconfigDepends = if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk24x ];
   license = null;
 }
