@@ -70,6 +70,7 @@ class Monad m => MonadJS x m | m -> x where
   mkJSUndefined :: m (JSRef x)
   isJSNull :: JSRef x -> m Bool
   isJSUndefined :: JSRef x -> m Bool
+  fromJSBool :: JSRef x -> m Bool
   fromJSString :: JSRef x -> m String
   fromJSArray :: JSRef x -> m [JSRef x]
   fromJSNumber :: JSRef x -> m Double
@@ -96,6 +97,7 @@ instance MonadJS JSCtx_IO IO where
   mkJSUndefined = return $ JSRef_IO JS.jsUndefined
   isJSNull (JSRef_IO r) = return $ JS.isNull r
   isJSUndefined (JSRef_IO r) = return $ JS.isUndefined r
+  fromJSBool (JSRef_IO r) = return $ JS.fromJSBool $ JS.castRef r
   fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.castRef r
   fromJSArray (JSRef_IO r) = liftM coerce $ JS.fromArray $ JS.castRef r
   fromJSNumber (JSRef_IO r) = do
@@ -174,6 +176,9 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   isJSUndefined (JSRef_JavaScriptCore r) = do
     jsContext <- askJSContext
     liftIO $ jsvalueisundefined jsContext r
+  fromJSBool (JSRef_JavaScriptCore r) = do
+    jsContext <- askJSContext
+    liftIO $ jsvaluetoboolean jsContext r
   fromJSString (JSRef_JavaScriptCore r) = do
     jsContext <- askJSContext
     liftIO $ do
@@ -257,6 +262,9 @@ class FromJS x a where
 
 instance FromJS x () where
   fromJS _ = return () --TODO: Should this do some kind of checking for the js value?
+
+instance FromJS x Bool where
+  fromJS = fromJSBool
 
 instance FromJS x String where
   fromJS = fromJSString
