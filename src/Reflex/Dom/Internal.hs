@@ -230,7 +230,6 @@ deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Wi
 instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   subscribeEvent = lift . subscribeEvent
-  runFrame = lift . runFrame
   runHostFrame = lift . runHostFrame
 
 runWithWebView :: WithWebView m a -> WebView -> m a
