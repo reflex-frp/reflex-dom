@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -30,8 +30,8 @@ import GHCJS.DOM.NamedNodeMap
 import Control.Lens hiding (element, children)
 import Data.These
 import Data.Align
-
 import Data.Maybe
+import Data.GADT.Compare.TH
 
 type AttributeMap = Map String String
 
@@ -382,6 +382,49 @@ wrapDomEventMaybe element elementOnevent getValue = do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
 
+data EventName
+   = Click
+   | Keypress
+   | Scroll
+
+data EventNameProxy :: EventName -> * where
+  ClickProxy :: EventNameProxy 'Click
+  KeypressProxy :: EventNameProxy 'Keypress
+  ScrollProxy :: EventNameProxy 'Scroll
+
+deriveGEq ''EventNameProxy
+deriveGCompare ''EventNameProxy
+
+type family EventType en where
+  EventType 'Click = MouseEvent
+  EventType 'Keypress = UIEvent
+  EventType 'Scroll = UIEvent
+
+onEventName :: IsElement e => EventNameProxy en -> e -> EventM (EventType en) e () -> IO (IO ())
+onEventName en = case en of
+  ClickProxy -> elementOnclick
+  KeypressProxy -> elementOnkeypress
+  ScrollProxy -> elementOnscroll
+
+newtype EventResult en = EventResult { unEventResult :: EventResultType en }
+
+type family EventResultType (en :: EventName) :: * where
+  EventResultType 'Click = ()
+  EventResultType 'Keypress = Int
+  EventResultType 'Scroll = Int
+
+wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventNameProxy en -> EventM (EventType en) e (Maybe (f en))) -> m (EventSelector t (WrapArg f EventNameProxy))
+wrapDomEventsMaybe element handlers = do
+  postGui <- askPostGui
+  runWithActions <- askRunWithActions
+  e <- newFanEventWithTrigger $ \(WrapArg en) et -> do
+        unsubscribe <- liftIO $ (onEventName en) element $ do
+          mv <- handlers en
+          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+        return $ liftIO $ do
+          unsubscribe
+  return $! e
+
 getKeyEvent :: EventM UIEvent e Int
 getKeyEvent = do
   e <- event
@@ -392,12 +435,15 @@ getKeyEvent = do
       if charCode /= 0 then return charCode else
         uiEventGetKeyCode e
 
-wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
+wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
-  clicked <- wrapDomEvent e elementOnclick (return ())
-  keypress <- wrapDomEvent e elementOnkeypress getKeyEvent
-  scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
-  return $ El e clicked keypress scrolled
+  es <- wrapDomEventsMaybe e $ \evt -> case evt of
+    ClickProxy -> return $ Just $ EventResult ()
+    KeypressProxy -> liftM (Just . EventResult) getKeyEvent
+    ScrollProxy -> liftM (Just . EventResult) $ liftIO $ elementGetScrollTop e
+  let selectEvent :: EventNameProxy en -> Event t (EventResultType en)
+      selectEvent = fmap unEventResult . select es . WrapArg
+  return $ El e (selectEvent ClickProxy) (selectEvent KeypressProxy) (selectEvent ScrollProxy)
 
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttr' elementTag attrs child = do

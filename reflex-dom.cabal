@@ -38,7 +38,8 @@ library
     aeson == 0.8.*,
     time == 1.5.*,
     exception-transformers == 0.4.*,
-    directory == 1.2.*
+    directory == 1.2.*,
+    dependent-sum-template >= 0.0.0.4 && < 0.1
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs

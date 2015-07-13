@@ -62,7 +62,8 @@ instance MonadHold t m => MonadHold t (Gui t h m) where
   hold a0 e = lift $ hold a0 e
 
 instance (Reflex t, MonadReflexCreateTrigger t m) => MonadReflexCreateTrigger t (Gui t h m) where
-  newEventWithTrigger initializer = lift $ newEventWithTrigger initializer
+  newEventWithTrigger = lift . newEventWithTrigger
+  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 data WidgetEnv
    = WidgetEnv { _widgetEnvParent :: !Node
@@ -132,6 +133,7 @@ instance MonadAtomicRef m => MonadAtomicRef (Widget t m) where
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (Widget t m) where
   newEventWithTrigger = lift . newEventWithTrigger
+  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Shouldn't need to be IO
          , MonadIO m, MonadAsyncException m, MonadIO h, MonadAsyncException h, Functor m
@@ -226,7 +228,10 @@ instance MonadRef m => MonadRef (WithWebView m) where
 instance MonadAtomicRef m => MonadAtomicRef (WithWebView m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-deriving instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView m)
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView m) where
+  newEventWithTrigger = lift . newEventWithTrigger
+  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
+
 instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   subscribeEvent = lift . subscribeEvent
