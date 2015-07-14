@@ -579,6 +579,7 @@ newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
 type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ClickTag = ()
+  EventResultType 'DblclickTag = ()
   EventResultType 'KeypressTag = Int
   EventResultType 'ScrollTag = Int
   EventResultType 'MousemoveTag = (Int, Int)
@@ -619,6 +620,7 @@ getMouseEventCoords = do
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM (EventType en) e (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Click -> return ()
+  Dblclick -> return ()
   Keypress -> getKeyEvent
   Scroll -> liftIO $ elementGetScrollTop e
   Mousemove -> getMouseEventCoords
