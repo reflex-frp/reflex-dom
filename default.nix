@@ -1,8 +1,8 @@
-{ mkDerivation, pkgs, dependent-map, ghcjs-dom, lens
+{ mkDerivation, dependent-map, ghcjs-dom, lens
 , mtl, ref-tf, reflex, safe, text, these
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
-, webkitgtk24x
+, webkitgtk24x, dependent-sum-template, bifunctors
 }:
 
 mkDerivation {
@@ -24,6 +24,8 @@ mkDerivation {
     ref-tf
     aeson
     exception-transformers
+    dependent-sum-template
+    bifunctors
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
   pkgconfigDepends = if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk24x ];
   license = null;

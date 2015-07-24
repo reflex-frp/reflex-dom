@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -30,16 +30,16 @@ import GHCJS.DOM.NamedNodeMap
 import Control.Lens hiding (element, children)
 import Data.These
 import Data.Align
-
 import Data.Maybe
+import Data.GADT.Compare.TH
+import Data.Bitraversable
+import GHCJS.DOM.MouseEvent
 
 type AttributeMap = Map String String
 
 data El t
   = El { _el_element :: HTMLElement
-       , _el_clicked :: Event t ()
-       , _el_keypress :: Event t Int
-       , _el_scrolled :: Event t Int
+       , _el_events :: EventSelector t (WrapArg EventResult EventName)
        }
 
 class Attributes m a where
@@ -382,6 +382,226 @@ wrapDomEventMaybe element elementOnevent getValue = do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
 
+data EventTag
+   = AbortTag
+   | BlurTag
+   | ChangeTag
+   | ClickTag
+   | ContextmenuTag
+   | DblclickTag
+   | DragTag
+   | DragendTag
+   | DragenterTag
+   | DragleaveTag
+   | DragoverTag
+   | DragstartTag
+   | DropTag
+   | ErrorTag
+   | FocusTag
+   | InputTag
+   | InvalidTag
+   | KeydownTag
+   | KeypressTag
+   | KeyupTag
+   | LoadTag
+   | MousedownTag
+   | MouseenterTag
+   | MouseleaveTag
+   | MousemoveTag
+   | MouseoutTag
+   | MouseoverTag
+   | MouseupTag
+--   | MousewheelTag -- webkitgtk only provides elementOnmousewheel (not elementOnwheel), but firefox does not support the mousewheel event; we should provide wheel (the equivalent, standard event), but we will need to make sure webkitgtk supports it first
+   | ScrollTag
+   | SelectTag
+   | SubmitTag
+--   | WheelTag -- See MousewheelTag
+   | BeforecutTag
+   | CutTag
+   | BeforecopyTag
+   | CopyTag
+   | BeforepasteTag
+   | PasteTag
+   | ResetTag
+   | SearchTag
+   | SelectstartTag
+   | TouchstartTag
+   | TouchmoveTag
+   | TouchendTag
+   | TouchcancelTag
+
+data EventName :: EventTag -> * where
+  Abort :: EventName 'AbortTag
+  Blur :: EventName 'BlurTag
+  Change :: EventName 'ChangeTag
+  Click :: EventName 'ClickTag
+  Contextmenu :: EventName 'ContextmenuTag
+  Dblclick :: EventName 'DblclickTag
+  Drag :: EventName 'DragTag
+  Dragend :: EventName 'DragendTag
+  Dragenter :: EventName 'DragenterTag
+  Dragleave :: EventName 'DragleaveTag
+  Dragover :: EventName 'DragoverTag
+  Dragstart :: EventName 'DragstartTag
+  Drop :: EventName 'DropTag
+  Error :: EventName 'ErrorTag
+  Focus :: EventName 'FocusTag
+  Input :: EventName 'InputTag
+  Invalid :: EventName 'InvalidTag
+  Keydown :: EventName 'KeydownTag
+  Keypress :: EventName 'KeypressTag
+  Keyup :: EventName 'KeyupTag
+  Load :: EventName 'LoadTag
+  Mousedown :: EventName 'MousedownTag
+  Mouseenter :: EventName 'MouseenterTag
+  Mouseleave :: EventName 'MouseleaveTag
+  Mousemove :: EventName 'MousemoveTag
+  Mouseout :: EventName 'MouseoutTag
+  Mouseover :: EventName 'MouseoverTag
+  Mouseup :: EventName 'MouseupTag
+  --Mousewheel :: EventName 'MousewheelTag
+  Scroll :: EventName 'ScrollTag
+  Select :: EventName 'SelectTag
+  Submit :: EventName 'SubmitTag
+  --Wheel :: EventName 'WheelTag
+  Beforecut :: EventName 'BeforecutTag
+  Cut :: EventName 'CutTag
+  Beforecopy :: EventName 'BeforecopyTag
+  Copy :: EventName 'CopyTag
+  Beforepaste :: EventName 'BeforepasteTag
+  Paste :: EventName 'PasteTag
+  Reset :: EventName 'ResetTag
+  Search :: EventName 'SearchTag
+  Selectstart :: EventName 'SelectstartTag
+  Touchstart :: EventName 'TouchstartTag
+  Touchmove :: EventName 'TouchmoveTag
+  Touchend :: EventName 'TouchendTag
+  Touchcancel :: EventName 'TouchcancelTag
+
+type family EventType en where
+  EventType 'AbortTag = UIEvent
+  EventType 'BlurTag = UIEvent
+  EventType 'ChangeTag = UIEvent
+  EventType 'ClickTag = MouseEvent
+  EventType 'ContextmenuTag = MouseEvent
+  EventType 'DblclickTag = MouseEvent
+  EventType 'DragTag = MouseEvent
+  EventType 'DragendTag = MouseEvent
+  EventType 'DragenterTag = MouseEvent
+  EventType 'DragleaveTag = MouseEvent
+  EventType 'DragoverTag = MouseEvent
+  EventType 'DragstartTag = MouseEvent
+  EventType 'DropTag = MouseEvent
+  EventType 'ErrorTag = UIEvent
+  EventType 'FocusTag = UIEvent
+  EventType 'InputTag = UIEvent
+  EventType 'InvalidTag = UIEvent
+  EventType 'KeydownTag = UIEvent
+  EventType 'KeypressTag = UIEvent
+  EventType 'KeyupTag = UIEvent
+  EventType 'LoadTag = UIEvent
+  EventType 'MousedownTag = MouseEvent
+  EventType 'MouseenterTag = UIEvent
+  EventType 'MouseleaveTag = UIEvent
+  EventType 'MousemoveTag = MouseEvent
+  EventType 'MouseoutTag = MouseEvent
+  EventType 'MouseoverTag = MouseEvent
+  EventType 'MouseupTag = MouseEvent
+  --EventType 'MousewheelTag = MouseEvent
+  EventType 'ScrollTag = UIEvent
+  EventType 'SelectTag = UIEvent
+  EventType 'SubmitTag = UIEvent
+  --EventType 'WheelTag = UIEvent
+  EventType 'BeforecutTag = UIEvent
+  EventType 'CutTag = UIEvent
+  EventType 'BeforecopyTag = UIEvent
+  EventType 'CopyTag = UIEvent
+  EventType 'BeforepasteTag = UIEvent
+  EventType 'PasteTag = UIEvent
+  EventType 'ResetTag = UIEvent
+  EventType 'SearchTag = UIEvent
+  EventType 'SelectstartTag = UIEvent
+  EventType 'TouchstartTag = UIEvent
+  EventType 'TouchmoveTag = UIEvent
+  EventType 'TouchendTag = UIEvent
+  EventType 'TouchcancelTag = UIEvent
+
+onEventName :: IsElement e => EventName en -> e -> EventM (EventType en) e () -> IO (IO ())
+onEventName en = case en of
+  Abort -> elementOnabort
+  Blur -> elementOnblur
+  Change -> elementOnchange
+  Click -> elementOnclick
+  Contextmenu -> elementOncontextmenu
+  Dblclick -> elementOndblclick
+  Drag -> elementOndrag
+  Dragend -> elementOndragend
+  Dragenter -> elementOndragenter
+  Dragleave -> elementOndragleave
+  Dragover -> elementOndragover
+  Dragstart -> elementOndragstart
+  Drop -> elementOndrop
+  Error -> elementOnerror
+  Focus -> elementOnfocus
+  Input -> elementOninput
+  Invalid -> elementOninvalid
+  Keydown -> elementOnkeydown
+  Keypress -> elementOnkeypress
+  Keyup -> elementOnkeyup
+  Load -> elementOnload
+  Mousedown -> elementOnmousedown
+  Mouseenter -> elementOnmouseenter
+  Mouseleave -> elementOnmouseleave
+  Mousemove -> elementOnmousemove
+  Mouseout -> elementOnmouseout
+  Mouseover -> elementOnmouseover
+  Mouseup -> elementOnmouseup
+  --Mousewheel -> elementOnmousewheel
+  Scroll -> elementOnscroll
+  Select -> elementOnselect
+  Submit -> elementOnsubmit
+  --Wheel -> elementOnwheel
+  Beforecut -> elementOnbeforecut
+  Cut -> elementOncut
+  Beforecopy -> elementOnbeforecopy
+  Copy -> elementOncopy
+  Beforepaste -> elementOnbeforepaste
+  Paste -> elementOnpaste
+  Reset -> elementOnreset
+  Search -> elementOnsearch
+  Selectstart -> elementOnselectstart
+  Touchstart -> elementOntouchstart
+  Touchmove -> elementOntouchmove
+  Touchend -> elementOntouchend
+  Touchcancel -> elementOntouchcancel
+
+newtype EventResult en = EventResult { unEventResult :: EventResultType en }
+
+type family EventResultType (en :: EventTag) :: * where
+  EventResultType 'ClickTag = ()
+  EventResultType 'DblclickTag = ()
+  EventResultType 'KeypressTag = Int
+  EventResultType 'ScrollTag = Int
+  EventResultType 'MousemoveTag = (Int, Int)
+  EventResultType 'MousedownTag = (Int, Int)
+  EventResultType 'MouseupTag = (Int, Int)
+  EventResultType 'MouseenterTag = ()
+  EventResultType 'MouseleaveTag = ()
+  EventResultType 'FocusTag = ()
+  EventResultType 'BlurTag = ()
+
+wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventName en -> EventM (EventType en) e (Maybe (f en))) -> m (EventSelector t (WrapArg f EventName))
+wrapDomEventsMaybe element handlers = do
+  postGui <- askPostGui
+  runWithActions <- askRunWithActions
+  e <- newFanEventWithTrigger $ \(WrapArg en) et -> do
+        unsubscribe <- liftIO $ (onEventName en) element $ do
+          mv <- handlers en
+          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+        return $ liftIO $ do
+          unsubscribe
+  return $! e
+
 getKeyEvent :: EventM UIEvent e Int
 getKeyEvent = do
   e <- event
@@ -392,12 +612,29 @@ getKeyEvent = do
       if charCode /= 0 then return charCode else
         uiEventGetKeyCode e
 
-wrapElement :: (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
+getMouseEventCoords :: EventM MouseEvent e (Int, Int)
+getMouseEventCoords = do
+  e <- event
+  liftIO $ bisequence (mouseEventGetX e, mouseEventGetY e)
+
+defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM (EventType en) e (Maybe (EventResult en))
+defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
+  Click -> return ()
+  Dblclick -> return ()
+  Keypress -> getKeyEvent
+  Scroll -> liftIO $ elementGetScrollTop e
+  Mousemove -> getMouseEventCoords
+  Mouseup -> getMouseEventCoords
+  Mousedown -> getMouseEventCoords
+  Mouseenter -> return ()
+  Mouseleave -> return ()
+  Focus -> return ()
+  Blur -> return ()
+
+wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
-  clicked <- wrapDomEvent e elementOnclick (return ())
-  keypress <- wrapDomEvent e elementOnkeypress getKeyEvent
-  scrolled <- wrapDomEvent e elementOnscroll $ liftIO $ elementGetScrollTop e
-  return $ El e clicked keypress scrolled
+  es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
+  return $ El e es
 
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttr' elementTag attrs child = do
@@ -479,10 +716,16 @@ data Link t
   = Link { _link_clicked :: Event t ()
          }
 
+class HasDomEvent t a where
+  domEvent :: EventName en -> a -> Event t (EventResultType en)
+
+instance Reflex t => HasDomEvent t (El t) where
+  domEvent en el = fmap unEventResult $ select (_el_events el) (WrapArg en)
+
 linkClass :: MonadWidget t m => String -> String -> m (Link t)
 linkClass s c = do
   (l,_) <- elAttr' "a" ("class" =: c) $ text s
-  return $ Link $ _el_clicked l
+  return $ Link $ domEvent Click l
 
 link :: MonadWidget t m => String -> m (Link t)
 link s = linkClass s ""
@@ -490,7 +733,7 @@ link s = linkClass s ""
 button :: MonadWidget t m => String -> m (Event t ())
 button s = do
   (e, _) <- el' "button" $ text s
-  return $ _el_clicked e
+  return $ domEvent Click e
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
@@ -556,3 +799,21 @@ unsafePlaceElement e = do
   p <- askParent
   _ <- liftIO $ nodeAppendChild p $ Just e
   wrapElement e
+
+deriveGEq ''EventName
+deriveGCompare ''EventName
+
+--------------------------------------------------------------------------------
+-- Deprecated functions
+
+{-# DEPRECATED _el_clicked "Use `domEvent Click` instead" #-}
+_el_clicked :: Reflex t => El t -> Event t ()
+_el_clicked = domEvent Click
+
+{-# DEPRECATED _el_keypress "Use `domEvent Keypress` instead" #-}
+_el_keypress :: Reflex t => El t -> Event t Int
+_el_keypress = domEvent Keypress
+
+{-# DEPRECATED _el_scrolled "Use `domEvent Scroll` instead" #-}
+_el_scrolled :: Reflex t => El t -> Event t Int
+_el_scrolled = domEvent Scroll
