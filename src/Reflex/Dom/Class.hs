@@ -13,6 +13,7 @@ import Data.Foldable
 import Control.Monad.Ref
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence)
 import Control.Monad.State hiding (mapM, mapM_, forM, forM_, sequence)
+import qualified Control.Monad.State.Strict as Strict hiding (mapM, mapM_, forM, forM_, sequence)
 import Data.Dependent.Sum (DSum (..))
 import GHCJS.DOM.Types hiding (Event)
 import GHCJS.DOM (WebView)
@@ -73,6 +74,10 @@ instance HasWebView m => HasWebView (StateT r m) where
   type WebViewPhantom (StateT r m) = WebViewPhantom m
   askWebView = lift askWebView
 
+instance HasWebView m => HasWebView (Strict.StateT r m) where
+  type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
+  askWebView = lift askWebView
+
 newtype Restore m = Restore { restore :: forall a. m a -> IO a }
 
 class Monad m => MonadIORestore m where
@@ -87,6 +92,7 @@ instance MonadIORestore m => MonadIORestore (ReaderT r m) where
 class (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h m | m -> t h where
   askPostGui :: m (h () -> IO ())
   askRunWithActions :: m ([DSum (EventTrigger t)] -> h ())
+  scheduleFollowup :: Ref m (Maybe (EventTrigger t a)) -> a -> m ()
 
 runFrameWithTriggerRef :: (HasPostGui t h m, MonadRef m, MonadIO m) => Ref m (Maybe (EventTrigger t a)) -> a -> m ()
 runFrameWithTriggerRef r a = do
@@ -97,6 +103,12 @@ runFrameWithTriggerRef r a = do
 instance HasPostGui t h m => HasPostGui t h (ReaderT r m) where
   askPostGui = lift askPostGui
   askRunWithActions = lift askRunWithActions
+  scheduleFollowup r a = lift $ scheduleFollowup r a
+
+instance HasPostGui t h m => HasPostGui t h (Strict.StateT s m) where
+  askPostGui = lift askPostGui
+  askRunWithActions = lift askRunWithActions
+  scheduleFollowup r a = lift $ scheduleFollowup r a
 
 instance MonadWidget t m => MonadWidget t (ReaderT r m) where
   type WidgetHost (ReaderT r m) = WidgetHost m

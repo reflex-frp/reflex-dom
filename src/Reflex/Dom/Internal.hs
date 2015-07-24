@@ -29,12 +29,17 @@ import Data.Traversable
 import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Monoid ((<>))
+import Data.IORef
+import Data.Maybe
+
+newtype EventTriggerRef t m a = EventTriggerRef { unEventTriggerRef :: Ref m (Maybe (EventTrigger t a)) }
 
 data GuiEnv t h x
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
             , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
             , _guiEnvWebView :: !(WebViewSingleton x)
+            , _guiEnvFollowupEvents :: Ref h [DSum (EventTriggerRef t h)]
             }
 
 --TODO: Poorly named
@@ -102,10 +107,14 @@ instance HasWebView m => HasWebView (Widget t m) where
 instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h x m) where
   askPostGui = Gui $ view guiEnvPostGui
   askRunWithActions = Gui $ view guiEnvRunWithActions
+  scheduleFollowup r a = Gui $ do
+    followupEventsRef <- view guiEnvFollowupEvents
+    modifyRef' followupEventsRef $ ((EventTriggerRef r :=> a) :)
 
 instance HasPostGui t h m => HasPostGui t h (Widget t m) where
   askPostGui = lift askPostGui
   askRunWithActions = lift askRunWithActions
+  scheduleFollowup r a = lift $ scheduleFollowup r a
 
 type WidgetInternal t m a = ReaderT WidgetEnv (StateT (WidgetState t m) m) a
 
@@ -215,10 +224,12 @@ instance HasPostGui t h m => HasPostGui t (WithWebView x h) (WithWebView x m) wh
   askRunWithActions = do
     runWithActions <- lift askRunWithActions
     return $ lift . runWithActions
+  scheduleFollowup r a = lift $ scheduleFollowup r a
 
 instance HasPostGui Spider SpiderHost SpiderHost where
   askPostGui = return $ \h -> liftIO $ runSpiderHost h
   askRunWithActions = return fireEvents
+  scheduleFollowup _ _ = liftIO $ putStrLn "scheduleFollowup{Spider,SpiderHost,SpiderHost}: not implemented"
 
 instance MonadTrans (WithWebView x) where
   lift = WithWebView . lift
@@ -248,11 +259,25 @@ attachWidget :: forall e x a. (IsHTMLElement e) => e -> WebViewSingleton x -> Wi
 attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView x SpiderHost) x
+  followupEvents <- liftIO $ newIORef []
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv followupEvents :: GuiEnv Spider (WithWebView x SpiderHost) x
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle
-            runHostFrame $ runGui (sequence_ voidActionNeeded) guiEnv
+            case voidActionNeeded of
+              Nothing -> return ()
+              Just va -> do
+                runHostFrame $ runGui va guiEnv
+                doFollowup
+          doFollowup = do
+            fe <- liftIO $ atomicModifyIORef followupEvents $ \x -> ([], x)
+            fe' <- forM fe $ \(EventTriggerRef r :=> a) -> do
+              mt <- readRef r
+              case mt of
+                Nothing -> return Nothing
+                Just t -> return $ Just (t :=> a)
+            let fe'' = catMaybes fe'
+            when (not $ null fe'') $ runWithActions fe''
       Just df <- liftIO $ documentCreateDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
@@ -262,6 +287,7 @@ attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TO
       _ <- liftIO $ nodeAppendChild rootElement $ Just df
       voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
+  doFollowup -- This must go after voidActionHandle is subscribed; otherwise, a loop results
   _ <- liftIO $ forkIO $ forever $ postGUISync =<< readChan frames -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe
   return result
 

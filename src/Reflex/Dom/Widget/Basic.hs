@@ -120,7 +120,7 @@ dyn child = do
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
         (result, postBuild, voidActions) <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+        scheduleFollowup newChildBuiltTriggerRef (result, voidActions)
         postBuild
         Just p <- liftIO $ nodeGetParentNode endPlaceholder
         _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
@@ -147,7 +147,7 @@ widgetHold child0 newChild = do
   let build c = do
         Just df <- liftIO $ documentCreateDocumentFragment doc
         (result, postBuild, voidActions) <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+        scheduleFollowup newChildBuiltTriggerRef (result, voidActions)
         postBuild
         mp <- liftIO $ nodeGetParentNode endPlaceholder
         case mp of
@@ -182,7 +182,7 @@ listWithKey vals mkChild = do
     initialState <- iforM curVals $ \k v -> do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
-    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
+    scheduleFollowup newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
     sequence_ $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
@@ -207,7 +207,7 @@ listWithKey vals mkChild = do
         return $ Just s
       These state _ -> do
         return $ Just state
-    runFrameWithTriggerRef newChildrenTriggerRef newState
+    scheduleFollowup newChildrenTriggerRef newState
     postBuild
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
@@ -262,7 +262,7 @@ listWithKey' initialVals valsChanged mkChild = do
         return $ Just s
       This state -> do -- No change
         return $ Just state
-    runFrameWithTriggerRef newChildrenTriggerRef newState
+    scheduleFollowup newChildrenTriggerRef newState
     postBuild
   mapDyn (fmap (fst . fst)) children
 
@@ -290,7 +290,7 @@ listViewWithKey' vals mkChild = do
     initialState <- iforM curVals $ \k v -> do
       (result, postBuild, voidAction) <- buildChild df k v
       return ((result, voidAction), postBuild)
-    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
+    scheduleFollowup newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
     sequence_ $ fmap snd initialState
     Just p <- liftIO $ nodeGetParentNode endPlaceholder
     _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
@@ -315,7 +315,7 @@ listViewWithKey' vals mkChild = do
         return $ Just s
       These state _ -> do
         return $ Just state
-    runFrameWithTriggerRef newChildrenTriggerRef newState
+    scheduleFollowup newChildrenTriggerRef newState
     postBuild
   return $ fmap (fmap (fst . fst)) children
 
