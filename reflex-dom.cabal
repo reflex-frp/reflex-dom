@@ -70,8 +70,8 @@ library
     Reflex.Dom.Xhr
     Reflex.Dom.Time
     Foreign.JavaScript.TH
-  other-modules:
     Reflex.Dom.Internal.Foreign
+  other-modules:
     Reflex.Dom.Xhr.Foreign
 
   other-extensions: TemplateHaskell
