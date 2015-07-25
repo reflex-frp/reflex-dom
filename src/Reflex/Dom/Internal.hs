@@ -248,6 +248,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
+  type ReadPhase (WithWebView x m) = ReadPhase m
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   subscribeEvent = lift . subscribeEvent
   runHostFrame = lift . runHostFrame
