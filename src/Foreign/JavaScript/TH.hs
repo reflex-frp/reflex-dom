@@ -73,6 +73,7 @@ class Monad m => MonadJS x m | m -> x where
   fromJSBool :: JSRef x -> m Bool
   fromJSString :: JSRef x -> m String
   fromJSArray :: JSRef x -> m [JSRef x]
+  fromJSUint8Array :: JSRef x -> m ByteString
   fromJSNumber :: JSRef x -> m Double
   withJSBool :: Bool -> (JSRef x -> m r) -> m r
   withJSString :: String -> (JSRef x -> m r) -> m r
@@ -102,6 +103,7 @@ instance MonadJS JSCtx_IO IO where
   fromJSBool (JSRef_IO r) = return $ JS.fromJSBool $ JS.castRef r
   fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.castRef r
   fromJSArray (JSRef_IO r) = liftM coerce $ JS.fromArray $ JS.castRef r
+  fromJSUint8Array (JSRef_IO r) = JS.bufferByteString 0 0 $ JS.castRef r
   fromJSNumber (JSRef_IO r) = do
     Just n <- JS.fromJSRef $ JS.castRef r
     return n
@@ -123,7 +125,7 @@ instance MonadJS JSCtx_IO IO where
       return $ JS.castRef result
     liftM (JSFun . JSRef_IO) $ funWithArguments cb
   freeJSFun (JSFun (JSRef_IO r)) = JS.release $ JS.castRef r
-  setJSProp s (JSRef_IO o) (JSRef_IO v) = JS.setProp s o v
+  setJSProp s (JSRef_IO v) (JSRef_IO o) = JS.setProp s v o
   getJSProp s (JSRef_IO o) = do
     r <- JS.getProp s o
     return $ JSRef_IO r
@@ -225,6 +227,10 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     let len = round lenDouble
     liftIO $ forM [0..len-1] $ \i -> do
       liftM JSRef_JavaScriptCore $ jsobjectgetpropertyatindex jsContext a i nullPtr --TODO: Exceptions
+    fromJSUint8Array a = do
+      vals <- fromJSArray a
+      doubles <- mapM fromJSNumber vals
+      return $ BS.pack $ map round doubles
   fromJSNumber (JSRef_JavaScriptCore val) = do
     jsContext <- askJSContext
     liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
@@ -243,7 +249,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   freeJSFun (JSFun (JSRef_JavaScriptCore f)) = do
     jsContext <- askJSContext
     liftIO $ jsvalueunprotect jsContext f
-  setJSProp propName (JSRef_JavaScriptCore objRef) (JSRef_JavaScriptCore valRef) = do
+  setJSProp propName (JSRef_JavaScriptCore valRef) (JSRef_JavaScriptCore objRef) = do
     withJSStringRaw propName $ \propNameRaw -> do
       jsContext <- askJSContext
       liftIO $ jsobjectsetproperty jsContext objRef propNameRaw valRef 0 nullPtr --TODO: property attribute, exceptions
@@ -342,12 +348,6 @@ instance FromJS x Double where
 instance ToJS x Node where
   withJS = withJSNode
 
-
-fromJSUint8Array :: MonadJS x m => JSUint8Array x -> m ByteString
-fromJSUint8Array (JSUint8Array a) = do
-  vals <- fromJSArray a
-  doubles <- mapM fromJSNumber vals
-  return $ BS.pack $ map round doubles
 
 importJS :: Safety -> String -> String -> Q Type -> Q [Dec]
 importJS safety body name qt = do
