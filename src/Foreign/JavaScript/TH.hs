@@ -74,6 +74,7 @@ class Monad m => MonadJS x m | m -> x where
   fromJSString :: JSRef x -> m String
   fromJSArray :: JSRef x -> m [JSRef x]
   fromJSNumber :: JSRef x -> m Double
+  withJSBool :: Bool -> (JSRef x -> m r) -> m r
   withJSString :: String -> (JSRef x -> m r) -> m r
   withJSNumber :: Double -> (JSRef x -> m r) -> m r
   withJSArray :: [JSRef x] -> (JSRef x -> m r) -> m r
@@ -82,6 +83,7 @@ class Monad m => MonadJS x m | m -> x where
   mkJSFun :: ([JSRef x] -> m (JSRef x)) -> m (JSFun x) --TODO: Support 'this', exceptions
   freeJSFun :: JSFun x -> m ()
   setJSProp :: String -> JSRef x -> JSRef x -> m ()
+  getJSProp :: String -> JSRef x -> m (JSRef x)
   withJSNode :: Node -> (JSRef x -> m r) -> m r
 
 #ifdef __GHCJS__
@@ -103,6 +105,7 @@ instance MonadJS JSCtx_IO IO where
   fromJSNumber (JSRef_IO r) = do
     Just n <- JS.fromJSRef $ JS.castRef r
     return n
+  withJSBool b f = f $ JSRef_IO $ JS.castRef $ JS.toJSBool b
   withJSString s f = f $ JSRef_IO $ JS.castRef $ JS.toJSString s
   withJSNumber n f = do
     r <- JS.toJSRef n
@@ -121,6 +124,9 @@ instance MonadJS JSCtx_IO IO where
     liftM (JSFun . JSRef_IO) $ funWithArguments cb
   freeJSFun (JSFun (JSRef_IO r)) = JS.release $ JS.castRef r
   setJSProp s (JSRef_IO o) (JSRef_IO v) = JS.setProp s o v
+  getJSProp s (JSRef_IO o) = do
+    r <- JS.getProp s o
+    return $ JSRef_IO r
   withJSNode n f = f $ JSRef_IO $ JS.castRef $ unNode n
 
 foreign import javascript unsafe "new Uint8Array($1_1.buf, $1_2, $2)" extractByteArray :: Ptr CChar -> Int -> IO (JS.JSRef (JSRef JSCtx_IO))
@@ -187,6 +193,10 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
       allocaBytes (fromIntegral l) $ \ps -> do
         _ <- jsstringgetutf8cstring'_ s ps (fromIntegral l)
         peekCString ps
+  withJSBool b a = do
+    jsContext <- askJSContext
+    valRef <- liftIO $ jsvaluemakeboolean jsContext bRef
+    a $ JSRef_JavaScriptCore valRef
   withJSString str a = do
     jsContext <- askJSContext
     withJSStringRaw str $ \strRef -> do
@@ -237,6 +247,10 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     withJSStringRaw propName $ \propNameRaw -> do
       jsContext <- askJSContext
       liftIO $ jsobjectsetproperty jsContext objRef propNameRaw valRef 0 nullPtr --TODO: property attribute, exceptions
+  getJSProp propName (JSRef_JavaScriptCore objRef) = do
+    withJSStringRaw propName $ \propNameRaw -> do
+      jsContext <- askJSContext
+      liftIO $ jsobjectgetproperty jsContext objRef propNameRaw 0 nullPtr --TODO: property attribute, exceptions
   withJSNode (Node n) f = do
     jsContext <- askJSContext
     withForeignPtr n $ \nPtr -> do
@@ -265,6 +279,9 @@ instance FromJS x () where
 
 instance FromJS x Bool where
   fromJS = fromJSBool
+
+instance ToJS x Bool where
+  withJS = withJSBool
 
 instance FromJS x String where
   fromJS = fromJSString
