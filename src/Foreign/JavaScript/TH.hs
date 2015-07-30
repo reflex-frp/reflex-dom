@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, CPP, TemplateHaskell, TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving, GeneralizedNewtypeDeriving, ExistentialQuantification, FunctionalDependencies, EmptyDataDecls, FlexibleContexts, RankNTypes #-}
+{-# LANGUAGE ForeignFunctionInterface, CPP, TemplateHaskell, TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving, GeneralizedNewtypeDeriving, ExistentialQuantification, FunctionalDependencies, EmptyDataDecls, FlexibleContexts, RankNTypes, UndecidableInstances #-}
 #ifdef __GHCJS__
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
@@ -33,6 +33,7 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Exception
+import Control.Monad.Reader
 import Foreign.Marshal
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -59,9 +60,13 @@ instance FromJS x (JSFun x) where
 class IsJSContext x where
   data JSRef x
 
-class (MonadIO (JSM m), MonadFix (JSM m), MonadJS x (JSM m)) => HasJS x m | m -> x where
+class (Monad m, MonadIO (JSM m), MonadFix (JSM m), MonadJS x (JSM m)) => HasJS x m | m -> x where
   type JSM m :: * -> *
   liftJS :: JSM m a -> m a
+
+instance HasJS x m => HasJS x (ReaderT r m) where
+  type JSM (ReaderT r m) = JSM m
+  liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
 class Monad m => MonadJS x m | m -> x where
