@@ -720,7 +720,7 @@ class HasDomEvent t a where
   domEvent :: EventName en -> a -> Event t (EventResultType en)
 
 instance Reflex t => HasDomEvent t (El t) where
-  domEvent en el = fmap unEventResult $ select (_el_events el) (WrapArg en)
+  domEvent en e = fmap unEventResult $ select (_el_events e) (WrapArg en)
 
 linkClass :: MonadWidget t m => String -> String -> m (Link t)
 linkClass s c = do
@@ -769,27 +769,24 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
---TODO preselect a tab on open
 tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
 tabDisplay ulClass activeClass tabItems = do
-  rec dCurrentTab <- holdDyn Nothing (updated dTabClicks)
-      dTabClicks :: Dynamic t (Maybe k) <- elAttr "ul" (Map.singleton "class" ulClass) $ do
-        tabClicksList :: [Event t k] <- (liftM Map.elems) $ imapM (\k (s,_) -> headerBarLink s k =<< mapDyn (== (Just k)) dCurrentTab) tabItems
+  let t0 = listToMaybe $ Map.keys tabItems
+  rec currentTab :: Demux t (Maybe k) <- elAttr "ul" ("class" =: ulClass) $ do
+        tabClicksList :: [Event t k] <- (liftM Map.elems) $ imapM (\k (s,_) -> headerBarLink s k =<< getDemuxed currentTab (Just k)) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
-        holdDyn Nothing $ fmap Just eTabClicks :: m (Dynamic t (Maybe k))
-  divClass "" $ do
-    let dTabs :: Dynamic t (Map k (String, m ())) = constDyn tabItems
-    _ <- listWithKey dTabs (\k dTab -> do
-      dAttrs <- mapDyn (\sel -> do
-        let t1 = listToMaybe $ Map.keys tabItems
-        if sel == Just k || (sel == Nothing && t1 == Just k) then Map.empty else Map.singleton "style" "display:none;") dCurrentTab 
-      elDynAttr "div" dAttrs $ dyn =<< mapDyn snd dTab)
+        liftM demux $ holdDyn t0 $ fmap Just eTabClicks
+  el "div" $ do
+    iforM_ tabItems $ \k (_, w) -> do
+      isSelected <- getDemuxed currentTab $ Just k
+      attrs <- forDyn isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
+      elDynAttr "div" attrs w
     return ()
   where
     headerBarLink :: (MonadWidget t m, Ord k) => String -> k -> Dynamic t Bool -> m (Event t k)
-    headerBarLink x k dBool = do
-      dAttributes <- mapDyn (\b -> if b then Map.singleton "class" activeClass else Map.empty) dBool
-      elDynAttr "li" dAttributes $ do
+    headerBarLink x k isSelected = do
+      attrs <- mapDyn (\b -> if b then Map.singleton "class" activeClass else Map.empty) isSelected
+      elDynAttr "li" attrs $ do
         a <- link x
         return $ fmap (const k) (_link_clicked a)
 
