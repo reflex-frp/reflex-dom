@@ -2,7 +2,7 @@
 , mtl, ref-tf, reflex, safe, text, these
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
-, dependent-sum-template, bifunctors
+, bifunctors, th-extras
 }:
 
 mkDerivation {
@@ -24,8 +24,8 @@ mkDerivation {
     ref-tf
     aeson
     exception-transformers
-    dependent-sum-template
     bifunctors
+    th-extras
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
   license = null;
 }
