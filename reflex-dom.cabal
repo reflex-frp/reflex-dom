@@ -72,5 +72,4 @@ library
     Data.GADT.Compare.TH
 
   other-extensions: TemplateHaskell
-  ghc-prof-options: -fprof-auto
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2
