@@ -33,9 +33,9 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
         currentTop <- mapDyn (listWrapperStyle . fst) window
         (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ listWithKey itemsInWindow $ \k v -> do
             (li,_) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v
-            return $ fmap (const k) (_el_clicked li)
+            return $ fmap (const k) (domEvent Click li)
         return lis
-      scrollPosition <- holdDyn 0 $ _el_scrolled container
+      scrollPosition <- holdDyn 0 $ domEvent Scroll container
       window <- mapDyn (findWindow heightPx rowPx) scrollPosition
       itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ take num $ drop idx $ Map.toList is) window items
   postBuild <- getPostBuild

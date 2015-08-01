@@ -1,3 +1,4 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Reflex.Dom.Internal.Foreign where
 
 import GHCJS.DOM hiding (runWebGUI)
@@ -10,7 +11,10 @@ import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, unWidget)
 import Graphics.UI.Gtk.WebKit.WebSettings
 import Graphics.UI.Gtk.WebKit.WebFrame
+import Graphics.UI.Gtk.WebKit.WebInspector
 import Data.List
+import Data.String
+import System.Directory
 
 makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
@@ -25,6 +29,7 @@ makeDefaultWebView userAgentKey main = do
   userAgent <- settings `get` webSettingsUserAgent
   settings `set` [ webSettingsUserAgent := userAgent ++ " " ++ userAgentKey
                  , webSettingsEnableUniversalAccessFromFileUris := True
+                 , webSettingsEnableDeveloperExtras := True
                  ]
   webViewSetWebSettings webView settings
   window `containerAdd` scrollWin
@@ -32,10 +37,20 @@ makeDefaultWebView userAgentKey main = do
   _ <- on window objectDestroy . liftIO $ mainQuit
   widgetShowAll window
   _ <- webView `on` loadFinished $ \_ -> do
-    main webView
+    main webView --TODO: Should probably only do this once
+  inspector <- webViewGetInspector webView
+  _ <- inspector `on` inspectWebView $ \wv -> do
+    inspectorWindow <- windowNew
+    windowSetDefaultSize inspectorWindow 900 600
+    inspectorScrollWin <- scrolledWindowNew Nothing Nothing
+    inspectorWebView <- webViewNew
+    inspectorWindow `containerAdd` inspectorScrollWin
+    inspectorScrollWin `containerAdd` inspectorWebView
+    widgetShowAll inspectorWindow
+    return inspectorWebView
   wf <- webViewGetMainFrame webView
-  webFrameLoadString wf "" Nothing "file:///"
-  main webView
+  pwd <- getCurrentDirectory
+  webFrameLoadString wf "" Nothing $ "file://" ++ pwd ++ "/"
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()
@@ -53,4 +68,3 @@ runWebGUI' userAgentKey main = do
       unless ((" " ++ userAgentKey) `isSuffixOf` agent) $ main (castToWebView window)
     Nothing -> do
       makeDefaultWebView userAgentKey main
-

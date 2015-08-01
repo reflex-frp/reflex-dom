@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
+import Data.Typeable
 
 data TickInfo
   = TickInfo { _tickInfo_lastUTC :: UTCTime
@@ -17,7 +18,7 @@ data TickInfo
              , _tickInfo_alreadyElapsed :: NominalDiffTime
              -- ^ Amount of time already elapsed in the current tick period.
              }
-  deriving (Eq)
+  deriving (Eq, Ord, Typeable)
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
