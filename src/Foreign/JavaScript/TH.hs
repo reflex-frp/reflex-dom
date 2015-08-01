@@ -39,6 +39,8 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Control.Concurrent
 import Data.Coerce
+import Text.Encoding.Z
+import Data.Monoid
 
 import Reflex.Dom (WithWebView, askWebView, runWithWebView, unWebViewSingleton)
 
@@ -377,9 +379,10 @@ mkJSFFI :: Safety -> String -> Q ([Dec], Exp)
 #ifdef __GHCJS__
 mkJSFFI safety body = do
   -- n <- newName "jsffi" --TODO: Should use newName, but that doesn't seem to work with ghcjs
-  let n = mkName $ "jsffi_" ++ show (abs (hash (show safety, body)))
+  l <- location
+  n <- newName $ "jsffi_" <> zEncodeString (loc_package l <> ":" <> loc_module l) <> "_" <> show (abs (hash (show safety, body)))
   t <- [t| JSFFI_Internal |]
-  let wrappedBody = "(function(){ return (" ++ body ++ "); }).apply($1)"
+  let wrappedBody = "(function(){ return (" <> body <> "); }).apply($1)"
   let decs = [ForeignD $ ImportF JavaScript safety wrappedBody n t]
   e <- [| JSFFI $(varE n) |]
   return (decs, e)
@@ -398,5 +401,5 @@ parseType (ForallT _ [AppT (AppT (ConT monadJs) (VarT _)) (VarT m)] funType)
             in (arg : args, result)
           AppT (VarT m') result
             | m' == m -> ([], result)
-          _ -> error $ "parseType: can't parse type " ++ show t
-parseType t = error $ "parseType: can't parse type " ++ show t
+          _ -> error $ "parseType: can't parse type " <> show t
+parseType t = error $ "parseType: can't parse type " <> show t

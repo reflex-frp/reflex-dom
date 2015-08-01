@@ -41,7 +41,8 @@ library
     exception-transformers == 0.4.*,
     directory == 1.2.*,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
-    bifunctors == 4.2.*
+    bifunctors == 4.2.*,
+    zenc == 0.1.*
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
