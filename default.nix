@@ -3,6 +3,7 @@
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
 , webkitgtk24x, dependent-sum-template, bifunctors, zenc
+, random
 }:
 
 mkDerivation {
@@ -27,6 +28,7 @@ mkDerivation {
     dependent-sum-template
     bifunctors
     zenc
+    random
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
   pkgconfigDepends = if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk24x ];
   license = null;
