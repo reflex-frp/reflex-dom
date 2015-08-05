@@ -70,19 +70,13 @@ In the Dynamic cases so far, the *content* of a widget is dynamic but the *defin
 Note the "list" functions do not imply particular HTML tags (ul, li, etc), though the widgets they create can have those tags if you construct them appropriately.
 
 ```haskell
--- Given a Dynamic of widget-creating actions, create a widget that is redefined
--- whenever the Dynamic updates. The returned Event of widget results occurs when
--- the Dynamic does.  Note that if type 'a' is an Event, the return value is an
--- Event-of-Events that would typically be flattened.
+-- Create a dynamically-redefined widget from a Dynamic of widget actions.
 [W]   dyn        ::        Dynamic (m a) -> m (Event a)
 
 -- Same as dyn, but takes initial value and an update Event instead of a Dynamic.
 [W]   widgetHold :: m a ->   Event (m a) -> m (Dynamic a)
 
--- Given a Dynamic key/value map and a function to create a widget for a given
--- key & Dynamic value, create a bunch of widgets.  Widgets will be created,
--- destroyed, and updated appropriately as the map changes.  Returns Dynamic map
--- from keys to widget results.
+-- Turn a Dynamic key/value map into a set of dynamically-changing widgets.
 [W]   listWithKey :: Ord k =>
           Dynamic (Map k v) -> (k -> Dynamic v -> m        a ) -> m (Dynamic (Map k a))
 
@@ -94,16 +88,11 @@ Note the "list" functions do not imply particular HTML tags (ul, li, etc), thoug
 [W]   simpleList  ::
           Dynamic       [v] -> (     Dynamic v -> m        a ) -> m (Dynamic       [a])
 
--- Like listWithKey specialized for widgets returning (Event a).  listWithKey would
--- return 'Dynamic (Map k (Event a))' in this scenario, but listViewWithKey flattens
--- this to 'Event (Map k a)' via 'switch'.
+-- Like listWithKey specialized for widgets returning (Event a).
 [W]   listViewWithKey :: Ord k =>
           Dynamic (Map k v) -> (k -> Dynamic v -> m (Event a)) -> m (Event   (Map k a))
 
--- As above, but there is a "current key", and the widget constructor gets a
--- Dynamic Bool indicating if that widget is currently selected.  The returned
--- Event fires when any of the widgets' returned Events fire, and returns the key
--- of an arbitrary firing widget.
+-- Create a dynamically-changing set of widgets, one of which is selected at any time.
 [W]   selectViewListWithKey_ :: Ord k => Dynamic k ->
           Dynamic (Map k v) -> (k -> Dynamic v -> Dynamic Bool -> m (Event a)) -> m (Event k)
 
@@ -131,25 +120,14 @@ Some of these widget builders take a configuration record and return a record co
 [W]   dropdown :: (Ord k, Show k, Read k) =>
           k -> Dynamic (Map k String) -> DropdownConfig k -> m (Dropdown k)
 
--- Given class, list of columns with (column header, function from row key and Dynamic row
--- value to widget), Dynamic map from row key to row value, and function from row key to
--- Dynamic row attributes, produce a table widget that returns a Dynamic map from row keys
--- to (row El, list of row widget values).
-[W]   tableDynAttr :: (Show k, Ord k) =>
-          String -> [(String, k -> Dynamic r -> m v)] -> Dynamic (Map k r) ->
-          (k -> m (Dynamic (Map String String))) -> m (Dynamic (Map k (El, [v])))
+-- Table with static columns and dynamic rows.
+[W]   tableDynAttr :: ...        -- See Reflex.Dom.Widget.Basic
 
--- Construct a tabbed view that shows only one of its child widgets at a time.  Takes a class
--- for the "ul" element, a class for the currently active "li" element, and a map from arbitrary
--- keys to (tab label, tab widget) pairs.
+-- Tabbed view that shows only one of its child widgets at a time.
 [W]   tabDisplay :: (Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
 
--- Widget to efficiently display long scrolling lists.  Dynamically control number of items in
--- list, current scroll position, attributes, and row content.  Returns current scroll position
--- and current selection.  Full documentation in Reflex/Dom/Widget/Lazy.hs
-[W]   virtualListWithSelection :: Ord k => Int -> Int -> Dynamic Int -> Int -> Event Int ->
-          String -> Dynamic (Map String String) -> String -> Dynamic (Map String String) ->
-          (k -> Dynamic v -> m ()) -> Dynamic (Map k v) -> m (Dynamic (Int, Int), Event k)
+-- Widget to efficiently display long scrolling lists.
+[W]   virtualListWithSelection :: ...        -- See Reflex.Dom.Widget.Lazy
 ```
 
 ## Connecting to the real world (I/O)
@@ -157,8 +135,7 @@ Some of these widget builders take a configuration record and return a record co
 ### Connecting to DOM events
 
 ```haskell
--- Extract the specified Event from an 'El'.  The allowable event names, and their
--- corresponding data types, are listed in Reflex/Dom/Widget/Basic.hs
+-- Extract the specified Event from an 'El'.  See Reflex.Dom.Widget.Basic
 [ ]   domEvent :: EventName en -> El -> Event (EventResultType en)
 ```
 
@@ -179,7 +156,7 @@ Some of these widget builders take a configuration record and return a record co
 
 ### XMLHttpRequest
 
-Convenience functions for XMLHttpRequest.  For configuration field details, see Reflex/Dom/Xhr.hs.
+Convenience functions for XMLHttpRequest.  see Reflex.Dom.Xhr
 
 ```haskell
 -- Given method, URL, and config record (with default instance), construct a request.
@@ -191,7 +168,7 @@ Convenience functions for XMLHttpRequest.  For configuration field details, see 
 -- Issue a collection of requests, wait for them ALL to complete, return collected results.
 [W]   performRequestsAsync :: Traversable f => Event (f XhrRequest) -> m (Event (f XhrResponse))
 
--- Convenience function to decode JSON-encoded response.
+-- Convenience function to decode JSON-encoded responses.
 [ ]   decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 
 -- Simplified interface to "GET" URLs and return decoded results.
@@ -201,12 +178,10 @@ Convenience functions for XMLHttpRequest.  For configuration field details, see 
 ### Time
 
 ```haskell
--- Given a time interval in seconds and a basis time, create an Event that fires on the given
--- interval. The Event will report the number of time intervals elapsed since the basis time
--- (and other info, see Reflex/Dom/Time.hs).  High load will cause ticks to be dropped.
+-- Create Event at given interval with given basis time.
 [W]   tickLossy :: NominalDiffTime -> UTCTime -> m (Event t TickInfo)
 
--- Delay an Event's occurences by a given amount in seconds.
+-- Delay an Event's occurrences by a given amount in seconds.
 [W]   delay :: NominalDiffTime -> Event t a -> m (Event t a)
 ```
 
