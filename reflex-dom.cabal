@@ -1,13 +1,13 @@
 Name: reflex-dom
 Version: 0.2
-Synopsis: Glitch-free Functional Reactive Web Apps
+Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
 Maintainer: ryan.trinkle@gmail.com
 Stability: Experimental
-Category: FRP
+Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
 Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
@@ -70,5 +70,8 @@ library
     Reflex.Dom.Xhr.Foreign
 
   other-extensions: TemplateHaskell
-  ghc-prof-options: -fprof-auto
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2
+
+source-repository head
+  type: git
+  location: https://github.com/ryantrinkle/reflex
