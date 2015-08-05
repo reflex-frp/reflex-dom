@@ -37,10 +37,10 @@ Widgets may return any type (this is 'a' in many of the functions below).  Often
 [W]   elDynAttr' :: String -> Dynamic (Map String String) -> m a -> m (El, a)
 
 -- Shortcut for elAttr when you only want to set the "class" attribute.
-[W]   elClass    :: String ->                      String -> m a -> m a
+[W]   elClass    :: String ->                     String  -> m a -> m a
 
 -- Even shorter-cut for above when element type is "div".  Create a div of given class.
-[W]   divClass   ::                                String -> m a -> m a
+[W]   divClass   ::                               String  -> m a -> m a
 
 -- Create a widget of given type with arbitrary, Dymamic HTML inside.
 [W]   elDynHtml'     :: String ->                      Dynamic String -> m El
@@ -110,11 +110,6 @@ Note the "list" functions do not imply particular HTML tags (ul, li, etc), thoug
 -- Same as listWithKey, but takes initial values and an updates Event instead of a Dynamic.
 [W]   listWithKey' :: Ord k =>
           Map k v -> Event (Map k (Maybe v)) -> (k -> v -> Event v -> m a) -> m (Dynamic (Map k a))
-
--- tableDynAttr
--- tabDisplay
--- workflow
--- workflowView
 ```
 
 ### Utility widgets
@@ -135,6 +130,19 @@ Some of these widget builders take a configuration record and return a record co
 -- Dropdown with Dynamic options.  First argument is initial state.
 [W]   dropdown :: (Ord k, Show k, Read k) =>
           k -> Dynamic (Map k String) -> DropdownConfig k -> m (Dropdown k)
+
+-- Given class, list of columns with (column header, function from row key and Dynamic row
+-- value to widget), Dynamic map from row key to row value, and function from row key to
+-- Dynamic row attributes, produce a table widget that returns a Dynamic map from row keys
+-- to (row El, list of row widget values).
+[W]   tableDynAttr :: (Show k, Ord k) =>
+          String -> [(String, k -> Dynamic r -> m v)] -> Dynamic (Map k r) ->
+          (k -> m (Dynamic (Map String String))) -> m (Dynamic (Map k (El, [v])))
+
+-- Construct a tabbed view that shows only one of its child widgets at a time.  Takes a class
+-- for the "ul" element, a class for the currently active "li" element, and a map from arbitrary
+-- keys to (tab label, tab widget) pairs.
+[W]   tabDisplay :: (Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
 
 -- Widget to efficiently display long scrolling lists.  Dynamically control number of items in
 -- list, current scroll position, attributes, and row content.  Returns current scroll position
