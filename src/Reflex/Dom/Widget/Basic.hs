@@ -310,8 +310,8 @@ listViewWithKey' vals mkChild = do
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        mp <- liftIO $ nodeGetParentNode placeholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder) --TODO: Should this really be ignored if mp is Nothing, or should we ensure that mp is never Nothing
         return $ Just s
       These state _ -> do
         return $ Just state
