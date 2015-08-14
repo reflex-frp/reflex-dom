@@ -45,6 +45,7 @@ tickLossyFrom dt t0 e = performEventAsync $ fmap callAtNextInterval e
           threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
           cb $ TickInfo t n alreadyElapsed
 
+-- | Delay an Event's occurrences by a given amount in seconds.
 delay :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
   threadDelay $ ceiling $ dt * 1000000

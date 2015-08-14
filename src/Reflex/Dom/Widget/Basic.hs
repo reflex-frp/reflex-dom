@@ -106,6 +106,9 @@ display :: (MonadWidget t m, Show a) => Dynamic t a -> m ()
 display a = dynText =<< mapDyn show a
 
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
+-- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
+--   The returned Event of widget results occurs when the Dynamic does.
+--   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened.
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   startPlaceholder <- text' ""
@@ -133,6 +136,9 @@ dyn child = do
     build newChild
   return $ fmap fst newChildBuilt
 
+-- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
+--   The returned Dynamic of widget results occurs when the Event does.
+--   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened.
 widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold child0 newChild = do
   startPlaceholder <- text' ""
@@ -162,7 +168,11 @@ widgetHold child0 newChild = do
   holdDyn result0 $ fmap fst newChildBuilt
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
-listWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
+-- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
+listWithKey :: (Ord k, MonadWidget t m)
+  => Dynamic t (Map k v)         -- ^ Dynamic key/value map
+  -> (k -> Dynamic t v -> m a)   -- ^ Function to create a widget for a given key from Dynamic value
+  -> m (Dynamic t (Map k a))     -- ^ Dynamic map from keys to widget results
 listWithKey vals mkChild = do
   doc <- askDocument
   endPlaceholder <- text' ""
@@ -211,7 +221,12 @@ listWithKey vals mkChild = do
     postBuild
   holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
 
-listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
+-- | Create a dynamically-changing set of widgets from a key/value map with update Events.
+listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m)
+  => Map k v                       -- ^ Initial key/value map
+  -> Event t (Map k (Maybe v))     -- ^ Event of map updates
+  -> (k -> v -> Event t v -> m a)  -- ^ Function to create a widget for a given key from initial value and update Event
+  -> m (Dynamic t (Map k a))       -- ^ Dynamic map from keys to widget results
 listWithKey' initialVals valsChanged mkChild = do
   doc <- askDocument
   endPlaceholder <- text' ""
@@ -267,6 +282,8 @@ listWithKey' initialVals valsChanged mkChild = do
   mapDyn (fmap (fst . fst)) children
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
+-- | Create a dynamically-changing set of Event-valued widgets.
+--   This is like listWithKey, specialized for widgets returning (Event t a).  listWithKey would return 'Dynamic t (Map k (Event t a))' in this scenario, but listViewWithKey flattens this to 'Event t (Map k a)' via 'switch'.
 listViewWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
 listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
 
@@ -321,7 +338,12 @@ listViewWithKey' vals mkChild = do
 
 --TODO: Deduplicate the various list*WithKey* implementations
 
-selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k) => Dynamic t k -> Dynamic t (Map k v) -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -> m (Event t k)
+-- | Create a dynamically-changing set of widgets, one of which is selected at any time.
+selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k)
+  => Dynamic t k          -- ^ Current selection key
+  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
+  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
+  -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
 selectViewListWithKey_ selection vals mkChild = do
   let selectionDemux = demux selection -- For good performance, this value must be shared across all children
   selectChild <- listWithKey vals $ \k v -> do
@@ -676,9 +698,12 @@ elClass elementTag c child = elAttr elementTag ("class" =: c) child
 -- Copied and pasted from Reflex.Widget.Class
 --------------------------------------------------------------------------------
 
+-- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
+--   Unlike the 'withKey' variants, the child widgets are insensitive to which key they're associated with.
 list :: (MonadWidget t m, Ord k) => Dynamic t (Map k v) -> (Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 list dm mkChild = listWithKey dm (\_ dv -> mkChild dv)
 
+-- | Create a dynamically-changing set of widgets from a Dynamic list.
 simpleList :: MonadWidget t m => Dynamic t [v] -> (Dynamic t v -> m a) -> m (Dynamic t [a])
 simpleList xs mkChild = mapDyn (map snd . Map.toList) =<< flip list mkChild =<< mapDyn (Map.fromList . zip [(1::Int)..]) xs
 
@@ -759,7 +784,13 @@ dtdd h w = do
 blank :: forall t m. MonadWidget t m => m ()
 blank = return ()
 
-tableDynAttr :: forall t m r k v. (MonadWidget t m, Show k, Ord k) => String -> [(String, k -> Dynamic t r -> m v)] -> Dynamic t (Map k r) -> (k -> m (Dynamic t (Map String String))) -> m (Dynamic t (Map k (El t, [v])))
+-- | A widget to display a table with static columns and dynamic rows.
+tableDynAttr :: forall t m r k v. (MonadWidget t m, Show k, Ord k)
+  => String                                   -- ^ Class applied to <table> element
+  -> [(String, k -> Dynamic t r -> m v)]      -- ^ Columns of (header, row key -> row value -> child widget)
+  -> Dynamic t (Map k r)                      -- ^ Map from row key to row value
+  -> (k -> m (Dynamic t (Map String String))) -- ^ Function to compute <tr> element attributes from row key
+  -> m (Dynamic t (Map k (El t, [v])))        -- ^ Map from row key to (El, list of widget return values)
 tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zoom: 1; overflow: auto; background: white;") $ do
     elAttr "table" (Map.singleton "class" klass) $ do
       el "thead" $ el "tr" $ do
@@ -770,7 +801,14 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
 --TODO preselect a tab on open
-tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
+-- | A widget to construct a tabbed view that shows only one of its child widgets at a time.
+--   Creates a header bar containing a <ul> with one <li> per child; clicking a <li> displays
+--   the corresponding child and hides all others.
+tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Show k, Ord k)
+  => String               -- ^ Class applied to <ul> element
+  -> String               -- ^ Class applied to currently active <li> element
+  -> Map k (String, m ()) -- ^ Map from (arbitrary) key to (tab label, child widget)
+  -> m ()
 tabDisplay ulClass activeClass tabItems = do
   rec dCurrentTab <- holdDyn Nothing (updated dTabClicks)
       dTabClicks :: Dynamic t (Maybe k) <- elAttr "ul" (Map.singleton "class" ulClass) $ do
