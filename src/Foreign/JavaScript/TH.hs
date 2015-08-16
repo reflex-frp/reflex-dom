@@ -204,7 +204,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
         peekCString ps
   withJSBool b a = do
     jsContext <- askJSContext
-    valRef <- liftIO $ jsvaluemakeboolean jsContext bRef
+    valRef <- liftIO $ jsvaluemakeboolean jsContext b
     a $ JSRef_JavaScriptCore valRef
   withJSString str a = do
     jsContext <- askJSContext
@@ -234,10 +234,10 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     let len = round lenDouble
     liftIO $ forM [0..len-1] $ \i -> do
       liftM JSRef_JavaScriptCore $ jsobjectgetpropertyatindex jsContext a i nullPtr --TODO: Exceptions
-    fromJSUint8Array a = do
-      vals <- fromJSArray a
-      doubles <- mapM fromJSNumber vals
-      return $ BS.pack $ map round doubles
+  fromJSUint8Array a = do
+    vals <- fromJSArray a
+    doubles <- mapM fromJSNumber vals
+    return $ BS.pack $ map round doubles
   fromJSNumber (JSRef_JavaScriptCore val) = do
     jsContext <- askJSContext
     liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
@@ -263,7 +263,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   getJSProp propName (JSRef_JavaScriptCore objRef) = do
     withJSStringRaw propName $ \propNameRaw -> do
       jsContext <- askJSContext
-      liftIO $ jsobjectgetproperty jsContext objRef propNameRaw 0 nullPtr --TODO: property attribute, exceptions
+      liftIO $ liftM JSRef_JavaScriptCore $ jsobjectgetproperty jsContext objRef propNameRaw nullPtr --TODO: property attribute, exceptions
   withJSNode (Node n) f = do
     jsContext <- askJSContext
     withForeignPtr n $ \nPtr -> do

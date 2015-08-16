@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest
@@ -33,19 +34,19 @@ import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Foreign
 import Data.Typeable
 
-data XhrRequest
+data XhrRequest a
    = XhrRequest { _xhrRequest_method :: String
                 , _xhrRequest_url :: String
-                , _xhrRequest_config :: XhrRequestConfig
+                , _xhrRequest_config :: XhrRequestConfig a
                 }
    deriving (Show, Read, Eq, Ord, Typeable)
 
-data XhrRequestConfig
+data XhrRequestConfig a
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
                       , _xhrRequestConfig_user :: Maybe String
                       , _xhrRequestConfig_password :: Maybe String
                       , _xhrRequestConfig_responseType :: Maybe String
-                      , _xhrRequestConfig_sendData :: Maybe String
+                      , _xhrRequestConfig_sendData :: a
                       }
    deriving (Show, Read, Eq, Ord, Typeable)
 
@@ -54,18 +55,18 @@ data XhrResponse
                  }
    deriving (Show, Read, Eq, Ord, Typeable)
 
-instance Default XhrRequestConfig where
+instance a ~ () => Default (XhrRequestConfig a) where
   def = XhrRequestConfig { _xhrRequestConfig_headers = Map.empty
                          , _xhrRequestConfig_user = Nothing
                          , _xhrRequestConfig_password  = Nothing
                          , _xhrRequestConfig_responseType  = Nothing
-                         , _xhrRequestConfig_sendData  = Nothing
+                         , _xhrRequestConfig_sendData  = ()
                          }
 
-xhrRequest :: String -> String -> XhrRequestConfig -> XhrRequest
+xhrRequest :: String -> String -> XhrRequestConfig a -> XhrRequest a
 xhrRequest = XhrRequest
 
-newXMLHttpRequest :: (HasWebView m, MonadIO m, HasPostGui t h m) => XhrRequest -> (XhrResponse -> h ()) -> m XMLHttpRequest
+newXMLHttpRequest :: (HasWebView m, MonadIO m, HasPostGui t h m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> h ()) -> m XMLHttpRequest
 newXMLHttpRequest req cb = do
   wv <- askWebView
   postGui <- askPostGui
@@ -92,12 +93,12 @@ newXMLHttpRequest req cb = do
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
     return xhr
 
-performRequestAsync :: (MonadWidget t m) => Event t XhrRequest -> m (Event t XhrResponse)
+performRequestAsync :: (MonadWidget t m, IsXhrPayload a) => Event t (XhrRequest a) -> m (Event t XhrResponse)
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
   _ <- newXMLHttpRequest r $ liftIO . cb
   return ()
 
-performRequestsAsync :: (Traversable f, MonadWidget t m) => Event t (f XhrRequest) -> m (Event t (f XhrResponse))
+performRequestsAsync :: (Traversable f, MonadWidget t m, IsXhrPayload a) => Event t (f (XhrRequest a)) -> m (Event t (f XhrResponse))
 performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
   resps <- forM rs $ \r -> do
     resp <- liftIO newEmptyMVar

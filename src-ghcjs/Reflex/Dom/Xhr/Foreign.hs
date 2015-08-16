@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI #-}
+{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, FlexibleInstances #-}
 
 module Reflex.Dom.Xhr.Foreign where
 
@@ -7,12 +7,11 @@ import GHCJS.Foreign
 import GHCJS.Marshal
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.Word
 import GHCJS.DOM.Types hiding (Text)
-import Control.Applicative ((<$>))
 import GHCJS.DOM.EventM
 import GHCJS.DOM
 import Data.Function
+import Control.Monad
 
 prepareWebView :: WebView -> IO ()
 prepareWebView _ = return ()
@@ -116,17 +115,26 @@ xmlHttpRequestOpen self method url async user password
 
 foreign import javascript unsafe "($2===null)?$1[\"send\"]():$1[\"send\"]($2)"
         ghcjs_dom_xml_http_request_send ::
-        JSRef XMLHttpRequest -> JSString -> IO ()
+        JSRef XMLHttpRequest -> JSRef XhrPayload -> IO ()
 
-xmlHttpRequestSend ::
-                   (IsXMLHttpRequest self, ToJSString payload) =>
-                     self -> Maybe payload -> IO ()
-xmlHttpRequestSend self payload
-  = ghcjs_dom_xml_http_request_send
-      (unXMLHttpRequest (toXMLHttpRequest self))
-      (case payload of
-            Just p -> toJSString p
-            Nothing -> jsNull)
+newtype XhrPayload = XhrPayload { unXhrPayload :: JSRef XhrPayload }
+
+class IsXhrPayload a where
+  xmlHttpRequestSend :: IsXMLHttpRequest self => self -> a -> IO ()
+
+instance IsXhrPayload () where
+  xmlHttpRequestSend xhr _ = xmlHttpRequestSendPayload xhr $ XhrPayload jsNull
+
+instance IsXhrPayload String where
+  xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . XhrPayload . castRef . toJSString
+
+foreign import javascript unsafe "$r = new FormData(); $r['append']($1, $2)" fileToFormData :: JSString -> JSRef File -> IO (JSRef XhrPayload)
+
+instance IsXhrPayload File where
+  xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . XhrPayload <=< fileToFormData (toJSString "file") . unFile
+
+xmlHttpRequestSendPayload :: IsXMLHttpRequest self => self -> XhrPayload -> IO ()
+xmlHttpRequestSendPayload self (XhrPayload p) = ghcjs_dom_xml_http_request_send (unXMLHttpRequest (toXMLHttpRequest self)) p
 
 
 foreign import javascript unsafe "$1[\"setRequestHeader\"]($2, $3)"

@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface, TypeSynonymInstances, FlexibleInstances #-}
 module Reflex.Dom.Xhr.Foreign where
 
 import Control.Lens.Indexed
@@ -96,8 +96,17 @@ xmlHttpRequestGetResponseText xhr = do
                 peekCString ps
          return $ Just s
 
-xmlHttpRequestSend :: XMLHttpRequest -> Maybe String -> IO ()
-xmlHttpRequestSend xhr payload = do
+class IsXhrPayload a where
+  xmlHttpRequestSend :: XMLHttpRequest -> a -> IO ()
+
+instance IsXhrPayload () where
+  xmlHttpRequestSend xhr _ = xmlHttpRequestSendPayload xhr Nothing
+
+instance IsXhrPayload String where
+  xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just
+
+xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe String -> IO ()
+xmlHttpRequestSendPayload xhr payload = do
   let c = xhrContext xhr
   (o,s) <- case payload of
             Nothing -> do
