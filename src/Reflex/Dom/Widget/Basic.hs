@@ -122,8 +122,8 @@ dyn child = do
         (result, postBuild, voidActions) <- runWidget df c
         scheduleFollowup newChildBuiltTriggerRef (result, voidActions)
         postBuild
-        Just p <- liftIO $ nodeGetParentNode endPlaceholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+        mp <- liftIO $ nodeGetParentNode endPlaceholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
         return ()
   schedulePostBuild $ do
     c <- sample $ current child
