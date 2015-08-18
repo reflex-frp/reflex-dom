@@ -219,6 +219,8 @@ liftM concat $ mapM makeLenses
   , ''TextArea
   , ''TextInputConfig
   , ''TextInput
+  , ''FileInputConfig
+  , ''FileInput
   , ''DropdownConfig
   , ''Dropdown
   , ''CheckboxConfig

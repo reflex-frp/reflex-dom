@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TemplateHaskell, GADTs #-}
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest
@@ -123,3 +123,8 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_body
 
+liftM concat $ mapM makeLenses
+  [ ''XhrRequest
+  , ''XhrRequestConfig
+  , ''XhrResponse
+  ]
