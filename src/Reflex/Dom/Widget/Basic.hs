@@ -611,6 +611,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'MouseleaveTag = ()
   EventResultType 'FocusTag = ()
   EventResultType 'BlurTag = ()
+  EventResultType 'ChangeTag = ()
 
 wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventName en -> EventM (EventType en) e (Maybe (f en))) -> m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
@@ -652,6 +653,7 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Mouseleave -> return ()
   Focus -> return ()
   Blur -> return ()
+  Change -> return ()
 
 wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
