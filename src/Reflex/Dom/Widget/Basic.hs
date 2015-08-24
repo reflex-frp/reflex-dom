@@ -184,8 +184,8 @@ listWithKey vals mkChild = do
       return ((result, voidAction), postBuild)
     scheduleFollowup newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
     sequence_ $ fmap snd initialState
-    Just p <- liftIO $ nodeGetParentNode endPlaceholder
-    _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+    mp <- liftIO $ nodeGetParentNode endPlaceholder
+    forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
   addVoidAction $ flip fmap (updated vals) $ \newVals -> do
     curState <- sample children
@@ -202,8 +202,8 @@ listWithKey vals mkChild = do
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        mp <- liftIO $ nodeGetParentNode placeholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       These state _ -> do
         return $ Just state
@@ -230,8 +230,8 @@ listWithKey' initialVals valsChanged mkChild = do
   initialState <- iforM initialVals $ \k v -> subWidgetWithVoidActions (toNode dfOrig) $ wrapChild k v --Note: we have to use subWidgetWithVoidActions rather than runWidget here, because running post-build actions during build can cause not-yet-constructed values to be read
   children <- holdDyn initialState newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
-  Just pOrig <- liftIO $ nodeGetParentNode endPlaceholder
-  _ <- liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
+  mpOrig <- liftIO $ nodeGetParentNode endPlaceholder
+  forM_ mpOrig $ \pOrig -> liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
     curState <- sample $ current children
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
@@ -245,8 +245,8 @@ listWithKey' initialVals valsChanged mkChild = do
         (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
         let s = (childResult, childVoidAction)
         modify (>>childPostBuild)
-        Just p <- liftIO $ nodeGetParentNode end
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just end)
+        mp <- liftIO $ nodeGetParentNode end
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just end)
         return $ Just s
       That Nothing -> return Nothing -- Deleting non-existent child
       That (Just v) -> do -- Creating new child
@@ -257,8 +257,8 @@ listWithKey' initialVals valsChanged mkChild = do
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        mp <- liftIO $ nodeGetParentNode placeholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       This state -> do -- No change
         return $ Just state
@@ -292,8 +292,8 @@ listViewWithKey' vals mkChild = do
       return ((result, voidAction), postBuild)
     scheduleFollowup newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
     sequence_ $ fmap snd initialState
-    Just p <- liftIO $ nodeGetParentNode endPlaceholder
-    _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+    mp <- liftIO $ nodeGetParentNode endPlaceholder
+    forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
     return ()
   addVoidAction $ flip fmap (updated vals) $ \newVals -> do
     curState <- sample children
@@ -310,8 +310,8 @@ listViewWithKey' vals mkChild = do
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        mp <- liftIO $ nodeGetParentNode placeholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       These state _ -> do
         return $ Just state
