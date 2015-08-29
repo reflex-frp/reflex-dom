@@ -152,78 +152,55 @@ widgetHoldInternal child0 newChild = do
     build c
   return (result0, fmap fst newChildBuilt)
 
---TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
--- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
-listWithKey :: (Ord k, MonadWidget t m)
-  => Dynamic t (Map k v)         -- ^ Dynamic key/value map
-  -> (k -> Dynamic t v -> m a)   -- ^ Function to create a widget for a given key from Dynamic value
-  -> m (Dynamic t (Map k a))     -- ^ Dynamic map from keys to widget results
-listWithKey vals mkChild = do
-  doc <- askDocument
-  endPlaceholder <- text' ""
-  (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
-  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
-  children <- hold Map.empty  newChildren
-  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
-  runWidget <- getRunWidget
-  let buildChild df k v = runWidget df $ do
-        childStart <- text' ""
-        result <- mkChild k =<< holdDyn v (fmapMaybe (Map.lookup k) (updated vals))
-        childEnd <- text' ""
-        return (result, (childStart, childEnd))
-  schedulePostBuild $ do
-    Just df <- liftIO $ documentCreateDocumentFragment doc
-    curVals <- sample $ current vals
-    initialState <- iforM curVals $ \k v -> do
-      (result, postBuild, voidAction) <- buildChild df k v
-      return ((result, voidAction), postBuild)
-    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd initialState
-    Just p <- liftIO $ nodeGetParentNode endPlaceholder
-    _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-    return ()
-  addVoidAction $ flip fmap (updated vals) $ \newVals -> do
-    curState <- sample children
-    --TODO: Should we remove the parent from the DOM first to avoid reflows?
-    (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
-      This ((_, (start, end)), _) -> do
-        liftIO $ deleteBetweenInclusive start end
-        return Nothing
-      That v -> do
-        Just df <- liftIO $ documentCreateDocumentFragment doc
-        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
-        let s = (childResult, childVoidAction)
-        modify (>>childPostBuild)
-        let placeholder = case Map.lookupGT k curState of
-              Nothing -> endPlaceholder
-              Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
-        return $ Just s
-      These state _ -> do
-        return $ Just state
-    runFrameWithTriggerRef newChildrenTriggerRef newState
-    postBuild
-  holdDyn Map.empty $ fmap (fmap (fst . fst)) newChildren
+diffMapNoEq :: (Ord k) => Map k v -> Map k v -> Map k (Maybe v)
+diffMapNoEq olds news = flip Map.mapMaybe (align olds news) $ \case
+  This _ -> Just Nothing
+  These old new -> Just $ Just new
+  That new -> Just $ Just new
 
--- | Create a dynamically-changing set of widgets from a key/value map with update Events.
-listWithKey' :: forall t m k v a. (Ord k, MonadWidget t m)
-  => Map k v                       -- ^ Initial key/value map
-  -> Event t (Map k (Maybe v))     -- ^ Event of map updates
-  -> (k -> v -> Event t v -> m a)  -- ^ Function to create a widget for a given key from initial value and update Event
-  -> m (Dynamic t (Map k a))       -- ^ Dynamic map from keys to widget results
-listWithKey' initialVals valsChanged mkChild = do
+applyMap :: Ord k => Map k v -> Map k (Maybe v) -> Map k v
+applyMap olds diffs = flip Map.mapMaybe (align olds diffs) $ \case
+  This old -> Just old
+  These _ new -> new
+  That new -> new
+
+--TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
+listWithKey :: forall t k v m a. (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
+listWithKey vals mkChild = do
+  postBuild <- getPostBuild
+  rec sentVals :: Dynamic t (Map k v) <- foldDyn (flip applyMap) Map.empty changeVals
+      let changeVals :: Event t (Map k (Maybe v))
+          changeVals = attachWith diffMapNoEq (current sentVals) $ leftmost
+                         [ updated vals
+                         , tag (current vals) postBuild
+                         ]
+  listWithKeyShallowDiff Map.empty changeVals $ \k v0 dv -> do
+    mkChild k =<< holdDyn v0 dv
+
+{-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
+listWithKey' :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
+listWithKey' = listWithKeyShallowDiff
+
+-- | Display the given map of items (in key order) using the builder function provided, and update it with the given event.  'Nothing' update entries will delete the corresponding children, and 'Just' entries will create them if they do not exist or send an update event to them if they do.
+listWithKeyShallowDiff :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
+listWithKeyShallowDiff initialVals valsChanged mkChild = do
+  let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
+  sentVals <- foldDyn (flip applyMap) Map.empty $ fmap (fmap (fmap (\_ -> ()))) valsChanged
+  listHoldWithKey initialVals (attachWith (flip Map.difference) (current sentVals) valsChanged) $ \k v ->
+    mkChild k v $ select childValChangedSelector $ Const2 k
+
+-- | Display the given map of items using the builder function provided, and update it with the given event.  'Nothing' entries will delete the corresponding children, and 'Just' entries will create or replace them.  Since child events do not take any signal arguments, they are always rebuilt.  To update a child without rebuilding, either embed signals in the map's values, or refer to them directly in the builder function.
+listHoldWithKey :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
+listHoldWithKey initialVals valsChanged mkChild = do
   doc <- askDocument
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
 --  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
   runWidget <- getRunWidget
-  let childValChangedSelector :: EventSelector t (Const2 k v)
-      childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
-      buildChild df k v = runWidget df $ wrapChild k v
+  let buildChild df k v = runWidget df $ wrapChild k v
       wrapChild k v = do
         childStart <- text' ""
-        result <- mkChild k v $ select childValChangedSelector $ Const2 k
+        result <- mkChild k v
         childEnd <- text' ""
         return (result, (childStart, childEnd))
   Just dfOrig <- liftIO $ documentCreateDocumentFragment doc
@@ -273,55 +250,7 @@ listViewWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dyna
 listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
 
 listViewWithKey' :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
-listViewWithKey' vals mkChild = do
-  doc <- askDocument
-  endPlaceholder <- text' ""
-  (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
-  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
-  children <- hold Map.empty newChildren
-  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) children
-  runWidget <- getRunWidget
-  let buildChild df k v = runWidget df $ do
-        childStart <- text' ""
-        result <- mkChild k =<< holdDyn v (fmapMaybe (Map.lookup k) (updated vals))
-        childEnd <- text' ""
-        return (result, (childStart, childEnd))
-  schedulePostBuild $ do
-    Just df <- liftIO $ documentCreateDocumentFragment doc
-    curVals <- sample $ current vals
-    initialState <- iforM curVals $ \k v -> do
-      (result, postBuild, voidAction) <- buildChild df k v
-      return ((result, voidAction), postBuild)
-    runFrameWithTriggerRef newChildrenTriggerRef $ fmap fst initialState --TODO: Do all these in a single runFrame
-    sequence_ $ fmap snd initialState
-    Just p <- liftIO $ nodeGetParentNode endPlaceholder
-    _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-    return ()
-  addVoidAction $ flip fmap (updated vals) $ \newVals -> do
-    curState <- sample children
-    --TODO: Should we remove the parent from the DOM first to avoid reflows?
-    (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
-      This ((_, (start, end)), _) -> do
-        liftIO $ deleteBetweenInclusive start end
-        return Nothing
-      That v -> do
-        Just df <- liftIO $ documentCreateDocumentFragment doc
-        (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
-        let s = (childResult, childVoidAction)
-        modify (>>childPostBuild)
-        let placeholder = case Map.lookupGT k curState of
-              Nothing -> endPlaceholder
-              Just (_, ((_, (start, _)), _)) -> start
-        mp <- liftIO $ nodeGetParentNode placeholder
-        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder) --TODO: Should this really be ignored if mp is Nothing, or should we ensure that mp is never Nothing
-        return $ Just s
-      These state _ -> do
-        return $ Just state
-    runFrameWithTriggerRef newChildrenTriggerRef newState
-    postBuild
-  return $ fmap (fmap (fst . fst)) children
-
---TODO: Deduplicate the various list*WithKey* implementations
+listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
 
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k)
