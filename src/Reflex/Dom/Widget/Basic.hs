@@ -111,42 +111,27 @@ display a = dynText =<< mapDyn show a
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened.
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
-  startPlaceholder <- text' ""
-  endPlaceholder <- text' ""
-  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  let e = fmap snd newChildBuilt --TODO: Get rid of this hack
-  childVoidAction <- hold never e
-  performEvent_ $ fmap (const $ return ()) e --TODO: Get rid of this hack
-  addVoidAction $ switch childVoidAction
-  doc <- askDocument
-  runWidget <- getRunWidget
-  let build c = do
-        Just df <- liftIO $ documentCreateDocumentFragment doc
-        (result, postBuild, voidActions) <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
-        postBuild
-        Just p <- liftIO $ nodeGetParentNode endPlaceholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-        return ()
-  schedulePostBuild $ do
-    c <- sample $ current child
-    build c
-  addVoidAction $ ffor (updated child) $ \newChild -> do
-    liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
-    build newChild
-  return $ fmap fst newChildBuilt
+  postBuild <- getPostBuild
+  let newChild = leftmost [updated child, tag (current child) postBuild]
+  liftM snd $ widgetHoldInternal (return ()) newChild
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened.
 widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold child0 newChild = do
+  (result0, newResult) <- widgetHoldInternal child0 newChild
+  holdDyn result0 newResult
+
+widgetHoldInternal :: MonadWidget t m => m a -> Event t (m b) -> m (a, Event t b)
+widgetHoldInternal child0 newChild = do
   startPlaceholder <- text' ""
-  result0 <- child0 -- I'm pretty sure this is wrong; the void actions should get removed when the child is swapped out
+  p <- askParent
+  (result0, childVoidAction0) <- subWidgetWithVoidActions p child0
   endPlaceholder <- text' ""
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
-  childVoidAction <- hold never $ fmap snd newChildBuilt
+  childVoidAction <- hold childVoidAction0 $ fmap snd newChildBuilt
   addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
   doc <- askDocument
   runWidget <- getRunWidget
@@ -165,7 +150,7 @@ widgetHold child0 newChild = do
   addVoidAction $ ffor newChild $ \c -> do
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
     build c
-  holdDyn result0 $ fmap fst newChildBuilt
+  return (result0, fmap fst newChildBuilt)
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 -- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
