@@ -209,8 +209,8 @@ listHoldWithKey initialVals valsChanged mkChild = do
   stateRef <- liftIO $ newIORef initialState
   children <- holdDyn initialState newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
-  Just pOrig <- liftIO $ nodeGetParentNode endPlaceholder
-  _ <- liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
+  mpOrig <- liftIO $ nodeGetParentNode endPlaceholder
+  forM_ mpOrig $ \pOrig -> liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
     curState <- liftIO $ readIORef stateRef
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
@@ -224,8 +224,8 @@ listHoldWithKey initialVals valsChanged mkChild = do
         (childResult, childPostBuild, childVoidAction) <- lift $ buildChild df k v
         let s = (childResult, childVoidAction)
         modify (>>childPostBuild)
-        Just p <- liftIO $ nodeGetParentNode end
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just end)
+        mp <- liftIO $ nodeGetParentNode end
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just end)
         return $ Just s
       That Nothing -> return Nothing -- Deleting non-existent child
       That (Just v) -> do -- Creating new child
@@ -236,8 +236,8 @@ listHoldWithKey initialVals valsChanged mkChild = do
         let placeholder = case Map.lookupGT k curState of
               Nothing -> endPlaceholder
               Just (_, ((_, (start, _)), _)) -> start
-        Just p <- liftIO $ nodeGetParentNode placeholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
+        mp <- liftIO $ nodeGetParentNode placeholder
+        forM_ mp $ \p -> liftIO $ nodeInsertBefore p (Just df) (Just placeholder)
         return $ Just s
       This state -> do -- No change
         return $ Just state
