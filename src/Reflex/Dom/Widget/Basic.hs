@@ -640,22 +640,6 @@ elDynHtmlAttr' elementTag attrs html = do
   addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
   wrapElement e
 
-{-
-
---TODO: Update dynamically
-{-# INLINABLE dynHtml #-}
-dynHtml :: MonadWidget t m => Dynamic t String -> m ()
-dynHtml ds = do
-  let mkSelf h = do
-        doc <- askDocument
-        Just e <- liftIO $ liftM (fmap castToHTMLElement) $ documentCreateElement doc "div"
-        liftIO $ htmlElementSetInnerHTML e h
-        return e
-  eCreated <- performEvent . fmap mkSelf . tagDyn ds =<< getEInit
-  putEChildren $ fmap ((:[]) . toNode) eCreated
-
--}
-
 data Link t
   = Link { _link_clicked :: Event t ()
          }
