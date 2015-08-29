@@ -34,6 +34,7 @@ import Data.Maybe
 import Data.GADT.Compare.TH
 import Data.Bitraversable
 import GHCJS.DOM.MouseEvent
+import Data.IORef
 
 type AttributeMap = Map String String
 
@@ -205,12 +206,13 @@ listHoldWithKey initialVals valsChanged mkChild = do
         return (result, (childStart, childEnd))
   Just dfOrig <- liftIO $ documentCreateDocumentFragment doc
   initialState <- iforM initialVals $ \k v -> subWidgetWithVoidActions (toNode dfOrig) $ wrapChild k v --Note: we have to use subWidgetWithVoidActions rather than runWidget here, because running post-build actions during build can cause not-yet-constructed values to be read
+  stateRef <- liftIO $ newIORef initialState
   children <- holdDyn initialState newChildren
   addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
   Just pOrig <- liftIO $ nodeGetParentNode endPlaceholder
   _ <- liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
-    curState <- sample $ current children
+    curState <- liftIO $ readIORef stateRef
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
     (newState, postBuild) <- flip runStateT (return ()) $ liftM (Map.mapMaybe id) $ iforM (align curState newVals) $ \k -> \case
       These ((_, (start, end)), _) Nothing -> do -- Deleting child
@@ -239,6 +241,7 @@ listHoldWithKey initialVals valsChanged mkChild = do
         return $ Just s
       This state -> do -- No change
         return $ Just state
+    liftIO $ writeIORef stateRef newState
     runFrameWithTriggerRef newChildrenTriggerRef newState
     postBuild
   mapDyn (fmap (fst . fst)) children
