@@ -187,7 +187,10 @@ listWithKeyShallowDiff :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k 
 listWithKeyShallowDiff initialVals valsChanged mkChild = do
   let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
   sentVals <- foldDyn (flip applyMap) Map.empty $ fmap (fmap (fmap (\_ -> ()))) valsChanged
-  listHoldWithKey initialVals (attachWith (flip Map.difference) (current sentVals) valsChanged) $ \k v ->
+  let relevantDiff diff cur = case diff of
+        Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
+        Just _ -> Nothing -- We don't want to let spurious re-creations of items through
+  listHoldWithKey initialVals (attachWith (flip (Map.differenceWith relevantDiff)) (current sentVals) valsChanged) $ \k v ->
     mkChild k v $ select childValChangedSelector $ Const2 k
 
 -- | Display the given map of items using the builder function provided, and update it with the given event.  'Nothing' entries will delete the corresponding children, and 'Just' entries will create or replace them.  Since child events do not take any signal arguments, they are always rebuilt.  To update a child without rebuilding, either embed signals in the map's values, or refer to them directly in the builder function.
