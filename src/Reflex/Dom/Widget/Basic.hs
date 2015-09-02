@@ -21,7 +21,7 @@ import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence
 import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM (event, EventM)
+import GHCJS.DOM.EventM (event, EventM, stopPropagation)
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLElement
@@ -39,7 +39,7 @@ import Data.IORef
 type AttributeMap = Map String String
 
 data El t
-  = El { _el_element :: HTMLElement
+  = El { _el_element :: Element
        , _el_events :: EventSelector t (WrapArg EventResult EventName)
        }
 
@@ -59,21 +59,29 @@ instance MonadWidget t m => Attributes m (Dynamic t AttributeMap) where
       forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
       imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
 
-buildEmptyElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m HTMLElement
-buildEmptyElement elementTag attrs = do
+buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m Element
+buildEmptyElementNS mns elementTag attrs = do
   doc <- askDocument
   p <- askParent
-  Just e <- liftIO $ documentCreateElement doc elementTag
+  Just e <- liftIO $ case mns of
+    Nothing -> documentCreateElement doc elementTag
+    Just ns -> documentCreateElementNS doc ns elementTag
   addAttributes attrs e
   _ <- liftIO $ nodeAppendChild p $ Just e
-  return $ castToHTMLElement e
+  return $ castToElement e
+
+buildEmptyElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m Element
+buildEmptyElement = buildEmptyElementNS Nothing
 
 -- We need to decide what type of attrs we've got statically, because it will often be a recursively defined value, in which case inspecting it will lead to a cycle
-buildElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m a -> m (HTMLElement, a)
-buildElement elementTag attrs child = do
-  e <- buildEmptyElement elementTag attrs
+buildElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m a -> m (Element, a)
+buildElementNS mns elementTag attrs child = do
+  e <- buildEmptyElementNS mns elementTag attrs
   result <- subWidget (toNode e) child
   return (e, result)
+
+buildElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m a -> m (Element, a)
+buildElement = buildElementNS Nothing
 
 namedNodeMapGetNames :: IsNamedNodeMap self => self -> IO (Set String)
 namedNodeMapGetNames self = do
@@ -575,16 +583,25 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Blur -> return ()
   Change -> return ()
 
-wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
+wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => Element -> m (El t)
 wrapElement e = do
   es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
   return $ El e es
 
-elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
-elDynAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag attrs child
+elStopPropagationNS :: (MonadWidget t m, EventClass (EventType en)) => Maybe String -> String -> EventName en -> m a -> m a
+elStopPropagationNS mns elementTag evt child = do
+  (e, result) <- buildElementNS mns elementTag (Map.empty :: Map String String) child
+  liftIO $ onEventName evt e stopPropagation
+  return result
+
+elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
+elDynAttrNS' mns elementTag attrs child = do
+  (e, result) <- buildElementNS mns elementTag attrs child
   e' <- wrapElement e
   return (e', result)
+
+elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
+elDynAttr' = elDynAttrNS' Nothing
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m a
@@ -632,15 +649,17 @@ simpleList xs mkChild = mapDyn (map snd . Map.toList) =<< flip list mkChild =<< 
 elDynHtml' :: MonadWidget t m => String -> Dynamic t String -> m (El t)
 elDynHtml' elementTag html = do
   e <- buildEmptyElement elementTag (Map.empty :: Map String String)
-  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
-  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
+  let h = castToHTMLElement e
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
   wrapElement e
 
 elDynHtmlAttr' :: MonadWidget t m => String -> Map String String -> Dynamic t String -> m (El t)
 elDynHtmlAttr' elementTag attrs html = do
   e <- buildEmptyElement elementTag attrs
-  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
-  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
+  let h = castToHTMLElement e
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
   wrapElement e
 
 data Link t
@@ -738,7 +757,7 @@ tabDisplay ulClass activeClass tabItems = do
         return $ fmap (const k) (_link_clicked a)
 
 -- | Place an element into the DOM and wrap it with Reflex event handlers.  Note: undefined behavior may result if the element is placed multiple times, removed from the DOM after being placed, or in other situations.  Don't use this unless you understand the internals of MonadWidget.
-unsafePlaceElement :: MonadWidget t m => HTMLElement -> m (El t)
+unsafePlaceElement :: MonadWidget t m => Element -> m (El t)
 unsafePlaceElement e = do
   p <- askParent
   _ <- liftIO $ nodeAppendChild p $ Just e
