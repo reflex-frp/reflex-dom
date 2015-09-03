@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module Reflex.Dom.Time where
 
 import Reflex

@@ -588,7 +588,7 @@ wrapElement e = do
   es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
   return $ El e es
 
-elStopPropagationNS :: (MonadWidget t m, EventClass (EventType en)) => Maybe String -> String -> EventName en -> m a -> m a
+elStopPropagationNS :: (MonadWidget t m, IsEvent (EventType en)) => Maybe String -> String -> EventName en -> m a -> m a
 elStopPropagationNS mns elementTag evt child = do
   (e, result) <- buildElementNS mns elementTag (Map.empty :: Map String String) child
   liftIO $ onEventName evt e stopPropagation
