@@ -566,7 +566,7 @@ getKeyEvent = do
 getMouseEventCoords :: EventM MouseEvent e (Int, Int)
 getMouseEventCoords = do
   e <- event
-  liftIO $ bisequence (mouseEventGetX e, mouseEventGetY e)
+  liftIO $ bisequence (mouseEventGetClientX e, mouseEventGetClientY e)
 
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM (EventType en) e (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
