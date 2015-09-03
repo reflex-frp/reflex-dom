@@ -105,61 +105,70 @@ dynText s = do
 display :: (MonadWidget t m, Show a) => Dynamic t a -> m ()
 display a = dynText =<< mapDyn show a
 
---TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
+type BuildInFragment t m a = m a -> WidgetHost m (a, WidgetHost m (), Event t (WidgetHost m ()))
+
+getBuildInFragment :: MonadWidget t m => m (BuildInFragment t m a)
+getBuildInFragment = do
+  doc <- askDocument
+  runWidget <- getRunWidget
+  
+  startPlaceholder <- text' ""
+  endPlaceholder <- text' ""
+  
+  return $ \child -> do
+    liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
+
+    Just df <- liftIO $ documentCreateDocumentFragment doc
+    r <- runWidget df child
+    Just p <- liftIO $ nodeGetParentNode endPlaceholder
+    _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
+    return r
+
+
+runVoidActions :: MonadWidget t m => Event t (WidgetHost m ()) -> Event t (Event t (WidgetHost m ())) -> m () 
+runVoidActions initial e = do
+  childVoidAction <- hold initial e
+  performEvent_ $ fmap (const $ return ()) e --TODO: Get rid of this hack
+  addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
+
+  
+widgetBuilder :: MonadWidget t m => Event t (WidgetHost m ()) ->  BuildInFragment t m a -> m (m a -> WidgetHost m (), Event t a)
+widgetBuilder voidActions0 buildInFragment = do
+  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
+  runVoidActions voidActions0 $ fmap snd newChildBuilt  
+
+  let build newChild = do
+        (result, postBuild, voidActions) <- buildInFragment newChild
+        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+        postBuild
+    
+  return (build, fmap fst newChildBuilt)    
+   
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
-  startPlaceholder <- text' ""
-  endPlaceholder <- text' ""
-  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  let e = fmap snd newChildBuilt --TODO: Get rid of this hack
-  childVoidAction <- hold never e
-  performEvent_ $ fmap (const $ return ()) e --TODO: Get rid of this hack
-  addVoidAction $ switch childVoidAction
-  doc <- askDocument
-  runWidget <- getRunWidget
-  let build c = do
-        Just df <- liftIO $ documentCreateDocumentFragment doc
-        (result, postBuild, voidActions) <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
-        postBuild
-        Just p <- liftIO $ nodeGetParentNode endPlaceholder
-        _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-        return ()
+  (build, newChildBuilt) <- getBuildInFragment >>= widgetBuilder never
+  addVoidAction $ fmap build (updated child)
   schedulePostBuild $ do
     c <- sample $ current child
-    build c
-  addVoidAction $ ffor (updated child) $ \newChild -> do
-    liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
-    build newChild
-  return $ fmap fst newChildBuilt
+    build c    
+  return newChildBuilt 
+  
+widgetSwitch :: MonadWidget t m => Event t (m a) -> m (Event t a)
+widgetSwitch child = do
+  (build, newChildBuilt) <- getBuildInFragment >>= widgetBuilder never
+  addVoidAction $ fmap build child
+  return newChildBuilt 
 
 widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
-widgetHold child0 newChild = do
-  startPlaceholder <- text' ""
-  result0 <- child0 -- I'm pretty sure this is wrong; the void actions should get removed when the child is swapped out
-  endPlaceholder <- text' ""
-  (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
-  performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
-  childVoidAction <- hold never $ fmap snd newChildBuilt
-  addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
-  doc <- askDocument
-  runWidget <- getRunWidget
-  let build c = do
-        Just df <- liftIO $ documentCreateDocumentFragment doc
-        (result, postBuild, voidActions) <- runWidget df c
-        runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
-        postBuild
-        mp <- liftIO $ nodeGetParentNode endPlaceholder
-        case mp of
-          Nothing -> return () --TODO: Is this right?
-          Just p -> do
-            _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-            return ()
-        return ()
-  addVoidAction $ ffor newChild $ \c -> do
-    liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
-    build c
-  holdDyn result0 $ fmap fst newChildBuilt
+widgetHold child0 child = do
+  buildInFragment <- getBuildInFragment
+  (result0, postBuild0, voidActions0) <- liftWidgetHost $ buildInFragment child0    
+  schedulePostBuild postBuild0
+  
+  (build, newChildBuilt) <-  widgetBuilder voidActions0 buildInFragment
+  addVoidAction $ fmap build child
+  holdDyn result0 newChildBuilt  
+  
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
