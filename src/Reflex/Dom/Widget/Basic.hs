@@ -596,9 +596,9 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Blur -> return ()
   Change -> return ()
 
-wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => Element -> m (El t)
-wrapElement e = do
-  es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
+wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => (forall en. Element -> EventName en -> EventM (EventType en) Element (Maybe (EventResult en))) -> Element -> m (El t)
+wrapElement eh e = do
+  es <- wrapDomEventsMaybe e $ eh e
   return $ El e es
 
 {-# INLINABLE elStopPropagationNS #-}
@@ -618,7 +618,7 @@ elWith elementTag cfg child = do
 elWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m a -> m (El t, a)
 elWith' elementTag cfg child = do
   (e, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
-  e' <- wrapElement e
+  e' <- wrapElement defaultDomEventHandler e
   return (e', result)
 
 {-# INLINABLE emptyElWith #-}
@@ -630,7 +630,7 @@ emptyElWith elementTag cfg = do
 {-# INLINABLE emptyElWith' #-}
 emptyElWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m (El t)
 emptyElWith' elementTag cfg = do
-  wrapElement =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
+  wrapElement defaultDomEventHandler =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
 
 {-# INLINABLE elDynAttrNS' #-}
 elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
@@ -684,7 +684,7 @@ elDynHtml' elementTag html = do
   let h = castToHTMLElement e
   schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
   addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
-  wrapElement e
+  wrapElement defaultDomEventHandler e
 
 elDynHtmlAttr' :: MonadWidget t m => String -> Map String String -> Dynamic t String -> m (El t)
 elDynHtmlAttr' elementTag attrs html = do
@@ -692,7 +692,7 @@ elDynHtmlAttr' elementTag attrs html = do
   let h = castToHTMLElement e
   schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
   addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
-  wrapElement e
+  wrapElement defaultDomEventHandler e
 
 data Link t
   = Link { _link_clicked :: Event t ()
@@ -805,7 +805,7 @@ unsafePlaceElement :: MonadWidget t m => Element -> m (El t)
 unsafePlaceElement e = do
   p <- askParent
   _ <- liftIO $ nodeAppendChild p $ Just e
-  wrapElement e
+  wrapElement defaultDomEventHandler e
 
 deriveGEq ''EventName
 deriveGCompare ''EventName
