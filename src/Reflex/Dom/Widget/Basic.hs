@@ -35,8 +35,21 @@ import Data.GADT.Compare.TH
 import Data.Bitraversable
 import GHCJS.DOM.MouseEvent
 import Data.IORef
+import Data.Default
 
 type AttributeMap = Map String String
+
+data ElConfig attrs
+  = ElConfig { _elConfig_namespace :: Maybe String
+             , _elConfig_attributes :: attrs
+             }
+
+makeLenses ''ElConfig
+
+instance (attrs ~ Map String String) => Default (ElConfig attrs) where
+  def = ElConfig { _elConfig_namespace = Nothing
+                 , _elConfig_attributes = Map.empty
+                 }
 
 data El t
   = El { _el_element :: Element
@@ -588,50 +601,69 @@ wrapElement e = do
   es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
   return $ El e es
 
+{-# INLINABLE elStopPropagationNS #-}
 elStopPropagationNS :: (MonadWidget t m, IsEvent (EventType en)) => Maybe String -> String -> EventName en -> m a -> m a
 elStopPropagationNS mns elementTag evt child = do
   (e, result) <- buildElementNS mns elementTag (Map.empty :: Map String String) child
   liftIO $ onEventName evt e stopPropagation
   return result
 
-elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
-elDynAttrNS' mns elementTag attrs child = do
-  (e, result) <- buildElementNS mns elementTag attrs child
+{-# INLINABLE elWith #-}
+elWith :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m a -> m a
+elWith elementTag cfg child = do
+  (_, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
+  return result
+
+{-# INLINABLE elWith' #-}
+elWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m a -> m (El t, a)
+elWith' elementTag cfg child = do
+  (e, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
   e' <- wrapElement e
   return (e', result)
 
+{-# INLINABLE emptyElWith #-}
+emptyElWith :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m ()
+emptyElWith elementTag cfg = do
+  _ <- buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
+  return ()
+
+{-# INLINABLE emptyElWith' #-}
+emptyElWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m (El t)
+emptyElWith' elementTag cfg = do
+  wrapElement =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
+
+{-# INLINABLE elDynAttrNS' #-}
+elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
+elDynAttrNS' mns elementTag attrs = elWith' elementTag $
+  def & namespace .~ mns
+      & elConfig_attributes .~ attrs
+
+{-# INLINABLE elDynAttr' #-}
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
-elDynAttr' = elDynAttrNS' Nothing
+elDynAttr' elementTag attrs = elWith' elementTag $ def & elConfig_attributes .~ attrs
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m a
-elAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag attrs child
-  return result
+elAttr elementTag attrs = elWith elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE el' #-}
 el' :: forall t m a. MonadWidget t m => String -> m a -> m (El t, a)
-el' elementTag child = elAttr' elementTag (Map.empty :: AttributeMap) child
+el' elementTag = elWith' elementTag def
 
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m (El t, a)
-elAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag attrs child
-  e' <- wrapElement e
-  return (e', result)
+elAttr' elementTag attrs = elWith' elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m a
-elDynAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag attrs child
-  return result
+elDynAttr elementTag attrs = elWith elementTag $ def & elConfig_attributes .~ attrs
 
 {-# INLINABLE el #-}
 el :: forall t m a. MonadWidget t m => String -> m a -> m a
-el elementTag child = elAttr elementTag Map.empty child
+el elementTag = elWith elementTag def
 
 elClass :: forall t m a. MonadWidget t m => String -> String -> m a -> m a
-elClass elementTag c child = elAttr elementTag ("class" =: c) child
+elClass elementTag c = elWith elementTag $ def & attributes .~ "class" =: c
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
@@ -665,6 +697,20 @@ elDynHtmlAttr' elementTag attrs html = do
 data Link t
   = Link { _link_clicked :: Event t ()
          }
+
+class HasAttributes a where
+  type Attrs a :: *
+  attributes :: Lens' a (Attrs a)
+
+instance HasAttributes (ElConfig attrs) where
+  type Attrs (ElConfig attrs) = attrs
+  attributes = elConfig_attributes
+
+class HasNamespace a where
+  namespace :: Lens' a (Maybe String)
+
+instance HasNamespace (ElConfig attrs) where
+  namespace = elConfig_namespace
 
 class HasDomEvent t a where
   domEvent :: EventName en -> a -> Event t (EventResultType en)

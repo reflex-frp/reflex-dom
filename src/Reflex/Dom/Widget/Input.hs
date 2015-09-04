@@ -225,10 +225,6 @@ liftM concat $ mapM makeLenses
   , ''Checkbox
   ]
 
-class HasAttributes a where
-  type Attrs a :: *
-  attributes :: Lens' a (Attrs a)
-
 instance HasAttributes (TextAreaConfig t) where
   type Attrs (TextAreaConfig t) = Dynamic t (Map String String)
   attributes = textAreaConfig_attributes
