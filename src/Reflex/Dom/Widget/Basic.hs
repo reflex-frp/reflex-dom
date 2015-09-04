@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell, FunctionalDependencies #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -636,11 +636,11 @@ emptyElWith' elementTag cfg = do
 elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttrNS' mns elementTag attrs = elWith' elementTag $
   def & namespace .~ mns
-      & elConfig_attributes .~ attrs
+      & attributes .~ attrs
 
 {-# INLINABLE elDynAttr' #-}
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
-elDynAttr' elementTag attrs = elWith' elementTag $ def & elConfig_attributes .~ attrs
+elDynAttr' elementTag attrs = elWith' elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m a
@@ -656,7 +656,7 @@ elAttr' elementTag attrs = elWith' elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m a
-elDynAttr elementTag attrs = elWith elementTag $ def & elConfig_attributes .~ attrs
+elDynAttr elementTag attrs = elWith elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE el #-}
 el :: forall t m a. MonadWidget t m => String -> m a -> m a
@@ -698,12 +698,10 @@ data Link t
   = Link { _link_clicked :: Event t ()
          }
 
-class HasAttributes a where
-  type Attrs a :: *
-  attributes :: Lens' a (Attrs a)
+class HasAttributes s t a b | s -> a, t -> b, s b -> t, t a -> s where
+  attributes :: Lens s t a b
 
-instance HasAttributes (ElConfig attrs) where
-  type Attrs (ElConfig attrs) = attrs
+instance HasAttributes (ElConfig attrs) (ElConfig attrs') attrs attrs' where
   attributes = elConfig_attributes
 
 class HasNamespace a where
