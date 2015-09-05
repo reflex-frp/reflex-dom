@@ -37,9 +37,9 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
         return lis
       scrollPosition <- holdDyn 0 $ domEvent Scroll container
       window <- mapDyn (findWindow heightPx rowPx) scrollPosition
-      itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ take num $ drop idx $ Map.toList is) window items
+      itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ take num $ Prelude.drop idx $ Map.toList is) window items
   postBuild <- getPostBuild
-  performEvent_ $ fmap (\i -> liftIO $ elementSetScrollTop (_el_element container) (i * rowPx)) $ leftmost [setI, fmap (const i0) postBuild]
+  performEvent_ $ fmap (\i -> liftIO $ setScrollTop (_el_element container) (i * rowPx)) $ leftmost [setI, fmap (const i0) postBuild]
   indexAndLength <- mapDyn snd window
   sel <- mapDyn (leftmost . Map.elems) itemList
   return (indexAndLength, switch $ current sel)
