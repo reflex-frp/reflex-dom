@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell, FunctionalDependencies #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -532,6 +532,13 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'FocusTag = ()
   EventResultType 'BlurTag = ()
   EventResultType 'ChangeTag = ()
+  EventResultType 'DragTag = ()
+  EventResultType 'DragendTag = ()
+  EventResultType 'DragenterTag = ()
+  EventResultType 'DragleaveTag = ()
+  EventResultType 'DragoverTag = ()
+  EventResultType 'DragstartTag = ()
+  EventResultType 'DropTag = ()
 
 wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventName en -> EventM (EventType en) e (Maybe (f en))) -> m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
@@ -574,6 +581,13 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Focus -> return ()
   Blur -> return ()
   Change -> return ()
+  Drag -> return ()
+  Dragend -> return ()
+  Dragenter -> return ()
+  Dragleave -> return ()
+  Dragover -> return ()
+  Dragstart -> return ()
+  Drop -> return ()
 
 wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
 wrapElement e = do
@@ -647,7 +661,7 @@ data Link t
   = Link { _link_clicked :: Event t ()
          }
 
-class HasDomEvent t a where
+class HasDomEvent t a | a -> t where
   domEvent :: EventName en -> a -> Event t (EventResultType en)
 
 instance Reflex t => HasDomEvent t (El t) where
