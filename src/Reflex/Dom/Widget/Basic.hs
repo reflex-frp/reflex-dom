@@ -523,6 +523,8 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ClickTag = ()
   EventResultType 'DblclickTag = ()
   EventResultType 'KeypressTag = Int
+  EventResultType 'KeydownTag = Int
+  EventResultType 'KeyupTag = Int
   EventResultType 'ScrollTag = Int
   EventResultType 'MousemoveTag = (Int, Int)
   EventResultType 'MousedownTag = (Int, Int)
@@ -572,6 +574,8 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> return ()
   Keypress -> getKeyEvent
+  Keydown -> getKeyEvent
+  Keyup -> getKeyEvent
   Scroll -> liftIO $ elementGetScrollTop e
   Mousemove -> getMouseEventCoords
   Mouseup -> getMouseEventCoords
