@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest

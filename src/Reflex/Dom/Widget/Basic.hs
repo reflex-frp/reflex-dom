@@ -21,7 +21,7 @@ import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence
 import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
 import GHCJS.DOM.Node
 import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM (event, EventM)
+import GHCJS.DOM.EventM (event, EventM, stopPropagation)
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLElement
@@ -35,11 +35,24 @@ import Data.GADT.Compare.TH
 import Data.Bitraversable
 import GHCJS.DOM.MouseEvent
 import Data.IORef
+import Data.Default
 
 type AttributeMap = Map String String
 
+data ElConfig attrs
+  = ElConfig { _elConfig_namespace :: Maybe String
+             , _elConfig_attributes :: attrs
+             }
+
+makeLenses ''ElConfig
+
+instance (attrs ~ Map String String) => Default (ElConfig attrs) where
+  def = ElConfig { _elConfig_namespace = Nothing
+                 , _elConfig_attributes = Map.empty
+                 }
+
 data El t
-  = El { _el_element :: HTMLElement
+  = El { _el_element :: Element
        , _el_events :: EventSelector t (WrapArg EventResult EventName)
        }
 
@@ -59,21 +72,29 @@ instance MonadWidget t m => Attributes m (Dynamic t AttributeMap) where
       forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
       imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
 
-buildEmptyElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m HTMLElement
-buildEmptyElement elementTag attrs = do
+buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m Element
+buildEmptyElementNS mns elementTag attrs = do
   doc <- askDocument
   p <- askParent
-  Just e <- liftIO $ documentCreateElement doc elementTag
+  Just e <- liftIO $ case mns of
+    Nothing -> documentCreateElement doc elementTag
+    Just ns -> documentCreateElementNS doc ns elementTag
   addAttributes attrs e
   _ <- liftIO $ nodeAppendChild p $ Just e
-  return $ castToHTMLElement e
+  return $ castToElement e
+
+buildEmptyElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m Element
+buildEmptyElement = buildEmptyElementNS Nothing
 
 -- We need to decide what type of attrs we've got statically, because it will often be a recursively defined value, in which case inspecting it will lead to a cycle
-buildElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m a -> m (HTMLElement, a)
-buildElement elementTag attrs child = do
-  e <- buildEmptyElement elementTag attrs
+buildElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m a -> m (Element, a)
+buildElementNS mns elementTag attrs child = do
+  e <- buildEmptyElementNS mns elementTag attrs
   result <- subWidget (toNode e) child
   return (e, result)
+
+buildElement :: (MonadWidget t m, Attributes m attrs) => String -> attrs -> m a -> m (Element, a)
+buildElement = buildElementNS Nothing
 
 namedNodeMapGetNames :: IsNamedNodeMap self => self -> IO (Set String)
 namedNodeMapGetNames self = do
@@ -564,7 +585,7 @@ getKeyEvent = do
 getMouseEventCoords :: EventM MouseEvent e (Int, Int)
 getMouseEventCoords = do
   e <- event
-  liftIO $ bisequence (mouseEventGetX e, mouseEventGetY e)
+  liftIO $ bisequence (mouseEventGetClientX e, mouseEventGetClientY e)
 
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM (EventType en) e (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
@@ -590,46 +611,74 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Dragstart -> return ()
   Drop -> return ()
 
-wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => HTMLElement -> m (El t)
-wrapElement e = do
-  es <- wrapDomEventsMaybe e $ defaultDomEventHandler e
+wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => (forall en. Element -> EventName en -> EventM (EventType en) Element (Maybe (EventResult en))) -> Element -> m (El t)
+wrapElement eh e = do
+  es <- wrapDomEventsMaybe e $ eh e
   return $ El e es
 
-elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
-elDynAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag attrs child
-  e' <- wrapElement e
+{-# INLINABLE elStopPropagationNS #-}
+elStopPropagationNS :: (MonadWidget t m, IsEvent (EventType en)) => Maybe String -> String -> EventName en -> m a -> m a
+elStopPropagationNS mns elementTag evt child = do
+  (e, result) <- buildElementNS mns elementTag (Map.empty :: Map String String) child
+  liftIO $ onEventName evt e stopPropagation
+  return result
+
+{-# INLINABLE elWith #-}
+elWith :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m a -> m a
+elWith elementTag cfg child = do
+  (_, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
+  return result
+
+{-# INLINABLE elWith' #-}
+elWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m a -> m (El t, a)
+elWith' elementTag cfg child = do
+  (e, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
+  e' <- wrapElement defaultDomEventHandler e
   return (e', result)
+
+{-# INLINABLE emptyElWith #-}
+emptyElWith :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m ()
+emptyElWith elementTag cfg = do
+  _ <- buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
+  return ()
+
+{-# INLINABLE emptyElWith' #-}
+emptyElWith' :: (MonadWidget t m, Attributes m attrs) => String -> ElConfig attrs -> m (El t)
+emptyElWith' elementTag cfg = do
+  wrapElement defaultDomEventHandler =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
+
+{-# INLINABLE elDynAttrNS' #-}
+elDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map String String) -> m a -> m (El t, a)
+elDynAttrNS' mns elementTag attrs = elWith' elementTag $
+  def & namespace .~ mns
+      & attributes .~ attrs
+
+{-# INLINABLE elDynAttr' #-}
+elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
+elDynAttr' elementTag attrs = elWith' elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m a
-elAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag attrs child
-  return result
+elAttr elementTag attrs = elWith elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE el' #-}
 el' :: forall t m a. MonadWidget t m => String -> m a -> m (El t, a)
-el' elementTag child = elAttr' elementTag (Map.empty :: AttributeMap) child
+el' elementTag = elWith' elementTag def
 
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. MonadWidget t m => String -> Map String String -> m a -> m (El t, a)
-elAttr' elementTag attrs child = do
-  (e, result) <- buildElement elementTag attrs child
-  e' <- wrapElement e
-  return (e', result)
+elAttr' elementTag attrs = elWith' elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m a
-elDynAttr elementTag attrs child = do
-  (_, result) <- buildElement elementTag attrs child
-  return result
+elDynAttr elementTag attrs = elWith elementTag $ def & attributes .~ attrs
 
 {-# INLINABLE el #-}
 el :: forall t m a. MonadWidget t m => String -> m a -> m a
-el elementTag child = elAttr elementTag Map.empty child
+el elementTag = elWith elementTag def
 
 elClass :: forall t m a. MonadWidget t m => String -> String -> m a -> m a
-elClass elementTag c child = elAttr elementTag ("class" =: c) child
+elClass elementTag c = elWith elementTag $ def & attributes .~ "class" =: c
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
@@ -647,22 +696,36 @@ simpleList xs mkChild = mapDyn (map snd . Map.toList) =<< flip list mkChild =<< 
 elDynHtml' :: MonadWidget t m => String -> Dynamic t String -> m (El t)
 elDynHtml' elementTag html = do
   e <- buildEmptyElement elementTag (Map.empty :: Map String String)
-  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
-  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
-  wrapElement e
+  let h = castToHTMLElement e
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
+  wrapElement defaultDomEventHandler e
 
 elDynHtmlAttr' :: MonadWidget t m => String -> Map String String -> Dynamic t String -> m (El t)
 elDynHtmlAttr' elementTag attrs html = do
   e <- buildEmptyElement elementTag attrs
-  schedulePostBuild $ liftIO . htmlElementSetInnerHTML e =<< sample (current html)
-  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML e) $ updated html
-  wrapElement e
+  let h = castToHTMLElement e
+  schedulePostBuild $ liftIO . htmlElementSetInnerHTML h =<< sample (current html)
+  addVoidAction $ fmap (liftIO . htmlElementSetInnerHTML h) $ updated html
+  wrapElement defaultDomEventHandler e
 
 data Link t
   = Link { _link_clicked :: Event t ()
          }
 
-class HasDomEvent t a | a -> t where
+class HasAttributes s t a b | s -> a, t -> b, s b -> t, t a -> s where
+  attributes :: Lens s t a b
+
+instance HasAttributes (ElConfig attrs) (ElConfig attrs') attrs attrs' where
+  attributes = elConfig_attributes
+
+class HasNamespace a where
+  namespace :: Lens' a (Maybe String)
+
+instance HasNamespace (ElConfig attrs) where
+  namespace = elConfig_namespace
+
+class HasDomEvent t a where
   domEvent :: EventName en -> a -> Event t (EventResultType en)
 
 instance Reflex t => HasDomEvent t (El t) where
@@ -753,11 +816,11 @@ tabDisplay ulClass activeClass tabItems = do
         return $ fmap (const k) (_link_clicked a)
 
 -- | Place an element into the DOM and wrap it with Reflex event handlers.  Note: undefined behavior may result if the element is placed multiple times, removed from the DOM after being placed, or in other situations.  Don't use this unless you understand the internals of MonadWidget.
-unsafePlaceElement :: MonadWidget t m => HTMLElement -> m (El t)
+unsafePlaceElement :: MonadWidget t m => Element -> m (El t)
 unsafePlaceElement e = do
   p <- askParent
   _ <- liftIO $ nodeAppendChild p $ Just e
-  wrapElement e
+  wrapElement defaultDomEventHandler e
 
 deriveGEq ''EventName
 deriveGCompare ''EventName
