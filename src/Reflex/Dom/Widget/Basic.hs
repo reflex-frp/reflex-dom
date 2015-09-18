@@ -127,8 +127,9 @@ widgetHold child0 newChild = do
 widgetHoldInternal :: MonadWidget t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 newChild = do
   startPlaceholder <- text' ""
-  p <- askParent
-  (result0, childVoidAction0) <- subWidgetWithVoidActions p child0
+  (result0, childVoidAction0) <- do
+    p <- askParent
+    subWidgetWithVoidActions p child0
   endPlaceholder <- text' ""
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
@@ -141,12 +142,8 @@ widgetHoldInternal child0 newChild = do
         (result, postBuild, voidActions) <- runWidget df c
         runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
         postBuild
-        mp <- liftIO $ nodeGetParentNode endPlaceholder
-        case mp of
-          Nothing -> return () --TODO: Is this right?
-          Just p -> do
-            _ <- liftIO $ nodeInsertBefore p (Just df) (Just endPlaceholder)
-            return ()
+        mp' <- liftIO $ nodeGetParentNode endPlaceholder
+        forM_ mp' $ \p' -> liftIO $ nodeInsertBefore p' (Just df) (Just endPlaceholder)
         return ()
   addVoidAction $ ffor newChild $ \c -> do
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
@@ -156,7 +153,7 @@ widgetHoldInternal child0 newChild = do
 diffMapNoEq :: (Ord k) => Map k v -> Map k v -> Map k (Maybe v)
 diffMapNoEq olds news = flip Map.mapMaybe (align olds news) $ \case
   This _ -> Just Nothing
-  These old new -> Just $ Just new
+  These _ new -> Just $ Just new
   That new -> Just $ Just new
 
 applyMap :: Ord k => Map k v -> Map k (Maybe v) -> Map k v
@@ -187,7 +184,7 @@ listWithKeyShallowDiff :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k 
 listWithKeyShallowDiff initialVals valsChanged mkChild = do
   let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
   sentVals <- foldDyn (flip applyMap) Map.empty $ fmap (fmap (fmap (\_ -> ()))) valsChanged
-  let relevantDiff diff cur = case diff of
+  let relevantDiff diff _ = case diff of
         Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
         Just _ -> Nothing -- We don't want to let spurious re-creations of items through
   listHoldWithKey initialVals (attachWith (flip (Map.differenceWith relevantDiff)) (current sentVals) valsChanged) $ \k v ->
@@ -669,7 +666,7 @@ class HasDomEvent t a | a -> t where
   domEvent :: EventName en -> a -> Event t (EventResultType en)
 
 instance Reflex t => HasDomEvent t (El t) where
-  domEvent en el = fmap unEventResult $ select (_el_events el) (WrapArg en)
+  domEvent en e = fmap unEventResult $ select (_el_events e) (WrapArg en)
 
 linkClass :: MonadWidget t m => String -> String -> m (Link t)
 linkClass s c = do

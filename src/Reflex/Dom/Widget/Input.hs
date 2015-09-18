@@ -13,7 +13,6 @@ import GHCJS.DOM.HTMLTextAreaElement
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLSelectElement
 import GHCJS.DOM.EventM
-import GHCJS.DOM.UIEvent
 import GHCJS.DOM.File
 import GHCJS.DOM.FileList
 import Data.Monoid
