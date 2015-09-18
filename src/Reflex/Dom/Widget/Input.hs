@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo, TemplateHaskell, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo, TemplateHaskell #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
 
 import Prelude
@@ -222,16 +222,20 @@ liftM concat $ mapM makeLenses
   , ''Checkbox
   ]
 
-instance HasAttributes (TextAreaConfig t) (TextAreaConfig t) (Dynamic t (Map String String)) (Dynamic t (Map String String)) where
+instance HasAttributes (TextAreaConfig t) where
+  type Attrs (TextAreaConfig t) = Dynamic t (Map String String)
   attributes = textAreaConfig_attributes
 
-instance HasAttributes (TextInputConfig t) (TextInputConfig t) (Dynamic t (Map String String)) (Dynamic t (Map String String)) where
+instance HasAttributes (TextInputConfig t) where
+  type Attrs (TextInputConfig t) = Dynamic t (Map String String)
   attributes = textInputConfig_attributes
 
-instance HasAttributes (DropdownConfig t k) (DropdownConfig t k) (Dynamic t (Map String String)) (Dynamic t (Map String String)) where
+instance HasAttributes (DropdownConfig t k) where
+  type Attrs (DropdownConfig t k) = Dynamic t (Map String String)
   attributes = dropdownConfig_attributes
 
-instance HasAttributes (CheckboxConfig t) (CheckboxConfig t) (Dynamic t (Map String String)) (Dynamic t (Map String String)) where
+instance HasAttributes (CheckboxConfig t) where
+  type Attrs (CheckboxConfig t) = Dynamic t (Map String String)
   attributes = checkboxConfig_attributes
 
 class HasSetValue a where
