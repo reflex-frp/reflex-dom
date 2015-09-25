@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, ScopedTypeVariables #-}
 module Reflex.Dom.Time where
 
 import Reflex
@@ -51,3 +51,12 @@ delay :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
   threadDelay $ ceiling $ dt * 1000000
   cb a
+
+-- | Block occurrences of an Event until th given number of seconds elapses without
+--   the Event firing, at which point the last occurrence of the Event will fire.
+debounce :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
+debounce dt e = do
+  n :: Dynamic t Integer <- count e
+  let tagged = attachDynWith (,) n e
+  delayed <- delay dt tagged
+  return $ attachWithMaybe (\n' (t, v) -> if n' == t then Just v else Nothing) (current n) delayed
