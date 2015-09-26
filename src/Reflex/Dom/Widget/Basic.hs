@@ -9,6 +9,7 @@ import Prelude hiding (mapM, mapM_, sequence, sequence_)
 import Reflex
 import Reflex.Host.Class
 import Data.Functor.Misc
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -37,7 +38,8 @@ import GHCJS.DOM.MouseEvent
 import Data.IORef
 import Data.Default
 
-type AttributeMap = Map String String
+type AttributeMap   = Map String String
+type AttributeNSMap = Map (Maybe String, String) String
 
 data ElConfig attrs
   = ElConfig { _elConfig_namespace :: Maybe String
@@ -71,6 +73,40 @@ instance MonadWidget t m => Attributes m (Dynamic t AttributeMap) where
       oldAttrs <- maybe (return Set.empty) namedNodeMapGetNames =<< elementGetAttributes e
       forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
       imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
+
+splitNSAttr :: String -> (Maybe String, String)
+splitNSAttr attr = case List.elemIndex ':' attr of
+  Nothing -> (Nothing, attr)
+  Just n  -> let (a,b) = List.splitAt n attr in (Just a, b)
+
+instance MonadIO m => Attributes m AttributeNSMap where
+  addAttributes curAttrs e = liftIO $ imapM_  (addAttrNS e) curAttrs
+
+instance MonadWidget t m => Attributes m (Dynamic t AttributeNSMap) where
+  addAttributes attrs e = do
+    schedulePostBuild $ do
+      curAttrs <- sample $ current attrs
+      liftIO $  imapM_ (addAttrNS e) curAttrs
+    addVoidAction $ flip fmap (updated attrs) $ \newAttrs -> liftIO $ do
+      oldAttrs <- maybe (return Set.empty) namedNodeMapGetNames =<< elementGetAttributes e
+      let (_, newAttrNames) = unzip $ Map.keys newAttrs
+      -- Definitely remove any old attrs not mentioned in the new set
+      forM_ (Set.toList $ oldAttrs `Set.difference` Set.fromList newAttrNames) (elementRemoveAttribute e)
+      -- TODO: also remove old attrs that are listed in the old set
+      --       but are under a different namespace? (or are these impossible,
+      --       because the attribute would have necessarily been namespace
+      --       prefixed (proper attributes in namespace other than xhtml
+      --       will always be prefixed)?)
+      imapM_ (addAttrNS e) newAttrs
+
+addAttrNS :: (IsElement e) => e -> (Maybe String, String) -> String -> IO ()
+addAttrNS e (Just ns, attrName) attrVal =
+  elementSetAttributeNS e ns attrName attrVal
+addAttrNS e (Nothing, attrName) attrVal =
+  elementSetAttribute e attrName attrVal
+
+
+
 
 buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m Element
 buildEmptyElementNS mns elementTag attrs = do
@@ -699,6 +735,11 @@ elDynAttrNS' mns elementTag attrs = elWith' elementTag $
   def & namespace .~ mns
       & elConfig_attributes .~ attrs
 
+elNSDynAttrNS' :: forall t m a. MonadWidget t m => Maybe String -> String -> Dynamic t (Map (Maybe String, String) String) -> m a -> m (El t, a)
+elNSDynAttrNS' mns elementTag attrs = elWith' elementTag $
+  def & namespace .~ mns
+      & elConfig_attributes .~ attrs
+
 {-# INLINABLE elDynAttr' #-}
 elDynAttr' :: forall t m a. MonadWidget t m => String -> Dynamic t (Map String String) -> m a -> m (El t, a)
 elDynAttr' elementTag attrs = elWith' elementTag $ def & elConfig_attributes .~ attrs
@@ -852,7 +893,7 @@ tabDisplay ulClass activeClass tabItems = do
     _ <- listWithKey dTabs (\k dTab -> do
       dAttrs <- mapDyn (\sel -> do
         let t1 = listToMaybe $ Map.keys tabItems
-        if sel == Just k || (sel == Nothing && t1 == Just k) then Map.empty else Map.singleton "style" "display:none;") dCurrentTab 
+        if sel == Just k || (sel == Nothing && t1 == Just k) then Map.empty else Map.singleton "style" "display:none;") dCurrentTab
       elDynAttr "div" dAttrs $ dyn =<< mapDyn snd dTab)
     return ()
   where
