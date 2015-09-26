@@ -74,11 +74,6 @@ instance MonadWidget t m => Attributes m (Dynamic t AttributeMap) where
       forM_ (Set.toList $ oldAttrs `Set.difference` Map.keysSet newAttrs) $ elementRemoveAttribute e
       imapM_ (elementSetAttribute e) newAttrs --TODO: avoid re-setting unchanged attributes; possibly do the compare using Align in haskell
 
-splitNSAttr :: String -> (Maybe String, String)
-splitNSAttr attr = case List.elemIndex ':' attr of
-  Nothing -> (Nothing, attr)
-  Just n  -> let (a,b) = List.splitAt n attr in (Just a, b)
-
 instance MonadIO m => Attributes m AttributeNSMap where
   addAttributes curAttrs e = liftIO $ imapM_  (addAttrNS e) curAttrs
 
