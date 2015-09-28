@@ -6,12 +6,15 @@ import Reflex
 import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Monoid
 import qualified Data.Map as Map
 import Data.Map (Map)
 import GHCJS.DOM.Element
+import Data.Maybe
+import Data.Int
 
 -- |A list view for long lists. Creates a scrollable element and only renders child row elements near the current scroll position.
 virtualListWithSelection :: forall t m k v. (MonadWidget t m, Ord k)
@@ -67,4 +70,39 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           preItems = min startingIndex numItems
       in (topPx - preItems * sizeIncrement, (startingIndex - preItems, preItems + numItems * 2))
 
-
+{-# NOINLINE virtualList #-}
+virtualList :: forall t m k v a. (MonadWidget t m, Ord k)
+  => Dynamic t Int -- ^ The height of the visible region in pixels
+  -> Int -- ^ The height of each row in pixels
+  -> Dynamic t Int -- ^ The total number of items
+  -> Int -- ^ The index of the row to scroll to on initialization
+  -> Event t Int -- ^ An 'Event' containing a row index. Used to scroll to the given index.
+  -> (k -> Int) -- ^ Index to Key function, used to determine position of Map elements
+  -> Map k v -- ^ The initial 'Map' of items
+  -> Event t (Map k (Maybe v)) -- ^ The update 'Event'
+  -> (k -> v -> Event t v -> m a) -- ^ The row child element builder
+  -> m (Dynamic t (Int, Int), Dynamic t (Map k a)) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and the Dynamic list result
+virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemUpdate itemBuilder = do
+  totalHeightStyle <- mapDyn (toHeightStyle . (*) rowPx) maxIndex
+  containerStyle <- mapDyn toContainer heightPx
+  viewportStyle <- mapDyn toViewport heightPx
+  pb <- getPostBuild
+  rec (viewport, result) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ do
+        elDynAttr "div" totalHeightStyle $ listWithKeyShallowDiff items0 itemUpdate $ \k v e -> do
+          elAttr "div" (toStyleAttr $ ("height" =: (show rowPx <> "px") <> "top" =: ((<>"px") $ show $ keyToIndex k * rowPx) <> "position" =: "absolute" <> "width" =: "100%")) $ itemBuilder k v e
+      scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll viewport
+                                             , fmap (const (i0 * rowPx)) pb
+                                             ]
+      window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
+  performEvent_ $ fmap (\i -> liftIO $ elementSetScrollTop (_el_element viewport) (i * rowPx)) $ leftmost [setI, fmap (const i0) pb]
+  return (nubDyn window, result)
+  where
+    toStyleAttr m = "style" =: (Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m)
+    toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
+                                 "left" =: "0" <> "right" =: "0" <> "height" =: (show h <> "px")
+    toContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (show h <> "px")
+    toHeightStyle h = toStyleAttr ("height" =: (show h <> "px") <> "overflow" =: "hidden" <> "position" =: "relative")
+    findWindow windowSize sizeIncrement startingPosition =
+      let (startingIndex, topOffsetPx) = startingPosition `divMod'` sizeIncrement
+          numItems = (windowSize + sizeIncrement - 1) `div` sizeIncrement
+      in (startingIndex, numItems)
