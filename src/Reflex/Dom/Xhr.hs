@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, GADTs #-}
+{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable #-}
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest
@@ -63,6 +63,7 @@ instance a ~ () => Default (XhrRequestConfig a) where
                          , _xhrRequestConfig_sendData  = ()
                          }
 
+-- | Construct a request object from method, URL, and config record.
 xhrRequest :: String -> String -> XhrRequestConfig a -> XhrRequest a
 xhrRequest = XhrRequest
 
@@ -93,11 +94,13 @@ newXMLHttpRequest req cb = do
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
     return xhr
 
+-- | Given Event of request, issue them when the Event fires.  Returns Event of corresponding response.
 performRequestAsync :: (MonadWidget t m, IsXhrPayload a) => Event t (XhrRequest a) -> m (Event t XhrResponse)
 performRequestAsync req = performEventAsync $ ffor req $ \r cb -> do
   _ <- newXMLHttpRequest r $ liftIO . cb
   return ()
 
+-- | Issues a collection of requests when the supplied Event fires.  When ALL requests from a given firing complete, the results are collected and returned via the return Event.
 performRequestsAsync :: (Traversable f, MonadWidget t m, IsXhrPayload a) => Event t (f (XhrRequest a)) -> m (Event t (f XhrResponse))
 performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
   resps <- forM rs $ \r -> do
@@ -107,6 +110,7 @@ performRequestsAsync req = performEventAsync $ ffor req $ \rs cb -> do
   _ <- liftIO $ forkIO $ cb =<< forM resps takeMVar
   return ()
 
+-- | Simplified interface to "GET" URLs and return decoded results.
 getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
 getAndDecode url = do
   r <- performRequestAsync $ fmap (\x -> XhrRequest "GET" x def) url
@@ -120,6 +124,7 @@ getMay f e = do
 decodeText :: FromJSON a => Text -> Maybe a
 decodeText = decode . BL.fromStrict . encodeUtf8
 
+-- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_body
 

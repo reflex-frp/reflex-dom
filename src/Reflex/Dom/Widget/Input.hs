@@ -13,7 +13,6 @@ import GHCJS.DOM.HTMLTextAreaElement
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLSelectElement
 import GHCJS.DOM.EventM
-import GHCJS.DOM.UIEvent
 import GHCJS.DOM.File
 import GHCJS.DOM.FileList
 import Data.Monoid
@@ -158,17 +157,15 @@ data FileInput t
                }
 
 data FileInputConfig t
-   = FileInputConfig { _fileInputConfig_clearValue :: Event t ()
-                     , _fileInputConfig_attributes :: Dynamic t (Map String String)
+   = FileInputConfig { _fileInputConfig_attributes :: Dynamic t (Map String String)
                      }
 
 instance Reflex t => Default (FileInputConfig t) where
-  def = FileInputConfig { _fileInputConfig_clearValue = never
-                        , _fileInputConfig_attributes = constDyn mempty
+  def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
 fileInput :: MonadWidget t m => FileInputConfig t -> m (FileInput t)
-fileInput (FileInputConfig clearValue dAttrs) = do
+fileInput (FileInputConfig dAttrs) = do
   e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "file") dAttrs
   eChange <- wrapDomEvent e elementOnchange $ liftIO $ do
     Just files <- htmlInputElementGetFiles e
@@ -226,10 +223,6 @@ liftM concat $ mapM makeLenses
   , ''CheckboxConfig
   , ''Checkbox
   ]
-
-class HasAttributes a where
-  type Attrs a :: *
-  attributes :: Lens' a (Attrs a)
 
 instance HasAttributes (TextAreaConfig t) where
   type Attrs (TextAreaConfig t) = Dynamic t (Map String String)

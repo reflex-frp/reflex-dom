@@ -8,7 +8,7 @@
 
 mkDerivation {
   pname = "reflex-dom";
-  version = "0.1";
+  version = "0.2";
   src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
   buildDepends = [
     reflex
