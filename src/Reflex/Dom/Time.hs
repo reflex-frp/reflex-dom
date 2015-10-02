@@ -40,11 +40,22 @@ tickLossyFrom
     -> m (Event t TickInfo)
 tickLossyFrom dt t0 e = performEventAsync $ fmap callAtNextInterval e
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ do
-          t <- getCurrentTime
-          let offset = t `diffUTCTime` t0
-              (n, alreadyElapsed) = offset `divMod'` dt
-          threadDelay $ ceiling $ (dt - alreadyElapsed) * 1000000
-          cb $ TickInfo t n alreadyElapsed
+          tick <- getCurrentTick dt t0
+          threadDelay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
+          cb tick
+
+clockLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
+clockLossy dt t0 = do
+  initial <- liftIO $ getCurrentTick dt t0
+  e <- tickLossy dt t0
+  holdDyn initial e
+
+getCurrentTick :: NominalDiffTime -> UTCTime -> IO TickInfo
+getCurrentTick dt t0 = do
+  t <- getCurrentTime
+  let offset = t `diffUTCTime` t0
+      (n, alreadyElapsed) = offset `divMod'` dt
+  return $ TickInfo t n alreadyElapsed
 
 -- | Delay an Event's occurrences by a given amount in seconds.
 delay :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
