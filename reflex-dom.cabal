@@ -26,7 +26,7 @@ library
     semigroups == 0.16.*,
     mtl >= 2.1 && < 2.3,
     containers == 0.5.*,
-    these >= 0.4,
+    these >= 0.4 && < 0.7,
     ref-tf == 0.4.*,
     transformers == 0.3.* || == 0.4.*,
     lens >= 4.7 && < 4.14,
