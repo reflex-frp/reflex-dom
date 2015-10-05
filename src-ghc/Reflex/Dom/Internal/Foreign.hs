@@ -5,7 +5,7 @@ import GHCJS.DOM hiding (runWebGUI)
 import Control.Concurrent
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
 import GHCJS.DOM.Navigator
-import GHCJS.DOM.DOMWindow
+import GHCJS.DOM.Window
 import Graphics.UI.Gtk hiding (Widget)
 import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, unWidget)
@@ -62,8 +62,8 @@ runWebGUI' userAgentKey main = do
   case mbWindow of
     Just window -> do
       -- Check if we are running in javascript inside the the native version
-      Just n <- domWindowGetNavigator window
-      agent <- navigatorGetUserAgent n
+      Just n <- getNavigator window
+      agent <- getUserAgent n
       unless ((" " ++ userAgentKey) `isSuffixOf` agent) $ main (castToWebView window)
     Nothing -> do
       makeDefaultWebView userAgentKey main

@@ -9,7 +9,7 @@ import Reflex.Dom.Class
 import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
 import GHCJS.DOM.Node
-import GHCJS.DOM.HTMLElement
+import GHCJS.DOM.Element
 import GHCJS.DOM.Document
 import Reflex.Class
 import Reflex.Host.Class
@@ -179,23 +179,23 @@ holdOnStartup a0 ma = do
 mainWidget :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidget w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just body <- documentGetBody doc
+  Just body <- getBody doc
   attachWidget body webView w
 
 mainWidgetWithHead :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
+  Just headElement <- liftM (fmap castToHTMLElement) $ getHead doc
   attachWidget headElement webView h
-  Just body <- documentGetBody doc
+  Just body <- getBody doc
   attachWidget body webView b
 
 mainWidgetWithCss :: ByteString -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
-  Just body <- documentGetBody doc
+  Just headElement <- liftM (fmap castToHTMLElement) $ getHead doc
+  setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
+  Just body <- getBody doc
   attachWidget body webView w
 
 newtype WithWebView m a = WithWebView { unWithWebView :: ReaderT WebView m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
@@ -245,20 +245,20 @@ runWithWebView = runReaderT . unWithWebView
 
 attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
 attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
-  Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
+  Just doc <- liftM (fmap castToHTMLDocument) $ getOwnerDocument rootElement
   frames <- liftIO newChan
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle
             runHostFrame $ runGui (sequence_ voidActionNeeded) guiEnv
-      Just df <- liftIO $ documentCreateDocumentFragment doc
+      Just df <- createDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
         postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
-      liftIO $ htmlElementSetInnerHTML rootElement ""
-      _ <- liftIO $ nodeAppendChild rootElement $ Just df
+      setInnerHTML rootElement $ Just ""
+      _ <- appendChild rootElement $ Just df
       voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
   _ <- liftIO $ forkIO $ forever $ postGUISync =<< readChan frames -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe

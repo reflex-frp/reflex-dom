@@ -46,7 +46,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
       window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
       itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
-  performEvent_ $ fmap (\i -> liftIO $ elementSetScrollTop (_el_element container) (i * rowPx)) $ leftmost [setI, fmap (const i0) postBuild]
+  performEvent_ $ fmap (\i -> liftIO $ setScrollTop (_el_element container) (i * rowPx)) $ leftmost [setI, fmap (const i0) postBuild]
   indexAndLength <- mapDyn snd window
   return (indexAndLength, sel)
   where
@@ -66,5 +66,3 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           numItems = windowSize `div` sizeIncrement + 1
           preItems = min startingIndex numItems
       in (topPx - preItems * sizeIncrement, (startingIndex - preItems, preItems + numItems * 2))
-
-
