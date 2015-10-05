@@ -11,6 +11,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
+import GHCJS.DOM.File
 
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
@@ -104,6 +105,9 @@ instance IsXhrPayload () where
 
 instance IsXhrPayload String where
   xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just
+
+instance IsXhrPayload File where
+  xmlHttpRequestSend = error "xmlHttpRequestSend{File}: not implemented"
 
 xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe String -> IO ()
 xmlHttpRequestSendPayload xhr payload = do
