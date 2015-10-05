@@ -38,7 +38,7 @@ makeDefaultWebView userAgentKey main = do
   _ <- webView `on` loadFinished $ \_ -> do
     main webView --TODO: Should probably only do this once
   inspector <- webViewGetInspector webView
-  _ <- inspector `on` inspectWebView $ \wv -> do
+  _ <- inspector `on` inspectWebView $ \_ -> do
     inspectorWindow <- windowNew
     windowSetDefaultSize inspectorWindow 900 600
     inspectorScrollWin <- scrolledWindowNew Nothing Nothing
