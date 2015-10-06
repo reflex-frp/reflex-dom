@@ -240,6 +240,10 @@ instance HasAttributes (CheckboxConfig t) where
   type Attrs (CheckboxConfig t) = Dynamic t (Map String String)
   attributes = checkboxConfig_attributes
 
+instance HasAttributes (FileInputConfig t) where
+  type Attrs (FileInputConfig t) = Dynamic t (Map String String)
+  attributes = fileInputConfig_attributes
+
 class HasSetValue a where
   type SetValue a :: *
   setValue :: Lens' a (SetValue a)
