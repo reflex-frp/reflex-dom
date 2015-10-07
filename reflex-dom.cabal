@@ -63,6 +63,7 @@ library
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
     Reflex.Dom.Widget.Lazy
+    Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
     Reflex.Dom.Time
   other-modules:
