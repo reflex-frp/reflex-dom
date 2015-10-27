@@ -22,12 +22,16 @@ import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.Aeson.Encode
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Traversable
 import Reflex
@@ -116,6 +120,15 @@ getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (M
 getAndDecode url = do
   r <- performRequestAsync $ fmap (\x -> XhrRequest "GET" x def) url
   return $ fmap decodeXhrResponse r
+
+-- | Create a "POST" request from an URL and thing with a JSON representation
+postJson :: (ToJSON a) => String -> a -> XhrRequest
+postJson url a = 
+  XhrRequest "POST" url $ def { _xhrRequestConfig_headers = headerUrlEnc
+                              , _xhrRequestConfig_sendData = Just body
+                              }
+  where headerUrlEnc = "Content-type" =: "application/json"
+        body = LT.unpack . B.toLazyText . encodeToTextBuilder $ a
 
 getMay :: MonadWidget t m => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))
 getMay f e = do
