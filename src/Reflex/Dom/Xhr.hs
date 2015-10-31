@@ -31,7 +31,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Traversable
 import Reflex
@@ -132,7 +131,7 @@ postJson url a =
                               , _xhrRequestConfig_sendData = Just body
                               }
   where headerUrlEnc = "Content-type" =: "application/json"
-        body = LT.unpack . B.toLazyText . encodeToTextBuilder $ a
+        body = LT.unpack $ B.toLazyText $ encodeToTextBuilder $ toJSON a
 
 getMay :: MonadWidget t m => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))
 getMay f e = do
