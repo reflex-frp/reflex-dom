@@ -326,6 +326,9 @@ xmlHttpRequestGetResponseText self
 responseTextToText :: (Maybe JSString) -> Maybe Text
 responseTextToText r = fmap (T.pack . fromJSString) r
 
+statusTextToText :: Text -> Text
+statusTextToText = id
+
 foreign import javascript unsafe "$1[\"responseXML\"]"
         ghcjs_dom_xml_http_request_get_response_xml ::
         JSRef XMLHttpRequest -> IO (JSRef Document)

@@ -53,6 +53,8 @@ data XhrRequestConfig
 
 data XhrResponse
    = XhrResponse { _xhrResponse_body :: Maybe Text
+                 , _xhrResponse_status :: Word
+                 , _xhrResponse_statusText :: Text
                  }
    deriving (Show, Read, Eq, Ord, Typeable)
 
@@ -86,10 +88,12 @@ newXMLHttpRequest req cb = do
     maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType) (_xhrRequestConfig_responseType c)
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
+      status <- liftIO $ xmlHttpRequestGetStatus xhr
+      statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
       if readyState == 4
           then do
             r <- liftIO $ xmlHttpRequestGetResponseText xhr
-            _ <- liftIO $ postGui $ cb $ XhrResponse $ responseTextToText r
+            _ <- liftIO $ postGui $ cb $ XhrResponse (responseTextToText r) status (statusTextToText statusText)
             return ()
           else return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
