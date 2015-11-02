@@ -29,6 +29,9 @@ toJSObject ctx args = do
 responseTextToText :: Maybe String -> Maybe Text
 responseTextToText = fmap T.pack
 
+statusTextToText :: String -> Text
+statusTextToText = T.pack
+
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
