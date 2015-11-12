@@ -23,7 +23,7 @@ library
     reflex == 0.3.*,
     dependent-sum == 0.2.*,
     dependent-map == 0.1.*,
-    semigroups == 0.16.*,
+    semigroups >= 0.16 && < 0.19,
     mtl >= 2.1 && < 2.3,
     containers == 0.5.*,
     these >= 0.4,
