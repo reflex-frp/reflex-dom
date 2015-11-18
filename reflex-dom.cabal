@@ -59,15 +59,17 @@ library
     Reflex.Dom
     Reflex.Dom.Class
     Reflex.Dom.Internal
+    Reflex.Dom.Time
+    Reflex.Dom.WebSocket
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
-    Reflex.Dom.Time
   other-modules:
     Reflex.Dom.Internal.Foreign
+    Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
 
   other-extensions: TemplateHaskell

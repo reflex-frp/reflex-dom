@@ -12,19 +12,13 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 
+import Reflex.Dom.Internal.Foreign
+
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
                     , xhrContext :: JSContextRef
                     }
    deriving (Eq, Ord)
-
-toJSObject :: JSContextRef -> [Ptr OpaqueJSValue] -> IO JSObjectRef
-toJSObject ctx args = do
-  o <- jsobjectmake ctx nullPtr nullPtr
-  iforM_ args $ \n a -> do
-    prop <- jsstringcreatewithutf8cstring $ show n
-    jsobjectsetproperty ctx o prop a 1 nullPtr
-  return o
 
 responseTextToText :: Maybe String -> Maybe Text
 responseTextToText = fmap T.pack
@@ -59,9 +53,6 @@ xmlHttpRequestOpen xhr method url async user password = do
   script <- jsstringcreatewithutf8cstring "this[0].open(this[1], this[2], this[3], this[4], this[5])"
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
-
-foreign import ccall "wrapper"
-  wrapper :: JSObjectCallAsFunctionCallback' -> IO JSObjectCallAsFunctionCallback
 
 xmlHttpRequestOnreadystatechange :: XMLHttpRequest -> IO () -> IO ()
 xmlHttpRequestOnreadystatechange xhr userCallback = do
