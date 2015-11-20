@@ -49,6 +49,7 @@ instance Reflex t => Default (TextInputConfig t) where
                         , _textInputConfig_attributes = constDyn mempty
                         }
 
+-- | Create an input whose value is a string.  By default, the "type" attribute is set to "text", but it can be changed using the _textInputConfig_inputType field.  Note that only types for which the value is always a string will work - types whose value may be null will not work properly with this widget.
 textInput :: MonadWidget t m => TextInputConfig t -> m (TextInput t)
 textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" inputType) dAttrs

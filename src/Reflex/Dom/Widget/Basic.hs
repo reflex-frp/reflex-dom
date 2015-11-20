@@ -277,18 +277,25 @@ listViewWithKey' :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dyn
 listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
 
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
+selectViewListWithKey :: forall t m k v a. (MonadWidget t m, Ord k)
+  => Dynamic t k          -- ^ Current selection key
+  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
+  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
+  -> m (Event t (k, a))        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
+selectViewListWithKey selection vals mkChild = do
+  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
+  selectChild <- listWithKey vals $ \k v -> do
+    selected <- getDemuxed selectionDemux k
+    selectSelf <- mkChild k v selected
+    return $ fmap ((,) k) selectSelf
+  liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k)
   => Dynamic t k          -- ^ Current selection key
   -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
   -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
   -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
-selectViewListWithKey_ selection vals mkChild = do
-  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
-  selectChild <- listWithKey vals $ \k v -> do
-    selected <- getDemuxed selectionDemux k
-    selectSelf <- mkChild k v selected
-    return $ fmap (const k) selectSelf
-  liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+selectViewListWithKey_ selection vals mkChild = liftM (fmap fst) $ selectViewListWithKey selection vals mkChild
 
 --------------------------------------------------------------------------------
 -- Basic DOM manipulation helpers
