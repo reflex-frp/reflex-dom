@@ -4,6 +4,7 @@ module Reflex.Dom.Xhr.Foreign where
 import Control.Lens.Indexed
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Typeable (Typeable)
 import System.Glib.FFI
 import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
@@ -29,8 +30,21 @@ statusTextToText = T.pack
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
-toResponseType :: a -> a
-toResponseType = id
+data XMLHttpRequestResponseType = XMLHttpRequestResponseType
+                                | XMLHttpRequestResponseTypeArraybuffer
+                                | XMLHttpRequestResponseTypeBlob
+                                | XMLHttpRequestResponseTypeDocument
+                                | XMLHttpRequestResponseTypeJson
+                                | XMLHttpRequestResponseTypeText
+                                deriving (Show, Read, Eq, Ord, Typeable)
+
+toResponseType :: XMLHttpRequestResponseType -> String
+toResponseType XMLHttpRequestResponseType = ""
+toResponseType XMLHttpRequestResponseTypeArraybuffer = "arraybuffer"
+toResponseType XMLHttpRequestResponseTypeBlob = "blob"
+toResponseType XMLHttpRequestResponseTypeDocument = "document"
+toResponseType XMLHttpRequestResponseTypeJson = "json"
+toResponseType XMLHttpRequestResponseTypeText = "text"
 
 xmlHttpRequestNew :: WebView -> IO XMLHttpRequest
 xmlHttpRequestNew wv = do
@@ -105,7 +119,7 @@ xmlHttpRequestSend xhr payload = do
               return (o,s)
   _ <- jsevaluatescript c s o nullPtr 1 nullPtr
   return ()
-  
+
 xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> String -> String -> IO ()
 xmlHttpRequestSetRequestHeader xhr header value = do
   let c = xhrContext xhr

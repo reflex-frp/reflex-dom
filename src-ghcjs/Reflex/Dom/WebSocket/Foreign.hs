@@ -11,7 +11,32 @@ import qualified Data.ByteString as BS
 import Foreign.Ptr
 import GHCJS.Foreign
 import GHCJS.Types
+import Data.JSString.Text
+import GHCJS.DOM.WebSocket (WebSocket, message, closeEvent)
+import qualified GHCJS.DOM.WebSocket as GD
+import GHCJS.DOM.MessageEvent
+import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.Types
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 
+data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
+
+newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
+newWebSocket _ url onMessage onClose = do
+  ws <- GD.newWebSocket url (Nothing :: Maybe [String])
+  on ws message $ do
+    e <- ask
+    d <- getData e
+    liftIO $ onMessage $ encodeUtf8 $ textFromJSVal d
+  on ws closeEvent $ liftIO onClose
+  return $ JSWebSocket ws
+
+webSocketSend :: JSWebSocket -> ByteString -> IO ()
+webSocketSend (JSWebSocket ws) bs = do
+  undefined
+
+{-
 #define JS(name, js, type) foreign import javascript unsafe js name :: type
 
 newtype JSWebSocket = JSWebSocket { unWebSocket :: JSRef JSWebSocket }
@@ -47,3 +72,4 @@ newWebSocket _ url onMessage onClose = do
         onClose
   liftM JSWebSocket $ newWebSocket_ (toJSString url) onMessageFun onCloseFun
 
+-}

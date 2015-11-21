@@ -49,7 +49,7 @@ data XhrRequestConfig
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
                       , _xhrRequestConfig_user :: Maybe String
                       , _xhrRequestConfig_password :: Maybe String
-                      , _xhrRequestConfig_responseType :: Maybe String
+                      , _xhrRequestConfig_responseType :: Maybe XMLHttpRequestResponseType
                       , _xhrRequestConfig_sendData :: Maybe String
                       }
    deriving (Show, Read, Eq, Ord, Typeable)
