@@ -1,75 +1,43 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, CPP, TemplateHaskell, NoMonomorphismRestriction, EmptyDataDecls, RankNTypes, GADTs, RecursiveDo, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, FlexibleContexts, DeriveDataTypeable, GeneralizedNewtypeDeriving, StandaloneDeriving, ConstraintKinds, UndecidableInstances, PolyKinds, AllowAmbiguousTypes #-}
+{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, CPP #-}
 
 module Reflex.Dom.WebSocket.Foreign where
 
 import Prelude hiding (div, span, mapM, mapM_, concat, concatMap, all, sequence)
 
-import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Data.ByteString (ByteString)
-import Data.Text.Encoding
 import qualified Data.ByteString as BS
-import Foreign.Ptr
-import GHCJS.Foreign
 import GHCJS.Types
-import Data.JSString.Text
-import GHCJS.DOM.WebSocket (WebSocket, message, closeEvent)
+import GHCJS.DOM.WebSocket (message, closeEvent)
 import qualified GHCJS.DOM.WebSocket as GD
 import GHCJS.DOM.MessageEvent
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import GHCJS.Buffer
+import JavaScript.TypedArray.ArrayBuffer as JS
+import GHCJS.Marshal.Pure
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
 
 newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onClose = do
-  ws <- GD.newWebSocket url (Nothing :: Maybe [String])
-  on ws message $ do
+  ws <- GD.newWebSocket url (Just [] :: Maybe [String])
+  GD.setBinaryType ws "arraybuffer"
+  _ <- on ws message $ do
     e <- ask
     d <- getData e
-    liftIO $ onMessage $ encodeUtf8 $ textFromJSVal d
-  on ws closeEvent $ liftIO onClose
+    ab <- liftIO $ unsafeFreeze $ pFromJSVal d
+    liftIO $ onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
+  _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
 
 webSocketSend :: JSWebSocket -> ByteString -> IO ()
 webSocketSend (JSWebSocket ws) bs = do
-  undefined
+  let (b, off, len) = fromByteString bs
+  ab <- ArrayBuffer <$> if BS.length bs == 0 --TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
+                        then jsval . getArrayBuffer <$> create 0
+                        else return $ js_dataView off len $ jsval $ getArrayBuffer b
+  GD.send ws $ Just ab
 
-{-
-#define JS(name, js, type) foreign import javascript unsafe js name :: type
-
-newtype JSWebSocket = JSWebSocket { unWebSocket :: JSRef JSWebSocket }
-
-data JSByteArray
-JS(extractByteArray, "new Uint8Array($1_1.buf, $1_2, $2)", Ptr a -> Int -> IO (JSRef JSByteArray))
-
-JS(newWebSocket_, "(function() { var ws = new WebSocket($1); ws['binaryType'] = 'arraybuffer'; ws['onmessage'] = function(e){ $2(e['data']); }; ws['onclose'] = function(e){ $3(); }; return ws; })()", JSString -> JSFun (JSString -> IO ()) -> JSFun (IO ()) -> IO (JSRef JSWebSocket))
-
-JS(webSocketSend_, "$1['send'](String.fromCharCode.apply(null, $2))", JSRef JSWebSocket -> JSRef JSByteArray -> IO ())
-
-webSocketSend :: JSWebSocket -> ByteString -> IO ()
-webSocketSend ws bs = BS.useAsCString bs $ \cStr -> do
-  ba <- extractByteArray cStr $ BS.length bs
-  webSocketSend_ (unWebSocket ws) ba
-
-JS(getLocationHost_, "location.host", IO JSString)
-
-getLocationHost :: FromJSString r => a -> IO r
-getLocationHost _ = liftM fromJSString getLocationHost_
-
-JS(getLocationProtocol_, "location.protocol", IO JSString)
-
-getLocationProtocol :: FromJSString r => a -> IO r
-getLocationProtocol _ = liftM fromJSString getLocationProtocol_
-
-newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
-newWebSocket _ url onMessage onClose = do
-  onMessageFun <- syncCallback1 AlwaysRetain True $ onMessage <=< return . encodeUtf8 . fromJSString
-  rec onCloseFun <- syncCallback AlwaysRetain True $ do
-        release onMessageFun
-        release onCloseFun
-        onClose
-  liftM JSWebSocket $ newWebSocket_ (toJSString url) onMessageFun onCloseFun
-
--}
+foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal
