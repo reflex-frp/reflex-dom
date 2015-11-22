@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TemplateHaskell, PolyKinds, TypeOperators, DeriveFunctor, LambdaCase, CPP, ForeignFunctionInterface, DeriveDataTypeable, ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TemplateHaskell, PolyKinds, TypeOperators, DeriveFunctor, LambdaCase, CPP, ForeignFunctionInterface, DeriveDataTypeable, ConstraintKinds, DefaultSignatures #-}
 module Reflex.Dom.Class where
 
 import Prelude hiding (mapM, mapM_, sequence, concat)
@@ -39,13 +39,18 @@ class ( Reflex t, MonadHold t m, MonadIO m, Functor m, MonadReflexCreateTrigger 
       ) => MonadWidget t m | m -> t where
   type WidgetHost m :: * -> *
   type GuiAction m :: * -> *
+  type WidgetOutput t m :: *
+  type WidgetOutput t m = Event t (WidgetHost m ())
   askParent :: m Node
   subWidget :: Node -> m a -> m a
-  subWidgetWithVoidActions :: Node -> m a -> m (a, Event t (WidgetHost m ()))
+  subWidgetWithVoidActions :: Node -> m a -> m (a, WidgetOutput t m)
   liftWidgetHost :: WidgetHost m a -> m a --TODO: Is this a good idea?
   schedulePostBuild :: WidgetHost m () -> m ()
   addVoidAction :: Event t (WidgetHost m ()) -> m ()
-  getRunWidget :: IsNode n => m (n -> m a -> WidgetHost m (a, WidgetHost m (), Event t (WidgetHost m ())))
+  getRunWidget :: IsNode n => m (n -> m a -> WidgetHost m (a, WidgetHost m (), WidgetOutput t m))
+  tellWidgetOutput :: Ord k => Dynamic t (Map k (WidgetOutput t m)) -> m ()
+  default tellWidgetOutput :: (WidgetOutput t m ~ Event t (WidgetHost m ()), Ord k) => Dynamic t (Map k (WidgetOutput t m)) -> m ()
+  tellWidgetOutput = addVoidAction . switch . fmap (mergeWith (>>) . toList) . current
 
 class Monad m => HasDocument m where
   askDocument :: m HTMLDocument
@@ -54,6 +59,9 @@ instance HasDocument m => HasDocument (ReaderT r m) where
   askDocument = lift askDocument
 
 instance HasDocument m => HasDocument (StateT r m) where
+  askDocument = lift askDocument
+
+instance HasDocument m => HasDocument (Strict.StateT r m) where
   askDocument = lift askDocument
 
 -- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
@@ -105,6 +113,11 @@ instance HasPostGui t h m => HasPostGui t h (ReaderT r m) where
   askRunWithActions = lift askRunWithActions
   scheduleFollowup r a = lift $ scheduleFollowup r a
 
+instance HasPostGui t h m => HasPostGui t h (StateT s m) where
+  askPostGui = lift askPostGui
+  askRunWithActions = lift askRunWithActions
+  scheduleFollowup r a = lift $ scheduleFollowup r a
+
 instance HasPostGui t h m => HasPostGui t h (Strict.StateT s m) where
   askPostGui = lift askPostGui
   askRunWithActions = lift askRunWithActions
@@ -113,6 +126,7 @@ instance HasPostGui t h m => HasPostGui t h (Strict.StateT s m) where
 instance MonadWidget t m => MonadWidget t (ReaderT r m) where
   type WidgetHost (ReaderT r m) = WidgetHost m
   type GuiAction (ReaderT r m) = GuiAction m
+  type WidgetOutput t (ReaderT r m) = WidgetOutput t m
   askParent = lift askParent
   subWidget n w = do
     r <- ask
@@ -129,6 +143,7 @@ instance MonadWidget t m => MonadWidget t (ReaderT r m) where
     return $ \rootElement w -> do
       (a, postBuild, voidActions) <- runWidget rootElement $ runReaderT w r
       return (a, postBuild, voidActions)
+  tellWidgetOutput = lift . tellWidgetOutput
 
 performEvent_ :: MonadWidget t m => Event t (WidgetHost m ()) -> m ()
 performEvent_ = addVoidAction

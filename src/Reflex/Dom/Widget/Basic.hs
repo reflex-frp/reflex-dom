@@ -154,8 +154,8 @@ widgetHoldInternal child0 newChild = do
   endPlaceholder <- text' ""
   (newChildBuilt, newChildBuiltTriggerRef) <- newEventWithTriggerRef
   performEvent_ $ fmap (const $ return ()) newChildBuilt --TODO: Get rid of this hack
-  childVoidAction <- hold childVoidAction0 $ fmap snd newChildBuilt
-  addVoidAction $ switch childVoidAction --TODO: Should this be a switchPromptly?
+  childOutput <- holdDyn (Map.singleton () childVoidAction0) $ fmap (Map.singleton () . snd) newChildBuilt
+  tellWidgetOutput childOutput
   doc <- askDocument
   runWidget <- getRunWidget
   let build c = do
@@ -217,7 +217,6 @@ listHoldWithKey initialVals valsChanged mkChild = do
   doc <- askDocument
   endPlaceholder <- text' ""
   (newChildren, newChildrenTriggerRef) <- newEventWithTriggerRef
---  performEvent_ $ fmap (const $ return ()) newChildren --TODO: Get rid of this hack
   runWidget <- getRunWidget
   let buildChild df k v = runWidget df $ wrapChild k v
       wrapChild k v = do
@@ -229,7 +228,7 @@ listHoldWithKey initialVals valsChanged mkChild = do
   initialState <- iforM initialVals $ \k v -> subWidgetWithVoidActions (toNode dfOrig) $ wrapChild k v --Note: we have to use subWidgetWithVoidActions rather than runWidget here, because running post-build actions during build can cause not-yet-constructed values to be read
   stateRef <- liftIO $ newIORef initialState
   children <- holdDyn initialState newChildren
-  addVoidAction $ switch $ fmap (mergeWith (>>) . map snd . Map.elems) $ current children
+  tellWidgetOutput =<< mapDyn (fmap snd) children
   mpOrig <- liftIO $ nodeGetParentNode endPlaceholder
   forM_ mpOrig $ \pOrig -> liftIO $ nodeInsertBefore pOrig (Just dfOrig) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
