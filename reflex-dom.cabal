@@ -58,6 +58,7 @@ library
   exposed-modules:
     Reflex.Dom
     Reflex.Dom.Class
+    Reflex.Dom.DynamicWriter
     Reflex.Dom.Internal
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
