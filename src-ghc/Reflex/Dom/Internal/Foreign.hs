@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase #-}
 module Reflex.Dom.Internal.Foreign where
 
 import Control.Lens hiding (set)
@@ -22,6 +22,21 @@ import Graphics.UI.Gtk.WebKit.WebInspector
 import Data.List
 import System.Directory
 import System.Glib.FFI hiding (void)
+
+#ifndef mingw32_HOST_OS
+import System.Posix.Signals
+#endif
+
+quitWebView :: WebView -> IO ()
+quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv
+                                   widgetDestroy w
+
+installQuitHandler :: WebView -> IO ()
+#ifdef mingw32_HOST_OS
+installQuitHandler wv = return () -- TODO: Maybe figure something out here for Windows users.
+#else
+installQuitHandler wv = installHandler keyboardSignal (Catch (quitWebView wv)) Nothing >> return ()
+#endif
 
 makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
@@ -58,6 +73,7 @@ makeDefaultWebView userAgentKey main = do
   wf <- webViewGetMainFrame webView
   pwd <- getCurrentDirectory
   webFrameLoadString wf "" Nothing $ "file://" ++ pwd ++ "/"
+  installQuitHandler webView
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()

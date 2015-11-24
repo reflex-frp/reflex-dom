@@ -54,6 +54,8 @@ library
       gtk3 == 0.13.*,
       webkitgtk3 == 0.13.*,
       webkitgtk3-javascriptcore == 0.13.*
+    if !os(windows)
+      build-depends: unix == 2.7.*
 
   exposed-modules:
     Reflex.Dom
