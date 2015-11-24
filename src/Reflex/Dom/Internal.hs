@@ -162,6 +162,9 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
   getRunWidget = return runWidget
 
+  getQuitWidget = return $ do wv <- askWebView
+                              liftIO $ quitWebView wv
+
 runWidget :: (Monad m, Reflex t, IsNode n) => n -> Widget t (Gui t h m) a -> WidgetHost (Widget t (Gui t h m)) (a, WidgetHost (Widget t (Gui t h m)) (), Event t (WidgetHost (Widget t (Gui t h m)) ()))
 runWidget rootElement w = do
   (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
@@ -244,16 +247,17 @@ runWithWebView :: WithWebView m a -> WebView -> m a
 runWithWebView = runReaderT . unWithWebView
 
 attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
-attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
-  Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
+attachWidget rootElement wv w = runSpiderHost . flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+  Just doc <- liftM (fmap castToHTMLDocument) . liftIO $ nodeGetOwnerDocument rootElement
   frames <- liftIO newChan
-  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
+  rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv)
+                          runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
           runWithActions dm = do
             voidActionNeeded <- fireEventsAndRead dm $ do
               sequence =<< readEvent voidActionHandle
             runHostFrame $ runGui (sequence_ voidActionNeeded) guiEnv
       Just df <- liftIO $ documentCreateDocumentFragment doc
-      (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
+      (result, voidAction) <- runHostFrame . flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
         postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
@@ -261,7 +265,8 @@ attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TO
       _ <- liftIO $ nodeAppendChild rootElement $ Just df
       voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
-  _ <- liftIO $ forkIO $ forever $ postGUISync =<< readChan frames -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe
+  _ <- liftIO . forkIO . forever $ do f <- readChan frames
+                                      postGUIAsync f -- postGUISync is necessary to prevent segfaults in GTK, which is not thread-safe
   return result
 
 --type MonadWidget t h m = (t ~ Spider, h ~ Gui Spider SpiderHost (HostFrame Spider), m ~ Widget t h, Monad h, MonadHold t h, HasDocument h, MonadSample t h, MonadRef h, MonadIO h, Functor (Event t), Functor h, Reflex t) -- Locking down these types seems to help a little in GHCJS, but not really in GHC

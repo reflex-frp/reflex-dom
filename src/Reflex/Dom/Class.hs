@@ -45,6 +45,7 @@ class ( Reflex t, MonadHold t m, MonadIO m, MonadAsyncException m, Functor m, Mo
   schedulePostBuild :: WidgetHost m () -> m ()
   addVoidAction :: Event t (WidgetHost m ()) -> m ()
   getRunWidget :: IsNode n => m (n -> m a -> WidgetHost m (a, WidgetHost m (), Event t (WidgetHost m ())))
+  getQuitWidget :: m (WidgetHost m ())
 
 class Monad m => HasDocument m where
   askDocument :: m HTMLDocument
@@ -108,6 +109,7 @@ instance MonadWidget t m => MonadWidget t (ReaderT r m) where
     return $ \rootElement w -> do
       (a, postBuild, voidActions) <- runWidget rootElement $ runReaderT w r
       return (a, postBuild, voidActions)
+  getQuitWidget = lift getQuitWidget
 
 performEvent_ :: MonadWidget t m => Event t (WidgetHost m ()) -> m ()
 performEvent_ = addVoidAction

@@ -22,6 +22,10 @@ import Data.List
 import System.Directory
 import System.Glib.FFI hiding (void)
 
+quitWebView :: WebView -> IO ()
+quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv
+                                   widgetDestroy w
+
 makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
   _ <- initGUI
