@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase #-}
 module Reflex.Dom.Internal.Foreign where
 
 import Control.Lens hiding (set)
@@ -22,9 +22,20 @@ import Data.List
 import System.Directory
 import System.Glib.FFI hiding (void)
 
+#ifndef mingw32_HOST_OS
+import System.Posix.Signals
+#endif
+
 quitWebView :: WebView -> IO ()
 quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv
                                    widgetDestroy w
+
+installQuitHandler :: WebView -> IO ()
+#ifdef mingw32_HOST_OS
+installQuitHandler wv = return () -- TODO: Maybe figure something out here for Windows users.
+#else
+installQuitHandler wv = installHandler keyboardSignal (Catch (quitWebView wv)) Nothing >> return ()
+#endif
 
 makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
@@ -47,7 +58,7 @@ makeDefaultWebView userAgentKey main = do
   _ <- on window objectDestroy . liftIO $ mainQuit
   widgetShowAll window
   _ <- webView `on` loadFinished $ \_ -> do
-    main webView --TODO: Should probably only do this once
+      main webView --TODO: Should probably only do this once
   inspector <- webViewGetInspector webView
   _ <- inspector `on` inspectWebView $ \_ -> do
     inspectorWindow <- windowNew
@@ -61,23 +72,24 @@ makeDefaultWebView userAgentKey main = do
   wf <- webViewGetMainFrame webView
   pwd <- getCurrentDirectory
   webFrameLoadString wf "" Nothing $ "file://" ++ pwd ++ "/"
+  installQuitHandler webView
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()
 runWebGUI = runWebGUI' "GHCJS"
 
 runWebGUI' :: String -> (WebView -> IO ()) -> IO ()
-runWebGUI' userAgentKey main = do
-  -- Are we in a java script inside some kind of browser
-  mbWindow <- currentWindow
-  case mbWindow of
-    Just window -> do
-      -- Check if we are running in javascript inside the the native version
-      Just n <- domWindowGetNavigator window
-      agent <- navigatorGetUserAgent n
-      unless ((" " ++ userAgentKey) `isSuffixOf` agent) $ main (castToWebView window)
-    Nothing -> do
-      makeDefaultWebView userAgentKey main
+runWebGUI' userAgentKey main =
+  do mbWindow <- currentWindow -- Are we in a javascript inside some kind of browser?
+     case mbWindow of
+       Just window -> do
+         -- Check if we are running in javascript inside the the native version
+         Just n <- domWindowGetNavigator window
+         agent <- navigatorGetUserAgent n
+         unless ((" " ++ userAgentKey) `isSuffixOf` agent) $
+           main (castToWebView window)
+       Nothing -> do -- this is the branch initially taken in a compiled program or in ghci
+         makeDefaultWebView userAgentKey main
 
 foreign import ccall "wrapper"
   wrapper :: JSObjectCallAsFunctionCallback' -> IO JSObjectCallAsFunctionCallback
