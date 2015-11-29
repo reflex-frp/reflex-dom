@@ -28,16 +28,6 @@ webSocketSend ws bs = BS.useAsCString bs $ \cStr -> do
   ba <- extractByteArray cStr $ BS.length bs
   webSocketSend_ (unWebSocket ws) ba
 
-JS(getLocationHost_, "location.host", IO JSString)
-
-getLocationHost :: FromJSString r => a -> IO r
-getLocationHost _ = liftM fromJSString getLocationHost_
-
-JS(getLocationProtocol_, "location.protocol", IO JSString)
-
-getLocationProtocol :: FromJSString r => a -> IO r
-getLocationProtocol _ = liftM fromJSString getLocationProtocol_
-
 newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onClose = do
   onMessageFun <- syncCallback1 AlwaysRetain True $ onMessage <=< return . encodeUtf8 . fromJSString

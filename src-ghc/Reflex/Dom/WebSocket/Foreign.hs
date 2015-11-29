@@ -26,22 +26,6 @@ data JSWebSocket = JSWebSocket { wsValue :: JSValueRef
                                , wsContext :: JSContextRef
                                }
 
-getLocationHost :: WebView -> IO String
-getLocationHost wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
-  script <- jsstringcreatewithutf8cstring "location.host"
-  lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
-  lh' <- fromJSStringMaybe c lh
-  return $ maybe "" id lh'
-
-getLocationProtocol :: WebView -> IO String
-getLocationProtocol wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
-  script <- jsstringcreatewithutf8cstring "location.protocol"
-  lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
-  lp' <- fromJSStringMaybe c lp
-  return $ maybe "" id lp'
-
 newWebSocket :: WebView -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
 newWebSocket wv url onMessage onClose = do
   c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv

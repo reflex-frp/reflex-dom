@@ -13,6 +13,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
+import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, unWidget)
 import Graphics.UI.Gtk.WebKit.WebSettings
@@ -98,4 +99,20 @@ fromJSStringMaybe c t = do
              _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
              peekCString ps
       return $ Just s
+
+getLocationHost :: WebView -> IO String
+getLocationHost wv = do
+  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
+  script <- jsstringcreatewithutf8cstring "location.host"
+  lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
+  lh' <- fromJSStringMaybe c lh
+  return $ maybe "" id lh'
+
+getLocationProtocol :: WebView -> IO String
+getLocationProtocol wv = do
+  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
+  script <- jsstringcreatewithutf8cstring "location.protocol"
+  lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
+  lp' <- fromJSStringMaybe c lp
+  return $ maybe "" id lp'
 
