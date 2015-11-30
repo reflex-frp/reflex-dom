@@ -77,13 +77,13 @@ instance MonadIORestore m => MonadIORestore (ReaderT r m) where
 
 class (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h m | m -> t h where
   askPostGui :: m (h () -> IO ())
-  askRunWithActions :: m ([DSum (EventTrigger t)] -> h ())
+  askRunWithActions :: m ([DSum (EventTrigger t) Identity] -> h ())
 
 runFrameWithTriggerRef :: (HasPostGui t h m, MonadRef m, MonadIO m) => Ref m (Maybe (EventTrigger t a)) -> a -> m ()
 runFrameWithTriggerRef r a = do
   postGui <- askPostGui
   runWithActions <- askRunWithActions
-  liftIO . postGui $ mapM_ (\t -> runWithActions [t :=> a]) =<< readRef r  
+  liftIO . postGui $ mapM_ (\t -> runWithActions [t :=> Identity a]) =<< readRef r  
 
 instance HasPostGui t h m => HasPostGui t h (ReaderT r m) where
   askPostGui = lift askPostGui
@@ -126,7 +126,7 @@ performEventAsync e = do
   addVoidAction $ ffor e $ \o -> do
     postGui <- askPostGui
     runWithActions <- askRunWithActions
-    o $ \a -> postGui $ mapM_ (\t -> runWithActions [t :=> a]) =<< readRef reResultTrigger
+    o $ \a -> postGui $ mapM_ (\t -> runWithActions [t :=> Identity a]) =<< readRef reResultTrigger
   return eResult
 
 getPostBuild :: MonadWidget t m => m (Event t ())

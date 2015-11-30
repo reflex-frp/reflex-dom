@@ -344,7 +344,7 @@ wrapDomEventMaybe element elementOnevent getValue = do
   e <- newEventWithTrigger $ \et -> do
         unsubscribe <- {-# SCC "a" #-} liftIO $ {-# SCC "b" #-} elementOnevent element $ {-# SCC "c" #-} do
           mv <- {-# SCC "d" #-} getValue
-          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> Identity v]
         return $ liftIO $ do
           {-# SCC "e" #-} unsubscribe
   return $! {-# SCC "f" #-} e
@@ -597,7 +597,7 @@ wrapDomEventsMaybe element handlers = do
   e <- newFanEventWithTrigger $ \(WrapArg en) et -> do
         unsubscribe <- liftIO $ (onEventName en) element $ do
           mv <- handlers en
-          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> v]
+          forM_ mv $ \v -> liftIO $ postGui $ runWithActions [et :=> Identity v]
         return $ liftIO $ do
           unsubscribe
   return $! e
