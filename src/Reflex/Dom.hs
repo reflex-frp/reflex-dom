@@ -6,6 +6,7 @@ module Reflex.Dom ( module Reflex
                   , module Reflex.Dom.Time
                   , module Reflex.Dom.WebSocket
                   , module Reflex.Dom.DynamicWriter
+                  , module Reflex.Dom.Location
                   ) where
 
 import Reflex
@@ -16,3 +17,4 @@ import Reflex.Dom.Xhr
 import Reflex.Dom.Time
 import Reflex.Dom.WebSocket
 import Reflex.Dom.DynamicWriter
+import Reflex.Dom.Location

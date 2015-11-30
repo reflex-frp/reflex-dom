@@ -74,6 +74,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
+    Reflex.Dom.Location
     Foreign.JavaScript.TH
   other-modules:
     Reflex.Dom.Internal.Foreign
