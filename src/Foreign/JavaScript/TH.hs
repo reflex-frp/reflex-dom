@@ -18,7 +18,7 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Data.Hashable
 #else
-import System.Glib.FFI hiding (withForeignPtr)
+import System.Glib.FFI
 import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
@@ -264,23 +264,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     withJSStringRaw propName $ \propNameRaw -> do
       jsContext <- askJSContext
       liftIO $ liftM JSRef_JavaScriptCore $ jsobjectgetproperty jsContext objRef propNameRaw nullPtr --TODO: property attribute, exceptions
-  withJSNode (Node n) f = do
-    jsContext <- askJSContext
-    withForeignPtr n $ \nPtr -> do
-      let acquire = liftIO $ do
-            jsNode <- webkit_dom_node_to_js jsContext nPtr
-            jsvalueprotect jsContext jsNode
-            return jsNode
-          release = liftIO . jsvalueunprotect jsContext
-      bracket acquire release $ f . JSRef_JavaScriptCore
-
-withForeignPtr :: MonadIO m => ForeignPtr a -> (Ptr a -> m b) -> m b
-withForeignPtr fo io = do
-  r <- io $ unsafeForeignPtrToPtr fo
-  liftIO $ touchForeignPtr fo
-  return r
-
-foreign import ccall unsafe "webkit_dom_node_to_js" webkit_dom_node_to_js :: JSContextRef -> Ptr Node -> IO JSValueRef
+  withJSNode = error "withJSNode is only supported in ghcjs"
 
 #endif
 
