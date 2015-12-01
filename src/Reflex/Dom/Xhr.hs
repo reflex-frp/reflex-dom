@@ -16,6 +16,10 @@ module Reflex.Dom.Xhr
   )
 where
 
+import Reflex
+import Reflex.Dom.Class
+import Reflex.Dom.Xhr.Foreign
+
 import Control.Concurrent
 import Control.Lens
 import Control.Monad hiding (forM)
@@ -32,9 +36,6 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Traversable
-import Reflex
-import Reflex.Dom.Class
-import Reflex.Dom.Xhr.Foreign
 import Data.Typeable
 
 data XhrRequest a

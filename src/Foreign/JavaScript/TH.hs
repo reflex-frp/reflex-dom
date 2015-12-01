@@ -12,6 +12,7 @@ import Language.Haskell.TH
 import qualified GHCJS.Marshal as JS
 import qualified GHCJS.Foreign as JS
 import qualified GHCJS.Types as JS
+import GHCJS.DOM
 import GHCJS.DOM.Types
 import Data.Word
 import Foreign.Ptr
@@ -34,6 +35,8 @@ import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Exception
 import Control.Monad.Reader
+import Control.Monad.State
+import qualified Control.Monad.State.Strict as Strict
 import Foreign.Marshal
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -42,7 +45,36 @@ import Data.Coerce
 import Text.Encoding.Z
 import Data.Monoid
 
-import Reflex.Dom (WithWebView, askWebView, runWithWebView, unWebViewSingleton)
+class Monad m => HasWebView m where
+  type WebViewPhantom m :: *
+  askWebView :: m (WebViewSingleton (WebViewPhantom m))
+
+instance HasWebView m => HasWebView (ReaderT r m) where
+  type WebViewPhantom (ReaderT r m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+instance HasWebView m => HasWebView (StateT r m) where
+  type WebViewPhantom (StateT r m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+instance HasWebView m => HasWebView (Strict.StateT r m) where
+  type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
+
+runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
+runWithWebView = runReaderT . unWithWebView
+
+instance (Monad m) => HasWebView (WithWebView x m) where
+  type WebViewPhantom (WithWebView x m) = x
+  askWebView = WithWebView ask
+
+withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
+withWebViewSingleton wv f = f $ WebViewSingleton wv
+
+-- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
+newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
 
 #ifdef __GHCJS__
 type JSFFI_Internal = JS.JSArray (JSRef JSCtx_IO) -> IO (JS.JSRef (JSRef JSCtx_IO))

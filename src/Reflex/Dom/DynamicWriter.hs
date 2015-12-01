@@ -4,6 +4,7 @@ module Reflex.Dom.DynamicWriter where
 import Reflex
 import Reflex.Host.Class
 import Reflex.Dom.Class
+
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
 import Control.Monad.Ref

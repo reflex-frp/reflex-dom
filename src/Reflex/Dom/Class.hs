@@ -1,10 +1,13 @@
 {-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TemplateHaskell, PolyKinds, TypeOperators, DeriveFunctor, LambdaCase, CPP, ForeignFunctionInterface, DeriveDataTypeable, ConstraintKinds, DefaultSignatures #-}
-module Reflex.Dom.Class where
+module Reflex.Dom.Class ( module Reflex.Dom.Class
+                        , module Foreign.JavaScript.TH
+                        ) where
 
 import Prelude hiding (mapM, mapM_, sequence, concat)
 
 import Reflex
 import Reflex.Host.Class
+import Foreign.JavaScript.TH
 
 import Control.Monad.Identity hiding (mapM, mapM_, forM, forM_, sequence)
 import Data.Map (Map)
@@ -63,28 +66,6 @@ instance HasDocument m => HasDocument (StateT r m) where
 
 instance HasDocument m => HasDocument (Strict.StateT r m) where
   askDocument = lift askDocument
-
--- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
-newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
-
-withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
-withWebViewSingleton wv f = f $ WebViewSingleton wv
-
-class Monad m => HasWebView m where
-  type WebViewPhantom m :: *
-  askWebView :: m (WebViewSingleton (WebViewPhantom m))
-
-instance HasWebView m => HasWebView (ReaderT r m) where
-  type WebViewPhantom (ReaderT r m) = WebViewPhantom m
-  askWebView = lift askWebView
-
-instance HasWebView m => HasWebView (StateT r m) where
-  type WebViewPhantom (StateT r m) = WebViewPhantom m
-  askWebView = lift askWebView
-
-instance HasWebView m => HasWebView (Strict.StateT r m) where
-  type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
-  askWebView = lift askWebView
 
 newtype Restore m = Restore { restore :: forall a. m a -> IO a }
 

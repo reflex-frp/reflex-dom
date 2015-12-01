@@ -5,6 +5,7 @@ import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
 
 import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Class
+import Foreign.JavaScript.TH
 
 import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
@@ -210,12 +211,6 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $
   Just body <- documentGetBody doc
   attachWidget body webViewSing w
 
-newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
-
-instance (Monad m) => HasWebView (WithWebView x m) where
-  type WebViewPhantom (WithWebView x m) = x
-  askWebView = WithWebView ask
-
 instance HasPostGui t h m => HasPostGui t (WithWebView x h) (WithWebView x m) where
   askPostGui = do
     postGui <- lift askPostGui
@@ -254,9 +249,6 @@ instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
   type ReadPhase (WithWebView x m) = ReadPhase m
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   runHostFrame = lift . runHostFrame
-
-runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
-runWithWebView = runReaderT . unWithWebView
 
 attachWidget :: forall e x a. (IsHTMLElement e) => e -> WebViewSingleton x -> Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) a -> IO a
 attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
