@@ -29,6 +29,7 @@ instance Reflex t => Default (WebSocketConfig t) where
 
 data WebSocket t
    = WebSocket { _webSocket_recv :: Event t ByteString
+               , _webSocket_open :: Event t ()
                }
 
 webSocket :: forall t m. (HasWebView m, MonadWidget t m) => String -> WebSocketConfig t -> m (WebSocket t)
@@ -39,12 +40,16 @@ webSocket url config = do
   (eRecv, eRecvTriggerRef) <- newEventWithTriggerRef
   currentSocketRef <- liftIO $ newIORef Nothing
   --TODO: Disconnect if value no longer needed
+  (eOpen, eOpenTriggerRef) <- newEventWithTriggerRef
   let onMessage :: ByteString -> IO ()
       onMessage m = postGui $ do
         mt <- readRef eRecvTriggerRef
         forM_ mt $ \t -> runWithActions [t :=> m]
+      onOpen = postGui $ do
+        mt <- readRef eOpenTriggerRef
+        forM_ mt $ \t -> runWithActions [t :=> ()]
       start = do
-        ws <- liftIO $ newWebSocket wv url onMessage $ do
+        ws <- liftIO $ newWebSocket wv url onMessage onOpen $ do
           void $ forkIO $ do --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?
             liftIO $ writeIORef currentSocketRef Nothing
             liftIO $ threadDelay 1000000
@@ -58,6 +63,6 @@ webSocket url config = do
       Nothing -> return () -- Discard --TODO: should we do something better here? probably buffer it, since we handle reconnection logic; how do we verify that the server has received things?
       Just ws -> do
         liftIO $ webSocketSend ws payload
-  return $ WebSocket eRecv
+  return $ WebSocket eRecv eOpen
 
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
