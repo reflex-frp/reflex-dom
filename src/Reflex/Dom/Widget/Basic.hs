@@ -16,6 +16,9 @@ import qualified Data.Set as Set
 import Data.Dependent.Sum (DSum (..))
 import Data.Foldable
 import Data.Traversable
+import Data.ByteString (ByteString)
+import qualified Data.Text as T
+import Data.Text.Encoding
 import Control.Monad.Trans
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
@@ -732,6 +735,42 @@ el elementTag = elWith elementTag def
 
 elClass :: forall t m a. MonadWidget t m => String -> String -> m a -> m a
 elClass elementTag c = elWith elementTag $ def & attributes .~ "class" =: c
+
+convToEl' :: (IsHTMLElement e, IsNode e, MonadWidget t m) => (HTMLDocument -> IO (Maybe e)) -> m a -> m (El t, a)
+convToEl' conv child = do
+    doc <- askDocument
+    Just e <- liftIO $ conv doc
+    result <- subWidget (toNode e) child
+    e' <- wrapElement defaultDomEventHandler (toElement e)
+    return (e', result)
+
+convToEl :: (IsHTMLElement e, IsNode e, MonadWidget t m) => (HTMLDocument -> IO (Maybe e)) -> m a -> m a
+convToEl conv child = do
+    doc <- askDocument
+    Just e <- liftIO $ conv doc
+    subWidget (toNode e) child
+
+elBody' :: MonadWidget t m => m a -> m (El t, a)
+elBody' = convToEl' documentGetBody
+
+elBody :: MonadWidget t m => m a -> m a
+elBody = convToEl documentGetBody
+
+elHead' :: MonadWidget t m => m a -> m (El t, a)
+elHead' = convToEl' documentGetHead
+
+elHead :: MonadWidget t m => m a -> m a
+elHead = convToEl documentGetHead
+
+-- | Dump the content into an element
+elEmbed :: MonadWidget t m => String -> ByteString -> m ()
+elEmbed elementTag innerHtml = do
+    doc <- askDocument
+    p <- askParent
+    liftIO $ do
+        Just e <- documentCreateElement doc elementTag
+        nodeSetTextContent e $ T.unpack (decodeUtf8 innerHtml)
+        void $ nodeAppendChild p $ Just e
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class

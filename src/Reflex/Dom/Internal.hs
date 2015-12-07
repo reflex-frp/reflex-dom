@@ -182,6 +182,12 @@ mainWidget w = runWebGUI $ \webView -> do
   Just body <- documentGetBody doc
   attachWidget body webView w
 
+-- | Just like mainWidget, but attach the widget to the document instead of the body
+mainDocument :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
+mainDocument child = runWebGUI $ \webView -> do
+  Just doc <- webViewGetDomDocument webView
+  attachWidget' (castToHTMLDocument doc) doc webView child
+
 mainWidgetWithHead :: Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
@@ -243,9 +249,13 @@ instance MonadReflexHost t m => MonadReflexHost t (WithWebView m) where
 runWithWebView :: WithWebView m a -> WebView -> m a
 runWithWebView = runReaderT . unWithWebView
 
-attachWidget :: (IsHTMLElement e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
-attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
+attachWidget :: (IsNode e) => e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
+attachWidget rootElement wv w = do
   Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
+  attachWidget' doc rootElement wv w
+
+attachWidget' :: (IsNode e) => HTMLDocument -> e -> WebView -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) a -> IO a
+attachWidget' doc rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
   frames <- liftIO newChan
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv :: GuiEnv Spider (WithWebView SpiderHost)
           runWithActions dm = do
@@ -257,7 +267,7 @@ attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TO
         (r, postBuild, va) <- runWidget df w
         postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
-      liftIO $ htmlElementSetInnerHTML rootElement ""
+      liftIO $ nodeSetTextContent rootElement ""
       _ <- liftIO $ nodeAppendChild rootElement $ Just df
       voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
