@@ -66,6 +66,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
+    Reflex.Dom.Location
   other-modules:
     Reflex.Dom.Internal.Foreign
     Reflex.Dom.WebSocket.Foreign

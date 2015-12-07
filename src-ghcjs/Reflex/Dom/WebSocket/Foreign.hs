@@ -7,7 +7,7 @@ import Prelude hiding (div, span, mapM, mapM_, concat, concatMap, all, sequence)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import GHCJS.Types
-import GHCJS.DOM.WebSocket (message, closeEvent)
+import GHCJS.DOM.WebSocket (message, open, closeEvent)
 import qualified GHCJS.DOM.WebSocket as GD
 import GHCJS.DOM.MessageEvent
 import GHCJS.DOM.EventM (on)
@@ -20,9 +20,10 @@ import GHCJS.Marshal.Pure
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
 
-newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
-newWebSocket _ url onMessage onClose = do
+newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket _ url onMessage onOpen onClose = do
   ws <- GD.newWebSocket url (Just [] :: Maybe [String])
+  _ <- on ws open $ liftIO onOpen
   GD.setBinaryType ws "arraybuffer"
   _ <- on ws message $ do
     e <- ask
