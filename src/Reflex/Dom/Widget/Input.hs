@@ -185,29 +185,30 @@ data DropdownConfig t k
                     , _dropdownConfig_attributes :: Dynamic t (Map String String)
                     }
 
-instance (Reflex t, Ord k, Show k, Read k) => Default (DropdownConfig t k) where
-  def = DropdownConfig { _dropdownConfig_attributes = constDyn mempty
+instance (Reflex t, Ord k) => Default (DropdownConfig t k) where
+  def = DropdownConfig { _dropdownConfig_setValue = never
+                       , _dropdownConfig_attributes = constDyn mempty
                        }
 
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
 --TODO: Get rid of Show k and Read k by indexing the possible values ourselves
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdown :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => (k,String) -> Map k String -> DropdownConfig t k -> m (Dropdown t k)
+dropdown :: forall k t m. (MonadWidget t m, Ord k) => (k,String) -> Map k String -> DropdownConfig t k -> m (Dropdown t k)
 dropdown (k0,s0) initOptions (DropdownConfig setK attrs) = do
   rec selectionD <- holdDyn ((k0,s0),initOptions) (leftmost [inputSetK, setK])
-      optionsWithDefault <- mapDyn (\((k,s),m) -> Map.insert k (True,s) (Map.map ((,) False) m)) selectionD
+      optionsWithDefault <- mapDyn (\((k,s),m) -> Map.fromAscList . zip [0 :: Integer ..] . Map.toAscList . Map.insert k (True,s) . Map.map ((,) False) $ m) selectionD
       (eRaw, _) <- elDynAttr' "select" attrs $ do
-        listWithKey optionsWithDefault $ \k p -> do
-          (selected, v) <- splitDyn p
-          attrD <- forDyn selected $ \s -> ("value" =: show k <> if s then "selected" =: "selected" else mempty)
-          elDynAttr "option" attrD $ dynText v
+        listWithKey optionsWithDefault $ \n p -> do
+          labelD <- forDyn p $ \(_,(_,v)) -> v
+          attrD <- forDyn p $ \(_,(s,_)) -> ("value" =: show n <> if s then "selected" =: "selected" else mempty)
+          elDynAttr "option" attrD $ dynText labelD
       let e = castToHTMLSelectElement $ _el_element eRaw
-      eInputKey <- fmap (fmapMaybe id) . wrapDomEvent e elementOnchange $ do
-        kStr <- liftIO $ htmlSelectElementGetValue e
-        return $ readMay kStr
-      let inputSetK = fmapMaybe id $ -- this fmapMaybe id really shouldn't be removing anything
-                         attachWith (\(_,m) k -> do s <- Map.lookup k m; return ((k,s),m)) (current selectionD) eInputKey
+      eInputIndex <- fmap (fmapMaybe id) . wrapDomEvent e elementOnchange $ do
+        nStr <- liftIO $ htmlSelectElementGetValue e
+        return $ readMay nStr
+      let eInputKey = fmapMaybe id $ attachWith (\m n -> do (k,_) <- Map.lookup n m; return k) (current optionsWithDefault) eInputIndex
+          inputSetK = fmapMaybe id $ attachWith (\(_,m) k -> do s <- Map.lookup k m; return ((k,s),m)) (current selectionD) eInputKey
       dValue <- mapDyn (fst . fst) selectionD
   return $ Dropdown dValue eInputKey
 
