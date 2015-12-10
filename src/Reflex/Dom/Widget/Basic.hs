@@ -330,6 +330,15 @@ deleteBetweenInclusive s e = do
       _ <- nodeRemoveChild currentParent $ Just e
       return ()
 
+nodeClear :: IsNode self => self -> IO ()
+nodeClear n = do
+  mfc <- nodeGetFirstChild n
+  case mfc of
+    Nothing -> return ()
+    Just fc -> do
+      nodeRemoveChild n $ Just fc
+      nodeClear n
+
 --------------------------------------------------------------------------------
 -- Adapters
 --------------------------------------------------------------------------------
