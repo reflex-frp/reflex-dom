@@ -26,7 +26,6 @@ import Data.Maybe
 import Safe
 import Data.Dependent.Sum (DSum (..))
 
-
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t String
                , _textInput_input :: Event t String
@@ -214,20 +213,19 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue (attachDynWith readKey options eChange)
 
-
 data ButtonGroup t a
-   = ButtonGroup { _buttonGroup_value    :: Dynamic t (Maybe a)
-                 , _buttonGroup_change   :: Event  t (Maybe a)
-                 , _buttonGroup_element  :: El t
-                 , _buttonGroup_children :: Dynamic t (Map.Map Int (El t))
+   = ButtonGroup { _buttonGroup_value :: Dynamic t (Maybe a)
+                 , _buttonGroup_change :: Event t (Maybe a)
+                 , _buttonGroup_element :: El t
+                 , _buttonGroup_children :: Dynamic t (Map Int (El t))
                  }
 
 data ButtonGroupConfig t a
-   = ButtonGroupConfig { _buttonGroupConfig_parentType   :: String
-                       , _buttonGroupConfig_parentTag    :: String
+   = ButtonGroupConfig { _buttonGroupConfig_parentType :: String
+                       , _buttonGroupConfig_parentTag :: String
                        , _buttonGroupConfig_initialValue :: Maybe a
-                       , _buttonGroupConfig_setValue     :: Event t (Maybe a)
-                       , _buttonGroupConfig_attributes   :: Dynamic t (Map String String)
+                       , _buttonGroupConfig_setValue :: Event t (Maybe a)
+                       , _buttonGroupConfig_attributes :: Dynamic t (Map String String)
                        }
 
 instance Reflex t => Default (ButtonGroupConfig t a) where
@@ -238,11 +236,7 @@ instance Reflex t => Default (ButtonGroupConfig t a) where
                           , _buttonGroupConfig_attributes   = constDyn mempty
                           }
 
-buttonGroup :: (MonadWidget t m, Eq a, Show a)
-            => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t))
-            -> Dynamic t (Map.Map Int a)
-            -> ButtonGroupConfig t a
-            -> m (ButtonGroup t a)
+buttonGroup :: (MonadWidget t m, Eq a, Show a) => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map Int a) -> ButtonGroupConfig t a -> m (ButtonGroup t a)
 buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
   dAtts' <- mapDyn (Map.insert "type" pType) dAtts
   (parent, (dynV, internV, child)) <- elDynAttr' pTag dAtts' $ mdo
@@ -264,15 +258,11 @@ buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
                       , _buttonGroup_children = child
                       })
  
-revLookup :: Eq a => Map.Map Int a -> Maybe a -> Maybe Int
+revLookup :: Eq a => Map Int a -> Maybe a -> Maybe Int
 revLookup _ Nothing = Nothing
 revLookup m (Just v) = listToMaybe . Map.keys $ Map.filter (== v) m
 
-selectViewListWithKey_' :: forall t m a v.(MonadWidget t m)
-                        => Dynamic t (Maybe Int)
-                        -> Dynamic t (Map.Map (Maybe Int) v)
-                        -> (Maybe Int -> Dynamic t v -> Dynamic t Bool -> m (Event t a, El t))
-                        -> m (Event t (Maybe Int), Dynamic t (Map.Map Int (El t)))
+selectViewListWithKey_' :: forall t m a v.(MonadWidget t m) => Dynamic t (Maybe Int) -> Dynamic t (Map (Maybe Int) v) -> (Maybe Int -> Dynamic t v -> Dynamic t Bool -> m (Event t a, El t)) -> m (Event t (Maybe Int), Dynamic t (Map Int (El t)))
 selectViewListWithKey_' selection vals mkChild = do
   let selectionDemux = demux selection
   selectChildAndEl <- listWithKey vals $ \k v -> do
@@ -286,27 +276,18 @@ selectViewListWithKey_' selection vals mkChild = do
   selEvents <- liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
   return (selEvents, els)
 
-
-radioButtons :: (MonadWidget t m, Eq a, Show a) 
-             => Dynamic t String
-             -> Dynamic t [(a, String)]
-             -> ButtonGroupConfig t a
-             -> m (ButtonGroup t a)
+radioButtons :: (MonadWidget t m, Eq a, Show a) => Dynamic t String -> Dynamic t [(a, String)] -> ButtonGroupConfig t a -> m (ButtonGroup t a)
 radioButtons dynName dynElems bgConfig0 = do
-
   btns <- forDyn dynElems $ \choiceElems ->
     Map.fromList $ zip [1..] (Prelude.map fst choiceElems)
-
   buttonGroup handleOne btns bgConfig0 
     {_buttonGroupConfig_parentTag = parentTag}
-
   where
     inpPTag   = _buttonGroupConfig_parentTag bgConfig0
     parentTag = if Prelude.null inpPTag then "table" else inpPTag
     handleOne _ dynV dynChecked = do
       (row, clicks) <- el' "tr" $ do
-        txt <- combineDyn (\v m -> fromMaybe "" $ Prelude.lookup v m)
-                          dynV dynElems
+        txt <- combineDyn (\v m -> fromMaybe "" $ Prelude.lookup v m) dynV dynElems
         let aux nm chk = "type" =: "radio" <> "name" =: nm 
                       <> bool mempty ("checked" =: "checked") chk
         btnAttrs <- combineDyn aux dynName dynChecked
@@ -316,7 +297,6 @@ radioButtons dynName dynElems bgConfig0 = do
         performEvent ((\b -> liftIO (htmlInputElementSetChecked e b)) <$> updated dynChecked)
         return (domEvent Click b)
       return (clicks, row)
-
 
 liftM concat $ mapM makeLenses
   [ ''TextAreaConfig
@@ -330,8 +310,6 @@ liftM concat $ mapM makeLenses
   , ''ButtonGroup
   , ''ButtonGroupConfig
   ]
-
-
 
 instance HasAttributes (TextAreaConfig t) where
   type Attrs (TextAreaConfig t) = Dynamic t (Map String String)
