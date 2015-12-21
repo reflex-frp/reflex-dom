@@ -229,11 +229,11 @@ data ButtonGroupConfig t a
                        }
 
 instance Reflex t => Default (ButtonGroupConfig t a) where
-  def = ButtonGroupConfig { _buttonGroupConfig_parentType   = ""
-                          , _buttonGroupConfig_parentTag    = "div"
+  def = ButtonGroupConfig { _buttonGroupConfig_parentType = ""
+                          , _buttonGroupConfig_parentTag = "div"
                           , _buttonGroupConfig_initialValue = Nothing
-                          , _buttonGroupConfig_setValue     = never
-                          , _buttonGroupConfig_attributes   = constDyn mempty
+                          , _buttonGroupConfig_setValue = never
+                          , _buttonGroupConfig_attributes = constDyn mempty
                           }
 
 buttonGroup :: (MonadWidget t m, Eq a) => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map Int a) -> ButtonGroupConfig t a -> m (ButtonGroup t a)
@@ -252,9 +252,9 @@ buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
     (clickSelEvts, children) <- selectViewListWithKey_' dynK dynBtns' drawBtn
     dynSelV <- combineDyn (\k m -> k >>= flip Map.lookup m) dynK dynBtns
     return (dynSelV, internVal, children)
-  return (ButtonGroup { _buttonGroup_value    = dynV
-                      , _buttonGroup_change   = internV
-                      , _buttonGroup_element  = parent
+  return (ButtonGroup { _buttonGroup_value = dynV
+                      , _buttonGroup_change = internV
+                      , _buttonGroup_element = parent
                       , _buttonGroup_children = child
                       })
  
