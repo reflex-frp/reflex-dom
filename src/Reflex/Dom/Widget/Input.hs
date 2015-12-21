@@ -217,7 +217,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
 
 data ButtonGroup t a
    = ButtonGroup { _buttonGroup_value    :: Dynamic t (Maybe a)
-                 , _buttonGroup_select   :: Event  t (Maybe a)
+                 , _buttonGroup_change   :: Event  t (Maybe a)
                  , _buttonGroup_element  :: El t
                  , _buttonGroup_children :: Dynamic t (Map.Map Int (El t))
                  }
