@@ -236,7 +236,7 @@ instance Reflex t => Default (ButtonGroupConfig t a) where
                           , _buttonGroupConfig_attributes   = constDyn mempty
                           }
 
-buttonGroup :: (MonadWidget t m, Eq a, Show a) => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map Int a) -> ButtonGroupConfig t a -> m (ButtonGroup t a)
+buttonGroup :: (MonadWidget t m, Eq a) => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map Int a) -> ButtonGroupConfig t a -> m (ButtonGroup t a)
 buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
   dAtts' <- mapDyn (Map.insert "type" pType) dAtts
   (parent, (dynV, internV, child)) <- elDynAttr' pTag dAtts' $ mdo
@@ -253,7 +253,7 @@ buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
     dynSelV <- combineDyn (\k m -> k >>= flip Map.lookup m) dynK dynBtns
     return (dynSelV, internVal, children)
   return (ButtonGroup { _buttonGroup_value    = dynV
-                      , _buttonGroup_select   = internV
+                      , _buttonGroup_change   = internV
                       , _buttonGroup_element  = parent
                       , _buttonGroup_children = child
                       })
@@ -276,7 +276,7 @@ selectViewListWithKey_' selection vals mkChild = do
   selEvents <- liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
   return (selEvents, els)
 
-radioButtons :: (MonadWidget t m, Eq a, Show a) => Dynamic t String -> Dynamic t [(a, String)] -> ButtonGroupConfig t a -> m (ButtonGroup t a)
+radioButtons :: (MonadWidget t m, Eq a) => Dynamic t String -> Dynamic t [(a, String)] -> ButtonGroupConfig t a -> m (ButtonGroup t a)
 radioButtons dynName dynElems bgConfig0 = do
   btns <- forDyn dynElems $ \choiceElems ->
     Map.fromList $ zip [1..] (Prelude.map fst choiceElems)
