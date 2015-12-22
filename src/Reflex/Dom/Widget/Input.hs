@@ -213,89 +213,64 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue (attachDynWith readKey options eChange)
 
-data ButtonGroup t a
+data ButtonGroup t k a
    = ButtonGroup { _buttonGroup_value :: Dynamic t (Maybe a)
                  , _buttonGroup_change :: Event t (Maybe a)
-                 , _buttonGroup_element :: El t
-                 , _buttonGroup_children :: Dynamic t (Map Int (El t))
+                 , _buttonGroup_elements :: Dynamic t (Map k (El t))
                  }
 
-data ButtonGroupConfig t a
-   = ButtonGroupConfig { _buttonGroupConfig_parentType :: String
-                       , _buttonGroupConfig_parentTag :: String
-                       , _buttonGroupConfig_initialValue :: Maybe a
+data ButtonGroupConfig t k a
+   = ButtonGroupConfig { _buttonGroupConfig_initialValue :: Maybe a
                        , _buttonGroupConfig_setValue :: Event t (Maybe a)
                        , _buttonGroupConfig_attributes :: Dynamic t (Map String String)
                        }
 
-instance Reflex t => Default (ButtonGroupConfig t a) where
-  def = ButtonGroupConfig { _buttonGroupConfig_parentType = ""
-                          , _buttonGroupConfig_parentTag = "div"
-                          , _buttonGroupConfig_initialValue = Nothing
+instance Reflex t => Default (ButtonGroupConfig t k a) where
+  def = ButtonGroupConfig { _buttonGroupConfig_initialValue = Nothing
                           , _buttonGroupConfig_setValue = never
                           , _buttonGroupConfig_attributes = constDyn mempty
                           }
 
-buttonGroup :: (MonadWidget t m, Eq a) => (Maybe Int -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map Int a) -> ButtonGroupConfig t a -> m (ButtonGroup t a)
-buttonGroup drawBtn dynBtns (ButtonGroupConfig pType pTag iVal setV dAtts) = do
-  dAtts' <- mapDyn (Map.insert "type" pType) dAtts
-  (parent, (dynV, internV, child)) <- elDynAttr' pTag dAtts' $ mdo
-    pb <- getPostBuild
-    let externSet = attachWith revLookup (current dynBtns) setV
-        initSet   = attachWith revLookup (current dynBtns) (iVal <$ pb)
-        internSet = leftmost [initSet, clickSelEvts]
-        internVal = attachWith (\m k -> k >>= flip Map.lookup m)
-                              (current dynBtns)
-                              internSet
-    dynK     <- holdDyn Nothing $ leftmost [internSet, externSet]
-    dynBtns' <- mapDyn (Map.mapKeys Just) dynBtns
-    (clickSelEvts, children) <- selectViewListWithKey_' dynK dynBtns' drawBtn
-    dynSelV <- combineDyn (\k m -> k >>= flip Map.lookup m) dynK dynBtns
-    return (dynSelV, internVal, children)
-  return (ButtonGroup { _buttonGroup_value = dynV
-                      , _buttonGroup_change = internV
-                      , _buttonGroup_element = parent
-                      , _buttonGroup_children = child
+buttonGroup :: (MonadWidget t m, Ord k, Eq a, Ord a) => (Maybe k -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map k a) -> ButtonGroupConfig t k a -> m (ButtonGroup t k a)
+buttonGroup drawBtn btns (ButtonGroupConfig iVal setV _) = mdo
+  pb <- getPostBuild
+  reverseIndex <- forDyn btns $ Map.fromList . fmap (\(a,b) -> (b,a)) . Map.toList
+  let lookup' :: Ord k => Map k a -> Maybe k -> Maybe a
+      lookup' = (=<<) . (flip Map.lookup)
+      externSet = attachWith lookup' (current reverseIndex) setV
+      initSet   = attachWith lookup' (current reverseIndex) (iVal <$ pb)
+      internSet = leftmost [initSet, fmap fst clickSelEvts]
+      internVal = attachWith lookup' (current btns) internSet
+      dropNothings = mapKeys fromJust . filterWithKey (const . isJust)
+  k     <- holdDyn Nothing $ leftmost [internSet, externSet]
+  btns' <- mapDyn (Map.mapKeys Just) btns
+  (clickSelEvts, children) <- selectViewListWithKey' k btns' drawBtn
+  nonNothingChildren <- mapDyn dropNothings children
+  selV <- combineDyn (\k' m -> k' >>= flip Map.lookup m) k btns
+  return (ButtonGroup { _buttonGroup_value = selV
+                      , _buttonGroup_change = internVal
+                      , _buttonGroup_elements = nonNothingChildren
                       })
  
-revLookup :: Eq a => Map Int a -> Maybe a -> Maybe Int
-revLookup _ Nothing = Nothing
-revLookup m (Just v) = listToMaybe . Map.keys $ Map.filter (== v) m
-
-selectViewListWithKey_' :: forall t m a v.(MonadWidget t m) => Dynamic t (Maybe Int) -> Dynamic t (Map (Maybe Int) v) -> (Maybe Int -> Dynamic t v -> Dynamic t Bool -> m (Event t a, El t)) -> m (Event t (Maybe Int), Dynamic t (Map Int (El t)))
-selectViewListWithKey_' selection vals mkChild = do
-  let selectionDemux = demux selection
-  selectChildAndEl <- listWithKey vals $ \k v -> do
-    selected <- getDemuxed selectionDemux k
-    (selectSelf, selfEl) <- mkChild k v selected
-    return $ (fmap (const k) selectSelf, selfEl)
-  selectChild <- mapDyn (Map.map fst) selectChildAndEl
-  els <- mapDyn (Map.mapKeys fromJust 
-                . Map.mapMaybeWithKey (\k v -> maybe Nothing (const (Just v)) k)
-                . Map.map snd) selectChildAndEl
-  selEvents <- liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
-  return (selEvents, els)
-
-radioButtons :: (MonadWidget t m, Eq a) => Dynamic t String -> Dynamic t [(a, String)] -> ButtonGroupConfig t a -> m (ButtonGroup t a)
-radioButtons dynName dynElems bgConfig0 = do
-  btns <- forDyn dynElems $ \choiceElems ->
-    Map.fromList $ zip [1..] (Prelude.map fst choiceElems)
-  buttonGroup handleOne btns bgConfig0 
-    {_buttonGroupConfig_parentTag = parentTag}
+radioButtons :: (MonadWidget t m, Eq a, Ord a) 
+             => String -- ^ The 'name' attribute for all buttons in this group. NOTE: For the page to properly render which input is selected, this  must be unique for each @radioButtons@ widget, or the @radioButton@'s must be under different 'form' tags
+             -> Dynamic t [(a, String)] -> ButtonGroupConfig t Int a -> m (ButtonGroup t Int a)
+radioButtons name choices cfg = do
+  choices' <- mapDyn Map.fromList choices
+  btns <- forDyn choices $ \choiceElems ->
+    Map.fromList $ zip [1 :: Int ..] (Prelude.map fst choiceElems)
+  buttonGroup (handleOne choices') btns cfg 
   where
-    inpPTag   = _buttonGroupConfig_parentTag bgConfig0
-    parentTag = if Prelude.null inpPTag then "table" else inpPTag
-    handleOne _ dynV dynChecked = do
+    handleOne namedChoices _ v checked = do
       (row, clicks) <- el' "tr" $ do
-        txt <- combineDyn (\v m -> fromMaybe "" $ Prelude.lookup v m) dynV dynElems
-        let aux nm chk = "type" =: "radio" <> "name" =: nm 
-                      <> bool mempty ("checked" =: "checked") chk
-        btnAttrs <- combineDyn aux dynName dynChecked
+        txt <- combineDyn (\v' m -> fromMaybe "" $ Map.lookup v' m) v namedChoices
+        btnAttrs <- forDyn checked $ \b ->
+          "type" =: "radio" <> "name" =: name <> bool mempty ("checked" =: "true") b
         (b,_) <- el "td" $ elDynAttr' "input" btnAttrs $ return ()
-        _     <- el "td" $ dynText txt
-        let e = castToHTMLInputElement (_el_element b)
-        performEvent ((\b -> liftIO (htmlInputElementSetChecked e b)) <$> updated dynChecked)
-        return (domEvent Click b)
+        el "td" $ dynText txt
+        let e = castToHTMLInputElement $ _el_element b
+        _ <- performEvent $ (liftIO . htmlInputElementSetChecked e) <$> updated checked
+        return $ domEvent Click b
       return (clicks, row)
 
 liftM concat $ mapM makeLenses
@@ -327,8 +302,8 @@ instance HasAttributes (CheckboxConfig t) where
   type Attrs (CheckboxConfig t) = Dynamic t (Map String String)
   attributes = checkboxConfig_attributes
 
-instance HasAttributes (ButtonGroupConfig t a) where
-  type Attrs (ButtonGroupConfig t a) = Dynamic t (Map String String)
+instance HasAttributes (ButtonGroupConfig t k a) where
+  type Attrs (ButtonGroupConfig t k a) = Dynamic t (Map String String)
   attributes = buttonGroupConfig_attributes
 
 class HasSetValue a where
@@ -351,8 +326,8 @@ instance HasSetValue (CheckboxConfig t) where
   type SetValue (CheckboxConfig t) = Event t Bool
   setValue = checkboxConfig_setValue
 
-instance HasSetValue (ButtonGroupConfig t a) where
-  type SetValue (ButtonGroupConfig t a) = Event t (Maybe a)
+instance HasSetValue (ButtonGroupConfig t k a) where
+  type SetValue (ButtonGroupConfig t k a) = Event t (Maybe a)
   setValue = buttonGroupConfig_setValue
 
 class HasValue a where
@@ -379,8 +354,8 @@ instance HasValue (Checkbox t) where
   type Value (Checkbox t) = Dynamic t Bool
   value = _checkbox_value
 
-instance HasValue (ButtonGroup t a) where
-  type Value (ButtonGroup t a) = Dynamic t (Maybe a)
+instance HasValue (ButtonGroup t k a) where
+  type Value (ButtonGroup t k a) = Dynamic t (Maybe a)
   value = _buttonGroup_value
 
 {-

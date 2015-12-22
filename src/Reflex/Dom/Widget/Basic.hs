@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE TupleSections, ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -276,19 +276,32 @@ listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey'
 listViewWithKey' :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
 listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
 
+-- | Create a dynamically-changing set of widgets, one of which is selected at any time, returning the selection and the effects generated during the widgets' creation
+selectViewListWithKey' :: forall t m k v a b. (MonadWidget t m, Ord k)
+  => Dynamic t k          -- ^ Current selection key
+  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
+  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a, b)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected. This widget returns an 'Event t a' indicating its taking of the selection, and an arbitrary payload 'b'
+  -> m (Event t (k, a), Dynamic t (Map k b))        -- ^ Event that fires when any child's return Event fires, containing key of an arbitrary firing widget; and the arbitrary payloads built by the children
+selectViewListWithKey' selection vals mkChild = do
+  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
+  selectChildAndPayload <- listWithKey vals $ \k v -> do
+    selected <- getDemuxed selectionDemux k
+    (selectSelf, payload) <- mkChild k v selected
+    return $ (fmap ((,) k) selectSelf, payload)
+  selectChild <- mapDyn (Map.map fst) selectChildAndPayload
+  selectPayload <- mapDyn (Map.map snd) selectChildAndPayload
+  selectEvents <- liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+  return (selectEvents, selectPayload)
+
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
 selectViewListWithKey :: forall t m k v a. (MonadWidget t m, Ord k)
   => Dynamic t k          -- ^ Current selection key
   -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
   -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
   -> m (Event t (k, a))        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
-selectViewListWithKey selection vals mkChild = do
-  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
-  selectChild <- listWithKey vals $ \k v -> do
-    selected <- getDemuxed selectionDemux k
-    selectSelf <- mkChild k v selected
-    return $ fmap ((,) k) selectSelf
-  liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+selectViewListWithKey selection vals mkChild =
+  let mkChild' k v b = fmap (,()) $ mkChild k v b
+  in fst <$> selectViewListWithKey' selection vals mkChild'
 
 selectViewListWithKey_ :: forall t m k v a. (MonadWidget t m, Ord k)
   => Dynamic t k          -- ^ Current selection key
