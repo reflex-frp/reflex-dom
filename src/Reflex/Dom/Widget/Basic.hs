@@ -289,9 +289,9 @@ selectViewListWithKey' selection vals mkChild = do
     (selectSelf, payload) <- mkChild k v selected
     return $ (fmap ((,) k) selectSelf, payload)
   selectChild <- mapDyn (Map.map fst) selectChildAndPayload
-  selectPayload <- mapDyn (Map.map snd) selectChildAndPayload
+  childrenPayload <- mapDyn (Map.map snd) selectChildAndPayload
   selectEvents <- liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
-  return (selectEvents, selectPayload)
+  return (selectEvents, childrenPayload)
 
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
 selectViewListWithKey :: forall t m k v a. (MonadWidget t m, Ord k)
