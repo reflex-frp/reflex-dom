@@ -232,25 +232,29 @@ instance Reflex t => Default (ButtonGroupConfig t k a) where
                           }
 
 buttonGroup :: (MonadWidget t m, Ord k, Eq a, Ord a) => (Maybe k -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map k a) -> ButtonGroupConfig t k a -> m (ButtonGroup t k a)
-buttonGroup drawBtn btns (ButtonGroupConfig iVal setV _) = mdo
+buttonGroup drawBtn btns (ButtonGroupConfig iVal setV _) = do
   pb <- getPostBuild
   reverseIndex <- forDyn btns $ Map.fromList . fmap (\(a,b) -> (b,a)) . Map.toList
-  let lookup' :: Ord k => Map k a -> Maybe k -> Maybe a
-      lookup' = (=<<) . (flip Map.lookup)
-      externSet = attachWith lookup' (current reverseIndex) setV
-      initSet   = attachWith lookup' (current reverseIndex) (iVal <$ pb)
-      internSet = leftmost [initSet, fmap fst clickSelEvts]
-      internVal = attachWith lookup' (current btns) internSet
-      dropNothings = mapKeys fromJust . filterWithKey (const . isJust)
-  k     <- holdDyn Nothing $ leftmost [internSet, externSet]
-  btns' <- mapDyn (Map.mapKeys Just) btns
-  (clickSelEvts, children) <- selectViewListWithKey' k btns' drawBtn
+  rec (clickSelEvts, children) <- selectViewListWithKey' k btns' drawBtn
+      let externSet = attachWith lookup' (current reverseIndex) setV
+          initSet   = attachWith lookup' (current reverseIndex) (iVal <$ pb)
+          internSet = leftmost [initSet, fmap fst clickSelEvts]
+          internVal = attachWith lookup' (current btns) internSet
+          dropNothings = mapKeys fromJust . filterWithKey (const . isJust)
+      k     <- holdDyn Nothing $ leftmost [internSet, externSet]
+      btns' <- mapDyn (Map.mapKeys Just) btns
+      
   nonNothingChildren <- mapDyn dropNothings children
   selV <- combineDyn (\k' m -> k' >>= flip Map.lookup m) k btns
   return (ButtonGroup { _buttonGroup_value = selV
                       , _buttonGroup_change = internVal
                       , _buttonGroup_elements = nonNothingChildren
                       })
+  where
+    lookup' :: Ord k => Map k a -> Maybe k -> Maybe a
+    lookup' = (=<<) . (flip Map.lookup)
+
+
  
 radioButtons :: (MonadWidget t m, Eq a, Ord a) 
              => String -- ^ The 'name' attribute for all buttons in this group. NOTE: For the page to properly render which input is selected, this  must be unique for each @radioButtons@ widget, or the @radioButton@'s must be under different 'form' tags
