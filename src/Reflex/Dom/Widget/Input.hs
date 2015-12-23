@@ -254,8 +254,6 @@ buttonGroup drawBtn btns (ButtonGroupConfig iVal setV _) = do
     lookup' :: Ord k => Map k a -> Maybe k -> Maybe a
     lookup' = (=<<) . (flip Map.lookup)
 
-
- 
 radioButtons :: (MonadWidget t m, Eq a, Ord a) 
              => String -- ^ The 'name' attribute for all buttons in this group. NOTE: For the page to properly render which input is selected, this  must be unique for each @radioButtons@ widget, or the @radioButton@'s must be under different 'form' tags
              -> Dynamic t [(a, String)] -> ButtonGroupConfig t Int a -> m (ButtonGroup t Int a)
