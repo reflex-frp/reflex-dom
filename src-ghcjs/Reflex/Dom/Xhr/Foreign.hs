@@ -7,9 +7,7 @@ import GHCJS.Foreign
 import GHCJS.Marshal
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.Word
 import GHCJS.DOM.Types hiding (Text)
-import Control.Applicative ((<$>))
 import GHCJS.DOM.EventM
 import GHCJS.DOM
 import Data.Function
@@ -62,6 +60,34 @@ foreign import javascript unsafe "window[\"XMLHttpRequest\"]" gTypeXMLHttpReques
 gTypeXMLHttpRequest :: GType
 gTypeXMLHttpRequest = GType gTypeXMLHttpRequest'
 
+newtype XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSRef XhrResponseBody }
+
+instance Eq XhrResponseBody where
+  (==) = eqRef `on` unXhrResponseBody
+
+instance ToJSRef XhrResponseBody where
+  toJSRef = return . unXhrResponseBody
+  {-# INLINE toJSRef #-}
+
+instance FromJSRef XhrResponseBody where
+  fromJSRef = return . fmap XhrResponseBody . maybeJSNull
+  {-# INLINE fromJSRef #-}
+
+class GObjectClass o => IsXhrResponseBody o
+toXhrResponseBody :: IsXhrResponseBody o => o -> XhrResponseBody
+toXhrResponseBody = unsafeCastGObject . toGObject
+
+instance IsXhrResponseBody XhrResponseBody
+instance GObjectClass XhrResponseBody where
+  toGObject = GObject . castRef . unXhrResponseBody
+  unsafeCastGObject = XhrResponseBody . castRef . unGObject
+
+castToXhrResponseBody :: GObjectClass obj => obj -> XhrResponseBody
+castToXhrResponseBody = castTo gTypeXhrResponseBody "XhrResponseBody"
+
+foreign import javascript unsafe "window[\"XhrResponseBody\"]" gTypeXhrResponseBody' :: JSRef GType
+gTypeXhrResponseBody :: GType
+gTypeXhrResponseBody = GType gTypeXhrResponseBody'
 
 newtype XMLHttpRequestUpload = XMLHttpRequestUpload { unXMLHttpRequestUpload :: JSRef XMLHttpRequestUpload }
 
@@ -311,6 +337,15 @@ xmlHttpRequestGetUpload self
   = fmap XMLHttpRequestUpload . maybeJSNull <$>
       (ghcjs_dom_xml_http_request_get_upload
          (unXMLHttpRequest (toXMLHttpRequest self)))
+
+foreign import javascript unsafe "$1[\"response\"]"
+        ghcjs_dom_xml_http_request_get_response ::
+        JSRef XMLHttpRequest -> IO (JSRef XhrResponseBody)
+
+xmlHttpRequestGetResponse :: IsXMLHttpRequest self => self -> IO (Maybe XhrResponseBody)
+xmlHttpRequestGetResponse self = fmap XhrResponseBody . maybeJSNull <$> 
+  (ghcjs_dom_xml_http_request_get_response
+     (unXMLHttpRequest (toXMLHttpRequest self)))
 
 foreign import javascript unsafe "$1[\"responseText\"]"
         ghcjs_dom_xml_http_request_get_response_text ::
