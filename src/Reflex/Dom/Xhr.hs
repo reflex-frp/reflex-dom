@@ -50,7 +50,7 @@ data XhrRequestConfig
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
                       , _xhrRequestConfig_user :: Maybe String
                       , _xhrRequestConfig_password :: Maybe String
-                      , _xhrRequestConfig_responseType :: Maybe String
+                      , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: Maybe String
                       }
    deriving (Show, Read, Eq, Ord, Typeable)
@@ -62,6 +62,21 @@ data XhrResponse
                  , _xhrResponse_responseText :: Maybe Text
                  }
    deriving (Eq, Typeable)
+
+data XhrResponseType = XhrResponseType_ArrayBuffer
+                     | XhrResponseType_Blob
+                     | XhrResponseType_Document
+                     | XhrResponseType_JSON
+                     | XhrResponseType_Text
+   deriving (Show, Read, Eq, Ord, Typeable)
+
+responseTypeString :: XhrResponseType -> String
+responseTypeString rt = case rt of
+  XhrResponseType_ArrayBuffer -> "arraybuffer"
+  XhrResponseType_Blob -> "blob"
+  XhrResponseType_Document -> "document"
+  XhrResponseType_JSON -> "json"
+  XhrResponseType_Text -> "text"
 
 {-# DEPRECATED _xhrResponse_body "Use _xhrResponse_response or _xhrResponse_responseText instead." #-}
 _xhrResponse_body :: XhrResponse -> Maybe Text
@@ -90,7 +105,7 @@ newXMLHttpRequest req cb = do
   liftIO $ do
     xhr <- xmlHttpRequestNew wv
     let c = _xhrRequest_config req
-        responseType = _xhrRequestConfig_responseType c
+        rt = _xhrRequestConfig_responseType c
     xmlHttpRequestOpen
       xhr
       (_xhrRequest_method req)
@@ -99,14 +114,14 @@ newXMLHttpRequest req cb = do
       (fromMaybe "" $ _xhrRequestConfig_user c)
       (fromMaybe "" $ _xhrRequestConfig_password c)
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
-    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType) (_xhrRequestConfig_responseType c)
+    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType . responseTypeString) rt
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr
       statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
       if readyState == 4
           then do
-            t <- if responseType == Just "text" || responseType == Nothing
+            t <- if rt == Just XhrResponseType_Text || rt == Nothing
                    then liftIO $ xmlHttpRequestGetResponseText xhr
                    else  return Nothing
             r <- liftIO $ xmlHttpRequestGetResponse xhr
