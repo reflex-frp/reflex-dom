@@ -68,6 +68,7 @@ data XhrResponseType = XhrResponseType_ArrayBuffer
                      | XhrResponseType_Document
                      | XhrResponseType_JSON
                      | XhrResponseType_Text
+                     | XhrResponseType_Other String
    deriving (Show, Read, Eq, Ord, Typeable)
 
 responseTypeString :: XhrResponseType -> String
@@ -77,6 +78,7 @@ responseTypeString rt = case rt of
   XhrResponseType_Document -> "document"
   XhrResponseType_JSON -> "json"
   XhrResponseType_Text -> "text"
+  XhrResponseType_Other r -> r
 
 {-# DEPRECATED _xhrResponse_body "Use _xhrResponse_response or _xhrResponse_responseText instead." #-}
 _xhrResponse_body :: XhrResponse -> Maybe Text
