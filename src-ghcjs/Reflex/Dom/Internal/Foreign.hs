@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, CPP #-}
-
-module Reflex.Dom.Internal.Foreign ( runWebGUI
-                                   , module Reflex.Dom.Internal.Foreign
+module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
+                                   , runWebGUI
+                                   , quitWebView
                                    ) where
 
 import Control.Monad
@@ -12,6 +12,9 @@ import Data.Function
 import GHCJS.Foreign
 
 #define JS(name, js, type) foreign import javascript unsafe js name :: type
+
+quitWebView :: WebView -> IO ()
+quitWebView = error "quitWebView: unimplemented in GHCJS"
 
 instance Eq Node where
   (==) = eqRef `on` unNode
