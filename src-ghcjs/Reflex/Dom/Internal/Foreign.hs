@@ -1,13 +1,15 @@
 {-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI #-}
-
-module Reflex.Dom.Internal.Foreign ( runWebGUI
-                                   , module Reflex.Dom.Internal.Foreign
+module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
+                                   , runWebGUI
                                    ) where
 
 import Control.Monad
 import GHCJS.DOM
 import GHCJS.DOM.Types
 import GHCJS.Types
+
+quitWebView :: WebView -> IO ()
+quitWebView = error "quitWebView: unimplemented in GHCJS"
 
 foreign import javascript unsafe "location['host']" getLocationHost_ :: IO JSString
 

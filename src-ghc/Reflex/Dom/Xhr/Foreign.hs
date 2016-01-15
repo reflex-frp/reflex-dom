@@ -1,10 +1,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module Reflex.Dom.Xhr.Foreign where
 
-import Control.Lens.Indexed
 import qualified Data.Text as T
 import Data.Text (Text)
-import Data.Typeable (Typeable)
 import System.Glib.FFI
 import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
@@ -12,6 +10,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
+import Reflex.Dom.Xhr.ResponseType
 
 import Reflex.Dom.Internal.Foreign
 
@@ -20,6 +19,8 @@ data XMLHttpRequest
                     , xhrContext :: JSContextRef
                     }
    deriving (Eq, Ord)
+
+data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSValueRef }
 
 responseTextToText :: Maybe String -> Maybe Text
 responseTextToText = fmap T.pack
@@ -30,21 +31,13 @@ statusTextToText = T.pack
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
-data XMLHttpRequestResponseType = XMLHttpRequestResponseType
-                                | XMLHttpRequestResponseTypeArraybuffer
-                                | XMLHttpRequestResponseTypeBlob
-                                | XMLHttpRequestResponseTypeDocument
-                                | XMLHttpRequestResponseTypeJson
-                                | XMLHttpRequestResponseTypeText
-                                deriving (Show, Read, Eq, Ord, Typeable)
-
-toResponseType :: XMLHttpRequestResponseType -> String
-toResponseType XMLHttpRequestResponseType = ""
-toResponseType XMLHttpRequestResponseTypeArraybuffer = "arraybuffer"
-toResponseType XMLHttpRequestResponseTypeBlob = "blob"
-toResponseType XMLHttpRequestResponseTypeDocument = "document"
-toResponseType XMLHttpRequestResponseTypeJson = "json"
-toResponseType XMLHttpRequestResponseTypeText = "text"
+toResponseType :: XhrResponseType -> String
+toResponseType XhrResponseType_Default = ""
+toResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
+toResponseType XhrResponseType_Blob = "blob"
+toResponseType XhrResponseType_Document = "document"
+toResponseType XhrResponseType_JSON = "json"
+toResponseType XhrResponseType_Text = "text"
 
 xmlHttpRequestNew :: WebView -> IO XMLHttpRequest
 xmlHttpRequestNew wv = do
@@ -87,6 +80,16 @@ xmlHttpRequestGetReadyState xhr = do
   rs <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
   d <- jsvaluetonumber c rs nullPtr
   return $ truncate d
+
+xmlHttpRequestGetResponse :: XMLHttpRequest -> IO (Maybe XhrResponseBody)
+xmlHttpRequestGetResponse xhr = do
+  let c = xhrContext xhr
+  script <- jsstringcreatewithutf8cstring "this.response"
+  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  isNull <- jsvalueisnull c t
+  case isNull of
+       True -> return Nothing
+       False ->  return $ Just $ XhrResponseBody t
 
 xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe String)
 xmlHttpRequestGetResponseText xhr = do

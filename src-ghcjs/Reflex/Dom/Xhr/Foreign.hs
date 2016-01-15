@@ -2,7 +2,7 @@
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
-  , XMLHttpRequestResponseType
+  , XMLHttpRequestResponseType(..)
   , module Reflex.Dom.Xhr.Foreign
 ) where
 
@@ -15,12 +15,16 @@ import GHCJS.DOM.XMLHttpRequest
 import Data.Maybe (fromMaybe)
 import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.EventM (EventM, on)
+import GHCJS.Types
+import Reflex.Dom.Xhr.ResponseType
+
+data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSVal }
 
 prepareWebView :: WebView -> IO ()
 prepareWebView _ = return ()
 
 xmlHttpRequestNew :: a -> IO XMLHttpRequest
-xmlHttpRequestNew _ = newXMLHttpRequest -- XMLHttpRequest <$> ghcjs_dom_xml_http_request_new
+xmlHttpRequestNew _ = newXMLHttpRequest
 
 xmlHttpRequestOpen ::
                    (ToJSString method, ToJSString url, ToJSString user, ToJSString password) =>
@@ -105,8 +109,13 @@ xmlHttpRequestGetResponseXML = getResponseXML
 xmlHttpRequestSetResponseType :: XMLHttpRequest -> XMLHttpRequestResponseType -> IO ()
 xmlHttpRequestSetResponseType = setResponseType
 
-toResponseType :: a -> a
-toResponseType = id
+toResponseType :: XhrResponseType -> XMLHttpRequestResponseType
+toResponseType XhrResponseType_Default = XMLHttpRequestResponseType
+toResponseType XhrResponseType_ArrayBuffer = XMLHttpRequestResponseTypeArraybuffer
+toResponseType XhrResponseType_Blob = XMLHttpRequestResponseTypeBlob
+toResponseType XhrResponseType_Document = XMLHttpRequestResponseTypeDocument
+toResponseType XhrResponseType_JSON = XMLHttpRequestResponseTypeJson
+toResponseType XhrResponseType_Text = XMLHttpRequestResponseTypeText
 
 xmlHttpRequestGetResponseType :: XMLHttpRequest -> IO XMLHttpRequestResponseType
 xmlHttpRequestGetResponseType = getResponseType
@@ -119,6 +128,11 @@ xmlHttpRequestGetStatusText = getStatusText
 
 xmlHttpRequestGetResponseURL :: FromJSString result => XMLHttpRequest -> IO result
 xmlHttpRequestGetResponseURL = getResponseURL
+
+xmlHttpRequestGetResponse :: XMLHttpRequest -> IO (Maybe XhrResponseBody)
+xmlHttpRequestGetResponse xhr = do
+  mr <- getResponse xhr
+  return $ fmap (\(GObject r) -> XhrResponseBody r) mr
 
 statusTextToText :: Text -> Text
 statusTextToText = id

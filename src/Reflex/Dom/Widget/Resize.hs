@@ -8,7 +8,7 @@ import Reflex.Dom.Widget.Basic
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Monoid
-import GHCJS.DOM.Element
+import GHCJS.DOM.Element hiding (reset)
 import GHCJS.DOM.EventM (on)
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
