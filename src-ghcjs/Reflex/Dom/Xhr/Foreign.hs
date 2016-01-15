@@ -15,8 +15,11 @@ import GHCJS.DOM.XMLHttpRequest
 import Data.Maybe (fromMaybe)
 import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.EventM (EventM, on)
+import GHCJS.DOM.JSFFI.XMLHttpRequest (XHRError(..))
 import GHCJS.Types
+import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
+import Control.Exception (catch, throwIO)
 
 data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSVal }
 
@@ -31,9 +34,14 @@ xmlHttpRequestOpen ::
                      XMLHttpRequest -> method -> url -> Bool -> user -> password -> IO ()
 xmlHttpRequestOpen = open
 
+convertException :: XHRError -> XhrException
+convertException e = case e of
+  XHRError -> XhrException_Error
+  XHRAborted -> XhrException_Aborted
+
 -- This used to be a non blocking call, but now it uses an interruptible ffi
 xmlHttpRequestSend :: ToJSString payload => XMLHttpRequest -> Maybe payload -> IO ()
-xmlHttpRequestSend self = maybe (send self) (sendString self)
+xmlHttpRequestSend self p = (maybe (send self) (sendString self) p) `catch` (throwIO . convertException)
 
 xmlHttpRequestSetRequestHeader :: (ToJSString header, ToJSString value)
                                => XMLHttpRequest -> header -> value -> IO ()

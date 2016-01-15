@@ -16,6 +16,7 @@ extra-source-files: src-ghc/Reflex/Dom/Internal/Foreign.hs
                     src-ghcjs/Reflex/Dom/Internal/Foreign.hs
                     src-ghcjs/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
+                    src/Reflex/Dom/Xhr/Exception.hs
 
 library
   hs-source-dirs: src
@@ -53,7 +54,8 @@ library
       glib == 0.13.*,
       gtk3 >= 0.13.0 && < 0.15,
       webkitgtk3 == 0.14.*,
-      webkitgtk3-javascriptcore == 0.13.*
+      webkitgtk3-javascriptcore == 0.13.*,
+      raw-strings-qq
     if !os(windows)
       build-depends: unix == 2.7.*
 
@@ -75,6 +77,7 @@ library
     Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType
+    Reflex.Dom.Xhr.Exception
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans

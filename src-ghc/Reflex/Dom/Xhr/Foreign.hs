@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE QuasiQuotes, ForeignFunctionInterface #-}
 module Reflex.Dom.Xhr.Foreign where
 
 import qualified Data.Text as T
@@ -11,8 +11,13 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Reflex.Dom.Xhr.ResponseType
+import Reflex.Dom.Xhr.Exception
+import Control.Concurrent.MVar
+import Control.Exception.Base
 
 import Reflex.Dom.Internal.Foreign
+
+import Text.RawString.QQ
 
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
@@ -110,18 +115,55 @@ xmlHttpRequestGetResponseText xhr = do
 xmlHttpRequestSend :: XMLHttpRequest -> Maybe String -> IO ()
 xmlHttpRequestSend xhr payload = do
   let c = xhrContext xhr
-  (o,s) <- case payload of
-            Nothing -> do
-              o <- toJSObject c [xhrValue xhr]
-              s <- jsstringcreatewithutf8cstring "this[0].send();"
-              return (o,s)
-            Just payload' -> do
-              d <- stringToJSValue c payload'
-              o <- toJSObject c [xhrValue xhr, d]
-              s <- jsstringcreatewithutf8cstring "this[0].send(this[1])"
-              return (o,s)
-  _ <- jsevaluatescript c s o nullPtr 1 nullPtr
-  return ()
+  result <- newEmptyMVar
+  let wrapper' x = wrapper $ \_ _ _ _ _ _ -> putMVar result x >> jsvaluemakeundefined c
+  bracket (wrapper' $ Just XhrException_Aborted) freeHaskellFunPtr $ \a -> do
+    onAbort <- jsobjectmakefunctionwithcallback c nullPtr a
+    bracket (wrapper' $ Just XhrException_Error) freeHaskellFunPtr $ \e -> do
+      onError <- jsobjectmakefunctionwithcallback c nullPtr e
+      bracket (wrapper' Nothing) freeHaskellFunPtr $ \l -> do
+        onLoad <- jsobjectmakefunctionwithcallback c nullPtr l
+        (o,s) <- case payload of
+                  Nothing -> do
+                    d <- jsvaluemakeundefined c
+                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
+                    s <- jsstringcreatewithutf8cstring send
+                    return (o,s)
+                  Just payload' -> do
+                    d <- stringToJSValue c payload'
+                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
+                    s <- jsstringcreatewithutf8cstring send
+                    return (o,s)
+        _ <- jsevaluatescript c s o nullPtr 1 nullPtr
+        takeMVar result >>= mapM_ throwIO
+  where
+    send = [r|
+      (function (xhr, d, onError, onAbort, onLoad) {
+          var clear;
+          var error = function () {
+              clear(); onError();
+          };
+          var abort = function () {
+              clear(); onAbort();
+          };
+          var load = function () {
+              clear(); onLoad();
+          };
+          clear = function () {
+              xhr.removeEventListener('error', error);
+              xhr.removeEventListener('abort', abort);
+              xhr.removeEventListener('load', load);
+          }
+          xhr.addEventListener('error', error);
+          xhr.addEventListener('abort', abort);
+          xhr.addEventListener('load', load);
+          if(d) {
+            xhr.send(d);
+          } else {
+            xhr.send();
+          }
+      })(this[0], this[1], this[2], this[3], this[4])
+    |]
 
 xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> String -> String -> IO ()
 xmlHttpRequestSetRequestHeader xhr header value = do
