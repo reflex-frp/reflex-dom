@@ -108,9 +108,6 @@ xmlHttpRequestGetUpload = getUpload
 xmlHttpRequestGetResponseText :: FromJSString result => XMLHttpRequest -> IO (Maybe result)
 xmlHttpRequestGetResponseText = getResponseText
 
-responseTextToText :: Maybe Text -> Maybe Text
-responseTextToText = id
-
 xmlHttpRequestGetResponseXML :: XMLHttpRequest -> IO (Maybe Document)
 xmlHttpRequestGetResponseXML = getResponseXML
 
@@ -142,5 +139,3 @@ xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
   return $ fmap (\(GObject r) -> XhrResponseBody r) mr
 
-statusTextToText :: Text -> Text
-statusTextToText = id
