@@ -63,7 +63,7 @@ delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
   threadDelay $ ceiling $ dt * 1000000
   cb a
 
--- | Block occurrences of an Event until th given number of seconds elapses without
+-- | Block occurrences of an Event until the given number of seconds elapses without
 --   the Event firing, at which point the last occurrence of the Event will fire.
 debounce :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
 debounce dt e = do
