@@ -26,24 +26,8 @@ data JSWebSocket = JSWebSocket { wsValue :: JSValueRef
                                , wsContext :: JSContextRef
                                }
 
-getLocationHost :: WebView -> IO String
-getLocationHost wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
-  script <- jsstringcreatewithutf8cstring "location.host"
-  lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
-  lh' <- fromJSStringMaybe c lh
-  return $ maybe "" id lh'
-
-getLocationProtocol :: WebView -> IO String
-getLocationProtocol wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
-  script <- jsstringcreatewithutf8cstring "location.protocol"
-  lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
-  lp' <- fromJSStringMaybe c lp
-  return $ maybe "" id lp'
-
-newWebSocket :: WebView -> String -> (ByteString -> IO ()) -> IO () -> IO JSWebSocket
-newWebSocket wv url onMessage onClose = do
+newWebSocket :: WebView -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket wv url onMessage onOpen onClose = do
   c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
   url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring url
   newWSArgs <- toJSObject c [url']
@@ -59,12 +43,16 @@ newWebSocket wv url onMessage onClose = do
       Just m -> onMessage $ encodeUtf8 $ T.pack m
     jsvaluemakeundefined c
   onMessageCb <- jsobjectmakefunctionwithcallback c nullPtr onMessage'
+  onOpen' <- wrapper $ \_ _ _ _ _ _ -> do
+    onOpen
+    jsvaluemakeundefined c
+  onOpenCb <- jsobjectmakefunctionwithcallback c nullPtr onOpen'
   onClose' <- wrapper $ \_ _ _ _ _ _ -> do
     onClose
     jsvaluemakeundefined c
   onCloseCb <- jsobjectmakefunctionwithcallback c nullPtr onClose'
-  o <- toJSObject c [ws, onMessageCb, onCloseCb]
-  addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onclose'] = this[2];"
+  o <- toJSObject c [ws, onMessageCb, onOpenCb, onCloseCb]
+  addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onopen'] = this[2]; this[0]['onclose'] = this[3];"
   _ <- jsevaluatescript c addCbs o nullPtr 1 nullPtr
   return $ JSWebSocket ws c
 

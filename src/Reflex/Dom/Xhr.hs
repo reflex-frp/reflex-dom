@@ -3,6 +3,7 @@
 module Reflex.Dom.Xhr
   ( module Reflex.Dom.Xhr
   , XMLHttpRequest
+  , XhrResponseBody(..)
   , responseTextToText
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
@@ -49,17 +50,43 @@ data XhrRequestConfig
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
                       , _xhrRequestConfig_user :: Maybe String
                       , _xhrRequestConfig_password :: Maybe String
-                      , _xhrRequestConfig_responseType :: Maybe String
+                      , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: Maybe String
                       }
    deriving (Show, Read, Eq, Ord, Typeable)
 
 data XhrResponse
-   = XhrResponse { _xhrResponse_body :: Maybe Text
-                 , _xhrResponse_status :: Word
+   = XhrResponse { _xhrResponse_status :: Word
                  , _xhrResponse_statusText :: Text
+                 , _xhrResponse_response :: Maybe XhrResponseBody
+                 , _xhrResponse_responseText :: Maybe Text
                  }
+   deriving (Eq, Typeable)
+
+data XhrResponseType = XhrResponseType_ArrayBuffer
+                     | XhrResponseType_Blob
+                     | XhrResponseType_Document
+                     | XhrResponseType_JSON
+                     | XhrResponseType_Text
+                     | XhrResponseType_Other String
    deriving (Show, Read, Eq, Ord, Typeable)
+
+responseTypeString :: XhrResponseType -> String
+responseTypeString rt = case rt of
+  XhrResponseType_ArrayBuffer -> "arraybuffer"
+  XhrResponseType_Blob -> "blob"
+  XhrResponseType_Document -> "document"
+  XhrResponseType_JSON -> "json"
+  XhrResponseType_Text -> "text"
+  XhrResponseType_Other r -> r
+
+{-# DEPRECATED _xhrResponse_body "Use _xhrResponse_response or _xhrResponse_responseText instead." #-}
+_xhrResponse_body :: XhrResponse -> Maybe Text
+_xhrResponse_body = _xhrResponse_responseText
+
+{-# DEPRECATED xhrResponse_body "Use xhrResponse_response or xhrResponse_responseText instead." #-}
+xhrResponse_body :: Lens XhrResponse XhrResponse (Maybe Text) (Maybe Text)
+xhrResponse_body = lens _xhrResponse_responseText (\r t -> r { _xhrResponse_responseText = t })
 
 instance Default XhrRequestConfig where
   def = XhrRequestConfig { _xhrRequestConfig_headers = Map.empty
@@ -80,6 +107,7 @@ newXMLHttpRequest req cb = do
   liftIO $ do
     xhr <- xmlHttpRequestNew wv
     let c = _xhrRequest_config req
+        rt = _xhrRequestConfig_responseType c
     xmlHttpRequestOpen
       xhr
       (_xhrRequest_method req)
@@ -88,15 +116,22 @@ newXMLHttpRequest req cb = do
       (fromMaybe "" $ _xhrRequestConfig_user c)
       (fromMaybe "" $ _xhrRequestConfig_password c)
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
-    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType) (_xhrRequestConfig_responseType c)
+    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType . responseTypeString) rt
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr
       statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
       if readyState == 4
           then do
-            r <- liftIO $ xmlHttpRequestGetResponseText xhr
-            _ <- liftIO $ postGui $ cb $ XhrResponse (responseTextToText r) status (statusTextToText statusText)
+            t <- if rt == Just XhrResponseType_Text || rt == Nothing
+                   then liftIO $ xmlHttpRequestGetResponseText xhr
+                   else  return Nothing
+            r <- liftIO $ xmlHttpRequestGetResponse xhr
+            _ <- liftIO $ postGui $ cb $ XhrResponse { _xhrResponse_status = status
+                                                     , _xhrResponse_statusText = statusTextToText statusText
+                                                     , _xhrResponse_response = r
+                                                     , _xhrResponse_responseText = responseTextToText t
+                                                     }
             return ()
           else return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
@@ -143,5 +178,5 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 
 -- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
-decodeXhrResponse = join . fmap decodeText . _xhrResponse_body
+decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
 

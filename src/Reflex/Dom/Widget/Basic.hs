@@ -330,6 +330,15 @@ deleteBetweenInclusive s e = do
       _ <- nodeRemoveChild currentParent $ Just e
       return ()
 
+nodeClear :: IsNode self => self -> IO ()
+nodeClear n = do
+  mfc <- nodeGetFirstChild n
+  case mfc of
+    Nothing -> return ()
+    Just fc -> do
+      nodeRemoveChild n $ Just fc
+      nodeClear n
+
 --------------------------------------------------------------------------------
 -- Adapters
 --------------------------------------------------------------------------------
@@ -796,7 +805,7 @@ link s = linkClass s ""
 
 button :: MonadWidget t m => String -> m (Event t ())
 button s = do
-  (e, _) <- el' "button" $ text s
+  (e, _) <- elAttr' "button" (Map.singleton "type" "button") $ text s
   return $ domEvent Click e
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
