@@ -44,10 +44,10 @@ webSocket url config = do
   let onMessage :: ByteString -> IO ()
       onMessage m = postGui $ do
         mt <- readRef eRecvTriggerRef
-        forM_ mt $ \t -> runWithActions [t :=> m]
+        forM_ mt $ \t -> runWithActions [t :=> Identity m]
       onOpen = postGui $ do
         mt <- readRef eOpenTriggerRef
-        forM_ mt $ \t -> runWithActions [t :=> ()]
+        forM_ mt $ \t -> runWithActions [t :=> Identity ()]
       start = do
         ws <- liftIO $ newWebSocket wv url onMessage onOpen $ do
           void $ forkIO $ do --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?

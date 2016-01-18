@@ -60,9 +60,9 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   runWithActions <- askRunWithActions
   eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
     unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> False]
+      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
     unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> True]
+      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
     return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
   dFocus <- holdDyn False eChangeFocus
   eKeypress <- wrapDomEvent e (`on` keyPress) getKeyEvent
@@ -102,9 +102,9 @@ textArea (TextAreaConfig initial eSet attrs) = do
   runWithActions <- askRunWithActions
   eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
     unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> False]
+      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
     unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> True]
+      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
     return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
   performEvent_ $ fmap (TextArea.setValue e . Just) eSet
   f <- holdDyn False eChangeFocus
