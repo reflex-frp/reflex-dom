@@ -33,7 +33,7 @@ import Data.Monoid ((<>))
 data GuiEnv t h
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
-            , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
+            , _guiEnvRunWithActions :: !([DSum (EventTrigger t) Identity] -> h ())
             , _guiEnvWebView :: !WebView
             }
 
