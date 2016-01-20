@@ -15,6 +15,7 @@ import GHCJS.DOM.HTMLSelectElement as Select
 import GHCJS.DOM.EventM
 import GHCJS.DOM.File
 import qualified GHCJS.DOM.FileList as FileList
+import Data.Bool (bool)
 import Data.Monoid
 import Data.Map as Map
 import Control.Lens
@@ -212,6 +213,72 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue (attachDynWith readKey options eChange)
 
+data ButtonGroup t k a
+   = ButtonGroup { _buttonGroup_value :: Dynamic t (Maybe a)
+                 , _buttonGroup_change :: Event t (Maybe a)
+                 , _buttonGroup_elements :: Dynamic t (Map k (El t))
+                 }
+
+data ButtonGroupConfig t k a
+   = ButtonGroupConfig { _buttonGroupConfig_initialValue :: Maybe a
+                       , _buttonGroupConfig_setValue :: Event t (Maybe a)
+                       , _buttonGroupConfig_attributes :: Dynamic t (Map String String)
+                       }
+
+instance Reflex t => Default (ButtonGroupConfig t k a) where
+  def = ButtonGroupConfig { _buttonGroupConfig_initialValue = Nothing
+                          , _buttonGroupConfig_setValue = never
+                          , _buttonGroupConfig_attributes = constDyn mempty
+                          }
+
+buttonGroup :: (MonadWidget t m, Ord k, Eq a, Ord a) => (Maybe k -> Dynamic t a -> Dynamic t Bool -> m (Event t (), El t)) -> Dynamic t (Map k a) -> ButtonGroupConfig t k a -> m (ButtonGroup t k a)
+buttonGroup drawBtn btns (ButtonGroupConfig iVal setV _) = do
+  pb <- getPostBuild
+  reverseIndex <- forDyn btns $ Map.fromList . fmap (\(a,b) -> (b,a)) . Map.toList
+  key0 <- forDyn reverseIndex (\bs -> lookup' bs iVal)
+  rec (clickSelEvts, children) <- selectViewListWithKey' k' btns' drawBtn
+      let externSet = attachWith lookup' (current reverseIndex) setV
+          initSet   = attachWith lookup' (current reverseIndex) (iVal <$ pb)
+          internSet = leftmost [initSet, fmap fst clickSelEvts]
+          internVal = attachWith lookup'' (current btns) internSet
+          dropNothings = mapKeys fromJust . filterWithKey (const . isJust)
+      k  <- holdDyn Nothing $ leftmost [internSet, externSet]
+      k' <- joinDyn <$> holdDyn key0 (fmap constDyn (updated k))
+      btns' <- mapDyn (Map.mapKeys Just) btns
+
+  nonNothingChildren <- mapDyn dropNothings children
+  selV <- holdDyn iVal . updated =<< (combineDyn (\k' m -> k' >>= flip Map.lookup m) k btns)
+  return (ButtonGroup { _buttonGroup_value = selV
+                      , _buttonGroup_change = internVal
+                      , _buttonGroup_elements = nonNothingChildren
+                      })
+  where
+    lookup' :: Ord a => Map a k -> Maybe a -> Maybe k
+    lookup' = (=<<) . flip Map.lookup
+    lookup'' :: Ord k => Map k a -> Maybe k -> Maybe a
+    lookup'' = (=<<) . flip Map.lookup
+
+radioButtons :: (MonadWidget t m, Eq a, Ord a)
+             => String -- ^ The 'name' attribute for all buttons in this group. NOTE: For the page to properly render which input is selected, this  must be unique for each @radioButtons@ widget, or the @radioButton@'s must be under different 'form' tags
+             -> Dynamic t [(a, String)] -> ButtonGroupConfig t Int a -> m (ButtonGroup t Int a)
+radioButtons name choices cfg = do
+  choices' <- mapDyn Map.fromList choices
+  btns <- forDyn choices $ \choiceElems ->
+    Map.fromList $ zip [1 :: Int ..] (Prelude.map fst choiceElems)
+  buttonGroup (handleOne choices') btns cfg
+  where
+    handleOne namedChoices _ v checked = do
+      (row, clicks) <- el' "tr" $ do
+        txt <- combineDyn (\v' m -> fromMaybe "" $ Map.lookup v' m) v namedChoices
+        btnAttrs <- forDyn checked $ \b ->
+          "type" =: "radio" <> "name" =: name <> bool mempty ("checked" =: "true") b
+        (b,_) <- el "td" $ elDynAttr' "input" btnAttrs $ return ()
+        el "td" $ dynText txt
+        let e = castToHTMLInputElement $ _el_element b
+        _ <- performEvent $ (liftIO . setChecked e) <$> updated checked
+        return $ domEvent Click b
+      return (clicks, row)
+
 liftM concat $ mapM makeLenses
   [ ''TextAreaConfig
   , ''TextArea
@@ -221,6 +288,8 @@ liftM concat $ mapM makeLenses
   , ''Dropdown
   , ''CheckboxConfig
   , ''Checkbox
+  , ''ButtonGroup
+  , ''ButtonGroupConfig
   ]
 
 instance HasAttributes (TextAreaConfig t) where
@@ -238,6 +307,10 @@ instance HasAttributes (DropdownConfig t k) where
 instance HasAttributes (CheckboxConfig t) where
   type Attrs (CheckboxConfig t) = Dynamic t (Map String String)
   attributes = checkboxConfig_attributes
+
+instance HasAttributes (ButtonGroupConfig t k a) where
+  type Attrs (ButtonGroupConfig t k a) = Dynamic t (Map String String)
+  attributes = buttonGroupConfig_attributes
 
 class HasSetValue a where
   type SetValue a :: *
@@ -258,6 +331,10 @@ instance HasSetValue (DropdownConfig t k) where
 instance HasSetValue (CheckboxConfig t) where
   type SetValue (CheckboxConfig t) = Event t Bool
   setValue = checkboxConfig_setValue
+
+instance HasSetValue (ButtonGroupConfig t k a) where
+  type SetValue (ButtonGroupConfig t k a) = Event t (Maybe a)
+  setValue = buttonGroupConfig_setValue
 
 class HasValue a where
   type Value a :: *
@@ -282,6 +359,10 @@ instance HasValue (Dropdown t k) where
 instance HasValue (Checkbox t) where
   type Value (Checkbox t) = Dynamic t Bool
   value = _checkbox_value
+
+instance HasValue (ButtonGroup t k a) where
+  type Value (ButtonGroup t k a) = Dynamic t (Maybe a)
+  value = _buttonGroup_value
 
 {-
 type family Controller sm t a where
