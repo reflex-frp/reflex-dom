@@ -5,12 +5,11 @@ import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
 
 import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Class
-import Foreign.JavaScript.TH
 
 import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Types hiding (Widget, unWidget, Event)
 import GHCJS.DOM.Node
-import GHCJS.DOM.HTMLElement
+import GHCJS.DOM.Element
 import GHCJS.DOM.Document
 import Reflex.Class
 import Reflex.Host.Class
@@ -38,9 +37,9 @@ newtype EventTriggerRef t m a = EventTriggerRef { unEventTriggerRef :: Ref m (Ma
 data GuiEnv t h x
    = GuiEnv { _guiEnvDocument :: !HTMLDocument
             , _guiEnvPostGui :: !(h () -> IO ())
-            , _guiEnvRunWithActions :: !([DSum (EventTrigger t)] -> h ())
+            , _guiEnvRunWithActions :: !([DSum (EventTrigger t) Identity] -> h ())
             , _guiEnvWebView :: !(WebViewSingleton x)
-            , _guiEnvFollowupEvents :: Ref h [DSum (EventTriggerRef t h)]
+            , _guiEnvFollowupEvents :: Ref h [DSum (EventTriggerRef t h) Identity]
             }
 
 --TODO: Poorly named
@@ -110,7 +109,7 @@ instance (MonadRef h, Ref h ~ Ref m, MonadRef m) => HasPostGui t h (Gui t h x m)
   askRunWithActions = Gui $ view guiEnvRunWithActions
   scheduleFollowup r a = Gui $ do
     followupEventsRef <- view guiEnvFollowupEvents
-    modifyRef' followupEventsRef $ ((EventTriggerRef r :=> a) :)
+    modifyRef' followupEventsRef $ ((EventTriggerRef r :=> Identity a) :)
 
 instance HasPostGui t h m => HasPostGui t h (Widget t m) where
   askPostGui = lift askPostGui
@@ -174,6 +173,10 @@ instance ( MonadRef m, Ref m ~ Ref IO, MonadRef h, Ref h ~ Ref IO --TODO: Should
 --  runWidget :: (Monad m, IsNode n, Reflex t) => n -> Widget t m a -> m (a, Event t (m ()))
   getRunWidget = return runWidget
 
+getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
+getQuitWidget = return $ do WebViewSingleton wv <- askWebView
+                            liftIO $ quitWebView wv
+
 runWidget :: (Monad m, Reflex t, IsNode n) => n -> Widget t (Gui t h x m) a -> WidgetHost (Widget t (Gui t h x m)) (a, WidgetHost (Widget t (Gui t h x m)) (), Event t (WidgetHost (Widget t (Gui t h x m)) ()))
 runWidget rootElement w = do
   (result, WidgetState postBuild voidActions) <- runStateT (runReaderT (unWidget w) (WidgetEnv $ toNode rootElement)) (WidgetState (return ()) [])
@@ -191,24 +194,24 @@ holdOnStartup a0 ma = do
 mainWidget :: (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
 mainWidget w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just body <- documentGetBody doc
+  Just body <- getBody doc
   attachWidget body webViewSing w
 
 --TODO: The x's should be unified here
 mainWidgetWithHead :: (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
+  Just headElement <- liftM (fmap castToHTMLElement) $ getHead doc
   attachWidget headElement webViewSing h
-  Just body <- documentGetBody doc
+  Just body <- getBody doc
   attachWidget body webViewSing b
 
 mainWidgetWithCss :: ByteString -> (forall x. Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) ()) -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap castToHTMLElement) $ documentGetHead doc
-  htmlElementSetInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
-  Just body <- documentGetBody doc
+  Just headElement <- liftM (fmap castToHTMLElement) $ getHead doc
+  setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
+  Just body <- getBody doc
   attachWidget body webViewSing w
 
 instance HasPostGui t h m => HasPostGui t (WithWebView x h) (WithWebView x m) where
@@ -252,7 +255,7 @@ instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
 
 attachWidget :: forall e x a. (IsHTMLElement e) => e -> WebViewSingleton x -> Widget Spider (Gui Spider (WithWebView x SpiderHost) x (HostFrame Spider)) a -> IO a
 attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TODO: It seems to re-run this handler if the URL changes, even if it's only the fragment
-  Just doc <- liftM (fmap castToHTMLDocument) $ liftIO $ nodeGetOwnerDocument rootElement
+  Just doc <- liftM (fmap castToHTMLDocument) $ getOwnerDocument rootElement
   frames <- liftIO newChan
   followupEvents <- liftIO $ newIORef []
   rec let guiEnv = GuiEnv doc (writeChan frames . runSpiderHost . flip runWithWebView wv) runWithActions wv followupEvents :: GuiEnv Spider (WithWebView x SpiderHost) x
@@ -273,13 +276,13 @@ attachWidget rootElement wv w = runSpiderHost $ flip runWithWebView wv $ do --TO
                 Just t -> return $ Just (t :=> a)
             let fe'' = catMaybes fe'
             when (not $ null fe'') $ runWithActions fe''
-      Just df <- liftIO $ documentCreateDocumentFragment doc
+      Just df <- liftIO $ createDocumentFragment doc
       (result, voidAction) <- runHostFrame $ flip runGui guiEnv $ do
         (r, postBuild, va) <- runWidget df w
         postBuild -- This probably shouldn't be run inside the frame; we need to make sure we don't run a frame inside of a frame
         return (r, va)
-      liftIO $ htmlElementSetInnerHTML rootElement ""
-      _ <- liftIO $ nodeAppendChild rootElement $ Just df
+      setInnerHTML rootElement $ Just ""
+      _ <- appendChild rootElement $ Just df
       voidActionHandle <- subscribeEvent voidAction --TODO: Should be unnecessary
   --postGUISync seems to leak memory on GHC (unknown on GHCJS)
   doFollowup -- This must go after voidActionHandle is subscribed; otherwise, a loop results

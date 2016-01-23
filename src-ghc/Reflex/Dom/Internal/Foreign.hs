@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase #-}
 module Reflex.Dom.Internal.Foreign where
 
 import Control.Lens hiding (set)
@@ -7,7 +7,7 @@ import Control.Concurrent
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
 import Foreign.Ptr
 import GHCJS.DOM.Navigator
-import GHCJS.DOM.DOMWindow
+import GHCJS.DOM.Window
 import Graphics.UI.Gtk hiding (Widget)
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
@@ -15,13 +15,28 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Graphics.UI.Gtk.WebKit.WebView
-import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, unWidget)
+import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget)
 import Graphics.UI.Gtk.WebKit.WebSettings
 import Graphics.UI.Gtk.WebKit.WebFrame
 import Graphics.UI.Gtk.WebKit.WebInspector
 import Data.List
 import System.Directory
 import System.Glib.FFI hiding (void)
+
+#ifndef mingw32_HOST_OS
+import System.Posix.Signals
+#endif
+
+quitWebView :: WebView -> IO ()
+quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv
+                                   widgetDestroy w
+
+installQuitHandler :: WebView -> IO ()
+#ifdef mingw32_HOST_OS
+installQuitHandler wv = return () -- TODO: Maybe figure something out here for Windows users.
+#else
+installQuitHandler wv = installHandler keyboardSignal (Catch (quitWebView wv)) Nothing >> return ()
+#endif
 
 makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
@@ -58,6 +73,7 @@ makeDefaultWebView userAgentKey main = do
   wf <- webViewGetMainFrame webView
   pwd <- getCurrentDirectory
   webFrameLoadString wf "" Nothing $ "file://" ++ pwd ++ "/"
+  installQuitHandler webView
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()
@@ -70,8 +86,8 @@ runWebGUI' userAgentKey main = do
   case mbWindow of
     Just window -> do
       -- Check if we are running in javascript inside the the native version
-      Just n <- domWindowGetNavigator window
-      agent <- navigatorGetUserAgent n
+      Just n <- getNavigator window
+      agent <- getUserAgent n
       unless ((" " ++ userAgentKey) `isSuffixOf` agent) $ main (castToWebView window)
     Nothing -> do
       makeDefaultWebView userAgentKey main

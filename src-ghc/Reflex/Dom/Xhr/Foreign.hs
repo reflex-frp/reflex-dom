@@ -1,7 +1,8 @@
-{-# LANGUAGE ForeignFunctionInterface, TypeSynonymInstances, FlexibleInstances #-}
-module Reflex.Dom.Xhr.Foreign where
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, QuasiQuotes, ForeignFunctionInterface #-}
+module Reflex.Dom.Xhr.Foreign ( module Reflex.Dom.Xhr.Foreign
+                              , XhrResponseType
+                              ) where
 
-import Control.Lens.Indexed
 import qualified Data.Text as T
 import Data.Text (Text)
 import System.Glib.FFI
@@ -12,8 +13,14 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import GHCJS.DOM.File
+import Reflex.Dom.Xhr.ResponseType
+import Reflex.Dom.Xhr.Exception
+import Control.Concurrent.MVar
+import Control.Exception.Base
 
 import Reflex.Dom.Internal.Foreign
+
+import Text.RawString.QQ
 
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
@@ -21,17 +28,18 @@ data XMLHttpRequest
                     }
    deriving (Eq, Ord)
 
-responseTextToText :: Maybe String -> Maybe Text
-responseTextToText = fmap T.pack
-
-statusTextToText :: String -> Text
-statusTextToText = T.pack
+data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSValueRef }
 
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
-toResponseType :: a -> a
-toResponseType = id
+toResponseType :: XhrResponseType -> String
+toResponseType XhrResponseType_Default = ""
+toResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
+toResponseType XhrResponseType_Blob = "blob"
+toResponseType XhrResponseType_Document = "document"
+toResponseType XhrResponseType_JSON = "json"
+toResponseType XhrResponseType_Text = "text"
 
 xmlHttpRequestNew :: WebView -> IO XMLHttpRequest
 xmlHttpRequestNew wv = do
@@ -75,7 +83,17 @@ xmlHttpRequestGetReadyState xhr = do
   d <- jsvaluetonumber c rs nullPtr
   return $ truncate d
 
-xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe String)
+xmlHttpRequestGetResponse :: XMLHttpRequest -> IO (Maybe XhrResponseBody)
+xmlHttpRequestGetResponse xhr = do
+  let c = xhrContext xhr
+  script <- jsstringcreatewithutf8cstring "this.response"
+  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  isNull <- jsvalueisnull c t
+  case isNull of
+       True -> return Nothing
+       False ->  return $ Just $ XhrResponseBody t
+
+xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe Text)
 xmlHttpRequestGetResponseText xhr = do
   let c = xhrContext xhr
   script <- jsstringcreatewithutf8cstring "this.responseText"
@@ -89,7 +107,7 @@ xmlHttpRequestGetResponseText xhr = do
          s <- allocaBytes (fromIntegral l) $ \ps -> do
                 _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
                 peekCString ps
-         return $ Just s
+         return $ Just $ T.pack s
 
 class IsXhrPayload a where
   xmlHttpRequestSend :: XMLHttpRequest -> a -> IO ()
@@ -106,19 +124,56 @@ instance IsXhrPayload File where
 xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe String -> IO ()
 xmlHttpRequestSendPayload xhr payload = do
   let c = xhrContext xhr
-  (o,s) <- case payload of
-            Nothing -> do
-              o <- toJSObject c [xhrValue xhr]
-              s <- jsstringcreatewithutf8cstring "this[0].send();"
-              return (o,s)
-            Just payload' -> do
-              d <- stringToJSValue c payload'
-              o <- toJSObject c [xhrValue xhr, d]
-              s <- jsstringcreatewithutf8cstring "this[0].send(this[1])"
-              return (o,s)
-  _ <- jsevaluatescript c s o nullPtr 1 nullPtr
-  return ()
-  
+  result <- newEmptyMVar
+  let wrapper' x = wrapper $ \_ _ _ _ _ _ -> putMVar result x >> jsvaluemakeundefined c
+  bracket (wrapper' $ Just XhrException_Aborted) freeHaskellFunPtr $ \a -> do
+    onAbort <- jsobjectmakefunctionwithcallback c nullPtr a
+    bracket (wrapper' $ Just XhrException_Error) freeHaskellFunPtr $ \e -> do
+      onError <- jsobjectmakefunctionwithcallback c nullPtr e
+      bracket (wrapper' Nothing) freeHaskellFunPtr $ \l -> do
+        onLoad <- jsobjectmakefunctionwithcallback c nullPtr l
+        (o,s) <- case payload of
+                  Nothing -> do
+                    d <- jsvaluemakeundefined c
+                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
+                    s <- jsstringcreatewithutf8cstring send
+                    return (o,s)
+                  Just payload' -> do
+                    d <- stringToJSValue c payload'
+                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
+                    s <- jsstringcreatewithutf8cstring send
+                    return (o,s)
+        _ <- jsevaluatescript c s o nullPtr 1 nullPtr
+        takeMVar result >>= mapM_ throwIO
+  where
+    send = [r|
+      (function (xhr, d, onError, onAbort, onLoad) {
+          var clear;
+          var error = function () {
+              clear(); onError();
+          };
+          var abort = function () {
+              clear(); onAbort();
+          };
+          var load = function () {
+              clear(); onLoad();
+          };
+          clear = function () {
+              xhr.removeEventListener('error', error);
+              xhr.removeEventListener('abort', abort);
+              xhr.removeEventListener('load', load);
+          }
+          xhr.addEventListener('error', error);
+          xhr.addEventListener('abort', abort);
+          xhr.addEventListener('load', load);
+          if(d) {
+            xhr.send(d);
+          } else {
+            xhr.send();
+          }
+      })(this[0], this[1], this[2], this[3], this[4])
+    |]
+
 xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> String -> String -> IO ()
 xmlHttpRequestSetRequestHeader xhr header value = do
   let c = xhrContext xhr
@@ -146,7 +201,7 @@ xmlHttpRequestGetStatus xhr = do
   d <- jsvaluetonumber c s nullPtr
   return $ truncate d
 
-xmlHttpRequestGetStatusText :: XMLHttpRequest -> IO String
+xmlHttpRequestGetStatusText :: XMLHttpRequest -> IO Text
 xmlHttpRequestGetStatusText xhr = do
   let c = xhrContext xhr
   script <- jsstringcreatewithutf8cstring "this.statusText"
@@ -156,4 +211,4 @@ xmlHttpRequestGetStatusText xhr = do
   s <- allocaBytes (fromIntegral l) $ \ps -> do
          _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
          peekCString ps
-  return s
+  return $ T.pack s

@@ -10,14 +10,27 @@ import Language.Haskell.TH
 
 #ifdef __GHCJS__
 import qualified GHCJS.Marshal as JS
+import qualified GHCJS.Marshal.Pure as JS
 import qualified GHCJS.Foreign as JS
+import qualified GHCJS.Foreign.Callback as JS
 import qualified GHCJS.Types as JS
+import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
-import GHCJS.DOM.Types
+import GHCJS.DOM.Types hiding (fromJSString)
+import qualified GHCJS.DOM.Types as JS
+import qualified JavaScript.Array as JS
+import qualified JavaScript.Cast as JS
+import qualified JavaScript.Object as JS
+import qualified JavaScript.Object.Internal (Object (..))
+import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
+import qualified JavaScript.Array.Internal (SomeJSArray (..))
+import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
+
 import Data.Word
 import Foreign.Ptr
 import Foreign.C.Types
 import Data.Hashable
+import Text.Encoding.Z
 #else
 import System.Glib.FFI
 import Graphics.UI.Gtk.WebKit.WebView
@@ -27,7 +40,6 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Graphics.UI.Gtk.WebKit.DOM.Node
-import Graphics.UI.Gtk.WebKit.Types
 #endif
 
 import Control.Monad
@@ -42,7 +54,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Control.Concurrent
 import Data.Coerce
-import Text.Encoding.Z
 import Data.Monoid
 
 class Monad m => HasWebView m where
@@ -77,7 +88,7 @@ withWebViewSingleton wv f = f $ WebViewSingleton wv
 newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
 
 #ifdef __GHCJS__
-type JSFFI_Internal = JS.JSArray (JSRef JSCtx_IO) -> IO (JS.JSRef (JSRef JSCtx_IO))
+type JSFFI_Internal = JS.MutableJSArray -> IO JS.JSVal
 newtype JSFFI = JSFFI JSFFI_Internal
 #else
 newtype JSFFI = JSFFI String
@@ -131,48 +142,48 @@ class Monad m => MonadJS x m | m -> x where
 data JSCtx_IO
 
 instance IsJSContext JSCtx_IO where
-  newtype JSRef JSCtx_IO = JSRef_IO { unJSRef_IO :: JS.JSRef (JSRef JSCtx_IO) }
+  newtype JSRef JSCtx_IO = JSRef_IO { unJSRef_IO :: JS.JSVal }
 
 instance MonadJS JSCtx_IO IO where
-  runJS (JSFFI f) l = liftM JSRef_IO . f =<< JS.toArray (coerce l)
+  runJS (JSFFI f) l = liftM JSRef_IO . f =<< JS.fromListIO (coerce l)
   forkJS = forkIO
   mkJSUndefined = return $ JSRef_IO JS.jsUndefined
   isJSNull (JSRef_IO r) = return $ JS.isNull r
   isJSUndefined (JSRef_IO r) = return $ JS.isUndefined r
-  fromJSBool (JSRef_IO r) = return $ JS.fromJSBool $ JS.castRef r
-  fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.castRef r
-  fromJSArray (JSRef_IO r) = liftM coerce $ JS.fromArray $ JS.castRef r
-  fromJSUint8Array (JSRef_IO r) = JS.bufferByteString 0 0 $ JS.castRef r
+  fromJSBool (JSRef_IO r) = return $ JS.fromJSBool r
+  fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.pFromJSVal r
+  fromJSArray (JSRef_IO r) = liftM coerce $ JS.toListIO $ coerce r
+  fromJSUint8Array (JSRef_IO r) = liftM (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JSArrayBuffer.unsafeFreeze $ JS.pFromJSVal r --TODO: Assert that this is immutable
   fromJSNumber (JSRef_IO r) = do
-    Just n <- JS.fromJSRef $ JS.castRef r
+    Just n <- JS.fromJSVal r
     return n
-  withJSBool b f = f $ JSRef_IO $ JS.castRef $ JS.toJSBool b
-  withJSString s f = f $ JSRef_IO $ JS.castRef $ JS.toJSString s
+  withJSBool b f = f $ JSRef_IO $ JS.toJSBool b
+  withJSString s f = f $ JSRef_IO $ JS.pToJSVal $ JS.toJSString s
   withJSNumber n f = do
-    r <- JS.toJSRef n
-    f $ JSRef_IO $ JS.castRef r
+    r <- JS.toJSVal n
+    f $ JSRef_IO r
   withJSArray l f = do
-    r <- JS.toArray $ coerce l
-    f $ JSRef_IO $ JS.castRef r
+    r <- JS.fromListIO $ coerce l
+    f $ JSRef_IO $ coerce r
   withJSUint8Array payload f = BS.useAsCString payload $ \cStr -> do
     ba <- extractByteArray cStr $ BS.length payload
     f $ JSUint8Array $ JSRef_IO ba
   mkJSFun f = do
-    cb <- JS.syncCallback1 JS.AlwaysRetain True $ \args -> do
-      l <- JS.fromArray args
+    cb <- JS.syncCallback1' $ \args -> do
+      l <- JS.toListIO $ coerce args
       JSRef_IO result <- f $ coerce l
-      return $ JS.castRef result
-    liftM (JSFun . JSRef_IO) $ funWithArguments cb
-  freeJSFun (JSFun (JSRef_IO r)) = JS.release $ JS.castRef r
-  setJSProp s (JSRef_IO v) (JSRef_IO o) = JS.setProp s v o
+      return result
+    liftM (JSFun . JSRef_IO) $ funWithArguments $ coerce cb
+  freeJSFun (JSFun (JSRef_IO r)) = JS.releaseCallback $ coerce r
+  setJSProp s (JSRef_IO v) (JSRef_IO o) = JS.setProp (JS.toJSString s) v $ coerce o
   getJSProp s (JSRef_IO o) = do
-    r <- JS.getProp s o
+    r <- JS.getProp (JS.toJSString s) $ coerce o
     return $ JSRef_IO r
-  withJSNode n f = f $ JSRef_IO $ JS.castRef $ unNode n
+  withJSNode n f = f $ JSRef_IO $ unNode n
 
 foreign import javascript unsafe "new Uint8Array($1_1.buf, $1_2, $2)" extractByteArray :: Ptr CChar -> Int -> IO (JS.JSRef (JSRef JSCtx_IO))
 
-foreign import javascript unsafe "function(){ return $1(arguments); }" funWithArguments :: JS.JSFun (JS.JSArray (JS.JSRef b) -> IO a) -> IO (JS.JSRef (JSRef JSCtx_IO))
+foreign import javascript unsafe "function(){ return $1(arguments); }" funWithArguments :: JS.Callback (JS.MutableJSArray -> IO a) -> IO JS.JSVal
 
 #else
 

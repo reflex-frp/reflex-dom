@@ -3,12 +3,12 @@
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
 , webkitgtk24x, dependent-sum-template, bifunctors, zenc
-, random
+, random, raw-strings-qq
 }:
 
 mkDerivation {
   pname = "reflex-dom";
-  version = "0.2";
+  version = "0.3";
   src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
   buildDepends = [
     reflex
@@ -29,7 +29,7 @@ mkDerivation {
     bifunctors
     zenc
     random
-  ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore ]);
+  ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore raw-strings-qq ]);
   pkgconfigDepends = if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk24x ];
   license = null;
 }
