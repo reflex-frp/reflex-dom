@@ -17,6 +17,8 @@ import Control.Monad.Reader
 import GHCJS.Buffer
 import JavaScript.TypedArray.ArrayBuffer as JS
 import GHCJS.Marshal.Pure
+import GHCJS.Foreign.Internal
+import Data.Text.Encoding
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
 
@@ -28,8 +30,11 @@ newWebSocket _ url onMessage onOpen onClose = do
   _ <- on ws message $ do
     e <- ask
     d <- getData e
-    ab <- liftIO $ unsafeFreeze $ pFromJSVal d
-    liftIO $ onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
+    liftIO $ case jsTypeOf d of
+      String -> onMessage $ encodeUtf8 $ pFromJSVal d
+      _ -> do
+        ab <- unsafeFreeze $ pFromJSVal d
+        onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
   _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
 
