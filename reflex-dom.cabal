@@ -22,6 +22,7 @@ library
   hs-source-dirs: src
   build-depends:
     base >= 4.7 && < 4.9,
+    stm == 2.4.*,
     reflex == 0.4.*,
     dependent-sum == 0.3.*,
     dependent-map == 0.2.*,
@@ -42,7 +43,8 @@ library
     exception-transformers == 0.4.*,
     directory == 1.2.*,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
-    bifunctors >= 4.2 && < 6
+    bifunctors >= 4.2 && < 6,
+    ghcjs-prim == 0.1.*
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
