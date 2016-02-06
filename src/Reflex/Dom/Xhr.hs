@@ -131,7 +131,7 @@ newXMLHttpRequestWithError req cb = do
       (fromMaybe "" $ _xhrRequestConfig_user c)
       (fromMaybe "" $ _xhrRequestConfig_password c)
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
-    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType) rt
+    maybe (return ()) (xmlHttpRequestSetResponseType xhr . fromResponseType) rt
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr
@@ -226,3 +226,4 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 -- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
+

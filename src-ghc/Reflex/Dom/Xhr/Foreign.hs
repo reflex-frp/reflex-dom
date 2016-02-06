@@ -1,6 +1,8 @@
 {-# LANGUAGE QuasiQuotes, ForeignFunctionInterface #-}
+
 module Reflex.Dom.Xhr.Foreign where
 
+import Control.Monad
 import qualified Data.Text as T
 import Data.Text (Text)
 import System.Glib.FFI
@@ -9,11 +11,11 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Reflex.Dom.Xhr.ResponseType
 import Reflex.Dom.Xhr.Exception
 import Control.Concurrent.MVar
 import Control.Exception.Base
+import Graphics.UI.Gtk.WebKit.Types hiding (Text)
 
 import Reflex.Dom.Internal.Foreign
 
@@ -25,23 +27,24 @@ data XMLHttpRequest
                     }
    deriving (Eq, Ord)
 
-data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSValueRef }
-
 stringToJSValue :: JSContextRef -> String -> IO JSValueRef
 stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
 
-toResponseType :: XhrResponseType -> String
-toResponseType XhrResponseType_Default = ""
-toResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
-toResponseType XhrResponseType_Blob = "blob"
-toResponseType XhrResponseType_Document = "document"
-toResponseType XhrResponseType_JSON = "json"
-toResponseType XhrResponseType_Text = "text"
+fromResponseType :: XhrResponseType -> String
+fromResponseType XhrResponseType_Default = ""
+fromResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
+fromResponseType XhrResponseType_Blob = "blob"
+fromResponseType XhrResponseType_Text = "text"
+
+toResponseType :: String -> Maybe XhrResponseType
+toResponseType "" = Just XhrResponseType_Default
+toResponseType "arraybuffer" = Just XhrResponseType_ArrayBuffer
+toResponseType "blob" = Just XhrResponseType_Blob
+toResponseType "text" = Just XhrResponseType_Text
+toResponseType _ = Nothing
 
 xmlHttpRequestNew :: WebView -> IO XMLHttpRequest
-xmlHttpRequestNew wv = do
-  wf <- webViewGetMainFrame wv
-  jsContext <- webFrameGetGlobalContext wf
+xmlHttpRequestNew wv = withWebViewContext wv $ \jsContext -> do
   xhrScript <- jsstringcreatewithutf8cstring "new XMLHttpRequest()"
   xhr' <- jsevaluatescript jsContext xhrScript nullPtr nullPtr 1 nullPtr
   jsvalueprotect jsContext xhr'
@@ -80,31 +83,35 @@ xmlHttpRequestGetReadyState xhr = do
   d <- jsvaluetonumber c rs nullPtr
   return $ truncate d
 
+xmlHttpRequestGetResponseType :: XMLHttpRequest -> IO (Maybe XhrResponseType)
+xmlHttpRequestGetResponseType xhr = do
+  script <- jsstringcreatewithutf8cstring "this.responseType"
+  rt <- jsevaluatescript (xhrContext xhr) script (xhrValue xhr) nullPtr 1 nullPtr
+  ms <- fromJSStringMaybe (xhrContext xhr) rt
+  return $ join $ fmap toResponseType ms
+
 xmlHttpRequestGetResponse :: XMLHttpRequest -> IO (Maybe XhrResponseBody)
 xmlHttpRequestGetResponse xhr = do
   let c = xhrContext xhr
+  mrt <- xmlHttpRequestGetResponseType xhr
   script <- jsstringcreatewithutf8cstring "this.response"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
   isNull <- jsvalueisnull c t
   case isNull of
        True -> return Nothing
-       False ->  return $ Just $ XhrResponseBody t
+       False ->  case mrt of
+         Just XhrResponseType_ArrayBuffer -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer c t
+         Just XhrResponseType_Blob -> Just . XhrResponseBody_Blob . Blob . castForeignPtr <$> newForeignPtr_ t
+         Just XhrResponseType_Default -> fmap (XhrResponseBody_Default . T.pack) <$> fromJSStringMaybe c t
+         Just XhrResponseType_Text -> fmap (XhrResponseBody_Text . T.pack) <$> fromJSStringMaybe c t
+         _ -> return Nothing
 
 xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe Text)
 xmlHttpRequestGetResponseText xhr = do
   let c = xhrContext xhr
   script <- jsstringcreatewithutf8cstring "this.responseText"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
-  isNull <- jsvalueisnull c t
-  case isNull of
-       True -> return Nothing
-       False -> do
-         j <- jsvaluetostringcopy c t nullPtr
-         l <- jsstringgetmaximumutf8cstringsize j
-         s <- allocaBytes (fromIntegral l) $ \ps -> do
-                _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
-                peekCString ps
-         return $ Just $ T.pack s
+  fmap (fmap T.pack) $ fromJSStringMaybe c t
 
 xmlHttpRequestSend :: XMLHttpRequest -> Maybe String -> IO ()
 xmlHttpRequestSend xhr payload = do
