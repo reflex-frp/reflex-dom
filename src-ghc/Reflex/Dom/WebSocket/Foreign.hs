@@ -15,7 +15,6 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Graphics.UI.Gtk.WebKit.WebView
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
@@ -27,8 +26,7 @@ data JSWebSocket = JSWebSocket { wsValue :: JSValueRef
                                }
 
 newWebSocket :: WebView -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
-newWebSocket wv url onMessage onOpen onClose = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
+newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
   url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring url
   newWSArgs <- toJSObject c [url']
   newWS <- jsstringcreatewithutf8cstring "(function(that) { var ws = new WebSocket(that[0]); ws['binaryType'] = 'arraybuffer'; return ws; })(this)"

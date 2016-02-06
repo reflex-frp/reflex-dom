@@ -1,11 +1,16 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase #-}
 module Reflex.Dom.Internal.Foreign where
 
-import Control.Lens hiding (set)
-import GHCJS.DOM hiding (runWebGUI)
 import Control.Concurrent
+import Control.Exception (bracket)
+import Control.Lens hiding (set)
+import Control.Monad
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
+import Data.ByteString (ByteString)
+import Data.List
+import Foreign.Marshal hiding (void)
 import Foreign.Ptr
+import GHCJS.DOM hiding (runWebGUI)
 import GHCJS.DOM.Navigator
 import GHCJS.DOM.Window
 import Graphics.UI.Gtk hiding (Widget)
@@ -14,14 +19,14 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.WebView
 import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget)
-import Graphics.UI.Gtk.WebKit.WebSettings
 import Graphics.UI.Gtk.WebKit.WebFrame
 import Graphics.UI.Gtk.WebKit.WebInspector
-import Data.List
+import Graphics.UI.Gtk.WebKit.WebSettings
+import Graphics.UI.Gtk.WebKit.WebView
 import System.Directory
 import System.Glib.FFI hiding (void)
+import qualified Data.ByteString as BS
 
 #ifndef mingw32_HOST_OS
 import System.Posix.Signals
@@ -117,18 +122,42 @@ fromJSStringMaybe c t = do
       return $ Just s
 
 getLocationHost :: WebView -> IO String
-getLocationHost wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
+getLocationHost wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.host"
   lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
   lh' <- fromJSStringMaybe c lh
   return $ maybe "" id lh'
 
 getLocationProtocol :: WebView -> IO String
-getLocationProtocol wv = do
-  c <- webFrameGetGlobalContext =<< webViewGetMainFrame wv
+getLocationProtocol wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.protocol"
   lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
   lp' <- fromJSStringMaybe c lp
   return $ maybe "" id lp'
 
+bsToArrayBuffer :: JSContextRef -> ByteString -> IO JSValueRef
+bsToArrayBuffer c bs = do
+  elems <- forM (BS.unpack bs) $ \x -> jsvaluemakenumber c $ fromIntegral x
+  let numElems = length elems
+  bracket (mallocArray numElems) free $ \elemsArr -> do
+    pokeArray elemsArr elems
+    a <- jsobjectmakearray c (fromIntegral numElems) elemsArr nullPtr
+    newUint8Array <- jsstringcreatewithutf8cstring "new Uint8Array(this)"
+    jsevaluatescript c newUint8Array a nullPtr 1 nullPtr
+
+bsFromArrayBuffer :: JSContextRef -> JSValueRef -> IO ByteString
+bsFromArrayBuffer c a = do
+  let getIntegral = fmap round . (\x -> jsvaluetonumber c x nullPtr)
+  getByteLength <- jsstringcreatewithutf8cstring "this.byteLength"
+  byteLength <- getIntegral =<< jsevaluatescript c getByteLength a nullPtr 1 nullPtr
+  toUint8Array <- jsstringcreatewithutf8cstring "new Uint8Array(this)"
+  uint8Array <- jsevaluatescript c toUint8Array a nullPtr 1 nullPtr
+  getIx <- jsstringcreatewithutf8cstring "this[0][this[1]]"
+  let arrayLookup i = do
+        i' <- jsvaluemakenumber c (fromIntegral i)
+        args <- toJSObject c [uint8Array, i']
+        getIntegral =<< jsevaluatescript c getIx args nullPtr 1 nullPtr
+  fmap BS.pack $ forM [0..byteLength-1] arrayLookup
+
+withWebViewContext :: WebView -> (JSContextRef -> IO a) -> IO a
+withWebViewContext wv f = f =<< webFrameGetGlobalContext =<< webViewGetMainFrame wv
