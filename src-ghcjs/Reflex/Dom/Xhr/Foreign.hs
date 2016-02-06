@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings, FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings #-}
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
@@ -9,18 +9,17 @@ module Reflex.Dom.Xhr.Foreign (
 import Prelude hiding (error)
 import Data.Text (Text)
 import GHCJS.DOM.Types hiding (Text)
-import GHCJS.DOM.EventM
 import GHCJS.DOM
 import GHCJS.DOM.Enums
 import GHCJS.DOM.XMLHttpRequest
 import Data.Maybe (fromMaybe)
 import GHCJS.DOM.EventTarget (dispatchEvent)
-import GHCJS.Types
+import GHCJS.DOM.EventM (EventM, on)
+import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
 import Control.Exception (catch, throwIO)
-
-data XhrResponseBody = XhrResponseBody { unXhrResponseBody :: JSVal }
+import GHCJS.Types
 
 prepareWebView :: WebView -> IO ()
 prepareWebView _ = return ()
@@ -61,6 +60,7 @@ newtype XhrPayload = XhrPayload { unXhrPayload :: JSVal }
 -- This used to be a non blocking call, but now it uses an interruptible ffi
 xmlHttpRequestSend :: IsXhrPayload payload => XMLHttpRequest -> payload -> IO ()
 xmlHttpRequestSend self p = sendXhrPayload self p `catch` (throwIO . convertException)
+
 
 xmlHttpRequestSetRequestHeader :: (ToJSString header, ToJSString value)
                                => XMLHttpRequest -> header -> value -> IO ()
@@ -133,16 +133,21 @@ xmlHttpRequestGetResponseXML = getResponseXML
 xmlHttpRequestSetResponseType :: XMLHttpRequest -> XMLHttpRequestResponseType -> IO ()
 xmlHttpRequestSetResponseType = setResponseType
 
-toResponseType :: XhrResponseType -> XMLHttpRequestResponseType
-toResponseType XhrResponseType_Default = XMLHttpRequestResponseType
-toResponseType XhrResponseType_ArrayBuffer = XMLHttpRequestResponseTypeArraybuffer
-toResponseType XhrResponseType_Blob = XMLHttpRequestResponseTypeBlob
-toResponseType XhrResponseType_Document = XMLHttpRequestResponseTypeDocument
-toResponseType XhrResponseType_JSON = XMLHttpRequestResponseTypeJson
-toResponseType XhrResponseType_Text = XMLHttpRequestResponseTypeText
+fromResponseType :: XhrResponseType -> XMLHttpRequestResponseType
+fromResponseType XhrResponseType_Default = XMLHttpRequestResponseType
+fromResponseType XhrResponseType_ArrayBuffer = XMLHttpRequestResponseTypeArraybuffer
+fromResponseType XhrResponseType_Blob = XMLHttpRequestResponseTypeBlob
+fromResponseType XhrResponseType_Text = XMLHttpRequestResponseTypeText
 
-xmlHttpRequestGetResponseType :: XMLHttpRequest -> IO XMLHttpRequestResponseType
-xmlHttpRequestGetResponseType = getResponseType
+toResponseType :: XMLHttpRequestResponseType -> Maybe XhrResponseType
+toResponseType XMLHttpRequestResponseType = Just XhrResponseType_Default
+toResponseType XMLHttpRequestResponseTypeArraybuffer = Just XhrResponseType_ArrayBuffer
+toResponseType XMLHttpRequestResponseTypeBlob = Just XhrResponseType_Blob
+toResponseType XMLHttpRequestResponseTypeText = Just XhrResponseType_Text
+toResponseType _ = Nothing
+
+xmlHttpRequestGetResponseType :: XMLHttpRequest -> IO (Maybe XhrResponseType)
+xmlHttpRequestGetResponseType = fmap toResponseType . getResponseType
 
 xmlHttpRequestGetStatus :: XMLHttpRequest -> IO Word
 xmlHttpRequestGetStatus = getStatus
@@ -156,5 +161,13 @@ xmlHttpRequestGetResponseURL = getResponseURL
 xmlHttpRequestGetResponse :: XMLHttpRequest -> IO (Maybe XhrResponseBody)
 xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
-  return $ fmap (\(GObject r) -> XhrResponseBody r) mr
+  rt <- xmlHttpRequestGetResponseType xhr
+  case rt of
+       Just XhrResponseType_Blob -> return $ fmap (XhrResponseBody_Blob . castToBlob) mr
+       Just XhrResponseType_Text -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_Default -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_ArrayBuffer -> case (fmap unGObject mr) of
+         Nothing -> return Nothing
+         Just ptr -> fmap (Just . XhrResponseBody_ArrayBuffer) $ bsFromArrayBuffer ptr ptr
+       _ -> return Nothing
 

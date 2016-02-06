@@ -167,8 +167,14 @@ widgetHoldInternal child0 newChild = do
         forM_ mp' $ \p' -> insertBefore p' (Just df) (Just endPlaceholder)
         return ()
   addVoidAction $ ffor newChild $ \c -> do
+    Just df <- createDocumentFragment doc
+    (result, postBuild, voidActions) <- runWidget df c
+    runFrameWithTriggerRef newChildBuiltTriggerRef (result, voidActions)
+    postBuild
     liftIO $ deleteBetweenExclusive startPlaceholder endPlaceholder
-    build c
+    mp' <- getParentNode endPlaceholder
+    forM_ mp' $ \p' -> insertBefore p' (Just df) (Just endPlaceholder)
+    return ()
   return (result0, fmap fst newChildBuilt)
 
 diffMapNoEq :: (Ord k) => Map k v -> Map k v -> Map k (Maybe v)

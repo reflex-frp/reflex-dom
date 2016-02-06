@@ -17,6 +17,8 @@ module Reflex.Dom.Xhr
   , performRequestAsyncWithError
   , performRequestsAsync
   , performMkRequestsAsync
+  , performRequestAsyncWithError
+  , performRequestsAsync
   , performRequestsAsyncWithError
   , getAndDecode
   , postJson
@@ -69,7 +71,10 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Traversable
+import Reflex
+import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
 import Data.Typeable
 
@@ -145,7 +150,7 @@ newXMLHttpRequestWithError req cb = do
       (fromMaybe "" $ _xhrRequestConfig_user c)
       (fromMaybe "" $ _xhrRequestConfig_password c)
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
-    maybe (return ()) (xmlHttpRequestSetResponseType xhr . toResponseType) rt
+    maybe (return ()) (xmlHttpRequestSetResponseType xhr . fromResponseType) rt
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr

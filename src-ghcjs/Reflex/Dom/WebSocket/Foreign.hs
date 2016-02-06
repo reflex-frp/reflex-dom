@@ -30,11 +30,8 @@ newWebSocket _ url onMessage onOpen onClose = do
   _ <- on ws message $ do
     e <- ask
     d <- getData e
-    liftIO $ case jsTypeOf d of
-      String -> onMessage $ encodeUtf8 $ pFromJSVal d
-      _ -> do
-        ab <- unsafeFreeze $ pFromJSVal d
-        onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
+    ab <- liftIO $ unsafeFreeze $ pFromJSVal d
+    liftIO $ onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
   _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
 
