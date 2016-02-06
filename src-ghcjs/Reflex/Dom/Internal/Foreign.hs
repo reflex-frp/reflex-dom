@@ -33,7 +33,7 @@ withWebViewContext a f = f a
 
 foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal
 
-foreign import javascript unsafe "new Uint8Array($1_1.buf, $1_2, $2)[\"buffer\"]" extractByteArray :: Ptr CChar -> Int -> IO JSVal
+foreign import javascript unsafe "new Uint8Array($1_1['buf'], $1_2, $2)['buffer']" extractByteArray :: Ptr CChar -> Int -> IO JSVal
 
 bsToArrayBuffer :: a -> ByteString -> IO JSVal
 bsToArrayBuffer _ bs = BS.useAsCString bs $ \cStr -> do
