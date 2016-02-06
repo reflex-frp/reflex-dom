@@ -822,6 +822,9 @@ workflowView w0 = do
       eReplace <- liftM switch $ hold never $ fmap snd eResult
   return $ fmap fst eResult
 
+mapWorkflow :: (MonadWidget t m) => (a -> b) -> Workflow t m a -> Workflow t m b
+mapWorkflow f (Workflow x) = Workflow (fmap (\(v,e) -> (f v, fmap (mapWorkflow f) e)) x)
+
 divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
 divClass = elClass "div"
 
