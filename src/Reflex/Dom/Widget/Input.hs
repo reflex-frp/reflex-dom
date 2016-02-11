@@ -210,7 +210,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
         guard $ Map.member k opts
         return k
   dValue <- combineDyn readKey options =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
-  return $ Dropdown dValue (attachDynWith readKey options eChange)
+  return $ Dropdown dValue (attachWith readKey (current options) eChange)
 
 liftM concat $ mapM makeLenses
   [ ''TextAreaConfig
