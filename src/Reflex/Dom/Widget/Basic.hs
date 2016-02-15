@@ -130,7 +130,7 @@ display a = dynText =<< mapDyn show a
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
 --   The returned Event of widget results occurs when the Dynamic does.
---   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened.
+--   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
