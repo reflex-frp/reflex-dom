@@ -35,7 +35,6 @@ library
     ghcjs-dom >= 0.2.1 && < 0.3,
     transformers == 0.3.* || == 0.4.*,
     lens >= 4.7 && < 4.14,
-    safe == 0.3.*,
     text == 1.2.*,
     bytestring == 0.10.*,
     data-default == 0.5.*,
@@ -44,7 +43,8 @@ library
     exception-transformers == 0.4.*,
     directory == 1.2.*,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
-    bifunctors >= 4.2 && < 6
+    bifunctors >= 4.2 && < 6,
+    bimap >= 0.3 && < 0.4
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
