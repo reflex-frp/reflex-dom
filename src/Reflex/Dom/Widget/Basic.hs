@@ -130,7 +130,7 @@ display a = dynText =<< mapDyn show a
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
 --   The returned Event of widget results occurs when the Dynamic does.
---   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened.
+--   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
 dyn :: MonadWidget t m => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
@@ -235,8 +235,8 @@ listHoldWithKey initialVals valsChanged mkChild = do
   stateRef <- liftIO $ newIORef initialState
   children <- holdDyn initialState newChildren
   tellWidgetOutput =<< mapDyn (fmap snd) children
-  mpOrig <- getParentNode endPlaceholder
-  forM_ mpOrig $ \pOrig -> insertBefore pOrig (Just dfOrig) (Just endPlaceholder)
+  mpOrig <- liftIO $ getParentNode endPlaceholder
+  forM_ mpOrig $ \pOrig -> liftIO $ insertBefore pOrig (Just dfOrig) (Just endPlaceholder)
   addVoidAction $ flip fmap valsChanged $ \newVals -> do
     curState <- liftIO $ readIORef stateRef
     --TODO: Should we remove the parent from the DOM first to avoid reflows?
@@ -826,6 +826,9 @@ workflowView w0 = do
   rec eResult <- dyn =<< mapDyn unWorkflow =<< holdDyn w0 eReplace
       eReplace <- liftM switch $ hold never $ fmap snd eResult
   return $ fmap fst eResult
+
+mapWorkflow :: (MonadWidget t m) => (a -> b) -> Workflow t m a -> Workflow t m b
+mapWorkflow f (Workflow x) = Workflow (fmap (\(v,e) -> (f v, fmap (mapWorkflow f) e)) x)
 
 divClass :: forall t m a. MonadWidget t m => String -> m a -> m a
 divClass = elClass "div"

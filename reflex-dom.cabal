@@ -13,8 +13,10 @@ Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
 extra-source-files: src-ghc/Reflex/Dom/Internal/Foreign.hs
                     src-ghc/Reflex/Dom/Xhr/Foreign.hs
+                    src-ghc/Reflex/Dom/WebSocket/Foreign.hs
                     src-ghcjs/Reflex/Dom/Internal/Foreign.hs
                     src-ghcjs/Reflex/Dom/Xhr/Foreign.hs
+                    src-ghcjs/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
 
@@ -35,7 +37,6 @@ library
     ghcjs-dom >= 0.2.1 && < 0.3,
     transformers == 0.3.* || == 0.4.*,
     lens >= 4.7 && < 4.14,
-    safe == 0.3.*,
     text == 1.2.*,
     bytestring == 0.10.*,
     data-default == 0.5.*,
@@ -45,7 +46,8 @@ library
     directory == 1.2.*,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     zenc == 0.1.*,
-    bifunctors >= 4.2 && < 6
+    bifunctors >= 4.2 && < 6,
+    bimap >= 0.3 && < 0.4
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
@@ -92,4 +94,4 @@ library
 
 source-repository head
   type: git
-  location: https://github.com/ryantrinkle/reflex
+  location: https://github.com/reflex-frp/reflex-dom
