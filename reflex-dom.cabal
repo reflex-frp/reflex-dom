@@ -24,6 +24,7 @@ library
   hs-source-dirs: src
   build-depends:
     base >= 4.7 && < 4.9,
+    stm == 2.4.*,
     reflex == 0.4.*,
     dependent-sum == 0.3.*,
     dependent-map == 0.2.*,
