@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, StandaloneDeriving, FunctionalDependencies #-}
 module Reflex.Dom.DynamicWriter where
 
 import Reflex
@@ -67,5 +67,8 @@ runDynamicWriterT (DynamicWriterT a) = do
   w <- mconcatDyn $ reverse ws
   return (result, w)
 
-tellDyn :: Monad m => Dynamic t w -> DynamicWriterT t w m ()
-tellDyn w = DynamicWriterT $ modify (w:)
+class Monad m => MonadDynamicWriter t w m | m -> t w where
+  tellDyn :: Dynamic t w -> m ()
+
+instance Monad m => MonadDynamicWriter t w (DynamicWriterT t w m) where
+  tellDyn w = DynamicWriterT $ modify (w:)
