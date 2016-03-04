@@ -39,6 +39,7 @@ webSocketSend (JSWebSocket ws) bs = do
   ab <- ArrayBuffer <$> if BS.length bs == 0 --TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
                         then jsval . getArrayBuffer <$> create 0
                         else return $ js_dataView off len $ jsval $ getArrayBuffer b
-  GD.send ws $ Just ab
+  rs <- GD.getReadyState ws
+  when (rs == GD.OPEN) $ GD.send ws $ Just ab
 
 foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal
