@@ -189,6 +189,13 @@ applyMap olds diffs = flip Map.mapMaybe (align olds diffs) $ \case
   These _ new -> new
   That new -> new
 
+--HACK: A listWithKey that is inefficient but works around a subtle buggy interaction with DynamicWriterT
+listWithKey :: forall t k v m a. (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
+listWithKey eltsMapD body = do
+  pb <- getPostBuild
+  widgetHold (return Map.empty) $ ffor (leftmost [ tagDyn eltsMapD pb, updated eltsMapD ]) $ imapM $ \k v -> body k (constDyn v)
+
+{-
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listWithKey :: forall t k v m a. (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 listWithKey vals mkChild = do
@@ -201,6 +208,7 @@ listWithKey vals mkChild = do
                          ]
   listWithKeyShallowDiff Map.empty changeVals $ \k v0 dv -> do
     mkChild k =<< holdDyn v0 dv
+-}
 
 {-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
 listWithKey' :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
@@ -277,6 +285,7 @@ listHoldWithKey initialVals valsChanged mkChild = do
 --   This is like listWithKey, specialized for widgets returning (Event t a).  listWithKey would return 'Dynamic t (Map k (Event t a))' in this scenario, but listViewWithKey flattens this to 'Event t (Map k a)' via 'switch'.
 listViewWithKey :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
 listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
+
 
 listViewWithKey' :: (Ord k, MonadWidget t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
 listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
