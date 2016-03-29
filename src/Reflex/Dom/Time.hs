@@ -71,3 +71,16 @@ debounce dt e = do
   let tagged = attachDynWith (,) n e
   delayed <- delay dt tagged
   return $ attachWithMaybe (\n' (t, v) -> if n' == t then Just v else Nothing) (current n) delayed
+
+-- | Convert a Dynamic into one which updates with at least a given delay between new values.
+--   The resulting Dynamic will update to the latest value of the input Dynamic when the delay
+--   period ends, if necessary.
+calm :: MonadWidget t m => NominalDiffTime -> Dynamic t a -> m (Dynamic t a)
+calm dt x = do
+  rec let changeE = leftmost [gate allow (updated x), catchUp]
+      changeDelayE <- delay dt (True <$ changeE)
+      allow <- hold True $ leftmost [False <$ changeE, changeDelayE]
+      needCatchUp <- hold False $ leftmost [True <$ gate (fmap not allow) (updated x), False <$ changeE]
+      let catchUp = gate needCatchUp (tagDyn x changeDelayE)
+  i <- sample (current x)
+  holdDyn i changeE
