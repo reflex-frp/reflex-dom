@@ -7,6 +7,7 @@ import Reflex.Dom.Class
 
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Exception
 import qualified Data.Map as Map
@@ -72,3 +73,16 @@ class Monad m => MonadDynamicWriter t w m | m -> t w where
 
 instance Monad m => MonadDynamicWriter t w (DynamicWriterT t w m) where
   tellDyn w = DynamicWriterT $ modify (w:)
+
+instance MonadDynamicWriter t w m => MonadDynamicWriter t w (ReaderT r m) where
+  tellDyn = lift . tellDyn
+
+deriving instance MonadReader r m => MonadReader r (DynamicWriterT t w m)
+
+instance MonadState s m => MonadState s (DynamicWriterT t w m) where
+  get = lift get
+  put = lift . put
+
+instance HasJS x m => HasJS x (DynamicWriterT t w m) where
+  type JSM (DynamicWriterT t w m) = JSM m
+  liftJS = lift . liftJS
