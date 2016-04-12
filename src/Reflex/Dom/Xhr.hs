@@ -72,6 +72,7 @@ data XhrRequestConfig
                       , _xhrRequestConfig_password :: Maybe String
                       , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: Maybe String
+                      , _xhrRequestConfig_withCredentials :: Bool
                       }
    deriving (Show, Read, Eq, Ord, Typeable)
 
@@ -97,6 +98,7 @@ instance Default XhrRequestConfig where
                          , _xhrRequestConfig_password  = Nothing
                          , _xhrRequestConfig_responseType  = Nothing
                          , _xhrRequestConfig_sendData  = Nothing
+                         , _xhrRequestConfig_withCredentials = False
                          }
 
 -- | Construct a request object from method, URL, and config record.
@@ -123,6 +125,7 @@ newXMLHttpRequestWithError req cb = do
   void $ liftIO $ forkIO $ flip catch (postGui . cb . Left) $ void $ do
     let c = _xhrRequest_config req
         rt = _xhrRequestConfig_responseType c
+        creds = _xhrRequestConfig_withCredentials c
     xmlHttpRequestOpen
       xhr
       (_xhrRequest_method req)
@@ -132,6 +135,7 @@ newXMLHttpRequestWithError req cb = do
       (fromMaybe "" $ _xhrRequestConfig_password c)
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
     maybe (return ()) (xmlHttpRequestSetResponseType xhr . fromResponseType) rt
+    xmlHttpRequestSetWithCredentials xhr creds
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr
