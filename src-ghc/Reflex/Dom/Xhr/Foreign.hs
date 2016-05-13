@@ -204,3 +204,13 @@ xmlHttpRequestGetStatusText xhr = do
          _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
          peekCString ps
   return $ T.pack s
+
+xmlHttpRequestSetWithCredentials :: XMLHttpRequest -> Bool -> IO ()
+xmlHttpRequestSetWithCredentials xhr b = do
+  let c = xhrContext xhr
+  b' <- jsvaluemakeboolean c b
+  o <- toJSObject c [xhrValue xhr, b']
+  script <- jsstringcreatewithutf8cstring "this[0].withCredentials = this[1]"
+  _ <- jsevaluatescript c script o nullPtr 1 nullPtr
+  return ()
+
