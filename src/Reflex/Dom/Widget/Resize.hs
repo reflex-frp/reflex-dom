@@ -7,9 +7,11 @@ import Reflex.Dom.Widget.Basic
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Map (Map)
 import Data.Monoid
 import GHCJS.DOM.Element hiding (reset)
 import GHCJS.DOM.EventM (on)
+import qualified Data.Map as Map
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from github.com/marcj/css-element-queries
@@ -20,10 +22,16 @@ resizeDetectorWithStyle :: MonadWidget t m
   => String -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
-resizeDetectorWithStyle styleString w = do
+resizeDetectorWithStyle styleString w = resizeDetectorWithAttrs ("style" =: styleString) w
+
+resizeDetectorWithAttrs :: MonadWidget t m
+  => Map String String -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
+  -> m a -- ^ The embedded widget
+  -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
+resizeDetectorWithAttrs attrs w = do
   let childStyle = "position: absolute; left: 0; top: 0;"
       containerAttrs = "style" =: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: scroll; z-index: -1; visibility: hidden;"
-  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" ("style" =: ("position: relative;" <> styleString)) $ do
+  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" (Map.unionWith (<>) attrs ("style" =: "position: relative;")) $ do
     w' <- w
     elAttr "div" containerAttrs $ do
       (expand, (expandChild, _)) <- elAttr' "div" containerAttrs $ elAttr' "div" ("style" =: childStyle) $ return ()
@@ -61,3 +69,4 @@ resizeDetectorWithStyle styleString w = do
   rec resize <- performEventAsync $ fmap (\d cb -> liftIO $ cb =<< resetIfChanged d) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]
   return (fmap (const ()) $ fmapMaybe id resize, w')
+
