@@ -11,7 +11,7 @@ import GHCJS.DOM.WebSocket (message, open, closeEvent)
 import qualified GHCJS.DOM.WebSocket as GD
 import GHCJS.DOM.MessageEvent
 import GHCJS.DOM.EventM (on)
-import GHCJS.DOM.Types
+import GHCJS.DOM.Types hiding (Text)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import GHCJS.Buffer
@@ -19,12 +19,13 @@ import JavaScript.TypedArray.ArrayBuffer as JS
 import GHCJS.Marshal.Pure
 import GHCJS.Foreign.Internal
 import Data.Text.Encoding
+import Data.Text (Text)
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
 
-newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket :: a -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onOpen onClose = do
-  ws <- GD.newWebSocket url (Just [] :: Maybe [String])
+  ws <- GD.newWebSocket url (Just [] :: Maybe [Text])
   _ <- on ws open $ liftIO onOpen
   GD.setBinaryType ws "arraybuffer"
   _ <- on ws message $ do

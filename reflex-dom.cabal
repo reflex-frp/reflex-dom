@@ -23,7 +23,7 @@ extra-source-files: src-ghc/Reflex/Dom/Internal/Foreign.hs
 library
   hs-source-dirs: src
   build-depends:
-    base >= 4.7 && < 4.9,
+    base >= 4.7 && < 4.10,
     template-haskell,
     stm == 2.4.*,
     reflex == 0.4.*,
@@ -36,19 +36,20 @@ library
     ref-tf == 0.4.*,
     random == 1.1.*,
     ghcjs-dom >= 0.2.1 && < 0.3,
-    transformers == 0.3.* || == 0.4.*,
-    lens >= 4.7 && < 4.14,
+    transformers >= 0.3 || < 0.6,
+    lens >= 4.7 && < 4.15,
     text == 1.2.*,
     bytestring == 0.10.*,
     data-default == 0.5.*,
-    aeson >= 0.8 && < 0.11,
-    time == 1.4.* || == 1.5.*,
+    aeson >= 0.8 && < 0.12,
+    time == 1.4.* || ( >= 1.5 && < 1.7 ),
     exception-transformers == 0.4.*,
     directory == 1.2.*,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     zenc == 0.1.*,
     bifunctors >= 4.2 && < 6,
-    bimap >= 0.3 && < 0.4
+    bimap >= 0.3 && < 0.4,
+    monad-control >= 1.0.1 && < 1.1
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
@@ -69,10 +70,21 @@ library
       build-depends: unix == 2.7.*
 
   exposed-modules:
+    Foreign.JavaScript.TH
     Reflex.Dom
+    Reflex.Dom.Builder.Class
+    Reflex.Dom.Builder.Class.Events
+    Reflex.Dom.Builder.Immediate
     Reflex.Dom.Class
+    Reflex.Dom.Deletable.Class
     Reflex.Dom.DynamicWriter
     Reflex.Dom.Internal
+    Reflex.Dom.Internal.Foreign
+    Reflex.Dom.Location
+    Reflex.Dom.PerformEvent.Base
+    Reflex.Dom.PerformEvent.Class
+    Reflex.Dom.PostBuild.Class
+    Reflex.Dom.Old
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.Widget
@@ -81,10 +93,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
-    Reflex.Dom.Location
-    Foreign.JavaScript.TH
   other-modules:
-    Reflex.Dom.Internal.Foreign
     Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType

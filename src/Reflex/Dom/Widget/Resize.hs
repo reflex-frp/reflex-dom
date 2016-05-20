@@ -1,13 +1,19 @@
-{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE RecursiveDo, TypeFamilies, FlexibleContexts, OverloadedStrings #-}
 module Reflex.Dom.Widget.Resize where
 
 import Reflex
+import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
+import Reflex.Dom.Old
 import Reflex.Dom.Widget.Basic
 
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Map (Map)
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Monoid
 import GHCJS.DOM.Element hiding (reset)
 import GHCJS.DOM.EventM (on)
@@ -19,13 +25,13 @@ resizeDetector :: MonadWidget t m => m a -> m (Event t (), a)
 resizeDetector = resizeDetectorWithStyle ""
 
 resizeDetectorWithStyle :: MonadWidget t m
-  => String -- ^ A css style string. Warning: It should not contain the "position" style attribute.
+  => Text -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithStyle styleString w = resizeDetectorWithAttrs ("style" =: styleString) w
 
 resizeDetectorWithAttrs :: MonadWidget t m
-  => Map String String -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
+  => Map Text Text -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithAttrs attrs w = do
@@ -44,7 +50,7 @@ resizeDetectorWithAttrs attrs w = do
         eoh <- getOffsetHeight e
         let ecw = eow + 10
             ech = eoh + 10
-        setAttribute (_el_element expandChild) "style" (childStyle <> "width: " <> show ecw <> "px;" <> "height: " <> show ech <> "px;")
+        setAttribute (_el_element expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
         esw <- getScrollWidth e
         setScrollLeft e esw
         esh <- getScrollHeight e
@@ -69,4 +75,3 @@ resizeDetectorWithAttrs attrs w = do
   rec resize <- performEventAsync $ fmap (\d cb -> liftIO $ cb =<< resetIfChanged d) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]
   return (fmap (const ()) $ fmapMaybe id resize, w')
-

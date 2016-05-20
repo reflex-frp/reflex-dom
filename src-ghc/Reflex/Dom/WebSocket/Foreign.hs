@@ -17,6 +17,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.WebView
 import qualified Data.ByteString as BS
+import Data.Text (Text)
 import qualified Data.Text as T
 
 import Reflex.Dom.Internal.Foreign
@@ -25,9 +26,9 @@ data JSWebSocket = JSWebSocket { wsValue :: JSValueRef
                                , wsContext :: JSContextRef
                                }
 
-newWebSocket :: WebView -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket :: WebView -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
-  url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring url
+  url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring (T.unpack url)
   newWSArgs <- toJSObject c [url']
   newWS <- jsstringcreatewithutf8cstring "(function(that) { var ws = new WebSocket(that[0]); ws['binaryType'] = 'arraybuffer'; return ws; })(this)"
   ws <- jsevaluatescript c newWS newWSArgs nullPtr 1 nullPtr
@@ -38,7 +39,7 @@ newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
     msg' <- fromJSStringMaybe c msg
     case msg' of
       Nothing -> return ()
-      Just m -> onMessage $ encodeUtf8 $ T.pack m
+      Just m -> onMessage $ encodeUtf8 m
     jsvaluemakeundefined c
   onMessageCb <- jsobjectmakefunctionwithcallback c nullPtr onMessage'
   onOpen' <- wrapper $ \_ _ _ _ _ _ -> do

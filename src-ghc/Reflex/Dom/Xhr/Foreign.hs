@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, QuasiQuotes, ForeignFunctionInterface #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, QuasiQuotes, ForeignFunctionInterface, OverloadedStrings #-}
 module Reflex.Dom.Xhr.Foreign ( module Reflex.Dom.Xhr.Foreign
                               , XhrResponseType
                               ) where
@@ -12,7 +12,6 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import GHCJS.DOM.File
 import Reflex.Dom.Xhr.ResponseType
 import Reflex.Dom.Xhr.Exception
@@ -36,22 +35,22 @@ class IsXhrPayload a where
 instance IsXhrPayload () where
   xmlHttpRequestSend xhr _ = xmlHttpRequestSendPayload xhr Nothing
 
-instance IsXhrPayload String where
+instance IsXhrPayload Text where
   xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just
 
 instance IsXhrPayload File where
   xmlHttpRequestSend = error "xmlHttpRequestSend{File}: not implemented"
 
-stringToJSValue :: JSContextRef -> String -> IO JSValueRef
-stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
+stringToJSValue :: JSContextRef -> Text -> IO JSValueRef
+stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring (T.unpack s)
 
-fromResponseType :: XhrResponseType -> String
+fromResponseType :: XhrResponseType -> Text
 fromResponseType XhrResponseType_Default = ""
 fromResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
 fromResponseType XhrResponseType_Blob = "blob"
 fromResponseType XhrResponseType_Text = "text"
 
-toResponseType :: String -> Maybe XhrResponseType
+toResponseType :: Text -> Maybe XhrResponseType
 toResponseType "" = Just XhrResponseType_Default
 toResponseType "arraybuffer" = Just XhrResponseType_ArrayBuffer
 toResponseType "blob" = Just XhrResponseType_Blob
@@ -65,7 +64,7 @@ xmlHttpRequestNew wv = withWebViewContext wv $ \jsContext -> do
   jsvalueprotect jsContext xhr'
   return $ XMLHttpRequest xhr' jsContext
 
-xmlHttpRequestOpen :: XMLHttpRequest -> String -> String -> Bool -> String -> String -> IO ()
+xmlHttpRequestOpen :: XMLHttpRequest -> Text -> Text -> Bool -> Text -> Text -> IO ()
 xmlHttpRequestOpen xhr method url async user password = do
   let c = xhrContext xhr
   method' <- stringToJSValue c method
@@ -117,8 +116,8 @@ xmlHttpRequestGetResponse xhr = do
        False ->  case mrt of
          Just XhrResponseType_ArrayBuffer -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer c t
          Just XhrResponseType_Blob -> Just . XhrResponseBody_Blob . Blob . castForeignPtr <$> newForeignPtr_ t
-         Just XhrResponseType_Default -> fmap (XhrResponseBody_Default . T.pack) <$> fromJSStringMaybe c t
-         Just XhrResponseType_Text -> fmap (XhrResponseBody_Text . T.pack) <$> fromJSStringMaybe c t
+         Just XhrResponseType_Default -> fmap (XhrResponseBody_Default) <$> fromJSStringMaybe c t
+         Just XhrResponseType_Text -> fmap (XhrResponseBody_Text) <$> fromJSStringMaybe c t
          _ -> return Nothing
 
 xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe Text)
@@ -126,9 +125,9 @@ xmlHttpRequestGetResponseText xhr = do
   let c = xhrContext xhr
   script <- jsstringcreatewithutf8cstring "this.responseText"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
-  fmap (fmap T.pack) $ fromJSStringMaybe c t
+  fromJSStringMaybe c t
 
-xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe String -> IO ()
+xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe Text -> IO ()
 xmlHttpRequestSendPayload xhr payload = do
   let c = xhrContext xhr
   result <- newEmptyMVar
@@ -181,7 +180,7 @@ xmlHttpRequestSendPayload xhr payload = do
       })(this[0], this[1], this[2], this[3], this[4])
     |]
 
-xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> String -> String -> IO ()
+xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> Text -> Text -> IO ()
 xmlHttpRequestSetRequestHeader xhr header value = do
   let c = xhrContext xhr
   header' <- stringToJSValue c header
@@ -191,7 +190,7 @@ xmlHttpRequestSetRequestHeader xhr header value = do
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
 
-xmlHttpRequestSetResponseType :: XMLHttpRequest -> String -> IO ()
+xmlHttpRequestSetResponseType :: XMLHttpRequest -> Text -> IO ()
 xmlHttpRequestSetResponseType xhr t = do
   let c = xhrContext xhr
   t' <- stringToJSValue c t

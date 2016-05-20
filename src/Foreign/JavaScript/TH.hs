@@ -6,6 +6,11 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              , Safety (..)
                              ) where
 
+import Reflex.Class
+import Reflex.Host.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.Deletable.Class
+
 import Language.Haskell.TH
 
 #ifdef __GHCJS__
@@ -16,10 +21,9 @@ import qualified GHCJS.Foreign.Callback as JS
 import qualified GHCJS.Types as JS
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
-import GHCJS.DOM.Types hiding (fromJSString)
+import GHCJS.DOM.Types hiding (fromJSString, Text)
 import qualified GHCJS.DOM.Types as JS
 import qualified JavaScript.Array as JS
-import qualified JavaScript.Cast as JS
 import qualified JavaScript.Object as JS
 import qualified JavaScript.Object.Internal (Object (..))
 import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
@@ -40,21 +44,25 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
 import Graphics.UI.Gtk.WebKit.DOM.Node
+import Foreign.Marshal
 #endif
 
 import Control.Monad
+import Control.Monad.Ref
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Exception
 import Control.Monad.Reader
 import Control.Monad.State
+import Control.Monad.Trans.Control
 import qualified Control.Monad.State.Strict as Strict
-import Foreign.Marshal
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Control.Concurrent
 import Data.Coerce
 import Data.Monoid
+import Data.Text (Text)
+import qualified Data.Text as T
 
 class Monad m => HasWebView m where
   type WebViewPhantom m :: *
@@ -72,7 +80,54 @@ instance HasWebView m => HasWebView (Strict.StateT r m) where
   type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
   askWebView = lift askWebView
 
-newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadException, MonadAsyncException)
+newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
+  {-# INLINABLE newEventWithTrigger #-}
+  newEventWithTrigger = lift . newEventWithTrigger
+  {-# INLINABLE newFanEventWithTrigger #-}
+  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
+
+instance MonadSubscribeEvent t m => MonadSubscribeEvent t (WithWebView x m) where
+  {-# INLINABLE subscribeEvent #-}
+  subscribeEvent = lift . subscribeEvent
+
+instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
+  type ReadPhase (WithWebView x m) = ReadPhase m
+  {-# INLINABLE fireEventsAndRead #-}
+  fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
+  {-# INLINABLE runHostFrame #-}
+  runHostFrame = lift . runHostFrame
+
+instance MonadSample t m => MonadSample t (WithWebView x m) where
+  {-# INLINABLE sample #-}
+  sample = lift . sample
+
+instance MonadHold t m => MonadHold t (WithWebView x m) where
+  {-# INLINABLE hold #-}
+  hold v0 = lift . hold v0
+  {-# INLINABLE holdDyn #-}
+  holdDyn v0 = lift . holdDyn v0
+  {-# INLINABLE holdIncremental #-}
+  holdIncremental v0 = lift . holdIncremental v0
+
+instance MonadTransControl (WithWebView x) where
+  type StT (WithWebView x) a = StT (ReaderT (WebViewSingleton x)) a
+  {-# INLINABLE liftWith #-}
+  liftWith = defaultLiftWith WithWebView unWithWebView
+  {-# INLINABLE restoreT #-}
+  restoreT = defaultRestoreT WithWebView
+
+instance PerformEvent t m => PerformEvent t (WithWebView x m) where
+  type Performable (WithWebView x m) = WithWebView x (Performable m)
+  {-# INLINABLE performEvent_ #-}
+  performEvent_ e = liftWith $ \run -> performEvent_ $ fmap run e
+  {-# INLINABLE performEvent #-}
+  performEvent e = liftWith $ \run -> performEvent $ fmap run e
+
+instance Deletable t m => Deletable t (WithWebView x m) where
+  {-# INLINABLE deletable #-}
+  deletable e = liftThrough $ deletable e
 
 runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
 runWithWebView = runReaderT . unWithWebView
@@ -80,6 +135,15 @@ runWithWebView = runReaderT . unWithWebView
 instance (Monad m) => HasWebView (WithWebView x m) where
   type WebViewPhantom (WithWebView x m) = x
   askWebView = WithWebView ask
+
+instance MonadRef m => MonadRef (WithWebView x m) where
+  type Ref (WithWebView x m) = Ref m
+  newRef = lift . newRef
+  readRef = lift . readRef
+  writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (WithWebView x m) where
+  atomicModifyRef r = lift . atomicModifyRef r
 
 withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
 withWebViewSingleton wv f = f $ WebViewSingleton wv
@@ -129,7 +193,7 @@ class Monad m => MonadJS x m | m -> x where
   withJSString :: String -> (JSRef x -> m r) -> m r
   withJSNumber :: Double -> (JSRef x -> m r) -> m r
   withJSArray :: [JSRef x] -> (JSRef x -> m r) -> m r
-  withJSUint8Array :: MonadJS x m => ByteString -> (JSUint8Array x -> m r) -> m r
+  withJSUint8Array :: ByteString -> (JSUint8Array x -> m r) -> m r
   -- | Create a JSFun with zero arguments; should be equilvant to `syncCallback AlwaysRetain True` in GHCJS
   mkJSFun :: ([JSRef x] -> m (JSRef x)) -> m (JSFun x) --TODO: Support 'this', exceptions
   freeJSFun :: JSFun x -> m ()
@@ -140,6 +204,10 @@ class Monad m => MonadJS x m | m -> x where
 #ifdef __GHCJS__
 
 data JSCtx_IO
+
+instance MonadIO m => HasJS JSCtx_IO (WithWebView x m) where
+  type JSM (WithWebView x m) = IO
+  liftJS = liftIO
 
 instance IsJSContext JSCtx_IO where
   newtype JSRef JSCtx_IO = JSRef_IO { unJSRef_IO :: JS.JSVal }
@@ -181,7 +249,7 @@ instance MonadJS JSCtx_IO IO where
     return $ JSRef_IO r
   withJSNode n f = f $ JSRef_IO $ unNode n
 
-foreign import javascript unsafe "new Uint8Array($1_1.buf, $1_2, $2)" extractByteArray :: Ptr CChar -> Int -> IO (JS.JSRef (JSRef JSCtx_IO))
+foreign import javascript unsafe "new Uint8Array($1_1.buf, $1_2, $2)" extractByteArray :: Ptr CChar -> Int -> IO JS.JSVal
 
 foreign import javascript unsafe "function(){ return $1(arguments); }" funWithArguments :: JS.Callback (JS.MutableJSArray -> IO a) -> IO JS.JSVal
 
@@ -203,7 +271,6 @@ fromJSNumberRaw val = do
   jsContext <- askJSContext
   liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
 
-foreign import ccall "wrapper" mkJSObjectCallAsFunctionCallback :: JSObjectCallAsFunctionCallback' -> IO (FunPtr JSObjectCallAsFunctionCallback')
 
 data JSCtx_JavaScriptCore x
 
@@ -326,6 +393,9 @@ instance ToJS x Bool where
 instance FromJS x String where
   fromJS = fromJSString
 
+instance FromJS x Text where
+  fromJS s = T.pack <$> fromJSString s
+
 instance FromJS x a => FromJS x (Maybe a) where
   fromJS x = do
     n <- isJSNull x
@@ -342,6 +412,9 @@ instance FromJS x (JSRef x) where
 
 instance ToJS x String where
   withJS = withJSString
+
+instance ToJS x Text where
+  withJS = withJSString . T.unpack
 
 newtype JSArray a = JSArray { unJSArray :: [a] }
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase, OverloadedStrings #-}
 module Reflex.Dom.Internal.Foreign where
 
 import Control.Concurrent
@@ -7,7 +7,6 @@ import Control.Lens hiding (set)
 import Control.Monad
 import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
 import Data.ByteString (ByteString)
-import Data.List
 import Foreign.Marshal hiding (void)
 import Foreign.Ptr
 import GHCJS.DOM hiding (runWebGUI)
@@ -19,7 +18,7 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget)
+import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, Text)
 import Graphics.UI.Gtk.WebKit.WebFrame
 import Graphics.UI.Gtk.WebKit.WebInspector
 import Graphics.UI.Gtk.WebKit.WebSettings
@@ -27,23 +26,26 @@ import Graphics.UI.Gtk.WebKit.WebView
 import System.Directory
 import System.Glib.FFI hiding (void)
 import qualified Data.ByteString as BS
+import Data.Monoid
+import Data.Text (Text)
+import qualified Data.Text as T
 
 #ifndef mingw32_HOST_OS
 import System.Posix.Signals
 #endif
 
 quitWebView :: WebView -> IO ()
-quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv
+quitWebView wv = postGUIAsync $ do w <- widgetGetToplevel wv --TODO: Shouldn't this be postGUISync?
                                    widgetDestroy w
 
 installQuitHandler :: WebView -> IO ()
 #ifdef mingw32_HOST_OS
 installQuitHandler wv = return () -- TODO: Maybe figure something out here for Windows users.
 #else
-installQuitHandler wv = installHandler keyboardSignal (Catch (quitWebView wv)) Nothing >> return ()
+installQuitHandler wv = void $ installHandler keyboardSignal (Catch (quitWebView wv)) Nothing
 #endif
 
-makeDefaultWebView :: String -> (WebView -> IO ()) -> IO ()
+makeDefaultWebView :: Text -> (WebView -> IO ()) -> IO ()
 makeDefaultWebView userAgentKey main = do
   _ <- initGUI
   window <- windowNew
@@ -54,7 +56,7 @@ makeDefaultWebView userAgentKey main = do
   webView <- webViewNew
   settings <- webViewGetWebSettings webView
   userAgent <- settings `get` webSettingsUserAgent
-  settings `set` [ webSettingsUserAgent := userAgent ++ " " ++ userAgentKey
+  settings `set` [ webSettingsUserAgent := userAgent <> " " <> userAgentKey
                  , webSettingsEnableUniversalAccessFromFileUris := True
                  , webSettingsEnableDeveloperExtras := True
                  ]
@@ -77,14 +79,14 @@ makeDefaultWebView userAgentKey main = do
     return inspectorWebView
   wf <- webViewGetMainFrame webView
   pwd <- getCurrentDirectory
-  webFrameLoadString wf "" Nothing $ "file://" ++ pwd ++ "/"
+  webFrameLoadString wf "" Nothing $ "file://" <> pwd <> "/"
   installQuitHandler webView
   mainGUI
 
 runWebGUI :: (WebView -> IO ()) -> IO ()
 runWebGUI = runWebGUI' "GHCJS"
 
-runWebGUI' :: String -> (WebView -> IO ()) -> IO ()
+runWebGUI' :: Text -> (WebView -> IO ()) -> IO ()
 runWebGUI' userAgentKey main = do
   -- Are we in a java script inside some kind of browser
   mbWindow <- currentWindow
@@ -93,7 +95,7 @@ runWebGUI' userAgentKey main = do
       -- Check if we are running in javascript inside the the native version
       Just n <- getNavigator window
       agent <- getUserAgent n
-      unless ((" " ++ userAgentKey) `isSuffixOf` agent) $ main (castToWebView window)
+      unless ((" " <> userAgentKey) `T.isSuffixOf` agent) $ main (castToWebView window)
     Nothing -> do
       makeDefaultWebView userAgentKey main
 
@@ -108,7 +110,7 @@ toJSObject ctx args = do
     jsobjectsetproperty ctx o prop a 1 nullPtr
   return o
 
-fromJSStringMaybe :: JSContextRef -> JSValueRef -> IO (Maybe String)
+fromJSStringMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Text)
 fromJSStringMaybe c t = do
   isNull <- jsvalueisnull c t
   case isNull of
@@ -119,16 +121,16 @@ fromJSStringMaybe c t = do
       s <- allocaBytes (fromIntegral l) $ \ps -> do
              _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
              peekCString ps
-      return $ Just s
+      return $ Just $ T.pack s
 
-getLocationHost :: WebView -> IO String
+getLocationHost :: WebView -> IO Text
 getLocationHost wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.host"
   lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
   lh' <- fromJSStringMaybe c lh
   return $ maybe "" id lh'
 
-getLocationProtocol :: WebView -> IO String
+getLocationProtocol :: WebView -> IO Text
 getLocationProtocol wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.protocol"
   lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr

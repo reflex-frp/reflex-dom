@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, FlexibleContexts, OverloadedStrings #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
   , XhrRequest(..)
@@ -8,23 +8,33 @@ module Reflex.Dom.Xhr
   , XhrResponseType(..)
   , XhrException(..)
   , _xhrResponse_body
-  , xhrResponse_body
-  , xhrRequest
+  , decodeText
+  , decodeXhrResponse
+  , getAndDecode
+  , getMay
   , newXMLHttpRequest
   , newXMLHttpRequestWithError
-  , performRequestAsync
   , performMkRequestAsync
-  , performRequestAsyncWithError
-  , performRequestsAsync
   , performMkRequestsAsync
+  , performRequestAsync
   , performRequestAsyncWithError
   , performRequestsAsync
   , performRequestsAsyncWithError
-  , getAndDecode
   , postJson
-  , getMay
-  , decodeText
-  , decodeXhrResponse
+  , xhrRequest
+  , xhrRequestConfig_headers
+  , xhrRequestConfig_password
+  , xhrRequestConfig_responseType
+  , xhrRequestConfig_sendData
+  , xhrRequestConfig_user
+  , xhrRequest_config
+  , xhrRequest_method
+  , xhrRequest_url
+  , xhrResponse_body
+  , xhrResponse_response
+  , xhrResponse_responseText
+  , xhrResponse_status
+  , xhrResponse_statusText
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
   , xmlHttpRequestGetStatus
@@ -35,24 +45,15 @@ module Reflex.Dom.Xhr
   , xmlHttpRequestSend
   , xmlHttpRequestSetRequestHeader
   , xmlHttpRequestSetResponseType
-  , xhrRequest_config
-  , xhrRequest_method
-  , xhrRequest_url
-  , xhrRequestConfig_headers
-  , xhrRequestConfig_password
-  , xhrRequestConfig_responseType
-  , xhrRequestConfig_sendData
-  , xhrRequestConfig_user
-  , xhrResponse_response
-  , xhrResponse_responseText
-  , xhrResponse_status
-  , xhrResponse_statusText
   )
 where
 
 import Reflex
 import Reflex.Dom.Class
 import Reflex.Dom.Xhr.Foreign
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.ResponseType
 
 import Control.Concurrent
 import Control.Exception (catch)
@@ -71,24 +72,19 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Traversable
-import Reflex
-import Reflex.Dom.Class
-import Reflex.Dom.Xhr.Exception
-import Reflex.Dom.Xhr.Foreign
-import Reflex.Dom.Xhr.ResponseType
 import Data.Typeable
 
 data XhrRequest a
-   = XhrRequest { _xhrRequest_method :: String
-                , _xhrRequest_url :: String
+   = XhrRequest { _xhrRequest_method :: Text
+                , _xhrRequest_url :: Text
                 , _xhrRequest_config :: XhrRequestConfig a
                 }
    deriving (Show, Read, Eq, Ord, Typeable)
 
 data XhrRequestConfig a
-   = XhrRequestConfig { _xhrRequestConfig_headers :: Map String String
-                      , _xhrRequestConfig_user :: Maybe String
-                      , _xhrRequestConfig_password :: Maybe String
+   = XhrRequestConfig { _xhrRequestConfig_headers :: Map Text Text
+                      , _xhrRequestConfig_user :: Maybe Text
+                      , _xhrRequestConfig_password :: Maybe Text
                       , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: a
                       }
@@ -119,7 +115,7 @@ instance a ~ () => Default (XhrRequestConfig a) where
                          }
 
 -- | Construct a request object from method, URL, and config record.
-xhrRequest :: String -> String -> XhrRequestConfig a -> XhrRequest a
+xhrRequest :: Text -> Text -> XhrRequestConfig a -> XhrRequest a
 xhrRequest = XhrRequest
 
 -- | Make a new asyncronous XHR request. This does not block (it forks),
@@ -127,19 +123,18 @@ xhrRequest = XhrRequest
 -- the XHR connection), and will pass an exception ('XhrException') to the
 -- continuation if the connection cannot be made (or is aborted).
 newXMLHttpRequestWithError
-    :: (HasWebView m, MonadIO m, HasPostGui t h m, IsXhrPayload a)
+    :: (HasWebView m, MonadIO m, IsXhrPayload a)
     => XhrRequest a
     -- ^ The request to make.
-    -> (Either XhrException XhrResponse -> h ())
+    -> (Either XhrException XhrResponse -> IO ())
     -- ^ A continuation to be called once a response comes back, or in
     -- case of error.
     -> m XMLHttpRequest
     -- ^ The XHR request, which could for example be aborted.
 newXMLHttpRequestWithError req cb = do
   wv <- askWebView
-  postGui <- askPostGui
   xhr <- liftIO $ xmlHttpRequestNew $ unWebViewSingleton wv
-  void $ liftIO $ forkIO $ flip catch (postGui . cb . Left) $ void $ do
+  void $ liftIO $ forkIO $ flip catch (cb . Left) $ void $ do
     let c = _xhrRequest_config req
         rt = _xhrRequestConfig_responseType c
     xmlHttpRequestOpen
@@ -161,7 +156,7 @@ newXMLHttpRequestWithError req cb = do
                    then liftIO $ xmlHttpRequestGetResponseText xhr
                    else  return Nothing
             r <- liftIO $ xmlHttpRequestGetResponse xhr
-            _ <- liftIO $ postGui $ cb $ Right $
+            _ <- liftIO $ cb $ Right $
                    XhrResponse { _xhrResponse_status = status
                                , _xhrResponse_statusText = statusText
                                , _xhrResponse_response = r
@@ -173,7 +168,7 @@ newXMLHttpRequestWithError req cb = do
     return ()
   return xhr
 
-newXMLHttpRequest :: (HasWebView m, MonadIO m, HasPostGui t h m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> h ()) -> m XMLHttpRequest
+newXMLHttpRequest :: (HasWebView m, MonadIO m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> IO ()) -> m XMLHttpRequest
 newXMLHttpRequest req cb = newXMLHttpRequestWithError req $ mapM_ cb
 
 -- | Given Event of requests, issue them when the Event fires.
@@ -182,23 +177,23 @@ newXMLHttpRequest req cb = newXMLHttpRequestWithError req $ mapM_ cb
 -- The request is processed asynchronously, therefore handling does
 -- not block or cause a delay while creating the connection.
 performRequestAsyncWithError
-    :: (MonadWidget t m, IsXhrPayload a)
+    :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, IsXhrPayload a)
     => Event t (XhrRequest a)
     -> m (Event t (Either XhrException XhrResponse))
 performRequestAsyncWithError = performRequestAsync' newXMLHttpRequestWithError . fmap return
 
 -- | Given Event of request, issue them when the Event fires.  Returns Event of corresponding response.
-performRequestAsync :: (MonadWidget t m, IsXhrPayload a) => Event t (XhrRequest a) -> m (Event t XhrResponse)
+performRequestAsync :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, IsXhrPayload a) => Event t (XhrRequest a) -> m (Event t XhrResponse)
 performRequestAsync = performRequestAsync' newXMLHttpRequest . fmap return
 
 -- | Given Event with an action that creates a request, build and issue the request when the Event fires.  Returns Event of corresponding response.
-performMkRequestAsync :: (MonadWidget t m, IsXhrPayload a) => Event t (WidgetHost m (XhrRequest a)) -> m (Event t XhrResponse)
+performMkRequestAsync :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, IsXhrPayload a) => Event t (Performable m (XhrRequest a)) -> m (Event t XhrResponse)
 performMkRequestAsync = performRequestAsync' newXMLHttpRequest
 
-performRequestAsync' :: (MonadWidget t m, MonadIO h, IsXhrPayload p) => (XhrRequest p -> (a -> h ()) -> WidgetHost m XMLHttpRequest) -> Event t (WidgetHost m (XhrRequest p)) -> m (Event t a)
+performRequestAsync' :: (MonadIO (Performable m), PerformEvent t m, TriggerEvent t m) => (XhrRequest p -> (a -> IO ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (XhrRequest p)) -> m (Event t a)
 performRequestAsync' newXhr req = performEventAsync $ ffor req $ \hr cb -> do
   r <- hr
-  newXhr r $ liftIO . cb
+  _ <- newXhr r $ liftIO . cb
   return ()
 
 -- | Issues a collection of requests when the supplied Event fires.
@@ -211,19 +206,19 @@ performRequestAsync' newXhr req = performEventAsync $ ffor req $ \hr cb -> do
 -- Order of request execution and completion is not guaranteed, but
 -- order of creation and the collection result is preserved.
 performRequestsAsyncWithError
-    :: (Traversable f, MonadWidget t m, IsXhrPayload a)
+    :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, Traversable f, IsXhrPayload a)
     => Event t (f (XhrRequest a)) -> m (Event t (f (Either XhrException XhrResponse)))
 performRequestsAsyncWithError = performRequestsAsync' newXMLHttpRequestWithError . fmap return
 
 -- | Issues a collection of requests when the supplied Event fires.  When ALL requests from a given firing complete, the results are collected and returned via the return Event.
-performRequestsAsync :: (Traversable f, MonadWidget t m, IsXhrPayload a) => Event t (f (XhrRequest a)) -> m (Event t (f XhrResponse))
+performRequestsAsync :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, Traversable f, IsXhrPayload a) => Event t (f (XhrRequest a)) -> m (Event t (f XhrResponse))
 performRequestsAsync = performRequestsAsync' newXMLHttpRequest . fmap return
 
 -- | Builds and issues a collection of requests when the supplied Event fires.  When ALL requests from a given firing complete, the results are collected and returned via the return Event.
-performMkRequestsAsync :: (Traversable f, MonadWidget t m, IsXhrPayload a) => Event t (WidgetHost m (f (XhrRequest a))) -> m (Event t (f XhrResponse))
+performMkRequestsAsync :: (MonadIO (Performable m), HasWebView (Performable m), PerformEvent t m, TriggerEvent t m, Traversable f, IsXhrPayload a) => Event t (Performable m (f (XhrRequest a))) -> m (Event t (f XhrResponse))
 performMkRequestsAsync = performRequestsAsync' newXMLHttpRequest
 
-performRequestsAsync' :: (MonadWidget t m, MonadIO h, Traversable f, IsXhrPayload b) => (XhrRequest b -> (a -> h ()) -> WidgetHost m XMLHttpRequest) -> Event t (WidgetHost m (f (XhrRequest b))) -> m (Event t (f a))
+performRequestsAsync' :: (MonadIO (Performable m), PerformEvent t m, TriggerEvent t m, Traversable f) => (XhrRequest b -> (a -> IO ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (f (XhrRequest b))) -> m (Event t (f a))
 performRequestsAsync' newXhr req = performEventAsync $ ffor req $ \hrs cb -> do
   rs <- hrs
   resps <- forM rs $ \r -> do
@@ -234,21 +229,21 @@ performRequestsAsync' newXhr req = performEventAsync $ ffor req $ \hrs cb -> do
   return ()
 
 -- | Simplified interface to "GET" URLs and return decoded results.
-getAndDecode :: (FromJSON a, MonadWidget t m) => Event t String -> m (Event t (Maybe a))
+getAndDecode :: (MonadIO m, MonadIO (Performable m), PerformEvent t m, HasWebView (Performable m), TriggerEvent t m, FromJSON a) => Event t Text -> m (Event t (Maybe a))
 getAndDecode url = do
   r <- performRequestAsync $ fmap (\x -> XhrRequest "GET" x def) url
   return $ fmap decodeXhrResponse r
 
 -- | Create a "POST" request from an URL and thing with a JSON representation
-postJson :: (ToJSON a) => String -> a -> XhrRequest String
+postJson :: (ToJSON a) => Text -> a -> XhrRequest Text
 postJson url a =
   XhrRequest "POST" url $ def { _xhrRequestConfig_headers = headerUrlEnc
                               , _xhrRequestConfig_sendData = body
                               }
   where headerUrlEnc = "Content-type" =: "application/json"
-        body = LT.unpack $ B.toLazyText $ encodeToTextBuilder $ toJSON a
+        body = LT.toStrict $ B.toLazyText $ encodeToTextBuilder $ toJSON a
 
-getMay :: MonadWidget t m => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))
+getMay :: (Monad m, Reflex t) => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))
 getMay f e = do
     e' <- f (fmapMaybe id e)
     return $ leftmost [fmap Just e', fmapMaybe (maybe (Just Nothing) (const Nothing)) e]

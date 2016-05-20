@@ -1,11 +1,13 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
 module Reflex.Dom.Time where
 
 import Reflex
-import Reflex.Dom.Class
+import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.PerformEvent.Class
 
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
@@ -24,14 +26,14 @@ data TickInfo
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
-tickLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
+tickLossy :: (PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
 tickLossy dt t0 = tickLossyFrom dt t0 =<< getPostBuild
 
 -- | Send events over time with the given basis time and interval
 --   If the system starts running behind, occurrences will be dropped rather than buffered
 --   Each occurrence of the resulting event will contain the index of the current interval, with 0 representing the basis time
 tickLossyFrom
-    :: MonadWidget t m
+    :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m))
     => NominalDiffTime
     -> UTCTime
     -> Event t a
@@ -45,7 +47,7 @@ tickLossyFrom dt t0 e = performEventAsync $ fmap callAtNextInterval e
           threadDelay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
           cb tick
 
-clockLossy :: MonadWidget t m => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
+clockLossy :: (MonadIO m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), PostBuild t m, MonadHold t m) => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
 clockLossy dt t0 = do
   initial <- liftIO $ getCurrentTick dt t0
   e <- tickLossy dt t0
@@ -59,7 +61,7 @@ getCurrentTick dt t0 = do
   return $ TickInfo t n alreadyElapsed
 
 -- | Delay an Event's occurrences by a given amount in seconds.
-delay :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
+delay :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
   threadDelay $ ceiling $ dt * 1000000
   cb a
@@ -68,7 +70,7 @@ delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
 --   Each occurence of the resulting event will contain the index of
 --   the current interval, with 0 representing the basis time
 poissonLossyFrom
-  :: (RandomGen g, MonadWidget t m)
+  :: (RandomGen g, MonadIO (Performable m), PerformEvent t m, TriggerEvent t m)
   => g
   -> Double
   -- ^ Poisson event rate (Hz)
@@ -89,7 +91,7 @@ poissonLossyFrom rnd rate t0 t =
 --   the current interval, with 0 representing the basis time.
 --   Automatically begin sending events when the DOM is built
 poissonLossy
-  :: (RandomGen g, MonadWidget t m)
+  :: (RandomGen g, MonadIO (Performable m), PerformEvent t m, TriggerEvent t m, PostBuild t m)
   => g
   -> Double
   -- ^ Poisson event rate (Hz)
@@ -101,7 +103,7 @@ poissonLossy rnd rate t0 = poissonLossyFrom rnd rate t0 =<< getPostBuild
 -- | Send events with inhomogeneous Poisson timing with the given basis
 --   and variable rate. Provide a maxRate that you expect to support.
 inhomogeneousPoissonFrom
-  :: (RandomGen g, MonadWidget t m)
+  :: (RandomGen g, MonadIO (Performable m), PerformEvent t m, TriggerEvent t m)
   => g
   -> Behavior t Double
   -> Double
@@ -145,7 +147,6 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
       -- Inter-event interval is drawn from exponential
       -- distribution accourding to u
       let dt             = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
-          offset         = t `diffUTCTime` t0
           nEvents        = lastN + 1
           alreadyElapsed = diffUTCTime t tTargetLast
           tTarget        = addUTCTime dt tTargetLast
@@ -157,7 +158,7 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
 -- | Send events with inhomogeneous Poisson timing with the given basis
 --   and variable rate. Provide a maxRate that you expect to support
 inhomogeneousPoisson
-  :: (RandomGen g, MonadWidget t m)
+  :: (RandomGen g, MonadIO (Performable m), PerformEvent t m, TriggerEvent t m, PostBuild t m)
   => g
   -> Behavior t Double
   -> Double
@@ -168,7 +169,7 @@ inhomogeneousPoisson rnd rate maxRate t0 =
 
 -- | Block occurrences of an Event until the given number of seconds elapses without
 --   the Event firing, at which point the last occurrence of the Event will fire.
-debounce :: MonadWidget t m => NominalDiffTime -> Event t a -> m (Event t a)
+debounce :: (MonadFix m, MonadHold t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t a)
 debounce dt e = do
   n :: Dynamic t Integer <- count e
   let tagged = attachDynWith (,) n e

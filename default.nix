@@ -3,7 +3,7 @@
 , transformers, data-default, semigroups, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
 , webkitgtk24x, dependent-sum-template, bifunctors, bimap
-, raw-strings-qq, zenc, random
+, raw-strings-qq, zenc, random, monad-control
 }:
 
 mkDerivation {
@@ -29,6 +29,7 @@ mkDerivation {
     zenc
     random
     bimap
+    monad-control
   ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore raw-strings-qq ]);
   pkgconfigDepends = if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk24x webkitgtk3-javascriptcore raw-strings-qq ];
   license = null;

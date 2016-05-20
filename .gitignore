@@ -8,6 +8,7 @@ cabal-dev
 *.dyn_o
 *.p_hi
 *.p_o
+*.prof
 *.js_dyn_hi
 *.js_dyn_o
 *.js_p_hi
