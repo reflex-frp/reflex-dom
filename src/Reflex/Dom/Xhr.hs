@@ -52,8 +52,10 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Traversable
+import GHCJS.DOM (WebView)
 import Reflex
 import Reflex.Dom.Class
+import Reflex.Dom.Location (getLocationProtocol)
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
@@ -120,6 +122,7 @@ newXMLHttpRequestWithError
     -- ^ The XHR request, which could for example be aborted.
 newXMLHttpRequestWithError req cb = do
   wv <- askWebView
+  localFilesystemCheck wv
   postGui <- askPostGui
   xhr <- liftIO $ xmlHttpRequestNew wv
   void $ liftIO $ forkIO $ flip catch (postGui . cb . Left) $ void $ do
@@ -231,3 +234,10 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
 
+
+localFilesystemCheck :: MonadIO m => WebView -> m ()
+localFilesystemCheck wv = liftIO $ do
+  p <- getLocationProtocol wv
+  when ("file" == take 4 p) $ print $
+    "Warning: XHR requests made from a page served directly from the local filesystem "
+    ++ "(file:///) may not work."
