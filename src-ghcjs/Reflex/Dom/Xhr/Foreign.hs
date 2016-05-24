@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings #-}
+{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings, ScopedTypeVariables #-}
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
@@ -7,6 +7,7 @@ module Reflex.Dom.Xhr.Foreign (
 ) where
 
 import Prelude hiding (error)
+import Control.Monad (when)
 import Data.Text (Text)
 import GHCJS.DOM.Types hiding (Text)
 import GHCJS.DOM
@@ -149,3 +150,9 @@ xmlHttpRequestGetResponse xhr = do
          Just ptr -> fmap (Just . XhrResponseBody_ArrayBuffer) $ bsFromArrayBuffer ptr ptr
        _ -> return Nothing
 
+localFilesystemCheck :: WebView -> IO ()
+localFilesystemCheck wv = do
+  p :: String <- getLocationProtocol wv
+  when ("file" == take 4 p) $ consoleWarn
+    ("Warning: XHR requests made from a page served directly from the local filesystem "
+    ++ "(file:///) may not work." :: String)

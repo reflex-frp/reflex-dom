@@ -41,3 +41,8 @@ bsToArrayBuffer _ bs = BS.useAsCString bs $ \cStr -> do
 
 bsFromArrayBuffer :: a -> JSVal -> IO ByteString
 bsFromArrayBuffer _ ab = liftM (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JS.unsafeFreeze $ JS.pFromJSVal ab
+
+consoleWarn :: ToJSString s => s -> IO ()
+consoleWarn = js_consoleWarn . toJSString
+
+foreign import javascript unsafe "console.warn($1)" js_consoleWarn :: JSString -> IO ()

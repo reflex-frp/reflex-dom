@@ -122,7 +122,7 @@ newXMLHttpRequestWithError
     -- ^ The XHR request, which could for example be aborted.
 newXMLHttpRequestWithError req cb = do
   wv <- askWebView
-  localFilesystemCheck wv
+  liftIO $ localFilesystemCheck wv
   postGui <- askPostGui
   xhr <- liftIO $ xmlHttpRequestNew wv
   void $ liftIO $ forkIO $ flip catch (postGui . cb . Left) $ void $ do
@@ -233,11 +233,3 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 -- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
-
-
-localFilesystemCheck :: MonadIO m => WebView -> m ()
-localFilesystemCheck wv = liftIO $ do
-  p <- getLocationProtocol wv
-  when ("file" == take 4 p) $ print $
-    "Warning: XHR requests made from a page served directly from the local filesystem "
-    ++ "(file:///) may not work."
