@@ -40,8 +40,6 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode t)
   element :: Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
-  -- | Create a section of DOM that can be completely deleted (no trace will be left once it is deleted)
-  fragment :: FragmentConfig above t m -> m a -> m (Fragment above t, a)
   -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
   -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
   placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
@@ -140,23 +138,6 @@ data Placeholder above t
                  , _placeholder_deleted :: Event t ()
                  }
 
-data FragmentConfig above t m
-   = FragmentConfig { _fragmentConfig_deleteSelf :: Event t ()
-                    , _fragmentConfig_insertAbove :: Event t (m above)
-                    }
-
-instance (Reflex t, above ~ ()) => Default (FragmentConfig above t m) where
-  {-# INLINABLE def #-}
-  def = FragmentConfig
-    { _fragmentConfig_deleteSelf = never
-    , _fragmentConfig_insertAbove = never
-    }
-
-data Fragment above t
-   = Fragment { _fragment_insertedAbove :: Event t above
-              , _fragment_deleted :: Event t ()
-              }
-
 data InputElementConfig er t m
    = InputElementConfig { _inputElementConfig_initialValue :: Text
                         , _inputElementConfig_setValue :: Event t Text
@@ -206,17 +187,12 @@ data TextAreaElement er d t
 
 makeLenses ''TextNodeConfig
 makeLenses ''ElementConfig
-makeLenses ''FragmentConfig
 makeLenses ''PlaceholderConfig
 makeLenses ''InputElementConfig
 makeLenses ''TextAreaElementConfig
 
 class CanDeleteSelf t a | a -> t where
   deleteSelf :: Lens' a (Event t ())
-
-instance CanDeleteSelf t (FragmentConfig above t m) where
-  {-# INLINABLE deleteSelf #-}
-  deleteSelf = fragmentConfig_deleteSelf
 
 instance CanDeleteSelf t (PlaceholderConfig above t m) where
   {-# INLINABLE deleteSelf #-}
@@ -225,8 +201,8 @@ instance CanDeleteSelf t (PlaceholderConfig above t m) where
 class InsertAbove t m above above' a a' | a -> t m above, a' -> t m above', a above' -> a', a' above -> a where
   insertAbove :: Lens a a' (Event t (m above)) (Event t (m above'))
 
-instance InsertAbove t m above above' (FragmentConfig above t m) (FragmentConfig above' t m) where
-  insertAbove = fragmentConfig_insertAbove
+instance InsertAbove t m above above' (PlaceholderConfig above t m) (PlaceholderConfig above' t m) where
+  insertAbove = placeholderConfig_insertAbove
 
 class InitialAttributes a where
   initialAttributes :: Lens' a (Map AttributeName Text)
@@ -265,12 +241,6 @@ instance Functor1 (ElementConfig er t) where
     , _elementConfig_eventHandler = _elementConfig_eventHandler cfg
     }
 
-instance Reflex t => Functor1 (FragmentConfig above t) where
-  {-# INLINABLE fmap1 #-}
-  fmap1 f cfg = cfg
-    { _fragmentConfig_insertAbove = fmap f $ _fragmentConfig_insertAbove cfg
-    }
-
 instance Reflex t => Functor1 (PlaceholderConfig above t) where
   {-# INLINABLE fmap1 #-}
   fmap1 f cfg = cfg
@@ -284,10 +254,6 @@ instance Functor1 (InputElementConfig er t) where
 instance Functor1 (TextAreaElementConfig er t) where
   type Functor1Constraint (TextAreaElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
   fmap1 f cfg = cfg & textAreaElementConfig_elementConfig %~ fmap1 f
-
-{-# INLINABLE deletableFragment #-}
-deletableFragment :: DomBuilder t m => Event t () -> m a -> m a
-deletableFragment d c = fmap snd $ fragment (def & deleteSelf .~ d) c
 
 class HasDomEvent t target eventName where
   type DomEventType target eventName :: *
@@ -313,7 +279,6 @@ instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   {-# INLINABLE textNode #-}
   textNode = liftTextNode
   element = liftElement
-  fragment = liftFragment
   placeholder = liftPlaceholder
   inputElement = liftInputElement
   textAreaElement = liftTextAreaElement
@@ -349,9 +314,6 @@ liftTextNode = lift . textNode
 
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (f m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag (fmap1 run cfg) $ run child
-
-liftFragment :: LiftDomBuilder t f m => FragmentConfig above t (f m) -> f m a -> f m (Fragment above t, a)
-liftFragment cfg child = liftWithStateless $ \run -> fragment (fmap1 run cfg) $ run child
 
 liftPlaceholder :: LiftDomBuilder t f m => PlaceholderConfig above t (f m) -> f m (Placeholder above t)
 liftPlaceholder cfg = liftWithStateless $ \run -> placeholder $ fmap1 run cfg

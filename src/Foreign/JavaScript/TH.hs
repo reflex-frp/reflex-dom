@@ -127,7 +127,7 @@ instance PerformEvent t m => PerformEvent t (WithWebView x m) where
 
 instance Deletable t m => Deletable t (WithWebView x m) where
   {-# INLINABLE deletable #-}
-  deletable e = liftThrough $ deletable e
+  deletable = liftThrough . deletable
 
 runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
 runWithWebView = runReaderT . unWithWebView

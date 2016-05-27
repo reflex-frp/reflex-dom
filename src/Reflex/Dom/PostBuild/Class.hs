@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, TypeFamilies, UndecidableInstances, RecursiveDo, ScopedTypeVariables, DataKinds, TypeOperators, PolyKinds #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, TypeFamilies, UndecidableInstances, RecursiveDo, ScopedTypeVariables, DataKinds, TypeOperators, PolyKinds, FunctionalDependencies #-}
 module Reflex.Dom.PostBuild.Class where
 
 import Reflex
@@ -13,7 +13,7 @@ import Control.Monad.Trans.Control
 import Control.Monad.Ref
 import Control.Monad.Exception
 
-class (Reflex t, Monad m) => PostBuild t m where
+class (Reflex t, Monad m) => PostBuild t m | m -> t where
   getPostBuild :: m (Event t ())
 
 newtype PostBuildT t m a = PostBuildT { unPostBuildT :: ReaderT (Event t ()) m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadTrans, MonadException, MonadAsyncException)
@@ -31,7 +31,7 @@ instance (Reflex t, Monad m) => PostBuild t (PostBuildT t m) where
 
 instance Deletable t m => Deletable t (PostBuildT t m) where
   {-# INLINABLE deletable #-}
-  deletable d = liftThrough $ deletable d
+  deletable = liftThrough . deletable
 
 {-# INLINABLE liftPostBuildTElementConfig #-}
 liftPostBuildTElementConfig :: ElementConfig er t (PostBuildT t m) -> ElementConfig er t m
@@ -46,23 +46,9 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   textNode = lift . textNode
   {-# INLINABLE element #-}
   element t cfg child = liftWith $ \run -> element t (liftPostBuildTElementConfig cfg) $ run child
-  {-# INLINABLE fragment #-}
-  fragment cfg child = liftWith $ \run -> do
-    rec (delayedDelete, childPostBuild) <- deletable delayedDelete $ do
-          delayedDeleteInner <- performEvent $ return () <$ cfg ^. deleteSelf
-          childPostBuildInner <- performEvent $ return () <$ _fragment_insertedAbove f
-          return (delayedDeleteInner, childPostBuildInner)
-        let cfg' = cfg
-              { _fragmentConfig_insertAbove = fmap (\a -> runPostBuildT a =<< headE childPostBuild) $ _fragmentConfig_insertAbove cfg
-              }
-        (f, result) <- fragment cfg' $ run child
-    return (f, result)
   {-# INLINABLE placeholder #-}
   placeholder cfg = lift $ do
-    rec (delayedDelete, childPostBuild) <- deletable delayedDelete $ do
-          delayedDeleteInner <- performEvent $ return () <$ cfg ^. deleteSelf
-          childPostBuildInner <- performEvent $ return () <$ _placeholder_insertedAbove p
-          return (delayedDeleteInner, childPostBuildInner)
+    rec childPostBuild <- deletable (cfg ^. deleteSelf) $ performEvent $ return () <$ _placeholder_insertedAbove p
         p <- placeholder $ cfg
           { _placeholderConfig_insertAbove = fmap (\a -> runPostBuildT a =<< headE childPostBuild) $ _placeholderConfig_insertAbove cfg
           }

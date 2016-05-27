@@ -11,4 +11,4 @@ class (Reflex t, Monad m) => Deletable t m | m -> t where
 
 instance Deletable t m => Deletable t (ReaderT r m) where
   {-# INLINABLE deletable #-}
-  deletable e = liftThrough $ deletable e
+  deletable = liftThrough . deletable

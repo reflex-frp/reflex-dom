@@ -82,7 +82,7 @@ mergePerformEventsAndAdd :: forall t m. ReflexHost t
 mergePerformEventsAndAdd initial eAddNew = do
   rec events :: Incremental t PatchDMap (DMap (Const2 Word64 (These (PerformEventT t m [DSum (EventTriggerRef t m) Identity]) ())) (Event t))
         <- holdIncremental initial $ eAddNew <> eDelete
-      let event = mergeIncremental events
+      let event = mergeWith DMap.union [mergeIncremental events, coincidence (fmap (\(PatchDMap m) -> merge $ DMap.mapMaybeWithKey (const getCompose) m) eAddNew)]
           eventToPerform :: Event t (PerformEventT t m [DSum (EventTriggerRef t m) Identity])
           eventToPerform = ffor event $
             fmap concat .

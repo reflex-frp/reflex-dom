@@ -190,15 +190,6 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return TextNode
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
-  {-# INLINABLE fragment #-}
-  fragment cfg child = liftThrough (deletable $ cfg ^. deleteSelf) $ do
-    top <- textNodeInternal ("" :: Text)
-    result <- child
-    bottom <- textNodeInternal ("" :: Text)
-    insertedAbove <- insertImmediateAbove top $ cfg ^. fragmentConfig_insertAbove
-    deleted <- lift $ performEvent $ ffor (cfg ^. deleteSelf) $ \_ -> do
-      deleteBetweenInclusive top bottom
-    return (Fragment insertedAbove deleted, result)
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove delete) = liftThrough (deletable delete) $ do
     n <- textNodeInternal ("" :: Text)
@@ -268,7 +259,13 @@ insertImmediateAbove n toInsertAbove = do
 
 instance SupportsImmediateDomBuilder t m => Deletable t (ImmediateDomBuilderT t m) where
   {-# INLINABLE deletable #-}
-  deletable = deletableFragment
+  deletable delete child = liftThrough (deletable delete) $ do
+    top <- textNodeInternal ("" :: Text)
+    result <- child
+    bottom <- textNodeInternal ("" :: Text)
+    lift $ performEvent_ $ ffor delete $ \_ -> do
+      deleteBetweenInclusive top bottom
+    return result
 
 instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   type Performable (ImmediateDomBuilderT t m) = Performable m

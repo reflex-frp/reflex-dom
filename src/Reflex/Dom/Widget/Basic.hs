@@ -63,8 +63,9 @@ listHoldWithKey initialChildren modifyChildren buildChild = do
             myCfg = def
               & insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Left k)
               & deleteSelf .~ delete
-        (me, result) <- fragment myCfg $ buildChild k v
-        return $ ChildResult (result, (fmap (fmap Just) $ _fragment_insertedAbove me) <> (Map.singleton k Nothing <$ _fragment_deleted me)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
+        ph <- placeholder myCfg
+        result <- deletable delete $ buildChild k v
+        return $ ChildResult (result, (fmap (fmap Just) $ _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deleted ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
   rec initialAugmentedResults <- iforM initialChildren buildAugmentedChild
       augmentedResults <- foldDyn applyMap initialAugmentedResults $ newInsertedBelow <> newInsertedAbove
       let newInsertedAbove = switch $ fmap (mconcat . reverse . fmap (snd . unChildResult) . Map.elems) $ current augmentedResults
@@ -145,13 +146,6 @@ applyMapKeysSet :: Ord k => Map k (Maybe v) -> Set k -> Set k
 applyMapKeysSet patch old = Map.keysSet insertions `Set.union` (old `Set.difference` Map.keysSet deletions)
   where (insertions, deletions) = Map.partition isJust patch
 
---HACK: A listWithKey that is inefficient but works around a subtle buggy interaction with DynamicWriterT
-listWithKey :: forall t k v m a. (PostBuild t m, DomBuilder t m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
-listWithKey eltsMapD body = do
-  pb <- getPostBuild
-  widgetHold (return Map.empty) $ ffor (leftmost [ tagDyn eltsMapD pb, updated eltsMapD ]) $ imapM $ \k v -> body k (constDyn v)
-
-{-
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 listWithKey :: forall t k v m a. (Ord k, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 listWithKey vals mkChild = do
@@ -164,7 +158,6 @@ listWithKey vals mkChild = do
                          ]
   listWithKeyShallowDiff Map.empty changeVals $ \k v0 dv -> do
     mkChild k =<< holdDyn v0 dv
--}
 
 {-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
 listWithKey' :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
@@ -184,14 +177,14 @@ listWithKeyShallowDiff initialVals valsChanged mkChild = do
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 -- | Create a dynamically-changing set of Event-valued widgets.
 --   This is like listWithKey, specialized for widgets returning (Event t a).  listWithKey would return 'Dynamic t (Map k (Event t a))' in this scenario, but listViewWithKey flattens this to 'Event t (Map k a)' via 'switch'.
-listViewWithKey :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
+listViewWithKey :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
 listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
 
-listViewWithKey' :: (DomBuilder t m, PostBuild t m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
+listViewWithKey' :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
 listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
 
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
-selectViewListWithKey :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m)
+selectViewListWithKey :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
   => Dynamic t k          -- ^ Current selection key
   -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
   -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
@@ -204,7 +197,7 @@ selectViewListWithKey selection vals mkChild = do
     return $ fmap ((,) k) selectSelf
   liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
 
-selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m)
+selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
   => Dynamic t k          -- ^ Current selection key
   -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
   -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
@@ -291,11 +284,11 @@ elClass elementTag c child = fmap snd $ element elementTag (def & initialAttribu
 
 -- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
 --   Unlike the 'withKey' variants, the child widgets are insensitive to which key they're associated with.
-list :: (DomBuilder t m, MonadHold t m, PostBuild t m) => Dynamic t (Map k v) -> (Dynamic t v -> m a) -> m (Dynamic t (Map k a))
+list :: (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Dynamic t (Map k v) -> (Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 list dm mkChild = listWithKey dm (\_ dv -> mkChild dv)
 
 -- | Create a dynamically-changing set of widgets from a Dynamic list.
-simpleList :: (DomBuilder t m, MonadHold t m, PostBuild t m) => Dynamic t [v] -> (Dynamic t v -> m a) -> m (Dynamic t [a])
+simpleList :: (DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Dynamic t [v] -> (Dynamic t v -> m a) -> m (Dynamic t [a])
 simpleList xs mkChild = mapDyn (map snd . Map.toList) =<< flip list mkChild =<< mapDyn (Map.fromList . zip [(1::Int)..]) xs
 
 {-
@@ -356,7 +349,7 @@ blank :: forall m. Monad m => m ()
 blank = return ()
 
 -- | A widget to display a table with static columns and dynamic rows.
-tableDynAttr :: forall t m r k v. (DomBuilder t m, MonadHold t m, PostBuild t m)
+tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
   => Text                                   -- ^ Class applied to <table> element
   -> [(Text, k -> Dynamic t r -> m v)]      -- ^ Columns of (header, row key -> row value -> child widget)
   -> Dynamic t (Map k r)                      -- ^ Map from row key to row value
