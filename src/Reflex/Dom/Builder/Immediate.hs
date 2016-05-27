@@ -11,13 +11,14 @@ import Foreign.JavaScript.TH
 import GHCJS.DOM.Document (Document, createTextNode, createElement, createElementNS, createDocumentFragment)
 import GHCJS.DOM.Element (setAttribute, setAttributeNS, removeAttribute, removeAttributeNS, getScrollTop)
 import qualified GHCJS.DOM.HTMLInputElement as Input
+import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Window as Window
 import GHCJS.DOM.EventM (on, event, EventM)
 import qualified GHCJS.DOM.Event as Event
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild, getParentNode, getPreviousSibling, removeChild, toNode, getOwnerDocument, insertBefore)
-import GHCJS.DOM.Types (Node, IsNode, ToDOMString, FocusEvent, KeyboardEvent, WheelEvent, TouchEvent, IsElement, IsEvent, castToHTMLInputElement)
+import GHCJS.DOM.Types (Node, IsNode, ToDOMString, FocusEvent, KeyboardEvent, WheelEvent, TouchEvent, IsElement, IsEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.EventM as DOM
 import GHCJS.DOM.UIEvent
@@ -232,12 +233,28 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
-    inputValue <- wrapDomEvent domElement (`on` Element.input) $ fromMaybe "" <$> Input.getValue domInputElement
-    return $ InputElement v (nubDyn c) inputValue hasFocus e
+    return $ InputElement v (nubDyn c) valueChangedByUI hasFocus e
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
-    (i, _) <- element "textarea" (_textAreaElementConfig_elementConfig cfg) $ return ()
-    return $ TextAreaElement (constDyn "") never (constDyn False) i
+    ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    let domTextAreaElement = castToHTMLTextAreaElement domElement
+    Just v0 <- TextArea.getValue domTextAreaElement
+    let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
+    valueChangedByUI <- performEvent $ ffor (Reflex.select (_element_events e) (WrapArg Input)) $ \_ ->
+      getMyValue
+    valueChangedBySetValue <- performEvent $ ffor (cfg ^. textAreaElementConfig_setValue) $ \v' -> do
+      TextArea.setValue domTextAreaElement $ Just v'
+      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    v <- holdDyn v0 $ leftmost
+      [ valueChangedBySetValue
+      , valueChangedByUI
+      ]
+    let initialFocus = False --TODO: Is this correct?
+    hasFocus <- holdDyn initialFocus $ leftmost
+      [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+      , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+      ]
+    return $ TextAreaElement v valueChangedByUI hasFocus e
 
 {-# INLINABLE insertImmediateAbove #-}
 insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
