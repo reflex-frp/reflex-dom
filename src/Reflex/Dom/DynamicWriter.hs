@@ -74,11 +74,11 @@ incrementalExtractFunctorDMap = unsafeMapIncremental mapWithFunctorToDMap $ \(Pa
 mergeIncrementalMap :: (Reflex t, Ord k) => Incremental t PatchMap (Map k (Event t v)) -> Event t (Map k v)
 mergeIncrementalMap = fmap dmapToMap . mergeIncremental . incrementalExtractFunctorDMap
 
-incrementalReplaceableMap :: (Reflex t, MonadHold t m, MonadFix m, Ord k) => Map k (Replaceable t v) -> Event t (PatchMap (Map k (Replaceable t v))) -> m (Incremental t PatchMap (Map k v))
-incrementalReplaceableMap v0 e = do
-  rec vals <- holdIncremental v0 $ e <> valChanges
-      let valChanges = fmap PatchMap $ mergeIncrementalMap $ mapIncrementalMapValues _replaceable_modify vals
-  return $ mapIncrementalMapValues _replaceable_value vals
+incrementalReplaceableMap :: (Reflex t, Ord k) => Incremental t PatchMap (Map k (Replaceable t v)) -> Incremental t PatchMap (Map k v)
+incrementalReplaceableMap m =
+  let vals = unsafeBuildIncremental (sample $ currentIncremental m) $ updatedIncremental m <> valChanges
+      valChanges = fmap PatchMap $ mergeIncrementalMap $ mapIncrementalMapValues _replaceable_modify vals
+  in mapIncrementalMapValues _replaceable_value vals
 
 mergeDynIncremental :: (Reflex t, Ord k) => Incremental t PatchMap (Map k (Dynamic t v)) -> Incremental t PatchMap (Map k v)
 mergeDynIncremental a = unsafeBuildIncremental (mapM (sample . current) =<< sample (currentIncremental a)) $ addedAndRemovedValues <> changedValues
@@ -114,13 +114,13 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (DynamicWrit
 runDynamicWriterTInternal :: DynamicWriterT t w m a -> m (a, DynamicWriterAccumulator t w)
 runDynamicWriterTInternal (DynamicWriterT a) = runStateT a []
 
-mconcatIncrementalReplaceableDynMap :: (Reflex t, Monoid v, Ord k) => Incremental t PatchMap (Map k (Dynamic t v)) -> Dynamic t v
-mconcatIncrementalReplaceableDynMap = fmap (mconcat . Map.elems) . incrementalToDynamic . mergeDynIncremental
+mconcatIncrementalReplaceableDynMap :: (Reflex t, Monoid v, Ord k) => Incremental t PatchMap (Map k (Replaceable t (Dynamic t v))) -> Dynamic t v
+mconcatIncrementalReplaceableDynMap = fmap (mconcat . Map.elems) . incrementalToDynamic . mergeDynIncremental . incrementalReplaceableMap
 
-runDynamicWriterT :: (Reflex t, MonadHold t m, Monoid w, MonadFix m) => DynamicWriterT t w m a -> m (a, Dynamic t w)
+runDynamicWriterT :: (Reflex t, MonadHold t m, Monoid w) => DynamicWriterT t w m a -> m (a, Dynamic t w)
 runDynamicWriterT (DynamicWriterT a) = do
   (result, ws) <- runStateT a []
-  i <- incrementalReplaceableMap (Map.fromList $ zip [1 :: Int ..] $ reverse ws) never
+  i <- holdIncremental (Map.fromList $ zip [1 :: Int ..] $ reverse ws) never
   let w = mconcatIncrementalReplaceableDynMap i
   return (result, w)
 
@@ -177,12 +177,13 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
                     let (myNextId, numbered) = mapAccumL (\n v -> (succ n, (n, Just v))) myFirstId cs
                     return (myNextId, PatchMap $ Map.fromList numbered)
                   newNextId = fst <$> numberedNewChildren
-          replaceableMap <- incrementalReplaceableMap Map.empty $ snd <$> numberedNewChildren
+          replaceableMap <- holdIncremental Map.empty $ snd <$> numberedNewChildren
           noMoreAdditions <- holdDyn False $ True <$ additionsCeased
           let replaceSelf nma i = do
                 guard nma
                 case Map.toList i of
                   [] -> return Nothing -- Delete self
+                  [(_, n)] -> return $ Just n
                   _ -> mzero
           return $ Replaceable (mconcatIncrementalReplaceableDynMap replaceableMap) $ fmapMaybe id $ updated $ zipDynWith replaceSelf noMoreAdditions $ incrementalToDynamic replaceableMap
     rec children <- lift $ manageChildren childOutputs $ cfg ^. deleteSelf
