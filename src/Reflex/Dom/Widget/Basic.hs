@@ -202,7 +202,7 @@ listWithKey' = listWithKeyShallowDiff
 listWithKeyShallowDiff :: (Ord k, MonadWidget t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
 listWithKeyShallowDiff initialVals valsChanged mkChild = do
   let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
-  sentVals <- foldDyn (flip applyMap) Map.empty $ fmap (fmap (fmap (\_ -> ()))) valsChanged
+  sentVals <- foldDyn (flip applyMap) (() <$ initialVals) $ fmap (fmap (fmap (\_ -> ()))) valsChanged
   let relevantDiff diff _ = case diff of
         Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
         Just _ -> Nothing -- We don't want to let spurious re-creations of items through
