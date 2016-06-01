@@ -404,6 +404,12 @@ data EventTag
    | TouchendTag
    | TouchcancelTag
 
+data MousePositionType
+  = RelativeToScreen
+  | RelativeToClient
+  | RelativeToOffset
+  deriving (Eq, Ord)
+
 data EventName :: EventTag -> * where
   Abort :: EventName 'AbortTag
   Blur :: EventName 'BlurTag
@@ -426,13 +432,13 @@ data EventName :: EventTag -> * where
   Keypress :: EventName 'KeypressTag
   Keyup :: EventName 'KeyupTag
   Load :: EventName 'LoadTag
-  Mousedown :: EventName 'MousedownTag
+  Mousedown :: MousePositionType -> EventName 'MousedownTag
   Mouseenter :: EventName 'MouseenterTag
   Mouseleave :: EventName 'MouseleaveTag
-  Mousemove :: EventName 'MousemoveTag
+  Mousemove :: MousePositionType -> EventName 'MousemoveTag
   Mouseout :: EventName 'MouseoutTag
   Mouseover :: EventName 'MouseoverTag
-  Mouseup :: EventName 'MouseupTag
+  Mouseup :: MousePositionType -> EventName 'MouseupTag
   Mousewheel :: EventName 'MousewheelTag
   Scroll :: EventName 'ScrollTag
   Select :: EventName 'SelectTag
@@ -523,13 +529,13 @@ onEventName en e = case en of
   Keypress -> on e E.keyPress
   Keyup -> on e E.keyUp
   Load -> on e E.load
-  Mousedown -> on e E.mouseDown
+  Mousedown _ -> on e E.mouseDown
   Mouseenter -> on e E.mouseEnter
   Mouseleave -> on e E.mouseLeave
-  Mousemove -> on e E.mouseMove
+  Mousemove _ -> on e E.mouseMove
   Mouseout -> on e E.mouseOut
   Mouseover -> on e E.mouseOver
-  Mouseup -> on e E.mouseUp
+  Mouseup _ -> on e E.mouseUp
   Mousewheel -> on e E.mouseWheel
   Scroll -> on e E.scroll
   Select -> on e E.select
@@ -620,10 +626,13 @@ getKeyEvent = do
     if charCode /= 0 then return charCode else
       getKeyCode e
 
-getMouseEventCoords :: EventM e MouseEvent (Int, Int)
-getMouseEventCoords = do
+getMouseEventCoords :: MousePositionType -> EventM e MouseEvent (Int, Int)
+getMouseEventCoords positionType = do
   e <- event
-  bisequence (getClientX e, getClientY e)
+  case positionType of
+    RelativeToScreen -> bisequence (getScreenX e, getScreenY e)
+    RelativeToClient -> bisequence (getClientX e, getClientY e)
+    RelativeToOffset -> bisequence (getOffsetX e, getOffsetY e)
 
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
@@ -633,9 +642,9 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Scroll -> getScrollTop e
   Keydown -> getKeyEvent
   Keyup -> getKeyEvent
-  Mousemove -> getMouseEventCoords
-  Mouseup -> getMouseEventCoords
-  Mousedown -> getMouseEventCoords
+  Mousemove positionType -> getMouseEventCoords positionType
+  Mouseup positionType -> getMouseEventCoords positionType
+  Mousedown positionType -> getMouseEventCoords positionType
   Mouseenter -> return ()
   Mouseleave -> return ()
   Focus -> return ()
