@@ -20,6 +20,14 @@ import Data.Semigroup
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 
+-- For fileInput
+import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.Types (File)
+import qualified GHCJS.DOM.Element as Element
+import qualified GHCJS.DOM.File as File
+import qualified GHCJS.DOM.FileList as FileList
+
+
 import Reflex
 import qualified Data.Map as Map
 import Control.Lens hiding (ix, element)
@@ -300,11 +308,9 @@ checkboxView dAttrs dValue = do
   performEvent_ $ fmap (\v -> Input.setChecked e $! v) $ updated dValue
   return eClicked
 -}
-{-
 
 data FileInput t
    = FileInput { _fileInput_value :: Dynamic t [File]
-               , _fileInput_element :: HTMLInputElement
                }
 
 data FileInputConfig t
@@ -315,16 +321,27 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: DomBuilder t m => FileInputConfig t -> m (FileInput t)
-fileInput (FileInputConfig dAttrs) = do
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "file") dAttrs
-  eChange <- wrapDomEvent e (flip on change) $ do
-    Just files <- getFiles e
-    len <- FileList.getLength files
-    mapM (liftM (fromMaybe (error "fileInput: fileListItem returned null")) . FileList.item files) $ init [0..len]
+fileInput :: forall t m. (MonadIO m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+          => FileInputConfig t -> m (FileInput t)
+fileInput config = do
+  let insertType = Map.insert "type" "file"
+      dAttrs = fmap insertType $ _fileInputConfig_attributes config
+  modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
+  let cfg = (def :: ElementConfig EventResult t m)
+              { _elementConfig_modifyAttributes = modifyAttrs
+              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
+                 return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
+              }
+  (eRaw, _) <- element "input" cfg blank
+  let e = castToHTMLInputElement (_element_raw eRaw)
+  eChange <- wrapDomEvent e (`on` Element.change) $ do
+      Just files <- Input.getFiles e
+      len <- FileList.getLength files
+      mapM (liftM (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) $ [0 .. len-1]
   dValue <- holdDyn [] eChange
-  return $ FileInput dValue e
--}
+  return $ FileInput
+    { _fileInput_value = dValue
+    }
 
 data Dropdown t k
     = Dropdown { _dropdown_value :: Dynamic t k
@@ -505,11 +522,9 @@ instance HasValue (TextInput t) where
   type Value (TextInput t) = Dynamic t Text
   value = _textInput_value
 
-{-
 instance HasValue (FileInput t) where
   type Value (FileInput t) = Dynamic t [File]
   value = _fileInput_value
--}
 
 instance HasValue (Dropdown t k) where
   type Value (Dropdown t k) = Dynamic t k
