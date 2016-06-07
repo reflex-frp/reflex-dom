@@ -43,7 +43,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
         return lis
       selected <- holdDyn (indexToKey i0) sel
       pb <- getPostBuild
-      scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll container
+      scrollPosition <- holdDyn 0 $ leftmost [ uiEventScrollTop <$> domEvent Scroll container
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
       window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
@@ -88,7 +88,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
   pb <- getPostBuild
   rec (viewport, result) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ elDynAttr "div" virtualH $
         listWithKeyShallowDiff items0 itemsUpdate $ \k v e -> elAttr "div" (mkRow k) $ itemBuilder k v e
-      scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll viewport
+      scrollPosition <- holdDyn 0 $ leftmost [ uiEventScrollTop <$> domEvent Scroll viewport
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
       window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
