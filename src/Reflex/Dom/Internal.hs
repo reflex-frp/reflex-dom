@@ -68,6 +68,7 @@ attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO 
 attachWidget' rootElement wv w = do
   Just doc <- getOwnerDocument rootElement
   events <- newChan
+  setInnerHTML rootElement $ Just (""::String)
   (result, fc@(FireCommand fire)) <- runSpiderHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let builderEnv = ImmediateDomBuilderEnv
