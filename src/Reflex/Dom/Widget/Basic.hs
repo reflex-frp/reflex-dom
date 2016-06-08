@@ -21,7 +21,11 @@ import Control.Monad.Trans
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
 import GHCJS.DOM.Node
-import GHCJS.DOM.UIEvent
+import qualified GHCJS.DOM.MouseEvent as MouseEvent
+import qualified GHCJS.DOM.KeyboardEvent as KeyboardEvent
+import qualified GHCJS.DOM.UIEvent as UIEvent
+import qualified GHCJS.DOM.WheelEvent as WheelEvent
+import qualified GHCJS.DOM.TouchEvent as TouchEvent
 import GHCJS.DOM.EventM (on, event, EventM, stopPropagation)
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element as E
@@ -34,7 +38,6 @@ import Data.Align
 import Data.Maybe
 import Data.GADT.Compare.TH
 import Data.Bitraversable
-import GHCJS.DOM.MouseEvent
 import Data.IORef
 import Data.Default
 
@@ -554,7 +557,7 @@ newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
 type family GetEventResultType et where
   GetEventResultType UIEvent = UIEventResult
-  GetEventResultType FocusEvent = FocusEventResult
+  GetEventResultType FocusEvent = ()
   GetEventResultType MouseEvent = MouseEventResult
   GetEventResultType KeyboardEvent = KeyboardEventResult
   GetEventResultType DOM.Event = ()
@@ -565,21 +568,113 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType en = GetEventResultType (EventType en)
 
 data MouseEventResult = MouseEventResult
-  { mouseEventOffsetX :: Int
+  { mouseEventScreenX :: Int
+  , mouseEventScreenY :: Int
+  , mouseEventClientX :: Int
+  , mouseEventClientY :: Int
+  , mouseEventCtrlKey :: Bool
+  , mouseEventShiftKey :: Bool
+  , mouseEventAltKey :: Bool
+  , mouseEventMetaKey :: Bool
+  , mouseEventButton :: Word
+  , mouseEventMovementX :: Int
+  , mouseEventMovementY :: Int
+  , mouseEventOffsetX :: Int
   , mouseEventOffsetY :: Int
   }
 
+getMouseEvent :: EventM e MouseEvent MouseEventResult
+getMouseEvent = do
+  e <- event
+  MouseEventResult <$> MouseEvent.getScreenX e
+                   <*> MouseEvent.getScreenY e
+                   <*> MouseEvent.getClientX e
+                   <*> MouseEvent.getClientY e
+                   <*> MouseEvent.getCtrlKey e
+                   <*> MouseEvent.getShiftKey e
+                   <*> MouseEvent.getAltKey e
+                   <*> MouseEvent.getMetaKey e
+                   <*> MouseEvent.getButton e
+                   <*> MouseEvent.getMovementX e
+                   <*> MouseEvent.getMovementY e
+                   <*> MouseEvent.getOffsetX e
+                   <*> MouseEvent.getOffsetY e
+
 data KeyboardEventResult = KeyboardEventResult
+  { keyboardEventLocation :: Word
+  , keyboardEventCtrlKey :: Bool
+  , keyboardEventShiftKey :: Bool
+  , keyboardEventAltKey :: Bool
+  , keyboardEventMetaKey :: Bool
+  , keyboardEventKeyCode :: Int
+  , keyboardEventCharCode :: Int
+}
+
+getKeyboardEvent :: EventM e KeyboardEvent KeyboardEventResult
+getKeyboardEvent = do
+  e <- event
+  KeyboardEventResult <$> KeyboardEvent.getLocation e
+                      <*> KeyboardEvent.getCtrlKey e
+                      <*> KeyboardEvent.getShiftKey e
+                      <*> KeyboardEvent.getAltKey e
+                      <*> KeyboardEvent.getMetaKey e
+                      <*> UIEvent.getKeyCode e
+                      <*> UIEvent.getCharCode e
 
 data UIEventResult = UIEventResult
   { uiEventScrollTop :: Int
+  , uiEventDetail :: Int
+  , uiEventLayerX :: Int
+  , uiEventLayerY :: Int
+  , uiEventPageX :: Int
+  , uiEventPageY :: Int
   }
 
-data FocusEventResult = FocusEventResult
+getUIEvent :: IsElement e => e -> EventM e UIEvent UIEventResult
+getUIEvent el = do
+  e <- event
+  UIEventResult <$> getScrollTop el
+                <*> UIEvent.getDetail e
+                <*> UIEvent.getLayerX e
+                <*> UIEvent.getLayerY e
+                <*> UIEvent.getPageX e
+                <*> UIEvent.getPageY e
 
 data WheelEventResult = WheelEventResult
+  { wheelEventDeltaX :: Double
+  , wheelEventDeltaY :: Double
+  , wheelEventDeltaZ :: Double
+  , wheelEventDeltaMode :: Word
+  }
+
+getWheelEvent :: EventM e WheelEvent WheelEventResult
+getWheelEvent = do
+  e <- event
+  WheelEventResult <$> WheelEvent.getDeltaX e
+                   <*> WheelEvent.getDeltaY e
+                   <*> WheelEvent.getDeltaZ e
+                   <*> WheelEvent.getDeltaMode e
 
 data TouchEventResult = TouchEventResult
+  { touchEventTouches :: Maybe TouchList
+  , touchEventTargetTouches :: Maybe TouchList
+  , touchEventChangedTouches :: Maybe TouchList
+  , touchEventCtrlKey :: Bool
+  , touchEventShiftKey :: Bool
+  , touchEventAltKey :: Bool
+  , touchEventMetaKey :: Bool
+  }
+
+getTouchEvent :: EventM e TouchEvent TouchEventResult
+getTouchEvent = do
+  e <- event
+  TouchEventResult <$> TouchEvent.getTouches e
+                   <*> TouchEvent.getTargetTouches e
+                   <*> TouchEvent.getChangedTouches e
+                   <*> TouchEvent.getCtrlKey e
+                   <*> TouchEvent.getShiftKey e
+                   <*> TouchEvent.getAltKey e
+                   <*> TouchEvent.getMetaKey e
 
 wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventName en -> EventM e (EventType en) (Maybe (f en))) -> m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
@@ -596,33 +691,11 @@ wrapDomEventsMaybe element handlers = do
 getKeyEvent :: EventM e KeyboardEvent Int
 getKeyEvent = do
   e <- event
-  which <- getWhich e
+  which <- UIEvent.getWhich e
   if which /= 0 then return which else do
-    charCode <- getCharCode e
+    charCode <- UIEvent.getCharCode e
     if charCode /= 0 then return charCode else
-      getKeyCode e
-
-getKeyboardEvent :: EventM e KeyboardEvent KeyboardEventResult
-getKeyboardEvent = pure KeyboardEventResult
-
-getUIEvent :: IsElement e => e -> EventM e UIEvent UIEventResult
-getUIEvent e =
-  UIEventResult <$> getScrollTop e
-
-getFocusEvent :: EventM e FocusEvent FocusEventResult
-getFocusEvent = pure FocusEventResult
-
-getWheelEvent :: EventM e WheelEvent WheelEventResult
-getWheelEvent = pure WheelEventResult
-
-getTouchEvent :: EventM e TouchEvent TouchEventResult
-getTouchEvent = pure TouchEventResult
-
-getMouseEvent :: EventM e MouseEvent MouseEventResult
-getMouseEvent = do
-  e <- event
-  MouseEventResult <$> getOffsetX e
-                   <*> getOffsetY e
+      UIEvent.getKeyCode e
 
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
@@ -637,8 +710,8 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Mousedown -> getMouseEvent
   Mouseenter -> getMouseEvent
   Mouseleave -> getMouseEvent
-  Focus -> getFocusEvent
-  Blur -> getFocusEvent
+  Focus -> pure ()
+  Blur -> pure ()
   Change -> pure ()
   Drag -> getMouseEvent
   Dragend -> getMouseEvent
