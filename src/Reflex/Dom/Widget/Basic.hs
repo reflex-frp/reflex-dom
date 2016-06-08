@@ -622,19 +622,17 @@ getKeyboardEvent = do
                       <*> UIEvent.getCharCode e
 
 data UIEventResult = UIEventResult
-  { uiEventScrollTop :: Int
-  , uiEventDetail :: Int
+  { uiEventDetail :: Int
   , uiEventLayerX :: Int
   , uiEventLayerY :: Int
   , uiEventPageX :: Int
   , uiEventPageY :: Int
   }
 
-getUIEvent :: IsElement e => e -> EventM e UIEvent UIEventResult
-getUIEvent el = do
+getUIEvent :: EventM e UIEvent UIEventResult
+getUIEvent = do
   e <- event
-  UIEventResult <$> getScrollTop el
-                <*> UIEvent.getDetail e
+  UIEventResult <$> UIEvent.getDetail e
                 <*> UIEvent.getLayerX e
                 <*> UIEvent.getLayerY e
                 <*> UIEvent.getPageX e
@@ -702,7 +700,7 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Click -> getMouseEvent
   Dblclick -> getMouseEvent
   Keypress -> getKeyboardEvent
-  Scroll -> getUIEvent e
+  Scroll -> getUIEvent
   Keydown -> getKeyboardEvent
   Keyup -> getKeyboardEvent
   Mousemove -> getMouseEvent
@@ -720,15 +718,15 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Dragover -> getMouseEvent
   Dragstart -> getMouseEvent
   Drop -> getMouseEvent
-  Abort -> getUIEvent e
+  Abort -> getUIEvent
   Contextmenu -> getMouseEvent
-  Error -> getUIEvent e
+  Error -> getUIEvent
   Input -> pure ()
   Invalid -> pure ()
-  Load -> getUIEvent e
+  Load -> getUIEvent
   Mouseout -> getMouseEvent
   Mouseover -> getMouseEvent
-  Select -> getUIEvent e
+  Select -> getUIEvent
   Submit -> pure ()
   Beforecut -> pure ()
   Cut -> pure ()
