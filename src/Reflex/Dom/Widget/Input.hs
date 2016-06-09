@@ -190,12 +190,10 @@ data Checkbox t
 checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
   let insertType = Map.insert "type" "checkbox"
-      insertChecked = if checked
-                      then Map.insert "checked" "checked"
-                      else id
-      dAttrs = fmap (insertChecked . insertType) $ _checkboxConfig_attributes config
+      dAttrs = fmap (Map.delete "checked" . insertType) $ _checkboxConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   i <- inputElement $ def
+    & inputElementConfig_initialChecked .~ checked
     & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
     & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
   return $ Checkbox
