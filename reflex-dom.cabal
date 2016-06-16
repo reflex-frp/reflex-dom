@@ -39,6 +39,7 @@ library
     transformers >= 0.3 || < 0.6,
     lens >= 4.7 && < 4.15,
     text == 1.2.*,
+    blaze-builder,
     bytestring == 0.10.*,
     data-default >= 0.5 && < 0.7,
     aeson >= 0.8 && < 0.12,
@@ -75,6 +76,7 @@ library
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
+    Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Deletable.Class
     Reflex.Dom.DynamicWriter
