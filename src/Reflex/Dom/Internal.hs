@@ -128,10 +128,8 @@ attachWidgetFragment' rootElement wv w = do
       _ <- fire (catMaybes mes) $ return ()
       liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
     return ()
-  -- XXX should it `setInnerHtml rootElement ""` first? looks good without it
-  -- FIXME this assumes the `rootElement` already has a child
-  Just prerender <- getFirstChild rootElement
-  replaceChild rootElement (Just df) (Just prerender)
+  setInnerHTML rootElement $ Just (""::String)
+  appendChild rootElement (Just df)
   return (result, fc)
 
 data AppInput t = AppInput
