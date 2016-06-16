@@ -7,6 +7,7 @@ import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Base
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.Widget.Basic (applyMap)
 import Control.Monad.Ref
 import Control.Monad.Identity
 import Data.Dependent.Sum (DSum (..))
@@ -103,24 +104,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> (BL.toStrict $ toLazyByteString $ fromHtmlEscapedText v) <> "\""
-    let attrs = B8.intercalate " " $ Map.foldMapWithKey (\k v -> [toAttr k v]) $ cfg ^. initialAttributes
-
-    let tag' = encodeUtf8 elementTag
-    let open' more = constant ("<" <> tag' <> " " <> attrs <> " ") <> more <> constant ">"
-    let close' = constant $ "</" <> tag' <> ">"
-
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
-      initial <- lift $ performEvent $ ffor (cfg ^. modifyAttributes) $ ifoldrM (\r@(mAttrNamespace, n) mv acc -> case mAttrNamespace of
-        Nothing -> return $ maybe acc ((" " <>) . toAttr r) mv
-        Just ns -> error $ "modifyAttributes Just " ++ show ns) ""
-
-      -- attributes that were not available till PostBuild was fired
-      -- TODO use Map and merge with initial attributes?
-      -- also ensure any removed attributes after postbuild are not passed on
-      extraAttrs <- hold "" initial
-      modify (open' extraAttrs <> innerHtml <> close' :)
+      attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
+      let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
+      let tag = encodeUtf8 elementTag
+      let open = mconcat [constant ("<" <> tag <> " "), attrs1, constant ">"]
+      let close = constant $ "</" <> tag <> ">" -- TODO handle elements without closing tags
+      modify $ (:) $ mconcat $ [open, innerHtml, close]
       return (Element es (error "Static.element RawElement was used"), result)
 
   {-# INLINABLE placeholder #-}
