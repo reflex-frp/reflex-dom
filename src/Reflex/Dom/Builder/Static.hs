@@ -13,7 +13,6 @@ import Data.Dependent.Sum (DSum (..))
 
 import Data.Monoid
 import Data.Text (Text)
--- import Foreign.JavaScript.TH
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Control.Lens hiding (element)
@@ -98,34 +97,28 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig contents) = StaticDomBuilderT $ do
-    modify . (:) $ constant $ BL.toStrict $ toLazyByteString $ fromHtmlEscapedText contents
+    modify $ (:) $ constant $ BL.toStrict $ toLazyByteString $ fromHtmlEscapedText contents
     return TextNode
 
   {-# INLINABLE element #-}
   element elementTag cfg child = do
-    let toAttr (_mns,k) v = let key = encodeUtf8 k; val = BL.toStrict $ toLazyByteString $ fromHtmlEscapedText v in [key <> "=\"" <> val  <> "\""]
-    let attrs0 = Map.foldMapWithKey toAttr $ cfg ^. initialAttributes
-    let attrs1 = if null attrs0 then "" else " " <> B8.intercalate " " attrs0
+    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> (BL.toStrict $ toLazyByteString $ fromHtmlEscapedText v) <> "\""
+    let attrs = B8.intercalate " " $ Map.foldMapWithKey (\k v -> [toAttr k v]) $ cfg ^. initialAttributes
 
     let tag' = encodeUtf8 elementTag
-    let open' more = constant ("<" <> tag' <> attrs1 <> " ") <> more <> constant ">"
+    let open' more = constant ("<" <> tag' <> " " <> attrs <> " ") <> more <> constant ">"
     let close' = constant $ "</" <> tag' <> ">"
 
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
       initial <- lift $ performEvent $ ffor (cfg ^. modifyAttributes) $ ifoldrM (\r@(mAttrNamespace, n) mv acc -> case mAttrNamespace of
-        Nothing -> do
-          case mv of
-            Just v -> do
-              let [attr'] = toAttr r v
-              return $ " " <> attr'
-            Nothing -> return acc
-        Just ns -> do
-          error $ "modifyAttributes Just " ++ show ns) ""
+        Nothing -> return $ maybe acc ((" " <>) . toAttr r) mv
+        Just ns -> error $ "modifyAttributes Just " ++ show ns) ""
 
       -- attributes that were not available till PostBuild was fired
-      -- TODO use map and merge with initial attributes?
+      -- TODO use Map and merge with initial attributes?
+      -- also ensure any removed attributes after postbuild are not passed on
       extraAttrs <- hold "" initial
       modify (open' extraAttrs <> innerHtml <> close' :)
       return (Element es (error "Static.element RawElement was used"), result)
@@ -134,7 +127,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
     result <- lift $ performEvent (fmap runStaticDomBuilderT toInsertAbove)
     acc <- foldDyn (:) [] (fmap snd result)
-    modify . (:) $ join $ fmap (mconcat . reverse) $ current acc
+    modify $ (:) $ join $ fmap (mconcat . reverse) $ current acc
     return $ Placeholder (fmap fst result) never
 
   {-# INLINABLE inputElement #-}
@@ -142,17 +135,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let v0 = constDyn $ cfg ^. inputElementConfig_initialValue
     let c0 = constDyn $ cfg ^. inputElementConfig_initialChecked
-    let valueChangedByUI = never
-    let hasFocus = constDyn False -- XXX should this coming from initialAtttributes
-    return $ InputElement v0 c0 valueChangedByUI hasFocus e
+    let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
+    return $ InputElement v0 c0 never hasFocus e
 
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
     (e, _domElement) <- element "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let v0 = constDyn $ cfg ^. textAreaElementConfig_initialValue
-    let valueChangedByUI = never
-    let hasFocus = constDyn False -- XXX should this be coming from initialAtttributes
-    return $ TextAreaElement v0 valueChangedByUI hasFocus e
+    let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
+    return $ TextAreaElement v0 never hasFocus e
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))

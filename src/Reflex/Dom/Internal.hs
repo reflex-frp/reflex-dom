@@ -129,7 +129,7 @@ attachWidgetFragment' rootElement wv w = do
       liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
     return ()
   setInnerHTML rootElement $ Just (""::String)
-  appendChild rootElement (Just df)
+  appendChild rootElement $ Just df
   return (result, fc)
 
 data AppInput t = AppInput

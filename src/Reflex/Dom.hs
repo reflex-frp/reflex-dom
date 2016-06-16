@@ -1,6 +1,7 @@
 module Reflex.Dom ( module Reflex
                   , module Reflex.Dom.Builder.Class
                   , module Reflex.Dom.Builder.Immediate
+                  , module Reflex.Dom.Builder.Static
                   , module Reflex.Dom.Class
                   , module Reflex.Dom.DynamicWriter
                   , module Reflex.Dom.Internal
@@ -17,6 +18,7 @@ module Reflex.Dom ( module Reflex
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Builder.Static
 import Reflex.Dom.Class
 import Reflex.Dom.DynamicWriter
 import Reflex.Dom.Internal
