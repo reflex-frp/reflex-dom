@@ -3,7 +3,7 @@
 , transformers, data-default, semigroups, blaze-builder, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
 , webkitgtk24x, dependent-sum-template, bifunctors, bimap
-, raw-strings-qq, zenc, random, monad-control, clay, SHA
+, raw-strings-qq, zenc, random, monad-control
 }:
 
 mkDerivation {
@@ -11,8 +11,6 @@ mkDerivation {
   version = "0.3";
   src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
   buildDepends = [
-    SHA
-    clay
     reflex
     dependent-map
     mtl
