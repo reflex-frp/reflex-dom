@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RecursiveDo #-}
 module Reflex.Dom.Time where
 
 import Reflex
@@ -26,14 +26,14 @@ data TickInfo
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
-tickLossy :: (PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
+tickLossy :: (PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m) => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
 tickLossy dt t0 = tickLossyFrom dt t0 =<< getPostBuild
 
 -- | Send events over time with the given basis time and interval
 --   If the system starts running behind, occurrences will be dropped rather than buffered
 --   Each occurrence of the resulting event will contain the index of the current interval, with 0 representing the basis time
 tickLossyFrom
-    :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m))
+    :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m)
     => NominalDiffTime
     -> UTCTime
     -> Event t a
@@ -41,13 +41,15 @@ tickLossyFrom
     -- be something like the result of getPostBuild that only fires once.  But
     -- there could be uses for starting multiple timer threads.
     -> m (Event t TickInfo)
-tickLossyFrom dt t0 e = performEventAsync $ fmap callAtNextInterval e
-  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ forever $ do
+tickLossyFrom dt t0 e = do
+  rec result <- performEventAsync $ fmap callAtNextInterval $ leftmost [() <$ e, () <$ result]
+  return result
+  where callAtNextInterval _ cb = void $ liftIO $ forkIO $ do
           tick <- getCurrentTick dt t0
           threadDelay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
           cb tick
 
-clockLossy :: (MonadIO m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), PostBuild t m, MonadHold t m) => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
+clockLossy :: (MonadIO m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), PostBuild t m, MonadHold t m, MonadFix m) => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
 clockLossy dt t0 = do
   initial <- liftIO $ getCurrentTick dt t0
   e <- tickLossy dt t0
