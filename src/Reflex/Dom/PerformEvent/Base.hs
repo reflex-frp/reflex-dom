@@ -55,13 +55,11 @@ instance (ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t
       return [EventTriggerRef reResultTrigger :=> Identity result]
     return eResult
 
-instance (ReflexHost t, Monad (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
+instance (ReflexHost t, Monad (HostFrame t), MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
   {-# INLINABLE deletable #-}
   deletable d a = PerformEventT $ do
-    (result, reverseEventsToPerform) <- lift $ runStateT (unPerformEventT a) []
-    let (numberedEvents, _) = numberWith (\n e -> Const2 n :=> e) (reverse reverseEventsToPerform) (1 :: Word64)
-    eventToPerform <- lift $ mergePerformEventsAndAdd (DMap.fromList numberedEvents) never
-    modify (align eventToPerform d :)
+    (result, eventToPerform) <- lift $ runPerformEventT a
+    modify (align (fmap (PerformEventT . lift) eventToPerform) d :)
     return result
 
 instance ReflexHost t => MonadReflexCreateTrigger t (PerformEventT t m) where
@@ -81,7 +79,7 @@ mergePerformEventsAndAdd :: forall t m. ReflexHost t
   -> HostFrame t (Event t (PerformEventT t m [DSum (EventTriggerRef t m) Identity]))
 mergePerformEventsAndAdd initial eAddNew = do
   rec events :: Incremental t PatchDMap (DMap (Const2 Word64 (These (PerformEventT t m [DSum (EventTriggerRef t m) Identity]) ())) (Event t))
-        <- holdIncremental initial $ eAddNew <> eDelete
+        <- holdIncremental initial $ eAddNew <> eDelete --TODO: Eliminate empty firings
       let event = mergeWith DMap.union [mergeIncremental events, coincidence (fmap (\(PatchDMap m) -> merge $ DMap.mapMaybeWithKey (const getCompose) m) eAddNew)]
           eventToPerform :: Event t (PerformEventT t m [DSum (EventTriggerRef t m) Identity])
           eventToPerform = ffor event $
@@ -109,8 +107,9 @@ runPerformEventT (PerformEventT a) = do
         (followups, reverseNewEventsToPerform) <- runStateT r []
         oldN <- readRef nextNumberRef
         let (numberedNewEvents, newN) = numberWith (\n e -> Const2 n :=> Compose (Just e)) (reverse reverseNewEventsToPerform) oldN
-        writeRef nextNumberRef newN
-        return $ (EventTriggerRef reAddNewTrigger :=> Identity (PatchDMap (DMap.fromList numberedNewEvents))) : followups --TODO: Don't fire eAddNew when the list is empty
+        if newN == oldN then return followups else do
+          writeRef nextNumberRef newN
+          return $ (EventTriggerRef reAddNewTrigger :=> Identity (PatchDMap (DMap.fromList numberedNewEvents))) : followups
   eventToPerform <- mergePerformEventsAndAdd (DMap.fromList numberedEvents) eAddNew
   return (result, runResult <$> eventToPerform)
 
