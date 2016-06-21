@@ -189,12 +189,13 @@ data Checkbox t
 {-# INLINABLE checkbox #-}
 checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
-  let insertType = Map.insert "type" "checkbox"
-      dAttrs = fmap (Map.delete "checked" . insertType) $ _checkboxConfig_attributes config
+  let permanentAttrs = "type" =: "checkbox"
+      dAttrs = fmap (Map.delete "checked" . Map.union permanentAttrs) $ _checkboxConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialChecked .~ checked
     & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
+    & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ Map.mapKeys ((,) Nothing) permanentAttrs
     & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
@@ -269,8 +270,8 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 {-# INLINABLE checkboxView #-}
 checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
-  let insertType = Map.insert "type" "checkbox"
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap insertType dAttrs
+  let permanentAttrs = "type" =: "checkbox"
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
   postBuild <- getPostBuild
   let filters :: DMap EventName (EventFilter (DomBuilderSpace m) CheckboxViewEventResult)
       filters = DMap.singleton Click $ EventFilter $ GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
@@ -280,6 +281,7 @@ checkboxView dAttrs dValue = do
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
         { _elementConfig_modifyAttributes = modifyAttrs
+        , _elementConfig_initialAttributes = Map.mapKeys ((,) Nothing) permanentAttrs
         , _elementConfig_eventFilters = filters
         , _elementConfig_eventHandler = GhcjsDomHandler1 $ \p@(Pair1 en _) -> case en of
             Click -> error "impossible"
