@@ -448,7 +448,11 @@ dropdown k0 options (DropdownConfig setK attrs) = do
     elDynAttr "option" optionAttrs $ dynText v
   let e = castToHTMLSelectElement $ _element_raw eRaw
   performEvent_ $ fmap (HTMLSelectElement.setValue e . Just . show) $ attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
-  eChange <- attachDynWith (\ks s -> join $ Bimap.lookup <$> join (T.readMaybe <$> s) <*> pure ks) ixKeys <$> (wrapDomEvent e (`on` Element.change) $ HTMLSelectElement.getValue e)
+  let lookupSelected ks value = do
+        v <- value
+        key <- T.readMaybe v
+        Bimap.lookup key ks
+  eChange <- attachDynWith lookupSelected ixKeys <$> (wrapDomEvent e (`on` Element.change) $ HTMLSelectElement.getValue e)
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
