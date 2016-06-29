@@ -7,6 +7,7 @@ module Reflex.Dom.Xhr
   , XhrResponseBody(..)
   , XhrResponseType(..)
   , XhrException(..)
+  , IsXhrPayload(..)
   , _xhrResponse_body
   , decodeText
   , decodeXhrResponse
