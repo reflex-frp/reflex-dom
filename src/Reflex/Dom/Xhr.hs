@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, FlexibleContexts, OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, DeriveFunctor, FlexibleContexts, OverloadedStrings #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
   , XhrRequest(..)
@@ -80,7 +80,7 @@ data XhrRequest a
                 , _xhrRequest_url :: Text
                 , _xhrRequest_config :: XhrRequestConfig a
                 }
-   deriving (Show, Read, Eq, Ord, Typeable)
+   deriving (Show, Read, Eq, Ord, Typeable, Functor)
 
 data XhrRequestConfig a
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map Text Text
@@ -89,7 +89,7 @@ data XhrRequestConfig a
                       , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: a
                       }
-   deriving (Show, Read, Eq, Ord, Typeable)
+   deriving (Show, Read, Eq, Ord, Typeable, Functor)
 
 data XhrResponse
    = XhrResponse { _xhrResponse_status :: Word
@@ -261,10 +261,4 @@ liftM concat $ mapM makeLenses
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
-
-instance Functor XhrRequest where
-    fmap f = over xhrRequest_config (fmap f)
-
-instance Functor XhrRequestConfig where
-    fmap f = over xhrRequestConfig_sendData f
 
