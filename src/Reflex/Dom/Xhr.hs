@@ -261,3 +261,10 @@ liftM concat $ mapM makeLenses
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
+
+instance Functor XhrRequest where
+    fmap f = over xhrRequest_config (fmap f)
+
+instance Functor XhrRequestConfig where
+    fmap f = over xhrRequestConfig_sendData f
+
