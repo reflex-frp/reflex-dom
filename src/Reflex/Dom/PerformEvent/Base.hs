@@ -58,8 +58,10 @@ instance (ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t
 instance (ReflexHost t, Monad (HostFrame t), MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
   {-# INLINABLE deletable #-}
   deletable d a = PerformEventT $ do
-    (result, eventToPerform) <- lift $ runPerformEventT a
-    modify (align (fmap (PerformEventT . lift) eventToPerform) d :)
+    (result, reverseEventsToPerform) <- lift $ runStateT (unPerformEventT a) []
+    let (numberedEvents, _) = numberWith (\n e -> Const2 n :=> e) (reverse reverseEventsToPerform) (1 :: Word64)
+    eventToPerform <- lift $ mergePerformEventsAndAdd (DMap.fromList numberedEvents) never
+    modify (align eventToPerform d :)
     return result
 
 instance ReflexHost t => MonadReflexCreateTrigger t (PerformEventT t m) where
