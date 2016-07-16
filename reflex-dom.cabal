@@ -39,7 +39,7 @@ library
     text == 1.2.*,
     bytestring == 0.10.*,
     data-default == 0.5.*,
-    aeson >= 0.8 && < 0.11,
+    aeson >= 0.8 && < 0.12,
     time == 1.4.* || == 1.5.*,
     exception-transformers == 0.4.*,
     directory == 1.2.*,
