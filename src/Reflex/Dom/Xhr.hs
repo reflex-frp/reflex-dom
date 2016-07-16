@@ -1,13 +1,13 @@
 {-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, DeriveFunctor, FlexibleContexts, OverloadedStrings #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
-  , XhrRequest(..)
-  , XhrRequestConfig(..)
-  , XhrResponse(..)
-  , XhrResponseBody(..)
-  , XhrResponseType(..)
-  , XhrException(..)
-  , IsXhrPayload(..)
+  , XhrRequest (..)
+  , XhrRequestConfig (..)
+  , XhrResponse (..)
+  , XhrResponseBody (..)
+  , XhrResponseType (..)
+  , XhrException (..)
+  , IsXhrPayload (..)
   , _xhrResponse_body
   , decodeText
   , decodeXhrResponse
@@ -43,7 +43,6 @@ module Reflex.Dom.Xhr
   , xmlHttpRequestNew
   , xmlHttpRequestOnreadystatechange
   , xmlHttpRequestOpen
-  , xmlHttpRequestSend
   , xmlHttpRequestSetRequestHeader
   , xmlHttpRequestSetResponseType
   )
