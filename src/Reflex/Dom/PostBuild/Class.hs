@@ -48,7 +48,7 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   element t cfg child = liftWith $ \run -> element t (liftPostBuildTElementConfig cfg) $ run child
   {-# INLINABLE placeholder #-}
   placeholder cfg = lift $ do
-    rec childPostBuild <- deletable (cfg ^. deleteSelf) $ performEvent $ return () <$ _placeholder_insertedAbove p
+    rec childPostBuild <- deletable (_placeholder_deletedSelf p) $ performEvent $ return () <$ _placeholder_insertedAbove p
         p <- placeholder $ cfg
           { _placeholderConfig_insertAbove = fmap (\a -> runPostBuildT a =<< headE childPostBuild) $ _placeholderConfig_insertAbove cfg
           }

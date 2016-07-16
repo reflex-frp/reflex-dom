@@ -135,7 +135,7 @@ instance Reflex t => Default (PlaceholderConfig above t m) where
 
 data Placeholder above t
    = Placeholder { _placeholder_insertedAbove :: Event t above
-                 , _placeholder_deleted :: Event t ()
+                 , _placeholder_deletedSelf :: Event t ()
                  }
 
 data InputElementConfig er t m

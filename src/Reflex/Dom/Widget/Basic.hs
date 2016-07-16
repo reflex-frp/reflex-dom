@@ -65,7 +65,7 @@ listHoldWithKey initialChildren modifyChildren buildChild = do
               & deleteSelf .~ delete
         ph <- placeholder myCfg
         result <- deletable delete $ buildChild k v
-        return $ ChildResult (result, (fmap (fmap Just) $ _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deleted ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
+        return $ ChildResult (result, (fmap (fmap Just) $ _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deletedSelf ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
   rec initialAugmentedResults <- iforM initialChildren buildAugmentedChild
       augmentedResults <- foldDyn applyMap initialAugmentedResults $ newInsertedBelow <> newInsertedAbove
       let newInsertedAbove = switch $ fmap (mconcat . reverse . fmap (snd . unChildResult) . Map.elems) $ current augmentedResults
