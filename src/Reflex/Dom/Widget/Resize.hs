@@ -4,12 +4,14 @@ module Reflex.Dom.Widget.Resize where
 import Reflex
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Old
 import Reflex.Dom.Widget.Basic
 
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Map (Map)
 import Data.Text (Text)
@@ -21,16 +23,16 @@ import qualified Data.Map as Map
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from github.com/marcj/css-element-queries
-resizeDetector :: MonadWidget t m => m a -> m (Event t (), a)
+resizeDetector :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadIO m, MonadFix m) => m a -> m (Event t (), a)
 resizeDetector = resizeDetectorWithStyle ""
 
-resizeDetectorWithStyle :: MonadWidget t m
+resizeDetectorWithStyle :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadIO m, MonadFix m)
   => Text -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithStyle styleString w = resizeDetectorWithAttrs ("style" =: styleString) w
 
-resizeDetectorWithAttrs :: MonadWidget t m
+resizeDetectorWithAttrs :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadIO m, MonadFix m)
   => Map Text Text -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
