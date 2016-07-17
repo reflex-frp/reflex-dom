@@ -68,13 +68,6 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $
   Just body <- getBody doc
   attachWidget body webViewSing w
 
-{-# INLINABLE mainWidgetFragment #-}
-mainWidgetFragment :: (forall x. Widget x ()) -> IO ()
-mainWidgetFragment w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
-  Just body <- getBody doc
-  attachWidgetFragment body webViewSing w
-
 type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 
 {-# INLINABLE attachWidget #-}
@@ -84,38 +77,6 @@ attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 {-# INLINABLE attachWidget' #-}
 attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
 attachWidget' rootElement wv w = do
-  Just doc <- getOwnerDocument rootElement
-  events <- newChan
-  setInnerHTML rootElement $ Just (""::String)
-  (result, fc@(FireCommand fire)) <- runSpiderHost $ do
-    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let builderEnv = ImmediateDomBuilderEnv
-          { _immediateDomBuilderEnv_document = doc
-          , _immediateDomBuilderEnv_parent = toNode rootElement
-          , _immediateDomBuilderEnv_events = events
-          }
-    results@(_, FireCommand fire) <- hostPerformEventT $ runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
-    mPostBuildTrigger <- readRef postBuildTriggerRef
-    forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
-    return results
-  void $ forkIO $ forever $ do
-    ers <- readChan events
-    _ <- postGUISync $ runSpiderHost $ do
-      mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
-        me <- readIORef er
-        return $ fmap (\e -> e :=> Identity a) me
-      _ <- fire (catMaybes mes) $ return ()
-      liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
-    return ()
-  return (result, fc)
-
-{-# INLINABLE attachWidgetFragment #-}
-attachWidgetFragment :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO a
-attachWidgetFragment rootElement wv w = fst <$> attachWidgetFragment' rootElement wv w
-
-{-# INLINABLE attachWidgetFragment' #-}
-attachWidgetFragment' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
-attachWidgetFragment' rootElement wv w = do
   Just doc <- getOwnerDocument rootElement
   Just df <- createDocumentFragment doc
   events <- newChan
