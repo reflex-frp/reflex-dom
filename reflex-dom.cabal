@@ -35,6 +35,7 @@ library
     ref-tf == 0.4.*,
     ghcjs-dom >= 0.2.1 && < 0.3,
     transformers == 0.3.* || == 0.4.*,
+    random == 1.0.*,
     lens >= 4.7 && < 4.14,
     text == 1.2.*,
     bytestring == 0.10.*,
