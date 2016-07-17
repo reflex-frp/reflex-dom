@@ -105,6 +105,12 @@ library
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
 
+test-suite hlint
+  build-depends: base, hlint == 1.9.*
+  hs-source-dirs: test
+  main-is: hlint.hs
+  type: exitcode-stdio-1.0
+
 source-repository head
   type: git
   location: https://github.com/reflex-frp/reflex-dom
