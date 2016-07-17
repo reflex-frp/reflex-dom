@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances, JavaScriptFFI, OverloadedStrings #-}
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
@@ -163,11 +163,11 @@ xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
   rt <- xmlHttpRequestGetResponseType xhr
   case rt of
-       Just XhrResponseType_Blob -> return $ fmap (XhrResponseBody_Blob . castToBlob) mr
-       Just XhrResponseType_Text -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_Default -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_ArrayBuffer -> case (fmap unGObject mr) of
+       Just XhrResponseType_Blob -> return $ XhrResponseBody_Blob . castToBlob <$> mr
+       Just XhrResponseType_Text -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_ArrayBuffer -> case fmap unGObject mr of
          Nothing -> return Nothing
-         Just ptr -> fmap (Just . XhrResponseBody_ArrayBuffer) $ bsFromArrayBuffer ptr ptr
+         Just ptr -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer ptr ptr
        _ -> return Nothing
 

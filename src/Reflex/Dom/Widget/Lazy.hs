@@ -49,14 +49,15 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
       scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll container
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
-      window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
+      window <- combineDyn (findWindow rowPx) heightPx scrollPosition
       itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
-  performEvent_ $ fmap (\i -> liftIO $ setScrollTop (_element_raw container) (i * rowPx)) $ leftmost [setI, fmap (const i0) postBuild]
+  performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i -> do
+    liftIO $ setScrollTop (_element_raw container) (i * rowPx)
   indexAndLength <- mapDyn snd window
   return (indexAndLength, sel)
   where
-    toStyleAttr m = "style" =: (Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m)
+    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     toContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
@@ -66,7 +67,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
     tagWrapper elTag attrs attrsOverride c = do
       attrs' <- combineDyn Map.union attrsOverride attrs
       elDynAttr' elTag attrs' c
-    findWindow windowSize sizeIncrement startingPosition =
+    findWindow sizeIncrement windowSize startingPosition =
       let (startingIndex, topOffsetPx) = startingPosition `divMod'` sizeIncrement
           topPx = startingPosition - topOffsetPx
           numItems = windowSize `div` sizeIncrement + 1
@@ -94,11 +95,12 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll viewport
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
-      window <- combineDyn (\h -> findWindow h rowPx) heightPx scrollPosition
-  performEvent_ $ fmap (\i -> liftIO $ setScrollTop (_element_raw viewport) (i * rowPx)) $ leftmost [setI, fmap (const i0) pb]
+      window <- combineDyn (findWindow rowPx) heightPx scrollPosition
+  performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i -> do
+    liftIO $ setScrollTop (_element_raw viewport) (i * rowPx)
   return (nubDyn window, result)
   where
-    toStyleAttr m = "style" =: (Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m)
+    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     mkContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
@@ -110,7 +112,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
                             "top" =: ((<>"px") $ T.pack $ show $ keyToIndex k * rowPx) <>
                             "position" =: "absolute" <>
                             "width" =: "100%"
-    findWindow windowSize sizeIncrement startingPosition =
+    findWindow sizeIncrement windowSize startingPosition =
       let (startingIndex, _) = startingPosition `divMod'` sizeIncrement
           numItems = (windowSize + sizeIncrement - 1) `div` sizeIncrement
       in (startingIndex, numItems)
@@ -137,6 +139,6 @@ virtualListBuffered buffer heightPx rowPx maxIndex i0 setI keyToIndex items0 ite
                  then Nothing
                  else Just (extendWin winOffset winLimit)) (current winBuffered) (updated win)
         winBuffered <- holdDyn (0, 0) $ leftmost [ winHitEdge
-                                                 , fmap (uncurry extendWin) $ tagDyn win pb
+                                                 , attachDynWith (\(x, y) _ -> extendWin x y) win pb
                                                  ]
     return (updated winBuffered, m)

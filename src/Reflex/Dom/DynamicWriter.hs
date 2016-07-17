@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, StandaloneDeriving, FunctionalDependencies, RecursiveDo, ScopedTypeVariables, LambdaCase, GADTs #-}
+{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, FunctionalDependencies, RecursiveDo, ScopedTypeVariables, LambdaCase, GADTs #-}
 module Reflex.Dom.DynamicWriter where
 
 import Reflex
@@ -66,7 +66,7 @@ mapIncrementalMapValues :: Reflex t => (v -> v') -> Incremental t PatchMap (Map 
 mapIncrementalMapValues f = mapIncrementalMapValuesWithKey $ const f
 
 unsafeMapIncremental :: (Reflex t, Patch p, Patch p') => (a -> a') -> (p a -> p' a') -> Incremental t p a -> Incremental t p' a'
-unsafeMapIncremental f g a = unsafeBuildIncremental (fmap f $ sample $ currentIncremental a) $ fmap g $ updatedIncremental a
+unsafeMapIncremental f g a = unsafeBuildIncremental (fmap f $ sample $ currentIncremental a) $ g <$> updatedIncremental a
 
 incrementalExtractFunctorDMap :: Reflex t => Incremental t PatchMap (Map k (f v)) -> Incremental t PatchDMap (DMap (Const2 k v) f)
 incrementalExtractFunctorDMap = unsafeMapIncremental mapWithFunctorToDMap $ \(PatchMap m) -> PatchDMap $ mapWithFunctorToDMap $ fmap Compose m
@@ -174,7 +174,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
     return (el, a)
   placeholder cfg = do
     let cfg' = cfg
-          { _placeholderConfig_insertAbove = fmap runDynamicWriterTInternal $ _placeholderConfig_insertAbove cfg
+          { _placeholderConfig_insertAbove = runDynamicWriterTInternal <$> _placeholderConfig_insertAbove cfg
           }
     let manageChildren :: Event t (NonEmpty (Replaceable t (Dynamic t w))) -- ^ Add nodes on the right; these are in reverse order
                        -> Event t () -- ^ No more nodes will be added after this event fires
@@ -193,7 +193,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
         p <- DynamicWriterT $ do
           modify (children:)
           lift $ placeholder cfg'
-        let result = fmap fst $ _placeholder_insertedAbove p
+        let result = fst <$> _placeholder_insertedAbove p
             childOutputs = fmapMaybe (nonEmpty . snd) $ _placeholder_insertedAbove p
     return $ p
       { _placeholder_insertedAbove = result

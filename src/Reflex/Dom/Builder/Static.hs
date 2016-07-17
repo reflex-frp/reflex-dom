@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, FunctionalDependencies, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
+{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
 module Reflex.Dom.Builder.Static where
 
 import Reflex
@@ -13,12 +13,9 @@ import Control.Monad.Identity
 import Data.Dependent.Sum (DSum (..))
 
 import Data.Monoid
-import Data.Text (Text)
 import qualified Data.Map as Map
-import Data.Map (Map)
 import Control.Lens hiding (element)
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Char8 as B8
 import Data.ByteString (ByteString)
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
@@ -104,15 +101,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
 
   {-# INLINABLE element #-}
   element elementTag cfg child = do
-    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> (BL.toStrict $ toLazyByteString $ fromHtmlEscapedText v) <> "\""
+    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
-      let tag = encodeUtf8 elementTag
-      let open = mconcat [constant ("<" <> tag <> " "), attrs1, constant ">"]
-      let close = constant $ "</" <> tag <> ">" -- TODO handle elements without closing tags
+      let tagBS = encodeUtf8 elementTag
+      let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
+      let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
       modify $ (:) $ mconcat $ [open, innerHtml, close]
       return (Element es (error "Static.element RawElement was used"), result)
 
@@ -120,7 +117,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
     result <- lift $ performEvent (fmap runStaticDomBuilderT toInsertAbove)
     acc <- foldDyn (:) [] (fmap snd result)
-    modify $ (:) $ join $ fmap (mconcat . reverse) $ current acc
+    modify $ (:) $ join $ mconcat . reverse <$> current acc
     return $ Placeholder (fmap fst result) never
 
   {-# INLINABLE inputElement #-}

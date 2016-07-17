@@ -42,7 +42,7 @@ tickLossyFrom
     -- there could be uses for starting multiple timer threads.
     -> m (Event t TickInfo)
 tickLossyFrom dt t0 e = do
-  rec result <- performEventAsync $ fmap callAtNextInterval $ leftmost [() <$ e, () <$ result]
+  rec result <- performEventAsync $ callAtNextInterval <$> leftmost [() <$ e, () <$ result]
   return result
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ do
           tick <- getCurrentTick dt t0
@@ -84,8 +84,7 @@ poissonLossyFrom
   -- there could be uses for starting multiple timer threads.
   -- Start sending events in response to the event parameter.
   -> m (Event t TickInfo)
-poissonLossyFrom rnd rate t0 t =
-  inhomogeneousPoissonFrom rnd (current $ constDyn rate) rate t0 t
+poissonLossyFrom rnd rate = inhomogeneousPoissonFrom rnd (constant rate) rate
 
 
 -- | Send events with Poisson timing with the given basis and rate
@@ -148,7 +147,7 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
 
       -- Inter-event interval is drawn from exponential
       -- distribution accourding to u
-      let dt             = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
+      let dt             = realToFrac $ (-1) * log u / maxRate :: NominalDiffTime
           nEvents        = lastN + 1
           alreadyElapsed = diffUTCTime t tTargetLast
           tTarget        = addUTCTime dt tTargetLast

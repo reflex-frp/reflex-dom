@@ -16,6 +16,7 @@ import qualified Data.Map as Map
 -- | Alias for Data.Map.singleton
 (=:) :: k -> a -> Map k a
 (=:) = Map.singleton
+infixr 7 =: -- Ought to bind tighter than <>, which is infixr 6
 
 keycodeEnter :: Int
 keycodeEnter = 13

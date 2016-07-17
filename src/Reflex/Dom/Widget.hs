@@ -1,10 +1,6 @@
-module Reflex.Dom.Widget ( module Reflex.Dom.Widget.Basic
-                         , module Reflex.Dom.Widget.Input
-                         , module Reflex.Dom.Widget.Lazy
-                         , module Reflex.Dom.Widget.Resize
-                         ) where
+module Reflex.Dom.Widget (module X) where
 
-import Reflex.Dom.Widget.Basic
-import Reflex.Dom.Widget.Input
-import Reflex.Dom.Widget.Lazy
-import Reflex.Dom.Widget.Resize
+import Reflex.Dom.Widget.Basic as X
+import Reflex.Dom.Widget.Input as X
+import Reflex.Dom.Widget.Lazy as X
+import Reflex.Dom.Widget.Resize as X

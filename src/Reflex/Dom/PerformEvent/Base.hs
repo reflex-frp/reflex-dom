@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, StandaloneDeriving, FlexibleContexts, RecursiveDo, UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, StandaloneDeriving, FlexibleContexts, RecursiveDo, UndecidableInstances #-}
 module Reflex.Dom.PerformEvent.Base where
 
 import Reflex
@@ -25,7 +25,7 @@ import Control.Lens
 
 newtype EventTriggerRef t m a = EventTriggerRef { unEventTriggerRef :: Ref m (Maybe (EventTrigger t a)) }
 
-newtype FireCommand t m = FireCommand { runFireCommand :: forall a. [DSum (EventTrigger t) Identity] -> (ReadPhase m a) -> m [a] } --TODO: The handling of this ReadPhase seems wrong, or at least inelegant; how do we actually make the decision about what order frames run in?
+newtype FireCommand t m = FireCommand { runFireCommand :: forall a. [DSum (EventTrigger t) Identity] -> ReadPhase m a -> m [a] } --TODO: The handling of this ReadPhase seems wrong, or at least inelegant; how do we actually make the decision about what order frames run in?
 
 newtype PerformEventT t m a = PerformEventT { unPerformEventT :: StateT [Event t (These (PerformEventT t m [DSum (EventTriggerRef t m) Identity]) ())] (HostFrame t) a }
 
@@ -55,7 +55,7 @@ instance (ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t
       return [EventTriggerRef reResultTrigger :=> Identity result]
     return eResult
 
-instance (ReflexHost t, Monad (HostFrame t), MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
+instance (ReflexHost t, Monad (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
   {-# INLINABLE deletable #-}
   deletable d a = PerformEventT $ do
     (result, reverseEventsToPerform) <- lift $ runStateT (unPerformEventT a) []
@@ -133,7 +133,7 @@ hostPerformEventT a = do
               followupEventTriggerRefs <- runHostFrame toPerform
               followupEventTriggers <- forM followupEventTriggerRefs $ \(EventTriggerRef rt :=> x) -> do
                 mt <- readRef rt
-                return $ fmap (\t -> t :=> x) mt
+                return $ fmap (:=> x) mt
               fmap (result':) $ go $ catMaybes followupEventTriggers
     go triggers
 

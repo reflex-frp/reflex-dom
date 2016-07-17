@@ -25,7 +25,7 @@ import Control.Monad.IO.Class
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types (File)
 import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.File as File
+-- import qualified GHCJS.DOM.File as File
 import qualified GHCJS.DOM.FileList as FileList
 
 
@@ -150,24 +150,6 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_hasFocus = _textAreaElement_hasFocus i
     , _textArea_element = castToHTMLTextAreaElement $ _element_raw $ _textAreaElement_element i
     }
-{-
-  e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
-  TextArea.setValue e $ Just initial
-  postGui <- askPostGui
-  runWithActions <- askRunWithActions
-  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
-    unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
-    unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
-    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
-  performEvent_ $ fmap (TextArea.setValue e . Just) eSet
-  f <- holdDyn False eChangeFocus
-  ev <- wrapDomEvent e (`on` input) $ fromMaybe "" <$> TextArea.getValue e
-  v <- holdDyn initial $ leftmost [eSet, ev]
-  eKeypress <- wrapDomEvent e (`on` keyPress) getKeyEvent
-  return $ TextArea v ev e f eKeypress
--}
 
 data CheckboxConfig t
     = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
@@ -191,7 +173,7 @@ data Checkbox t
 checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
   let permanentAttrs = "type" =: "checkbox"
-      dAttrs = fmap (Map.delete "checked" . Map.union permanentAttrs) $ _checkboxConfig_attributes config
+      dAttrs = Map.delete "checked" . Map.union permanentAttrs <$> _checkboxConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialChecked .~ checked
@@ -201,14 +183,6 @@ checkbox checked config = do
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
     }
-{-
-  attrs <- mapDyn (\c -> Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") c) (_checkboxConfig_attributes config)
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" attrs
-  eClick <- wrapDomEvent e (`on` click) $ Input.getChecked e
-  performEvent_ $ fmap (\v -> Input.setChecked e $! v) $ _checkboxConfig_setValue config
-  dValue <- holdDyn checked $ leftmost [_checkboxConfig_setValue config, eClick]
-  return $ Checkbox dValue eClick
--}
 
 type family CheckboxViewEventResultType (en :: EventTag) :: * where
   CheckboxViewEventResultType 'ClickTag = Bool
@@ -297,7 +271,7 @@ checkboxView dAttrs dValue = do
         & inputElementConfig_setChecked .~ leftmost [updated dValue, tag (current dValue) postBuild]
         & inputElementConfig_elementConfig .~ elementConfig
   i <- inputElement inputElementConfig
-  return $ fmap unCheckboxViewEventResult $ select (_element_events $ _inputElement_element i) (WrapArg Click)
+  return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 {-
   e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "checkbox") dAttrs
   eClicked <- wrapDomEvent e (`on` click) $ do
@@ -326,11 +300,11 @@ fileInput :: forall t m. (MonadIO m, MonadFix m, MonadHold t m, TriggerEvent t m
           => FileInputConfig t -> m (FileInput t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
-      dAttrs = fmap insertType $ _fileInputConfig_attributes config
+      dAttrs = insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   let cfg = (def :: ElementConfig EventResult t m)
               { _elementConfig_modifyAttributes = modifyAttrs
-              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
+              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \_ -> do
                  return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
               }
   (eRaw, _) <- element "input" cfg blank
@@ -338,7 +312,7 @@ fileInput config = do
   eChange <- wrapDomEvent e (`on` Element.change) $ do
       Just files <- Input.getFiles e
       len <- FileList.getLength files
-      mapM (liftM (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) $ [0 .. len-1]
+      mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) $ [0 .. len-1]
   dValue <- holdDyn [] eChange
   return $ FileInput
     { _fileInput_value = dValue
@@ -447,12 +421,12 @@ dropdown k0 options (DropdownConfig setK attrs) = do
     optionAttrs <- mapDyn (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
   let e = castToHTMLSelectElement $ _element_raw eRaw
-  performEvent_ $ fmap (HTMLSelectElement.setValue e . Just . show) $ attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
+  performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
   let lookupSelected ks value = do
         v <- value
         key <- T.readMaybe v
         Bimap.lookup key ks
-  eChange <- attachDynWith lookupSelected ixKeys <$> (wrapDomEvent e (`on` Element.change) $ HTMLSelectElement.getValue e)
+  eChange <- attachDynWith lookupSelected ixKeys <$> wrapDomEvent e (`on` Element.change) (HTMLSelectElement.getValue e)
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
@@ -460,13 +434,13 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- combineDyn readKey ixKeys <=< holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
   return $ Dropdown dValue (attachDynWith readKey ixKeys eChange)
 
-liftM concat $ mapM makeLenses
+concat <$> mapM makeLenses
   [ ''TextAreaConfig
   , ''TextArea
   , ''TextInputConfig
   , ''TextInput
---  , ''FileInputConfig
---  , ''FileInput
+  , ''FileInputConfig
+  , ''FileInput
   , ''DropdownConfig
   , ''Dropdown
   , ''CheckboxConfig
@@ -489,11 +463,9 @@ instance HasAttributes (CheckboxConfig t) where
   type Attrs (CheckboxConfig t) = Dynamic t (Map Text Text)
   attributes = checkboxConfig_attributes
 
-{-
 instance HasAttributes (FileInputConfig t) where
   type Attrs (FileInputConfig t) = Dynamic t (Map Text Text)
   attributes = fileInputConfig_attributes
--}
 
 class HasSetValue a where
   type SetValue a :: *

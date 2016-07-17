@@ -27,6 +27,7 @@ import System.Directory
 import System.Glib.FFI hiding (void)
 import qualified Data.ByteString as BS
 import Data.Monoid
+import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -113,29 +114,27 @@ toJSObject ctx args = do
 fromJSStringMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Text)
 fromJSStringMaybe c t = do
   isNull <- jsvalueisnull c t
-  case isNull of
-    True -> return Nothing
-    False -> do
-      j <- jsvaluetostringcopy c t nullPtr
-      l <- jsstringgetmaximumutf8cstringsize j
-      s <- allocaBytes (fromIntegral l) $ \ps -> do
-             _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
-             peekCString ps
-      return $ Just $ T.pack s
+  if isNull then return Nothing else do
+    j <- jsvaluetostringcopy c t nullPtr
+    l <- jsstringgetmaximumutf8cstringsize j
+    s <- allocaBytes (fromIntegral l) $ \ps -> do
+           _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
+           peekCString ps
+    return $ Just $ T.pack s
 
 getLocationHost :: WebView -> IO Text
 getLocationHost wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.host"
   lh <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
   lh' <- fromJSStringMaybe c lh
-  return $ maybe "" id lh'
+  return $ fromMaybe "" lh'
 
 getLocationProtocol :: WebView -> IO Text
 getLocationProtocol wv = withWebViewContext wv $ \c -> do
   script <- jsstringcreatewithutf8cstring "location.protocol"
   lp <- jsevaluatescript c script nullPtr nullPtr 1 nullPtr
   lp' <- fromJSStringMaybe c lp
-  return $ maybe "" id lp'
+  return $ fromMaybe "" lp'
 
 bsToArrayBuffer :: JSContextRef -> ByteString -> IO JSValueRef
 bsToArrayBuffer c bs = do
@@ -159,7 +158,7 @@ bsFromArrayBuffer c a = do
         i' <- jsvaluemakenumber c (fromIntegral i)
         args <- toJSObject c [uint8Array, i']
         getIntegral =<< jsevaluatescript c getIx args nullPtr 1 nullPtr
-  fmap BS.pack $ forM [0..byteLength-1] arrayLookup
+  BS.pack <$> forM [0..byteLength-1] arrayLookup
 
 withWebViewContext :: WebView -> (JSContextRef -> IO a) -> IO a
 withWebViewContext wv f = f =<< webFrameGetGlobalContext =<< webViewGetMainFrame wv

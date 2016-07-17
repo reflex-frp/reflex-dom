@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, StandaloneDeriving, FlexibleContexts, UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, FlexibleContexts, UndecidableInstances #-}
 module Reflex.Dom.PerformEvent.Class where
 
 import Reflex

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, DeriveFunctor, FlexibleInstances, DataKinds, LambdaCase, PolyKinds, RankNTypes, ScopedTypeVariables, PolyKinds, FlexibleContexts, UndecidableInstances, ConstraintKinds, DefaultSignatures #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, DeriveFunctor, FlexibleInstances, DataKinds, LambdaCase, PolyKinds, RankNTypes, ScopedTypeVariables, FlexibleContexts, UndecidableInstances, ConstraintKinds, DefaultSignatures #-}
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
@@ -244,7 +244,7 @@ instance Functor1 (ElementConfig er t) where
 instance Reflex t => Functor1 (PlaceholderConfig above t) where
   {-# INLINABLE fmap1 #-}
   fmap1 f cfg = cfg
-    { _placeholderConfig_insertAbove = fmap f $ _placeholderConfig_insertAbove cfg
+    { _placeholderConfig_insertAbove = f <$> _placeholderConfig_insertAbove cfg
     }
 
 instance Functor1 (InputElementConfig er t) where
@@ -262,7 +262,7 @@ class HasDomEvent t target eventName where
 instance Reflex t => HasDomEvent t (Element EventResult d t) en where
   type DomEventType (Element EventResult d t) en = EventResultType en
   {-# INLINABLE domEvent #-}
-  domEvent en e = fmap unEventResult $ Reflex.select (_element_events e) (WrapArg en)
+  domEvent en e = unEventResult <$> Reflex.select (_element_events e) (WrapArg en)
 
 instance Reflex t => HasDomEvent t (InputElement EventResult d t) en where
   type DomEventType (InputElement EventResult d t) en = EventResultType en
@@ -307,7 +307,7 @@ instance MonadTransControlStateless (ReaderT r)
 type RunStateless t = forall n b. Monad n => t n b -> n b
 
 liftWithStateless :: forall m t a. (Monad m, MonadTransControlStateless t) => (RunStateless t -> m a) -> t m a
-liftWithStateless a = liftWith $ \run -> a $ \x -> liftM (fromStT (Proxy :: Proxy t)) $ run x
+liftWithStateless a = liftWith $ \run -> a $ \x -> fromStT (Proxy :: Proxy t) <$> run x
 
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode t)
 liftTextNode = lift . textNode

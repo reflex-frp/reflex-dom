@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, FunctionalDependencies, RecursiveDo, UndecidableInstances, GeneralizedNewtypeDeriving, StandaloneDeriving, EmptyDataDecls, NoMonomorphismRestriction, TypeOperators, DeriveDataTypeable, PackageImports, TemplateHaskell, LambdaCase, ConstraintKinds, CPP #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, RecursiveDo, UndecidableInstances, NoMonomorphismRestriction, TypeOperators, LambdaCase, ConstraintKinds, CPP #-}
 module Reflex.Dom.Internal where
 
 import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
@@ -17,7 +17,6 @@ import GHCJS.DOM.Node
 import GHCJS.DOM.Element
 import GHCJS.DOM.Document
 import Control.Lens
-import Control.Monad hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.Ref
 import Control.Concurrent
@@ -34,7 +33,7 @@ import Data.Maybe
 {-# INLINABLE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> IO ()
 mainWidget w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- liftM (fmap DOM.castToHTMLDocument) $ webViewGetDomDocument webView
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
   Just body <- getBody doc
   attachWidget body webViewSing w
 
@@ -42,8 +41,8 @@ mainWidget w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSi
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> IO ()
 mainWidgetWithHead h b = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- liftM (fmap DOM.castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap DOM.castToHTMLElement) $ getHead doc
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
+  Just headElement <- fmap DOM.castToHTMLElement <$> getHead doc
   attachWidget headElement webViewSing h
   Just body <- getBody doc
   attachWidget body webViewSing b
@@ -51,8 +50,8 @@ mainWidgetWithHead h b = runWebGUI $ \webView -> withWebViewSingleton webView $ 
 {-# INLINABLE mainWidgetWithCss #-}
 mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> IO ()
 mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- liftM (fmap DOM.castToHTMLDocument) $ webViewGetDomDocument webView
-  Just headElement <- liftM (fmap DOM.castToHTMLElement) $ getHead doc
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
+  Just headElement <- fmap DOM.castToHTMLElement <$> getHead doc
   setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- getBody doc
   attachWidget body webViewSing w
@@ -60,7 +59,7 @@ mainWidgetWithCss css w = runWebGUI $ \webView -> withWebViewSingleton webView $
 {-# INLINABLE mainWidgetFragment #-}
 mainWidgetFragment :: (forall x. Widget x ()) -> IO ()
 mainWidgetFragment w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- liftM (fmap DOM.castToHTMLDocument) $ webViewGetDomDocument webView
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
   Just body <- getBody doc
   attachWidgetFragment body webViewSing w
 
@@ -129,7 +128,7 @@ attachWidgetFragment' rootElement wv w = do
       liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
     return ()
   setInnerHTML rootElement $ Just (""::String)
-  appendChild rootElement $ Just df
+  _ <- appendChild rootElement $ Just df
   return (result, fc)
 
 data AppInput t = AppInput
@@ -142,7 +141,7 @@ data AppOutput t = AppOutput --TODO: Add quit event
 
 runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> IO ()
 runApp' app = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
-  Just doc <- liftM (fmap DOM.castToHTMLDocument) $ webViewGetDomDocument webView
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
   Just body <- getBody doc
   Just win <- getDefaultView doc
   rec o <- attachWidget body webViewSing $ do

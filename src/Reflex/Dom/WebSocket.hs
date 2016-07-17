@@ -38,15 +38,13 @@ data WebSocket t
 webSocket :: (MonadIO m, MonadIO (Performable m), HasWebView m, PerformEvent t m, TriggerEvent t m, PostBuild t m) => Text -> WebSocketConfig t -> m (WebSocket t)
 webSocket url config = do
   wv <- fmap unWebViewSingleton askWebView
-  (eRecv, triggerERecv) <- newTriggerEvent
+  (eRecv, onMessage) <- newTriggerEvent
   currentSocketRef <- liftIO $ newIORef Nothing
   --TODO: Disconnect if value no longer needed
   (eOpen, triggerEOpen) <- newTriggerEventWithOnComplete
   payloadQueue <- liftIO newTQueueIO
   isOpen       <- liftIO newEmptyTMVarIO
-  let onMessage :: ByteString -> IO ()
-      onMessage m = triggerERecv m
-      onOpen = triggerEOpen () $ do
+  let onOpen = triggerEOpen () $ do
         liftIO $ void $ atomically $ tryPutTMVar isOpen ()
       --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?
       onClose = void $ forkIO $ do

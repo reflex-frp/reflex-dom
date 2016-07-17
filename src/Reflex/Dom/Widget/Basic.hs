@@ -1,5 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
-
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes #-}
 module Reflex.Dom.Widget.Basic where
 
 import Reflex.Dom.Class
@@ -16,6 +15,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Foldable
 import Data.Traversable
+import Control.Arrow
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Lens hiding (element, children)
 import Data.These
@@ -65,12 +65,12 @@ listHoldWithKey initialChildren modifyChildren buildChild = do
               & deleteSelf .~ delete
         ph <- placeholder myCfg
         result <- deletable delete $ buildChild k v
-        return $ ChildResult (result, (fmap (fmap Just) $ _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deletedSelf ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
+        return $ ChildResult (result, (fmap Just <$> _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deletedSelf ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
   rec initialAugmentedResults <- iforM initialChildren buildAugmentedChild
       augmentedResults <- foldDyn applyMap initialAugmentedResults $ newInsertedBelow <> newInsertedAbove
-      let newInsertedAbove = switch $ fmap (mconcat . reverse . fmap (snd . unChildResult) . Map.elems) $ current augmentedResults
+      let newInsertedAbove = switch $ mconcat . reverse . fmap (snd . unChildResult) . Map.elems <$> current augmentedResults
       belowAll <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Right ())
-      let newInsertedBelow = fmap (fmap Just) $ _placeholder_insertedAbove belowAll
+      let newInsertedBelow = fmap Just <$> _placeholder_insertedAbove belowAll
   mapDyn (fmap (fst . unChildResult)) augmentedResults
 
 text :: DomBuilder t m => Text -> m ()
@@ -101,7 +101,7 @@ dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
   let newChild = leftmost [updated child, tag (current child) postBuild]
-  liftM snd $ widgetHoldInternal (return ()) newChild
+  snd <$> widgetHoldInternal (return ()) newChild
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
@@ -167,7 +167,7 @@ listWithKey' = listWithKeyShallowDiff
 listWithKeyShallowDiff :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
 listWithKeyShallowDiff initialVals valsChanged mkChild = do
   let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
-  sentVals <- foldDyn applyMap Map.empty $ fmap (fmap (fmap (\_ -> ()))) valsChanged
+  sentVals <- foldDyn applyMap Map.empty $ fmap (fmap void) valsChanged
   let relevantPatch patch _ = case patch of
         Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
         Just _ -> Nothing -- We don't want to let spurious re-creations of items through
@@ -178,10 +178,10 @@ listWithKeyShallowDiff initialVals valsChanged mkChild = do
 -- | Create a dynamically-changing set of Event-valued widgets.
 --   This is like listWithKey, specialized for widgets returning (Event t a).  listWithKey would return 'Dynamic t (Map k (Event t a))' in this scenario, but listViewWithKey flattens this to 'Event t (Map k a)' via 'switch'.
 listViewWithKey :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
-listViewWithKey vals mkChild = liftM (switch . fmap mergeMap) $ listViewWithKey' vals mkChild
+listViewWithKey vals mkChild = switch . fmap mergeMap <$> listViewWithKey' vals mkChild
 
 listViewWithKey' :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
-listViewWithKey' vals mkChild = liftM current $ listWithKey vals mkChild
+listViewWithKey' vals mkChild = current <$> listWithKey vals mkChild
 
 -- | Create a dynamically-changing set of widgets, one of which is selected at any time.
 selectViewListWithKey :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
@@ -195,14 +195,14 @@ selectViewListWithKey selection vals mkChild = do
     selected <- getDemuxed selectionDemux k
     selectSelf <- mkChild k v selected
     return $ fmap ((,) k) selectSelf
-  liftM switchPromptlyDyn $ mapDyn (leftmost . Map.elems) selectChild
+  return $ switchPromptlyDyn $ leftmost . Map.elems <$> selectChild
 
 selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
   => Dynamic t k          -- ^ Current selection key
   -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
   -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
   -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
-selectViewListWithKey_ selection vals mkChild = liftM (fmap fst) $ selectViewListWithKey selection vals mkChild
+selectViewListWithKey_ selection vals mkChild = fmap fst <$> selectViewListWithKey selection vals mkChild
 
 {-
 {-# INLINABLE elWith #-}
@@ -265,7 +265,7 @@ el' elementTag = element elementTag def
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elAttr' elementTag attrs = element elementTag $ def
-  & initialAttributes .~ (Map.fromList $ fmap (\(k, v) -> ((Nothing, k), v)) $ Map.toList $ attrs)
+  & initialAttributes .~ Map.mapKeys (\k -> (Nothing, k)) attrs
 
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
@@ -276,7 +276,7 @@ el :: forall t m a. DomBuilder t m => Text -> m a -> m a
 el elementTag child = snd <$> el' elementTag child
 
 elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
-elClass elementTag c child = fmap snd $ element elementTag (def & initialAttributes .~ (Nothing, "class") =: c) child
+elClass elementTag c child = snd <$> element elementTag (def & initialAttributes .~ (Nothing, "class") =: c) child
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
@@ -325,17 +325,17 @@ newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)
 
 workflow :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m) => Workflow t m a -> m (Dynamic t a)
 workflow w0 = do
-  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ fmap snd $ current eResult
-  mapDyn fst eResult
+  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ snd <$> current eResult
+  return $ fmap fst eResult
 
 workflowView :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m) => Workflow t m a -> m (Event t a)
 workflowView w0 = do
-  rec eResult <- dyn =<< mapDyn unWorkflow =<< holdDyn w0 eReplace
-      eReplace <- liftM switch $ hold never $ fmap snd eResult
+  rec eResult <- dyn . fmap unWorkflow =<< holdDyn w0 eReplace
+      eReplace <- fmap switch $ hold never $ fmap snd eResult
   return $ fmap fst eResult
 
 mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
-mapWorkflow f (Workflow x) = Workflow (fmap (\(v,e) -> (f v, fmap (mapWorkflow f) e)) x)
+mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
 
 divClass :: forall t m a. DomBuilder t m => Text -> m a -> m a
 divClass = elClass "div"
@@ -376,9 +376,9 @@ tabDisplay :: forall t m k. (MonadFix m, DomBuilder t m, MonadHold t m, PostBuil
 tabDisplay ulClass activeClass tabItems = do
   let t0 = listToMaybe $ Map.keys tabItems
   rec currentTab :: Demux t (Maybe k) <- elAttr "ul" ("class" =: ulClass) $ do
-        tabClicksList :: [Event t k] <- (liftM Map.elems) $ imapM (\k (s,_) -> headerBarLink s k =<< getDemuxed currentTab (Just k)) tabItems
+        tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s,_) -> headerBarLink s k =<< getDemuxed currentTab (Just k)) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
-        liftM demux $ holdDyn t0 $ fmap Just eTabClicks
+        fmap demux $ holdDyn t0 $ fmap Just eTabClicks
   el "div" $ do
     iforM_ tabItems $ \k (_, w) -> do
       isSelected <- getDemuxed currentTab $ Just k

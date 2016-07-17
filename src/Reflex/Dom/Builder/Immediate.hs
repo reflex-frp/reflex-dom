@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, FunctionalDependencies, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
+{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
 module Reflex.Dom.Builder.Immediate where
 
 import Reflex
@@ -62,7 +62,7 @@ instance MonadTrans (ImmediateDomBuilderT t) where
 
 {-# INLINABLE runImmediateDomBuilderT #-}
 runImmediateDomBuilderT :: ImmediateDomBuilderT t m a -> ImmediateDomBuilderEnv t -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env = runReaderT a env
+runImmediateDomBuilderT (ImmediateDomBuilderT a) = runReaderT a
 
 {-# INLINABLE askDocument #-}
 askDocument :: Monad m => ImmediateDomBuilderT t m Document
@@ -206,8 +206,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     let domInputElement = castToHTMLInputElement domElement
     Just v0 <- Input.getValue domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
-    valueChangedByUI <- performEvent $ ffor (Reflex.select (_element_events e) (WrapArg Input)) $ \_ ->
-      getMyValue
+    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- performEvent $ ffor (cfg ^. inputElementConfig_setValue) $ \v' -> do
       Input.setValue domInputElement $ Just v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
@@ -240,8 +239,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     let domTextAreaElement = castToHTMLTextAreaElement domElement
     Just v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
-    valueChangedByUI <- performEvent $ ffor (Reflex.select (_element_events e) (WrapArg Input)) $ \_ ->
-      getMyValue
+    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- performEvent $ ffor (cfg ^. textAreaElementConfig_setValue) $ \v' -> do
       TextArea.setValue domTextAreaElement $ Just v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
@@ -314,10 +312,9 @@ instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => 
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete f = do
     events <- askEvents
-    eResult <- lift $ newEventWithTrigger $ \t -> f $ \a cb -> do
+    lift $ newEventWithTrigger $ \t -> f $ \a cb -> do
       reResultTrigger <- newIORef $ Just t
       writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a cb]
-    return eResult
 
 instance HasWebView m => HasWebView (ImmediateDomBuilderT t m) where
   type WebViewPhantom (ImmediateDomBuilderT t m) = WebViewPhantom m
@@ -392,7 +389,7 @@ type family EventType en where
 
 {-# INLINABLE defaultDomEventHandler #-}
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
-defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
+defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> return ()
   Keypress -> getKeyEvent
@@ -444,7 +441,7 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
 
 {-# INLINABLE defaultDomWindowEventHandler #-}
 defaultDomWindowEventHandler :: DOM.Window -> EventName en -> EventM DOM.Window (EventType en) (Maybe (EventResult en))
-defaultDomWindowEventHandler w evt = liftM (Just . EventResult) $ case evt of
+defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> return ()
   Keypress -> getKeyEvent
@@ -652,7 +649,7 @@ windowOnEventName en e = case en of
 
 {-# INLINABLE wrapDomEvent #-}
 wrapDomEvent :: (MonadIO m, TriggerEvent t m) => e -> (e -> EventM e event () -> IO (IO ())) -> EventM e event a -> m (Event t a)
-wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ liftM Just getValue
+wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ fmap Just getValue
 
 {-# INLINABLE subscribeDomEvent #-}
 subscribeDomEvent :: (EventM e event () -> IO (IO ()))
@@ -674,10 +671,9 @@ wrapDomEventMaybe :: (MonadIO m, TriggerEvent t m)
                   -> EventM e event (Maybe a)
                   -> m (Event t a)
 wrapDomEventMaybe el elementOnevent getValue = do
-  e <- newEventWithLazyTriggerWithOnComplete $ \trigger -> elementOnevent el $ do
+  newEventWithLazyTriggerWithOnComplete $ \trigger -> elementOnevent el $ do
     mv <- getValue
     forM_ mv $ \v -> liftIO $ trigger v $ return ()
-  return e
 
 {-# INLINABLE wrapDomEventsMaybe #-}
 wrapDomEventsMaybe :: (MonadIO m, MonadReflexCreateTrigger t m)
