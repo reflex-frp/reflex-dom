@@ -1,25 +1,29 @@
-{-# LANGUAGE RecursiveDo, TypeFamilies, FlexibleContexts, OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Resize where
 
 import Reflex
-import Reflex.Dom.PostBuild.Class
-import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Old
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic
 
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Monoid
 import GHCJS.DOM.Element hiding (reset)
 import GHCJS.DOM.EventM (on)
-import qualified Data.Map as Map
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from github.com/marcj/css-element-queries

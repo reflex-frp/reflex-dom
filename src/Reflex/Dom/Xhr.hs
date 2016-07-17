@@ -1,4 +1,10 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, DeriveFunctor, FlexibleContexts, OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
   , XhrRequest (..)
@@ -50,9 +56,9 @@ where
 
 import Reflex
 import Reflex.Dom.Class
-import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
 
 import Control.Concurrent
@@ -62,8 +68,6 @@ import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Encode
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Builder as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Map (Map)
@@ -71,6 +75,8 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
 import Data.Typeable
 

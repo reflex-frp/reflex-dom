@@ -1,12 +1,13 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Reflex.Dom.Class ( module Reflex.Dom.Class
                         , module Foreign.JavaScript.TH
                         ) where
 
 import Reflex.Class
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
 
-import Prelude hiding (mapM, mapM_, sequence, concat)
+import Prelude hiding (concat, mapM, mapM_, sequence)
 
 import Foreign.JavaScript.TH
 

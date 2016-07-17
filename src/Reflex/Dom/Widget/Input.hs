@@ -1,50 +1,62 @@
-{-# LANGUAGE OverloadedStrings, ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo, TemplateHaskell, UndecidableInstances, PolyKinds #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
 
 import Prelude
 
-import Reflex.Dom.Class
-import Reflex.Dom.Widget.Basic
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Class
+import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.Widget.Basic
 
 -- For dropdown
-import Reflex.Dom.PerformEvent.Class
-import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
-import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
-import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
-import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
-import Data.Maybe
-import qualified Text.Read as T
-import Data.Semigroup
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Maybe
+import Data.Semigroup
+import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
+import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
+import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
+import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
+import Reflex.Dom.PerformEvent.Class
+import qualified Text.Read as T
 
 -- For fileInput
+import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types (File)
-import qualified GHCJS.DOM.Element as Element
 -- import qualified GHCJS.DOM.File as File
 import qualified GHCJS.DOM.FileList as FileList
 
 
-import Reflex
-import qualified Data.Map as Map
-import Control.Lens hiding (ix, element)
+import Control.Lens hiding (element, ix)
 import Control.Monad hiding (forM_)
+import qualified Data.Bimap as Bimap
 import Data.Default
-import Data.Map (Map)
-import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import qualified Data.Bimap as Bimap
-import Data.Proxy
 import Data.Functor.Misc
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Proxy
+import Data.Text (Text)
+import qualified Data.Text as T
+import Reflex
 
-import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.Event as Event
+import qualified GHCJS.DOM.HTMLInputElement as Input
 
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text

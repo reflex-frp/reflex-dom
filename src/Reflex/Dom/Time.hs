@@ -1,9 +1,14 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RecursiveDo #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Time where
 
 import Reflex
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
 
 import Control.Concurrent
 import Control.Monad
@@ -11,8 +16,8 @@ import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
-import System.Random
 import Data.Typeable
+import System.Random
 
 data TickInfo
   = TickInfo { _tickInfo_lastUTC :: UTCTime
