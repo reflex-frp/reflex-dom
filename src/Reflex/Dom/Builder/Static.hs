@@ -103,8 +103,18 @@ type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFi
 
 data StaticDomSpace
 
+-- | Static documents never produce any events, so this type has no inhabitants
+data StaticDomEvent (a :: k)
+
+-- | Static documents don't process events, so all handlers are equivalent
+data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
+
 instance DomSpace StaticDomSpace where
   type RawElement StaticDomSpace = ByteString
+  type RawEvent StaticDomSpace = StaticDomEvent
+  type DomHandler StaticDomSpace = StaticDomHandler
+  type DomHandler1 StaticDomSpace = StaticDomHandler
+  defaultEventHandler _ = StaticDomHandler
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
