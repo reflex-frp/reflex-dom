@@ -1,18 +1,19 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE JavaScriptFFI #-}
 module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
                                    , runWebGUI
                                    ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Foreign
 import Foreign.C
+import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
 import GHCJS.DOM.Types
+import qualified GHCJS.Marshal.Pure as JS
 import GHCJS.Types
 import JavaScript.TypedArray.ArrayBuffer as JS
-import qualified Data.ByteString as BS
-import qualified GHCJS.Buffer as JS
-import qualified GHCJS.Marshal.Pure as JS
 
 quitWebView :: WebView -> IO ()
 quitWebView = error "quitWebView: unimplemented in GHCJS"

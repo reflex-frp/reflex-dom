@@ -1,23 +1,25 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, QuasiQuotes, OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 module Reflex.Dom.Xhr.Foreign ( module Reflex.Dom.Xhr.Foreign
                               , XhrResponseType
                               ) where
 
+import Control.Concurrent.MVar
+import Control.Exception.Base
 import Control.Monad
-import qualified Data.Text as T
 import Data.Text (Text)
-import System.Glib.FFI
-import Graphics.UI.Gtk.WebKit.WebView
+import qualified Data.Text as T
+import GHCJS.DOM.File
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import GHCJS.DOM.File
-import Reflex.Dom.Xhr.ResponseType
-import Reflex.Dom.Xhr.Exception
-import Control.Concurrent.MVar
-import Control.Exception.Base
 import Graphics.UI.Gtk.WebKit.Types hiding (Text)
+import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.ResponseType
+import System.Glib.FFI
 
 import Reflex.Dom.Internal.Foreign
 

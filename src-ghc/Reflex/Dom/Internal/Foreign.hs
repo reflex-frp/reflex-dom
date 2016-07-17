@@ -1,12 +1,21 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface, ScopedTypeVariables, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Reflex.Dom.Internal.Foreign where
 
 import Control.Concurrent
 import Control.Exception (bracket)
 import Control.Lens hiding (set)
 import Control.Monad
-import Control.Monad.State.Strict hiding (mapM, mapM_, forM, forM_, sequence, sequence_, get)
+import Control.Monad.State.Strict hiding (forM, forM_, get, mapM, mapM_, sequence, sequence_)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.Maybe
+import Data.Monoid
+import Data.Text (Text)
+import qualified Data.Text as T
 import Foreign.Marshal hiding (void)
 import Foreign.Ptr
 import GHCJS.DOM hiding (runWebGUI)
@@ -18,18 +27,13 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.Types hiding (Event, Widget, Text)
+import Graphics.UI.Gtk.WebKit.Types hiding (Event, Text, Widget)
 import Graphics.UI.Gtk.WebKit.WebFrame
 import Graphics.UI.Gtk.WebKit.WebInspector
 import Graphics.UI.Gtk.WebKit.WebSettings
 import Graphics.UI.Gtk.WebKit.WebView
 import System.Directory
 import System.Glib.FFI hiding (void)
-import qualified Data.ByteString as BS
-import Data.Monoid
-import Data.Maybe
-import Data.Text (Text)
-import qualified Data.Text as T
 
 #ifndef mingw32_HOST_OS
 import System.Posix.Signals

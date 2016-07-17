@@ -1,28 +1,42 @@
-{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Control.Monad.Identity
+import Control.Monad.Ref
+import Data.Dependent.Sum (DSum (..))
 import Reflex
-import Reflex.Host.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Base
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
-import Control.Monad.Ref
-import Control.Monad.Identity
-import Data.Dependent.Sum (DSum (..))
+import Reflex.Host.Class
 
-import Data.Monoid
-import qualified Data.Map as Map
+import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
-import qualified Data.ByteString.Lazy as BL
-import Data.ByteString (ByteString)
+import Control.Monad.Exception
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
+import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
-import Blaze.ByteString.Builder.Html.Utf8
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Map as Map
+import Data.Monoid
 import Data.Text.Encoding
-import Control.Monad.Exception
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT

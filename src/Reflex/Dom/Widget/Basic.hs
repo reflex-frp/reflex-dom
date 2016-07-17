@@ -1,31 +1,42 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Basic where
 
+import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
 import Reflex.Dom.PostBuild.Class
-import Reflex.Dom.Builder.Class
 
-import Prelude hiding (mapM, mapM_, sequence, sequence_)
-import Reflex
+import Control.Arrow
+import Control.Lens hiding (children, element)
+import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+import Data.Align
+import Data.Default
+import Data.Either
+import Data.Foldable
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
+import Data.Semigroup
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Foldable
-import Data.Traversable
-import Control.Arrow
-import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
-import Control.Lens hiding (element, children)
-import Data.These
-import Data.Align
-import Data.Maybe
-import Data.Default
-import Data.Either
-import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.These
+import Data.Traversable
+import Prelude hiding (mapM, mapM_, sequence, sequence_)
+import Reflex
 
 widgetHoldInternal :: DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 child' = do

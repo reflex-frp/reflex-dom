@@ -1,17 +1,27 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, TypeFamilies, UndecidableInstances, RecursiveDo, ScopedTypeVariables, DataKinds, TypeOperators, PolyKinds, FunctionalDependencies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.PostBuild.Class where
 
+import Foreign.JavaScript.TH
 import Reflex
-import Reflex.Host.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Class
-import Foreign.JavaScript.TH
+import Reflex.Host.Class
 
 import Control.Lens hiding (element)
-import Control.Monad.Reader
-import Control.Monad.Trans.Control
-import Control.Monad.Ref
 import Control.Monad.Exception
+import Control.Monad.Reader
+import Control.Monad.Ref
+import Control.Monad.Trans.Control
 
 class (Reflex t, Monad m) => PostBuild t m | m -> t where
   getPostBuild :: m (Event t ())

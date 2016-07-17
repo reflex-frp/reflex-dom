@@ -1,4 +1,18 @@
-{-# LANGUAGE ForeignFunctionInterface, CPP, TemplateHaskell, TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving, GeneralizedNewtypeDeriving, ExistentialQuantification, FunctionalDependencies, EmptyDataDecls, FlexibleContexts, RankNTypes, UndecidableInstances #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 #ifdef __GHCJS__
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
@@ -7,58 +21,58 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              ) where
 
 import Reflex.Class
-import Reflex.Host.Class
-import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.Deletable.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Host.Class
 
 import Language.Haskell.TH
 
 #ifdef __GHCJS__
-import qualified GHCJS.Marshal as JS
-import qualified GHCJS.Marshal.Pure as JS
-import qualified GHCJS.Foreign as JS
-import qualified GHCJS.Foreign.Callback as JS
-import qualified GHCJS.Types as JS
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
-import GHCJS.DOM.Types hiding (fromJSString, Text)
+import GHCJS.DOM.Types hiding (Text, fromJSString)
 import qualified GHCJS.DOM.Types as JS
+import qualified GHCJS.Foreign as JS
+import qualified GHCJS.Foreign.Callback as JS
+import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
+import qualified GHCJS.Marshal as JS
+import qualified GHCJS.Marshal.Pure as JS
+import qualified GHCJS.Types as JS
 import qualified JavaScript.Array as JS
+import qualified JavaScript.Array.Internal (SomeJSArray (..))
 import qualified JavaScript.Object as JS
 import qualified JavaScript.Object.Internal (Object (..))
-import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
-import qualified JavaScript.Array.Internal (SomeJSArray (..))
 import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
 
-import Data.Word
-import Foreign.Ptr
-import Foreign.C.Types
 import Data.Hashable
+import Data.Word
+import Foreign.C.Types
+import Foreign.Ptr
 import Text.Encoding.Z
 #else
-import System.Glib.FFI
-import Graphics.UI.Gtk.WebKit.WebView
+import Foreign.Marshal
+import Graphics.UI.Gtk.WebKit.DOM.Node
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.DOM.Node
-import Foreign.Marshal
+import Graphics.UI.Gtk.WebKit.WebView
+import System.Glib.FFI
 #endif
 
+import Control.Concurrent
 import Control.Monad
-import Control.Monad.Ref
+import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Control.Monad.Exception
 import Control.Monad.Reader
+import Control.Monad.Ref
 import Control.Monad.State
-import Control.Monad.Trans.Control
 import qualified Control.Monad.State.Strict as Strict
+import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Control.Concurrent
 import Data.Coerce
 import Data.Monoid
 import Data.Text (Text)

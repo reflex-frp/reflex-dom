@@ -1,27 +1,37 @@
-{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, FunctionalDependencies, RecursiveDo, ScopedTypeVariables, LambdaCase, GADTs #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.DynamicWriter where
 
 import Reflex
-import Reflex.Host.Class
-import Reflex.Dom.Class
 import Reflex.Dom.Builder.Class
+import Reflex.Dom.Class
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
+import Reflex.Host.Class
 
 import Control.Lens hiding (element)
+import Control.Monad.Exception
 import Control.Monad.IO.Class
-import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.Exception
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Control.Monad.State.Strict
 import Data.Dependent.Map (DMap)
-import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.Foldable
 import Data.Functor.Compose
 import Data.Functor.Misc
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Semigroup
-import Data.Foldable
 import Data.Traversable
 
 instance MonadTrans (DynamicWriterT t w) where

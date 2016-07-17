@@ -2,10 +2,10 @@
 
 module Reflex.Dom.Xhr.ResponseType where
 
-import Data.Typeable
-import Data.Text (Text)
-import GHCJS.DOM.Blob (Blob)
 import Data.ByteString (ByteString)
+import Data.Text (Text)
+import Data.Typeable
+import GHCJS.DOM.Blob (Blob)
 
 data XhrResponseType = XhrResponseType_Default
                      | XhrResponseType_ArrayBuffer

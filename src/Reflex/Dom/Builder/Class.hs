@@ -1,4 +1,19 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, DeriveFunctor, FlexibleInstances, DataKinds, LambdaCase, PolyKinds, RankNTypes, ScopedTypeVariables, FlexibleContexts, UndecidableInstances, ConstraintKinds, DefaultSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
@@ -9,20 +24,20 @@ import Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.Dom.Deletable.Class
 
+import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
 import Data.Default
-import Data.Functor.Misc
-import Data.Map (Map)
-import Data.Text (Text)
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import Data.Semigroup
+import Data.Functor.Misc
+import Data.Map (Map)
 import Data.Proxy
-import GHC.Exts (Constraint)
+import Data.Semigroup
+import Data.Text (Text)
 import Data.Type.Coercion
-import qualified Control.Category
+import GHC.Exts (Constraint)
 
 data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
 

@@ -1,4 +1,6 @@
-{-# LANGUAGE ConstraintKinds, TypeFamilies, FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Old where
 
 import Control.Monad.Exception

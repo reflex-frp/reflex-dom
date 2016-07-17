@@ -1,27 +1,37 @@
-{-# LANGUAGE MultiParamTypeClasses, GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, StandaloneDeriving, FlexibleContexts, RecursiveDo, UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.PerformEvent.Base where
 
-import Reflex
-import Reflex.Host.Class
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.Deletable.Class
 import Foreign.JavaScript.TH
+import Reflex
+import Reflex.Dom.Deletable.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Host.Class
 
+import Control.Lens
+import Control.Monad.Exception
 import Control.Monad.Identity
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Control.Monad.Exception
-import Data.Dependent.Sum
-import Data.Maybe
-import Data.Functor.Misc
+import Data.Align
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import Data.Word
+import Data.Dependent.Sum
 import Data.Functor.Compose
+import Data.Functor.Misc
+import Data.Maybe
 import Data.Semigroup
 import Data.These
-import Data.Align
-import Control.Lens
+import Data.Word
 
 newtype EventTriggerRef t m a = EventTriggerRef { unEventTriggerRef :: Ref m (Maybe (EventTrigger t a)) }
 

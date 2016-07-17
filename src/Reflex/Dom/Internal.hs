@@ -1,7 +1,20 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, RankNTypes, GADTs, ScopedTypeVariables, RecursiveDo, UndecidableInstances, NoMonomorphismRestriction, TypeOperators, LambdaCase, ConstraintKinds, CPP #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Internal where
 
-import Prelude hiding (mapM, mapM_, concat, sequence, sequence_)
+import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
@@ -9,26 +22,25 @@ import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.PerformEvent.Base
 import Reflex.Dom.PostBuild.Class
 import Reflex.Host.Class
-import Reflex.Spider (Spider, SpiderHost, runSpiderHost, Global)
+import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 
-import GHCJS.DOM hiding (runWebGUI)
-import qualified GHCJS.DOM.Types as DOM
-import GHCJS.DOM.Node
-import GHCJS.DOM.Element
-import GHCJS.DOM.Document
-import Control.Lens
-import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
-import Control.Monad.Ref
 import Control.Concurrent
+import Control.Lens
+import Control.Monad
+import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+import Control.Monad.Ref
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
-import Data.Foldable
+import Data.IORef
+import Data.Maybe
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.Monoid ((<>))
-import Data.IORef
-import Control.Monad
-import Data.Maybe
+import GHCJS.DOM hiding (runWebGUI)
+import GHCJS.DOM.Document
+import GHCJS.DOM.Element
+import GHCJS.DOM.Node
+import qualified GHCJS.DOM.Types as DOM
 
 {-# INLINABLE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> IO ()

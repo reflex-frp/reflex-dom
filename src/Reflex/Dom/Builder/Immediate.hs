@@ -1,42 +1,58 @@
-{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Immediate where
 
+import Foreign.JavaScript.TH
 import Reflex
-import Reflex.Host.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
-import Foreign.JavaScript.TH
+import Reflex.Host.Class
 
-import GHCJS.DOM.Document (Document, createTextNode, createElement, createElementNS, createDocumentFragment)
-import GHCJS.DOM.Element (setAttribute, setAttributeNS, removeAttribute, removeAttributeNS, getScrollTop)
-import qualified GHCJS.DOM.HTMLInputElement as Input
-import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
-import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.Window as Window
-import GHCJS.DOM.EventM (on, event, EventM)
-import qualified GHCJS.DOM.Event as Event
-import GHCJS.DOM.MouseEvent
-import GHCJS.DOM.Node (appendChild, getParentNode, getPreviousSibling, removeChild, toNode, getOwnerDocument, insertBefore)
-import GHCJS.DOM.Types (Node, IsNode, ToDOMString, FocusEvent, KeyboardEvent, WheelEvent, TouchEvent, IsElement, IsEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.EventM as DOM
-import GHCJS.DOM.UIEvent
-import Control.Monad.Reader
-import Control.Monad.Trans.Control
-import Control.Lens hiding (element)
 import Control.Concurrent.Chan
-import Data.Dependent.Sum
-import Data.Functor.Misc
-import Data.Bitraversable
-import Data.Text (Text)
-import Data.Maybe
-import Data.IORef
-import Control.Monad.Ref
+import Control.Lens hiding (element)
 import Control.Monad.Exception
+import Control.Monad.Reader
+import Control.Monad.Ref
+import Control.Monad.Trans.Control
+import Data.Bitraversable
+import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import Data.Default
+import Data.Dependent.Sum
+import Data.Functor.Misc
+import Data.IORef
+import Data.Maybe
+import Data.Text (Text)
+import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
+import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
+import qualified GHCJS.DOM.Element as Element
+import qualified GHCJS.DOM.Event as Event
+import GHCJS.DOM.EventM (EventM, event, on)
+import qualified GHCJS.DOM.EventM as DOM
+import qualified GHCJS.DOM.HTMLInputElement as Input
+import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
+import GHCJS.DOM.MouseEvent
+import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
+                       removeChild, toNode)
+import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
+                        WheelEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
+import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.UIEvent
+import qualified GHCJS.DOM.Window as Window
 
 import Debug.Trace hiding (traceEvent)
 
@@ -648,7 +664,7 @@ windowOnEventName en e = case en of
   Touchcancel -> on e Window.touchCancel
 
 {-# INLINABLE wrapDomEvent #-}
-wrapDomEvent :: (MonadIO m, TriggerEvent t m) => e -> (e -> EventM e event () -> IO (IO ())) -> EventM e event a -> m (Event t a)
+wrapDomEvent :: TriggerEvent t m => e -> (e -> EventM e event () -> IO (IO ())) -> EventM e event a -> m (Event t a)
 wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ fmap Just getValue
 
 {-# INLINABLE subscribeDomEvent #-}
@@ -665,7 +681,7 @@ subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
     writeChan eventChan [TriggerRef etr :=> TriggerInvocation v (return ())]
 
 {-# INLINABLE wrapDomEventMaybe #-}
-wrapDomEventMaybe :: (MonadIO m, TriggerEvent t m)
+wrapDomEventMaybe :: TriggerEvent t m
                   => e
                   -> (e -> EventM e event () -> IO (IO ()))
                   -> EventM e event (Maybe a)

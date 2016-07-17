@@ -2,13 +2,13 @@
 
 module HaltSpec where
 
-import           Control.Monad.IO.Class
-import           Data.Foldable
-import           GHCJS.DOM
+import Control.Monad.IO.Class
+import Data.Foldable
+import GHCJS.DOM
 import qualified Graphics.UI.Gtk as Gtk
-import           Reflex.Dom
-import           Reflex.Spider.Internal (SpiderHostFrame)
-import           Test.Hspec
+import Reflex.Dom
+import Reflex.Spider.Internal (SpiderHostFrame)
+import Test.Hspec
 
 spec :: Spec
 spec = do
