@@ -104,7 +104,7 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
 
 {-# INLINABLE textInputGetEnter #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
-textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
+textInputGetEnter i = fmapMaybe (\n -> if keyCodeLookup n == Enter then Just () else Nothing) $ _textInput_keypress i
 
 data TextAreaConfig t
    = TextAreaConfig { _textAreaConfig_initialValue :: Text

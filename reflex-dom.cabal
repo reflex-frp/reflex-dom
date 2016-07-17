@@ -50,7 +50,8 @@ library
     zenc == 0.1.*,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
-    monad-control >= 1.0.1 && < 1.1
+    monad-control >= 1.0.1 && < 1.1,
+    keycode == 0.2.*
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
