@@ -354,7 +354,7 @@ divClass = elClass "div"
 dtdd :: forall t m a. DomBuilder t m => Text -> m a -> m a
 dtdd h w = do
   el "dt" $ text h
-  el "dd" $ w
+  el "dd" w
 
 blank :: forall m. Monad m => m ()
 blank = return ()

@@ -293,7 +293,7 @@ fileInput config = do
   eChange <- wrapDomEvent e (`on` Element.change) $ do
       Just files <- Input.getFiles e
       len <- FileList.getLength files
-      mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) $ [0 .. len-1]
+      mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) [0 .. len-1]
   dValue <- holdDyn [] eChange
   return $ FileInput
     { _fileInput_value = dValue

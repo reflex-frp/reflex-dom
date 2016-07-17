@@ -158,7 +158,7 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
           tTarget        = addUTCTime dt tTargetLast
           thisDelay      = realToFrac $ diffUTCTime tTarget t :: Double
       threadDelay $ ceiling $ thisDelay * 1000000
-      void $ cb $ (TickInfo t nEvents alreadyElapsed, p)
+      _ <- cb (TickInfo t nEvents alreadyElapsed, p)
       go tTarget nextGen' cb nEvents
 
 -- | Send events with inhomogeneous Poisson timing with the given basis

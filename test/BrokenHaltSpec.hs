@@ -34,7 +34,6 @@ getFirstEventAndHalt action = do
   return ()
 
 haltGui :: WebView -> IO ()
-haltGui wv = do
-  Gtk.postGUIAsync $ do
-    w <- Gtk.widgetGetToplevel wv
-    Gtk.widgetDestroy w
+haltGui wv = Gtk.postGUIAsync $ do
+  w <- Gtk.widgetGetToplevel wv
+  Gtk.widgetDestroy w

@@ -124,7 +124,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let tagBS = encodeUtf8 elementTag
       let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
       let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
-      modify $ (:) $ mconcat $ [open, innerHtml, close]
+      modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (error "Static.element RawElement was used"), result)
 
   {-# INLINABLE placeholder #-}
