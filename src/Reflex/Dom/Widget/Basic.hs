@@ -82,7 +82,7 @@ listHoldWithKey initialChildren modifyChildren buildChild = do
       let newInsertedAbove = switch $ mconcat . reverse . fmap (snd . unChildResult) . Map.elems <$> current augmentedResults
       belowAll <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Right ())
       let newInsertedBelow = fmap Just <$> _placeholder_insertedAbove belowAll
-  mapDyn (fmap (fst . unChildResult)) augmentedResults
+  return $ fmap (fmap (fst . unChildResult)) augmentedResults
 
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_contents .~ t
@@ -97,7 +97,7 @@ dynText t = do
   return ()
 
 display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
-display = dynText <=< mapDyn (T.pack . show)
+display = dynText . fmap (T.pack . show)
 
 button :: DomBuilder t m => Text -> m (Event t ())
 button t = do
@@ -300,7 +300,7 @@ list dm mkChild = listWithKey dm (\_ dv -> mkChild dv)
 
 -- | Create a dynamically-changing set of widgets from a Dynamic list.
 simpleList :: (DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Dynamic t [v] -> (Dynamic t v -> m a) -> m (Dynamic t [a])
-simpleList xs mkChild = mapDyn (map snd . Map.toList) =<< flip list mkChild =<< mapDyn (Map.fromList . zip [(1::Int)..]) xs
+simpleList xs mkChild = fmap (fmap (map snd . Map.toList)) $ flip list mkChild $ fmap (Map.fromList . zip [(1::Int)..]) xs
 
 {-
 schedulePostBuild x = performEvent_ . (x <$) =<< getPostBuild
@@ -399,7 +399,7 @@ tabDisplay ulClass activeClass tabItems = do
   where
     headerBarLink :: Text -> k -> Dynamic t Bool -> m (Event t k)
     headerBarLink x k isSelected = do
-      attrs <- mapDyn (\b -> if b then Map.singleton "class" activeClass else Map.empty) isSelected
+      let attrs = fmap (\b -> if b then Map.singleton "class" activeClass else Map.empty) isSelected
       elDynAttr "li" attrs $ do
         a <- link x
         return $ fmap (const k) (_link_clicked a)

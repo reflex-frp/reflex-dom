@@ -40,11 +40,11 @@ virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, Mona
   -> (Int -> k) -- ^ Index to Key function, used to determine position of Map elements
   -> m (Dynamic t (Int, Int), Event t k) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and an 'Event' of the selected key
 virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTag rowAttrs itemBuilder items indexToKey = do
-  totalHeightStyle <- mapDyn (toHeightStyle . (*) rowPx) maxIndex
-  containerStyle <- mapDyn toContainer heightPx
-  viewportStyle <- mapDyn toViewport heightPx
+  let totalHeightStyle = fmap (toHeightStyle . (*) rowPx) maxIndex
+      containerStyle = fmap toContainer heightPx
+      viewportStyle = fmap toViewport heightPx
   rec (container, sel) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ do
-        currentTop <- mapDyn (listWrapperStyle . fst) window
+        let currentTop = fmap (listWrapperStyle . fst) window
         (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ selectViewListWithKey_ selected itemsInWindow $ \k v s -> do
             (li,_) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v s
             return $ fmap (const k) (domEvent Click li)
@@ -59,7 +59,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
   postBuild <- getPostBuild
   performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i -> do
     liftIO $ setScrollTop (_element_raw container) (i * rowPx)
-  indexAndLength <- mapDyn snd window
+  let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
     toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
@@ -91,9 +91,9 @@ virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, 
   -> (k -> v -> Event t v -> m a) -- ^ The row child element builder.
   -> m (Dynamic t (Int, Int), Dynamic t (Map k a)) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and the 'Dynamic' list result
 virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBuilder = do
-  virtualH <- mapDyn (mkVirtualHeight . (*) rowPx) maxIndex
-  containerStyle <- mapDyn mkContainer heightPx
-  viewportStyle <- mapDyn mkViewport heightPx
+  let virtualH = fmap (mkVirtualHeight . (*) rowPx) maxIndex
+      containerStyle = fmap mkContainer heightPx
+      viewportStyle = fmap mkViewport heightPx
   pb <- getPostBuild
   rec (viewport, result) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ elDynAttr "div" virtualH $
         listWithKeyShallowDiff items0 itemsUpdate $ \k v e -> elAttr "div" (mkRow k) $ itemBuilder k v e

@@ -101,26 +101,6 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     , _textInput_hasFocus = _inputElement_hasFocus i
     , _textInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
     }
-{-
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" inputType) dAttrs
-  Input.setValue e $ Just initial
-  performEvent_ $ fmap (Input.setValue e . Just) eSetValue
-  eChange <- wrapDomEvent e (`on` input) $ fromMaybe "" <$> Input.getValue e
-  postGui <- askPostGui
-  runWithActions <- askRunWithActions
-  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
-    unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
-    unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
-    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
-  dFocus <- holdDyn False eChangeFocus
-  eKeypress <- wrapDomEvent e (`on` keyPress) getKeyEvent
-  eKeydown <- wrapDomEvent e (`on` keyDown) getKeyEvent
-  eKeyup <- wrapDomEvent e (`on` keyUp) getKeyEvent
-  dValue <- holdDyn initial $ leftmost [eSetValue, eChange]
-  return $ TextInput dValue eChange eKeypress eKeydown eKeyup dFocus e
--}
 
 {-# INLINABLE textInputGetEnter #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
@@ -284,17 +264,6 @@ checkboxView dAttrs dValue = do
         & inputElementConfig_elementConfig .~ elementConfig
   i <- inputElement inputElementConfig
   return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
-{-
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "checkbox") dAttrs
-  eClicked <- wrapDomEvent e (`on` click) $ do
-    preventDefault
-    Input.getChecked e
-  schedulePostBuild $ do
-    v <- sample $ current dValue
-    when v $ Input.setChecked e True
-  performEvent_ $ fmap (\v -> Input.setChecked e $! v) $ updated dValue
-  return eClicked
--}
 
 data FileInput t
    = FileInput { _fileInput_value :: Dynamic t [File]
@@ -430,7 +399,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
                 Just1 (EventResult r) -> return $ Just1 $ DropdownViewEventResult $ regularToDropdownViewEventType en r
         }
   (eRaw, _) <- element "select" cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
-    optionAttrs <- mapDyn (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
+    let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
   let e = castToHTMLSelectElement $ _element_raw eRaw
   performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
