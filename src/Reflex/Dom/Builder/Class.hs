@@ -111,6 +111,9 @@ instance Monoid EventFlags where
 preventDefault :: EventFlags
 preventDefault = mempty { _eventFlags_preventDefault = True }
 
+stopPropagation :: EventFlags
+stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
+
 newtype EventFilter d er en = EventFilter (DomHandler d (RawEvent d en) (EventFlags, DomHandler d () (Maybe (er en))))
 
 data ElementConfig er t m
