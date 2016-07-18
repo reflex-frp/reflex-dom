@@ -23,7 +23,7 @@ extra-source-files: src-ghc/Reflex/Dom/Internal/Foreign.hs
 library
   hs-source-dirs: src
   build-depends:
-    base >= 4.7 && < 4.9,
+    base >= 4.7 && < 4.10,
     stm == 2.4.*,
     reflex == 0.4.*,
     dependent-sum == 0.3.*,
