@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, LambdaCase, ConstraintKinds, TypeFamilies, FlexibleContexts, MultiParamTypeClasses, FlexibleInstances, RecursiveDo, GADTs, DataKinds, RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Reflex.Dom.Widget.Basic where
 
@@ -20,7 +21,11 @@ import Control.Monad.Trans
 import Control.Monad.Reader hiding (mapM, mapM_, forM, forM_, sequence, sequence_)
 import Control.Monad.State hiding (state, mapM, mapM_, forM, forM_, sequence, sequence_)
 import GHCJS.DOM.Node
-import GHCJS.DOM.UIEvent
+import qualified GHCJS.DOM.MouseEvent as MouseEvent
+import qualified GHCJS.DOM.KeyboardEvent as KeyboardEvent
+import qualified GHCJS.DOM.UIEvent as UIEvent
+import qualified GHCJS.DOM.WheelEvent as WheelEvent
+import qualified GHCJS.DOM.TouchEvent as TouchEvent
 import GHCJS.DOM.EventM (on, event, EventM, stopPropagation)
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element as E
@@ -33,7 +38,6 @@ import Data.Align
 import Data.Maybe
 import Data.GADT.Compare.TH
 import Data.Bitraversable
-import GHCJS.DOM.MouseEvent
 import Data.IORef
 import Data.Default
 
@@ -551,53 +555,124 @@ onEventName en e = case en of
 
 newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
+type family GetEventResultType et where
+  GetEventResultType UIEvent = UIEventResult
+  GetEventResultType FocusEvent = ()
+  GetEventResultType MouseEvent = MouseEventResult
+  GetEventResultType KeyboardEvent = KeyboardEventResult
+  GetEventResultType DOM.Event = ()
+  GetEventResultType WheelEvent = WheelEventResult
+  GetEventResultType TouchEvent = TouchEventResult
+
 type family EventResultType (en :: EventTag) :: * where
-  EventResultType 'ClickTag = ()
-  EventResultType 'DblclickTag = ()
-  EventResultType 'KeypressTag = Int
-  EventResultType 'KeydownTag = Int
-  EventResultType 'KeyupTag = Int
-  EventResultType 'ScrollTag = Int
-  EventResultType 'MousemoveTag = (Int, Int)
-  EventResultType 'MousedownTag = (Int, Int)
-  EventResultType 'MouseupTag = (Int, Int)
-  EventResultType 'MouseenterTag = ()
-  EventResultType 'MouseleaveTag = ()
-  EventResultType 'FocusTag = ()
-  EventResultType 'BlurTag = ()
-  EventResultType 'ChangeTag = ()
-  EventResultType 'DragTag = ()
-  EventResultType 'DragendTag = ()
-  EventResultType 'DragenterTag = ()
-  EventResultType 'DragleaveTag = ()
-  EventResultType 'DragoverTag = ()
-  EventResultType 'DragstartTag = ()
-  EventResultType 'DropTag = ()
-  EventResultType 'AbortTag = ()
-  EventResultType 'ContextmenuTag = ()
-  EventResultType 'ErrorTag = ()
-  EventResultType 'InputTag = ()
-  EventResultType 'InvalidTag = ()
-  EventResultType 'LoadTag = ()
-  EventResultType 'MouseoutTag = ()
-  EventResultType 'MouseoverTag = ()
-  EventResultType 'SelectTag = ()
-  EventResultType 'SubmitTag = ()
-  EventResultType 'BeforecutTag = ()
-  EventResultType 'CutTag = ()
-  EventResultType 'BeforecopyTag = ()
-  EventResultType 'CopyTag = ()
-  EventResultType 'BeforepasteTag = ()
-  EventResultType 'PasteTag = ()
-  EventResultType 'ResetTag = ()
-  EventResultType 'SearchTag = ()
-  EventResultType 'SelectstartTag = ()
-  EventResultType 'TouchstartTag = ()
-  EventResultType 'TouchmoveTag = ()
-  EventResultType 'TouchendTag = ()
-  EventResultType 'TouchcancelTag = ()
-  EventResultType 'MousewheelTag = ()
-  EventResultType 'WheelTag = ()
+  EventResultType en = GetEventResultType (EventType en)
+
+data MouseEventResult = MouseEventResult
+  { mouseEventScreenX :: Int
+  , mouseEventScreenY :: Int
+  , mouseEventClientX :: Int
+  , mouseEventClientY :: Int
+  , mouseEventCtrlKey :: Bool
+  , mouseEventShiftKey :: Bool
+  , mouseEventAltKey :: Bool
+  , mouseEventMetaKey :: Bool
+  , mouseEventButton :: Word
+  , mouseEventMovementX :: Int
+  , mouseEventMovementY :: Int
+  , mouseEventOffsetX :: Int
+  , mouseEventOffsetY :: Int
+  }
+
+getMouseEvent :: EventM e MouseEvent MouseEventResult
+getMouseEvent = do
+  e <- event
+  MouseEventResult <$> MouseEvent.getScreenX e
+                   <*> MouseEvent.getScreenY e
+                   <*> MouseEvent.getClientX e
+                   <*> MouseEvent.getClientY e
+                   <*> MouseEvent.getCtrlKey e
+                   <*> MouseEvent.getShiftKey e
+                   <*> MouseEvent.getAltKey e
+                   <*> MouseEvent.getMetaKey e
+                   <*> MouseEvent.getButton e
+                   <*> MouseEvent.getMovementX e
+                   <*> MouseEvent.getMovementY e
+                   <*> MouseEvent.getOffsetX e
+                   <*> MouseEvent.getOffsetY e
+
+data KeyboardEventResult = KeyboardEventResult
+  { keyboardEventLocation :: Word
+  , keyboardEventCtrlKey :: Bool
+  , keyboardEventShiftKey :: Bool
+  , keyboardEventAltKey :: Bool
+  , keyboardEventMetaKey :: Bool
+  , keyboardEventKeyCode :: Int
+  , keyboardEventCharCode :: Int
+}
+
+getKeyboardEvent :: EventM e KeyboardEvent KeyboardEventResult
+getKeyboardEvent = do
+  e <- event
+  KeyboardEventResult <$> KeyboardEvent.getLocation e
+                      <*> KeyboardEvent.getCtrlKey e
+                      <*> KeyboardEvent.getShiftKey e
+                      <*> KeyboardEvent.getAltKey e
+                      <*> KeyboardEvent.getMetaKey e
+                      <*> UIEvent.getKeyCode e
+                      <*> UIEvent.getCharCode e
+
+data UIEventResult = UIEventResult
+  { uiEventDetail :: Int
+  , uiEventLayerX :: Int
+  , uiEventLayerY :: Int
+  , uiEventPageX :: Int
+  , uiEventPageY :: Int
+  }
+
+getUIEvent :: EventM e UIEvent UIEventResult
+getUIEvent = do
+  e <- event
+  UIEventResult <$> UIEvent.getDetail e
+                <*> UIEvent.getLayerX e
+                <*> UIEvent.getLayerY e
+                <*> UIEvent.getPageX e
+                <*> UIEvent.getPageY e
+
+data WheelEventResult = WheelEventResult
+  { wheelEventDeltaX :: Double
+  , wheelEventDeltaY :: Double
+  , wheelEventDeltaZ :: Double
+  , wheelEventDeltaMode :: Word
+  }
+
+getWheelEvent :: EventM e WheelEvent WheelEventResult
+getWheelEvent = do
+  e <- event
+  WheelEventResult <$> WheelEvent.getDeltaX e
+                   <*> WheelEvent.getDeltaY e
+                   <*> WheelEvent.getDeltaZ e
+                   <*> WheelEvent.getDeltaMode e
+
+data TouchEventResult = TouchEventResult
+  { touchEventTouches :: Maybe TouchList
+  , touchEventTargetTouches :: Maybe TouchList
+  , touchEventChangedTouches :: Maybe TouchList
+  , touchEventCtrlKey :: Bool
+  , touchEventShiftKey :: Bool
+  , touchEventAltKey :: Bool
+  , touchEventMetaKey :: Bool
+  }
+
+getTouchEvent :: EventM e TouchEvent TouchEventResult
+getTouchEvent = do
+  e <- event
+  TouchEventResult <$> TouchEvent.getTouches e
+                   <*> TouchEvent.getTargetTouches e
+                   <*> TouchEvent.getChangedTouches e
+                   <*> TouchEvent.getCtrlKey e
+                   <*> TouchEvent.getShiftKey e
+                   <*> TouchEvent.getAltKey e
+                   <*> TouchEvent.getMetaKey e
 
 wrapDomEventsMaybe :: (Functor (Event t), IsElement e, MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => e -> (forall en. EventName en -> EventM e (EventType en) (Maybe (f en))) -> m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
@@ -614,65 +689,60 @@ wrapDomEventsMaybe element handlers = do
 getKeyEvent :: EventM e KeyboardEvent Int
 getKeyEvent = do
   e <- event
-  which <- getWhich e
+  which <- UIEvent.getWhich e
   if which /= 0 then return which else do
-    charCode <- getCharCode e
+    charCode <- UIEvent.getCharCode e
     if charCode /= 0 then return charCode else
-      getKeyCode e
-
-getMouseEventCoords :: EventM e MouseEvent (Int, Int)
-getMouseEventCoords = do
-  e <- event
-  bisequence (getClientX e, getClientY e)
+      UIEvent.getKeyCode e
 
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
-  Click -> return ()
-  Dblclick -> return ()
-  Keypress -> getKeyEvent
-  Scroll -> getScrollTop e
-  Keydown -> getKeyEvent
-  Keyup -> getKeyEvent
-  Mousemove -> getMouseEventCoords
-  Mouseup -> getMouseEventCoords
-  Mousedown -> getMouseEventCoords
-  Mouseenter -> return ()
-  Mouseleave -> return ()
-  Focus -> return ()
-  Blur -> return ()
-  Change -> return ()
-  Drag -> return ()
-  Dragend -> return ()
-  Dragenter -> return ()
-  Dragleave -> return ()
-  Dragover -> return ()
-  Dragstart -> return ()
-  Drop -> return ()
-  Abort -> return ()
-  Contextmenu -> return ()
-  Error -> return ()
-  Input -> return ()
-  Invalid -> return ()
-  Load -> return ()
-  Mouseout -> return ()
-  Mouseover -> return ()
-  Select -> return ()
-  Submit -> return ()
-  Beforecut -> return ()
-  Cut -> return ()
-  Beforecopy -> return ()
-  Copy -> return ()
-  Beforepaste -> return ()
-  Paste -> return ()
-  Reset -> return ()
-  Search -> return ()
-  Selectstart -> return ()
-  Touchstart -> return ()
-  Touchmove -> return ()
-  Touchend -> return ()
-  Touchcancel -> return ()
-  Mousewheel -> return ()
-  Wheel -> return ()
+  Click -> getMouseEvent
+  Dblclick -> getMouseEvent
+  Keypress -> getKeyboardEvent
+  Scroll -> getUIEvent
+  Keydown -> getKeyboardEvent
+  Keyup -> getKeyboardEvent
+  Mousemove -> getMouseEvent
+  Mouseup -> getMouseEvent
+  Mousedown -> getMouseEvent
+  Mouseenter -> getMouseEvent
+  Mouseleave -> getMouseEvent
+  Focus -> pure ()
+  Blur -> pure ()
+  Change -> pure ()
+  Drag -> getMouseEvent
+  Dragend -> getMouseEvent
+  Dragenter -> getMouseEvent
+  Dragleave -> getMouseEvent
+  Dragover -> getMouseEvent
+  Dragstart -> getMouseEvent
+  Drop -> getMouseEvent
+  Abort -> getUIEvent
+  Contextmenu -> getMouseEvent
+  Error -> getUIEvent
+  Input -> pure ()
+  Invalid -> pure ()
+  Load -> getUIEvent
+  Mouseout -> getMouseEvent
+  Mouseover -> getMouseEvent
+  Select -> getUIEvent
+  Submit -> pure ()
+  Beforecut -> pure ()
+  Cut -> pure ()
+  Beforecopy -> pure ()
+  Copy -> pure ()
+  Beforepaste -> pure ()
+  Paste -> pure ()
+  Reset -> pure ()
+  Search -> pure ()
+  Selectstart -> pure ()
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
+  Mousewheel -> getMouseEvent
+  Wheel -> getWheelEvent
 
 wrapElement :: forall t h m. (Functor (Event t), MonadIO m, MonadSample t m, MonadReflexCreateTrigger t m, Reflex t, HasPostGui t h m) => (forall en. Element -> EventName en -> EventM Element (EventType en) (Maybe (EventResult en))) -> Element -> m (El t)
 wrapElement eh e = do
@@ -797,7 +867,7 @@ instance Reflex t => HasDomEvent t (El t) where
 linkClass :: MonadWidget t m => String -> String -> m (Link t)
 linkClass s c = do
   (l,_) <- elAttr' "a" ("class" =: c) $ text s
-  return $ Link $ domEvent Click l
+  return $ Link $ () <$ domEvent Click l
 
 link :: MonadWidget t m => String -> m (Link t)
 link s = linkClass s ""
@@ -805,7 +875,7 @@ link s = linkClass s ""
 button :: MonadWidget t m => String -> m (Event t ())
 button s = do
   (e, _) <- elAttr' "button" (Map.singleton "type" "button") $ text s
-  return $ domEvent Click e
+  return $ () <$ domEvent Click e
 
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
@@ -896,12 +966,12 @@ deriveGCompare ''EventName
 
 {-# DEPRECATED _el_clicked "Use `domEvent Click` instead" #-}
 _el_clicked :: Reflex t => El t -> Event t ()
-_el_clicked = domEvent Click
+_el_clicked e = () <$ domEvent Click e
 
 {-# DEPRECATED _el_keypress "Use `domEvent Keypress` instead" #-}
-_el_keypress :: Reflex t => El t -> Event t Int
-_el_keypress = domEvent Keypress
+_el_keypress :: Reflex t => El t -> Event t ()
+_el_keypress e = () <$ domEvent Keypress e
 
 {-# DEPRECATED _el_scrolled "Use `domEvent Scroll` instead" #-}
-_el_scrolled :: Reflex t => El t -> Event t Int
-_el_scrolled = domEvent Scroll
+_el_scrolled :: Reflex t => El t -> Event t ()
+_el_scrolled e = () <$ domEvent Scroll e
