@@ -50,6 +50,9 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
+import qualified Data.Text as T
+import GHCJS.DOM.XMLHttpRequest (getAllResponseHeaders)
+import Data.List
 import Data.Text.Encoding
 import Data.Traversable
 import Reflex
@@ -81,6 +84,7 @@ data XhrResponse
                  , _xhrResponse_statusText :: Text
                  , _xhrResponse_response :: Maybe XhrResponseBody
                  , _xhrResponse_responseText :: Maybe Text
+                 , _xhrResponse_headers :: Map Text Text
                  }
    deriving (Typeable)
 
@@ -146,11 +150,19 @@ newXMLHttpRequestWithError req cb = do
                    then liftIO $ xmlHttpRequestGetResponseText xhr
                    else  return Nothing
             r <- liftIO $ xmlHttpRequestGetResponse xhr
+            hdrsTxt <- liftIO $ xmlHttpRequestGetAllResponseHeaders xhr
+            let stripBoth (txt1, txt2) = (T.strip txt1, T.strip $ T.drop 1 txt2)
+              -- XMLHttpRequest return all the response headers separated by CRLF
+            let hdrs = Map.fromList
+                  $ fmap (stripBoth . (T.span (/=':')))
+                  $ dropWhileEnd T.null
+                  $ T.splitOn (T.pack "\r\n") hdrsTxt
             _ <- liftIO $ postGui $ cb $ Right $
                    XhrResponse { _xhrResponse_status = status
                                , _xhrResponse_statusText = statusText
                                , _xhrResponse_response = r
                                , _xhrResponse_responseText = t
+                               , _xhrResponse_headers = hdrs
                                }
             return ()
           else return ()
