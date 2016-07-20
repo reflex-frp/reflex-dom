@@ -240,33 +240,25 @@ emptyElWith' elementTag cfg = do
   wrapElement defaultDomEventHandler =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
 -}
 
-dynamicAttributesToModifyAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> m (Event t (Map AttributeName (Maybe Text)))
-dynamicAttributesToModifyAttributes d = do
-  postBuild <- getPostBuild
-  let modificationsNeeded = flip pushAlways (align postBuild $ updated d) $ \case
-        This () -> fmap (fmap Just) $ sample $ current d
-        These () new -> return $ fmap Just new
-        That new -> do
-          old <- sample $ current d
-          return $ diffMap old new
-  return $ Map.fromList . fmap (\(k, v) -> ((Nothing, k), v)) . Map.toList <$> modificationsNeeded
-
-{-# INLINABLE elDynAttrNS' #-}
-elDynAttrNS' :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
-elDynAttrNS' mns elementTag attrs child = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  let cfg = def
-        & elementConfig_namespace .~ mns
-        & modifyAttributes .~ modifyAttrs
-  element elementTag cfg child
-
-{-# INLINABLE elDynAttr' #-}
-elDynAttr' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
-elDynAttr' = elDynAttrNS' Nothing
+{-# INLINABLE el #-}
+el :: forall t m a. DomBuilder t m => Text -> m a -> m a
+el elementTag child = snd <$> el' elementTag child
 
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m a
 elAttr elementTag attrs child = snd <$> elAttr' elementTag attrs child
+
+{-# INLINABLE elClass #-}
+elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
+elClass elementTag c child = snd <$> elClass' elementTag c child
+
+{-# INLINABLE elDynAttr #-}
+elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
+elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
+
+{-# INLINABLE elDynClass #-}
+elDynClass :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m a
+elDynClass elementTag c child = snd <$> elDynClass' elementTag c child
 
 {-# INLINABLE el' #-}
 el' :: forall t m a. DomBuilder t m => Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
@@ -277,16 +269,37 @@ elAttr' :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m (El
 elAttr' elementTag attrs = element elementTag $ def
   & initialAttributes .~ Map.mapKeys (\k -> (Nothing, k)) attrs
 
-{-# INLINABLE elDynAttr #-}
-elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
-elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
+{-# INLINABLE elClass' #-}
+elClass' :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elClass' elementTag c = elAttr' elementTag ("class" =: c)
 
-{-# INLINABLE el #-}
-el :: forall t m a. DomBuilder t m => Text -> m a -> m a
-el elementTag child = snd <$> el' elementTag child
+{-# INLINABLE elDynAttr' #-}
+elDynAttr' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynAttr' = elDynAttrNS' Nothing
 
-elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
-elClass elementTag c child = snd <$> element elementTag (def & initialAttributes .~ (Nothing, "class") =: c) child
+{-# INLINABLE elDynClass' #-}
+elDynClass' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynClass' elementTag c = elDynAttr' elementTag (fmap ("class" =:) c)
+
+{-# INLINABLE elDynAttrNS' #-}
+elDynAttrNS' :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynAttrNS' mns elementTag attrs child = do
+  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
+  let cfg = def
+        & elementConfig_namespace .~ mns
+        & modifyAttributes .~ modifyAttrs
+  element elementTag cfg child
+
+dynamicAttributesToModifyAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> m (Event t (Map AttributeName (Maybe Text)))
+dynamicAttributesToModifyAttributes d = do
+  postBuild <- getPostBuild
+  let modificationsNeeded = flip pushAlways (align postBuild $ updated d) $ \case
+        This () -> fmap (fmap Just) $ sample $ current d
+        These () new -> return $ fmap Just new
+        That new -> do
+          old <- sample $ current d
+          return $ diffMap old new
+  return $ Map.fromList . fmap (\(k, v) -> ((Nothing, k), v)) . Map.toList <$> modificationsNeeded
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
