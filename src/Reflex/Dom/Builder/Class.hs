@@ -64,13 +64,15 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
 type Namespace = Text
 
 data TextNodeConfig t
-   = TextNodeConfig { _textNodeConfig_contents :: Text
+   = TextNodeConfig { _textNodeConfig_initialContents :: Text
+                    , _textNodeConfig_setContents :: Event t Text
                     }
 
-instance Default (TextNodeConfig t) where
+instance (Reflex t) => Default (TextNodeConfig t) where
   {-# INLINABLE def #-}
   def = TextNodeConfig
-    { _textNodeConfig_contents = mempty
+    { _textNodeConfig_initialContents = mempty
+    , _textNodeConfig_setContents = never
     }
 
 data TextNode t = TextNode

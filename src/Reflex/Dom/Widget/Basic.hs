@@ -85,16 +85,15 @@ listHoldWithKey initialChildren modifyChildren buildChild = do
   return $ fmap (fmap (fst . unChildResult)) augmentedResults
 
 text :: DomBuilder t m => Text -> m ()
-text t = void $ textNode $ def & textNodeConfig_contents .~ t
+text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
-dynText :: (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
+dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
 dynText t = do
   postBuild <- getPostBuild
-  _ <- widgetHoldInternal (return ()) $ text <$> leftmost
+  void $ textNode $ (def :: TextNodeConfig t) & textNodeConfig_setContents .~ leftmost
     [ updated t
     , tag (current t) postBuild
     ]
-  return ()
 
 display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
 display = dynText . fmap (T.pack . show)

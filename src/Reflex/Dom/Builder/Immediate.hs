@@ -47,7 +47,7 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
-                       removeChild, toNode)
+                       removeChild, toNode, setNodeValue)
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
                         WheelEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
 import qualified GHCJS.DOM.Types as DOM
@@ -202,8 +202,9 @@ instance DomSpace GhcjsDomSpace where
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
   type DomBuilderSpace (ImmediateDomBuilderT t m) = GhcjsDomSpace
   {-# INLINABLE textNode #-}
-  textNode (TextNodeConfig contents) = do
-    _ <- textNodeInternal contents
+  textNode (TextNodeConfig initialContents eSetContents) = do
+    n <- textNodeInternal initialContents
+    lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
     return TextNode
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child

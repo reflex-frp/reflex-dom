@@ -119,8 +119,9 @@ instance DomSpace StaticDomSpace where
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
-  textNode (TextNodeConfig contents) = StaticDomBuilderT $ do
-    modify $ (:) $ constant $ BL.toStrict $ toLazyByteString $ fromHtmlEscapedText contents
+  textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
+    let escape = BL.toStrict . toLazyByteString . fromHtmlEscapedText
+    modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
     return TextNode
 
   {-# INLINABLE element #-}
