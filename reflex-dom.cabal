@@ -51,7 +51,8 @@ library
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     monad-control >= 1.0.1 && < 1.1,
-    keycode == 0.2.*
+    keycode == 0.2.*,
+    unbounded-delays == 0.1.0.9
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs

@@ -4,6 +4,7 @@
 , ghc, webkitgtk3-javascriptcore, exception-transformers
 , webkitgtk24x, dependent-sum-template, bifunctors, bimap
 , raw-strings-qq, zenc, random, monad-control, keycode, hlint
+, unbounded-delays
 }:
 
 mkDerivation {
@@ -32,6 +33,7 @@ mkDerivation {
     these
     transformers
     zenc
+    unbounded-delays
   ] ++ (if ghc.isGhcjs or false then [] else [
     raw-strings-qq
     webkitgtk3-javascriptcore

@@ -11,6 +11,7 @@ import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 
 import Control.Concurrent
+import qualified Control.Concurrent.Thread.Delay as Concurrent
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -51,7 +52,7 @@ tickLossyFrom dt t0 e = do
   return result
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ do
           tick <- getCurrentTick dt t0
-          threadDelay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
+          Concurrent.delay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
           cb tick
 
 clockLossy :: (MonadIO m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), PostBuild t m, MonadHold t m, MonadFix m) => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
@@ -70,7 +71,7 @@ getCurrentTick dt t0 = do
 -- | Delay an Event's occurrences by a given amount in seconds.
 delay :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
-  threadDelay $ ceiling $ dt * 1000000
+  Concurrent.delay $ ceiling $ dt * 1000000
   cb a
 
 -- | Send events with Poisson timing with the given basis and rate
@@ -157,7 +158,7 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
           alreadyElapsed = diffUTCTime t tTargetLast
           tTarget        = addUTCTime dt tTargetLast
           thisDelay      = realToFrac $ diffUTCTime tTarget t :: Double
-      threadDelay $ ceiling $ thisDelay * 1000000
+      Concurrent.delay $ ceiling $ thisDelay * 1000000
       _ <- cb (TickInfo t nEvents alreadyElapsed, p)
       go tTarget nextGen' cb nEvents
 
