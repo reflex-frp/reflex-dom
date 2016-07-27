@@ -1,12 +1,27 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, CPP, TemplateHaskell, NoMonomorphismRestriction, EmptyDataDecls, RankNTypes, GADTs, RecursiveDo, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, FlexibleContexts, DeriveDataTypeable, GeneralizedNewtypeDeriving, StandaloneDeriving, ConstraintKinds, UndecidableInstances, PolyKinds, AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Reflex.Dom.WebSocket.Foreign where
 
-import Prelude hiding (div, span, mapM, mapM_, concat, concatMap, all, sequence)
+import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
 import Control.Exception
 import Control.Monad.State
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Foreign.Marshal hiding (void)
 import Foreign.Ptr
@@ -16,9 +31,6 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.WebView
-import qualified Data.ByteString as BS
-import Data.Text (Text)
-import qualified Data.Text as T
 
 import Reflex.Dom.Internal.Foreign
 

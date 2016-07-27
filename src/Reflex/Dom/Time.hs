@@ -1,18 +1,24 @@
-{-# LANGUAGE DeriveDataTypeable, TypeFamilies, ScopedTypeVariables, FlexibleContexts, RecursiveDo #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Time where
 
 import Reflex
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
 
 import Control.Concurrent
+import qualified Control.Concurrent.Thread.Delay as Concurrent
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Time.Clock
-import System.Random
 import Data.Typeable
+import System.Random
 
 data TickInfo
   = TickInfo { _tickInfo_lastUTC :: UTCTime
@@ -42,11 +48,11 @@ tickLossyFrom
     -- there could be uses for starting multiple timer threads.
     -> m (Event t TickInfo)
 tickLossyFrom dt t0 e = do
-  rec result <- performEventAsync $ fmap callAtNextInterval $ leftmost [() <$ e, () <$ result]
+  rec result <- performEventAsync $ callAtNextInterval <$> leftmost [() <$ e, () <$ result]
   return result
   where callAtNextInterval _ cb = void $ liftIO $ forkIO $ do
           tick <- getCurrentTick dt t0
-          threadDelay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
+          Concurrent.delay $ ceiling $ (dt - _tickInfo_alreadyElapsed tick) * 1000000
           cb tick
 
 clockLossy :: (MonadIO m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), PostBuild t m, MonadHold t m, MonadFix m) => NominalDiffTime -> UTCTime -> m (Dynamic t TickInfo)
@@ -65,7 +71,7 @@ getCurrentTick dt t0 = do
 -- | Delay an Event's occurrences by a given amount in seconds.
 delay :: (PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t a)
 delay dt e = performEventAsync $ ffor e $ \a cb -> liftIO $ void $ forkIO $ do
-  threadDelay $ ceiling $ dt * 1000000
+  Concurrent.delay $ ceiling $ dt * 1000000
   cb a
 
 -- | Send events with Poisson timing with the given basis and rate
@@ -84,8 +90,7 @@ poissonLossyFrom
   -- there could be uses for starting multiple timer threads.
   -- Start sending events in response to the event parameter.
   -> m (Event t TickInfo)
-poissonLossyFrom rnd rate t0 t =
-  inhomogeneousPoissonFrom rnd (current $ constDyn rate) rate t0 t
+poissonLossyFrom rnd rate = inhomogeneousPoissonFrom rnd (constant rate) rate
 
 
 -- | Send events with Poisson timing with the given basis and rate
@@ -148,13 +153,13 @@ inhomogeneousPoissonFrom rnd rate maxRate t0 e = do
 
       -- Inter-event interval is drawn from exponential
       -- distribution accourding to u
-      let dt             = realToFrac $ -1 * log(u)/maxRate :: NominalDiffTime
+      let dt             = realToFrac $ (-1) * log u / maxRate :: NominalDiffTime
           nEvents        = lastN + 1
           alreadyElapsed = diffUTCTime t tTargetLast
           tTarget        = addUTCTime dt tTargetLast
           thisDelay      = realToFrac $ diffUTCTime tTarget t :: Double
-      threadDelay $ ceiling $ thisDelay * 1000000
-      void $ cb $ (TickInfo t nEvents alreadyElapsed, p)
+      Concurrent.delay $ ceiling $ thisDelay * 1000000
+      _ <- cb (TickInfo t nEvents alreadyElapsed, p)
       go tTarget nextGen' cb nEvents
 
 -- | Send events with inhomogeneous Poisson timing with the given basis

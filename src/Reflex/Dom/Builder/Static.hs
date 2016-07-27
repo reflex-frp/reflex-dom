@@ -1,31 +1,42 @@
-{-# LANGUAGE OverloadedStrings, MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, UndecidableInstances, FunctionalDependencies, DataKinds, TypeFamilies, RankNTypes, ConstraintKinds, TypeOperators, FlexibleContexts, LambdaCase, ScopedTypeVariables, PolyKinds, EmptyDataDecls #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Control.Monad.Identity
+import Control.Monad.Ref
+import Data.Dependent.Sum (DSum (..))
 import Reflex
-import Reflex.Host.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Base
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
-import Control.Monad.Ref
-import Control.Monad.Identity
-import Data.Dependent.Sum (DSum (..))
+import Reflex.Host.Class
 
-import Data.Monoid
-import Data.Text (Text)
-import qualified Data.Map as Map
-import Data.Map (Map)
+import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Char8 as B8
-import Data.ByteString (ByteString)
+import Control.Monad.Exception
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
+import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
-import Blaze.ByteString.Builder.Html.Utf8
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Map as Map
+import Data.Monoid
 import Data.Text.Encoding
-import Control.Monad.Exception
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -91,35 +102,47 @@ instance (Monad m, Ref m ~ Ref IO, Reflex t) => TriggerEvent t (StaticDomBuilder
 type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
 data StaticDomSpace
+
+-- | Static documents never produce any events, so this type has no inhabitants
+data StaticDomEvent (a :: k)
+
+-- | Static documents don't process events, so all handlers are equivalent
+data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
+
 instance DomSpace StaticDomSpace where
-    type RawElement StaticDomSpace = ByteString
+  type RawElement StaticDomSpace = ByteString
+  type RawEvent StaticDomSpace = StaticDomEvent
+  type DomHandler StaticDomSpace = StaticDomHandler
+  type DomHandler1 StaticDomSpace = StaticDomHandler
+  defaultEventHandler _ = StaticDomHandler
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
-  textNode (TextNodeConfig contents) = StaticDomBuilderT $ do
-    modify $ (:) $ constant $ BL.toStrict $ toLazyByteString $ fromHtmlEscapedText contents
+  textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
+    let escape = BL.toStrict . toLazyByteString . fromHtmlEscapedText
+    modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
     return TextNode
 
   {-# INLINABLE element #-}
   element elementTag cfg child = do
-    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> (BL.toStrict $ toLazyByteString $ fromHtmlEscapedText v) <> "\""
+    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
-      let tag = encodeUtf8 elementTag
-      let open = mconcat [constant ("<" <> tag <> " "), attrs1, constant ">"]
-      let close = constant $ "</" <> tag <> ">" -- TODO handle elements without closing tags
-      modify $ (:) $ mconcat $ [open, innerHtml, close]
+      let tagBS = encodeUtf8 elementTag
+      let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
+      let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
+      modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (error "Static.element RawElement was used"), result)
 
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
     result <- lift $ performEvent (fmap runStaticDomBuilderT toInsertAbove)
     acc <- foldDyn (:) [] (fmap snd result)
-    modify $ (:) $ join $ fmap (mconcat . reverse) $ current acc
+    modify $ (:) $ join $ mconcat . reverse <$> current acc
     return $ Placeholder (fmap fst result) never
 
   {-# INLINABLE inputElement #-}

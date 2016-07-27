@@ -1,27 +1,37 @@
-{-# LANGUAGE CPP, FlexibleInstances, MultiParamTypeClasses, TypeFamilies, GeneralizedNewtypeDeriving, UndecidableInstances, StandaloneDeriving, FunctionalDependencies, RecursiveDo, ScopedTypeVariables, LambdaCase, GADTs #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.DynamicWriter where
 
 import Reflex
-import Reflex.Host.Class
-import Reflex.Dom.Class
 import Reflex.Dom.Builder.Class
+import Reflex.Dom.Class
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
+import Reflex.Host.Class
 
 import Control.Lens hiding (element)
+import Control.Monad.Exception
 import Control.Monad.IO.Class
-import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.Exception
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Control.Monad.State.Strict
 import Data.Dependent.Map (DMap)
-import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.Foldable
 import Data.Functor.Compose
 import Data.Functor.Misc
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Semigroup
-import Data.Foldable
 import Data.Traversable
 
 instance MonadTrans (DynamicWriterT t w) where
@@ -66,7 +76,7 @@ mapIncrementalMapValues :: Reflex t => (v -> v') -> Incremental t PatchMap (Map 
 mapIncrementalMapValues f = mapIncrementalMapValuesWithKey $ const f
 
 unsafeMapIncremental :: (Reflex t, Patch p, Patch p') => (a -> a') -> (p a -> p' a') -> Incremental t p a -> Incremental t p' a'
-unsafeMapIncremental f g a = unsafeBuildIncremental (fmap f $ sample $ currentIncremental a) $ fmap g $ updatedIncremental a
+unsafeMapIncremental f g a = unsafeBuildIncremental (fmap f $ sample $ currentIncremental a) $ g <$> updatedIncremental a
 
 incrementalExtractFunctorDMap :: Reflex t => Incremental t PatchMap (Map k (f v)) -> Incremental t PatchDMap (DMap (Const2 k v) f)
 incrementalExtractFunctorDMap = unsafeMapIncremental mapWithFunctorToDMap $ \(PatchMap m) -> PatchDMap $ mapWithFunctorToDMap $ fmap Compose m
@@ -174,7 +184,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
     return (el, a)
   placeholder cfg = do
     let cfg' = cfg
-          { _placeholderConfig_insertAbove = fmap runDynamicWriterTInternal $ _placeholderConfig_insertAbove cfg
+          { _placeholderConfig_insertAbove = runDynamicWriterTInternal <$> _placeholderConfig_insertAbove cfg
           }
     let manageChildren :: Event t (NonEmpty (Replaceable t (Dynamic t w))) -- ^ Add nodes on the right; these are in reverse order
                        -> Event t () -- ^ No more nodes will be added after this event fires
@@ -193,7 +203,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
         p <- DynamicWriterT $ do
           modify (children:)
           lift $ placeholder cfg'
-        let result = fmap fst $ _placeholder_insertedAbove p
+        let result = fst <$> _placeholder_insertedAbove p
             childOutputs = fmapMaybe (nonEmpty . snd) $ _placeholder_insertedAbove p
     return $ p
       { _placeholder_insertedAbove = result

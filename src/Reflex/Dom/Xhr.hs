@@ -1,12 +1,19 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DeriveDataTypeable, FlexibleContexts, OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
-  , XhrRequest(..)
-  , XhrRequestConfig(..)
-  , XhrResponse(..)
-  , XhrResponseBody(..)
-  , XhrResponseType(..)
-  , XhrException(..)
+  , XhrRequest (..)
+  , XhrRequestConfig (..)
+  , XhrResponse (..)
+  , XhrResponseBody (..)
+  , XhrResponseType (..)
+  , XhrException (..)
+  , IsXhrPayload (..)
   , _xhrResponse_body
   , decodeText
   , decodeXhrResponse
@@ -42,7 +49,6 @@ module Reflex.Dom.Xhr
   , xmlHttpRequestNew
   , xmlHttpRequestOnreadystatechange
   , xmlHttpRequestOpen
-  , xmlHttpRequestSend
   , xmlHttpRequestSetRequestHeader
   , xmlHttpRequestSetResponseType
   )
@@ -50,20 +56,18 @@ where
 
 import Reflex
 import Reflex.Dom.Class
-import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
 
 import Control.Concurrent
-import Control.Exception (catch)
+import Control.Exception (handle)
 import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Encode
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Builder as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Map (Map)
@@ -71,6 +75,8 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import Data.Text.Encoding
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
 import Data.Typeable
 
@@ -79,7 +85,7 @@ data XhrRequest a
                 , _xhrRequest_url :: Text
                 , _xhrRequest_config :: XhrRequestConfig a
                 }
-   deriving (Show, Read, Eq, Ord, Typeable)
+   deriving (Show, Read, Eq, Ord, Typeable, Functor)
 
 data XhrRequestConfig a
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map Text Text
@@ -88,7 +94,7 @@ data XhrRequestConfig a
                       , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: a
                       }
-   deriving (Show, Read, Eq, Ord, Typeable)
+   deriving (Show, Read, Eq, Ord, Typeable, Functor)
 
 data XhrResponse
    = XhrResponse { _xhrResponse_status :: Word
@@ -134,7 +140,7 @@ newXMLHttpRequestWithError
 newXMLHttpRequestWithError req cb = do
   wv <- askWebView
   xhr <- liftIO $ xmlHttpRequestNew $ unWebViewSingleton wv
-  void $ liftIO $ forkIO $ flip catch (cb . Left) $ void $ do
+  void $ liftIO $ forkIO $ handle (cb . Left) $ void $ do
     let c = _xhrRequest_config req
         rt = _xhrRequestConfig_responseType c
     xmlHttpRequestOpen
@@ -150,20 +156,18 @@ newXMLHttpRequestWithError req cb = do
       readyState <- liftIO $ xmlHttpRequestGetReadyState xhr
       status <- liftIO $ xmlHttpRequestGetStatus xhr
       statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
-      if readyState == 4
-          then do
-            t <- if rt == Just XhrResponseType_Text || rt == Nothing
-                   then liftIO $ xmlHttpRequestGetResponseText xhr
-                   else  return Nothing
-            r <- liftIO $ xmlHttpRequestGetResponse xhr
-            _ <- liftIO $ cb $ Right $
-                   XhrResponse { _xhrResponse_status = status
-                               , _xhrResponse_statusText = statusText
-                               , _xhrResponse_response = r
-                               , _xhrResponse_responseText = t
-                               }
-            return ()
-          else return ()
+      when (readyState == 4) $ do
+        t <- if rt == Just XhrResponseType_Text || isNothing rt
+               then liftIO $ xmlHttpRequestGetResponseText xhr
+               else return Nothing
+        r <- liftIO $ xmlHttpRequestGetResponse xhr
+        _ <- liftIO $ cb $ Right $ XhrResponse
+          { _xhrResponse_status = status
+          , _xhrResponse_statusText = statusText
+          , _xhrResponse_response = r
+          , _xhrResponse_responseText = t
+          }
+        return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
     return ()
   return xhr
@@ -255,8 +259,9 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
 
-liftM concat $ mapM makeLenses
+concat <$> mapM makeLenses
   [ ''XhrRequest
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
+

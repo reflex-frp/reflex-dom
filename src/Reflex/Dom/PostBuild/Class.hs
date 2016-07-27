@@ -1,17 +1,27 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, GeneralizedNewtypeDeriving, TypeFamilies, UndecidableInstances, RecursiveDo, ScopedTypeVariables, DataKinds, TypeOperators, PolyKinds, FunctionalDependencies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.PostBuild.Class where
 
+import Foreign.JavaScript.TH
 import Reflex
-import Reflex.Host.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Class
-import Foreign.JavaScript.TH
+import Reflex.Host.Class
 
 import Control.Lens hiding (element)
-import Control.Monad.Reader
-import Control.Monad.Trans.Control
-import Control.Monad.Ref
 import Control.Monad.Exception
+import Control.Monad.Reader
+import Control.Monad.Ref
+import Control.Monad.Trans.Control
 
 class (Reflex t, Monad m) => PostBuild t m | m -> t where
   getPostBuild :: m (Event t ())
@@ -48,9 +58,9 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   element t cfg child = liftWith $ \run -> element t (liftPostBuildTElementConfig cfg) $ run child
   {-# INLINABLE placeholder #-}
   placeholder cfg = lift $ do
-    rec childPostBuild <- deletable (cfg ^. deleteSelf) $ performEvent $ return () <$ _placeholder_insertedAbove p
+    rec childPostBuild <- deletable (_placeholder_deletedSelf p) $ performEvent $ return () <$ _placeholder_insertedAbove p
         p <- placeholder $ cfg
-          { _placeholderConfig_insertAbove = fmap (\a -> runPostBuildT a =<< headE childPostBuild) $ _placeholderConfig_insertAbove cfg
+          { _placeholderConfig_insertAbove = ffor (_placeholderConfig_insertAbove cfg) $ \a -> runPostBuildT a =<< headE childPostBuild
           }
     return p
   {-# INLINABLE inputElement #-}
@@ -113,7 +123,7 @@ instance HasWebView m => HasWebView (PostBuildT t m) where
 
 {-# INLINABLE runPostBuildT #-}
 runPostBuildT :: PostBuildT t m a -> Event t () -> m a
-runPostBuildT (PostBuildT a) postBuild = runReaderT a postBuild
+runPostBuildT (PostBuildT a) = runReaderT a
 
 instance PostBuild t m => PostBuild t (ReaderT r m) where
   getPostBuild = lift getPostBuild

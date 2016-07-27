@@ -1,31 +1,41 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, GeneralizedNewtypeDeriving, FlexibleInstances, TypeFamilies, TypeOperators, RankNTypes, ScopedTypeVariables, StandaloneDeriving, FlexibleContexts, RecursiveDo, UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.PerformEvent.Base where
 
-import Reflex
-import Reflex.Host.Class
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.Deletable.Class
 import Foreign.JavaScript.TH
+import Reflex
+import Reflex.Dom.Deletable.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Host.Class
 
+import Control.Lens
+import Control.Monad.Exception
 import Control.Monad.Identity
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Control.Monad.Exception
-import Data.Dependent.Sum
-import Data.Maybe
-import Data.Functor.Misc
+import Data.Align
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import Data.Word
+import Data.Dependent.Sum
 import Data.Functor.Compose
+import Data.Functor.Misc
+import Data.Maybe
 import Data.Semigroup
 import Data.These
-import Data.Align
-import Control.Lens
+import Data.Word
 
 newtype EventTriggerRef t m a = EventTriggerRef { unEventTriggerRef :: Ref m (Maybe (EventTrigger t a)) }
 
-newtype FireCommand t m = FireCommand { runFireCommand :: forall a. [DSum (EventTrigger t) Identity] -> (ReadPhase m a) -> m [a] } --TODO: The handling of this ReadPhase seems wrong, or at least inelegant; how do we actually make the decision about what order frames run in?
+newtype FireCommand t m = FireCommand { runFireCommand :: forall a. [DSum (EventTrigger t) Identity] -> ReadPhase m a -> m [a] } --TODO: The handling of this ReadPhase seems wrong, or at least inelegant; how do we actually make the decision about what order frames run in?
 
 newtype PerformEventT t m a = PerformEventT { unPerformEventT :: StateT [Event t (These (PerformEventT t m [DSum (EventTriggerRef t m) Identity]) ())] (HostFrame t) a }
 
@@ -55,11 +65,13 @@ instance (ReflexHost t, Ref m ~ Ref IO, MonadRef (HostFrame t), Ref (HostFrame t
       return [EventTriggerRef reResultTrigger :=> Identity result]
     return eResult
 
-instance (ReflexHost t, Monad (HostFrame t), MonadRef (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
+instance (ReflexHost t, Monad (HostFrame t), Ref (HostFrame t) ~ Ref IO, Ref m ~ Ref IO) => Deletable t (PerformEventT t m) where
   {-# INLINABLE deletable #-}
   deletable d a = PerformEventT $ do
-    (result, eventToPerform) <- lift $ runPerformEventT a
-    modify (align (fmap (PerformEventT . lift) eventToPerform) d :)
+    (result, reverseEventsToPerform) <- lift $ runStateT (unPerformEventT a) []
+    let (numberedEvents, _) = numberWith (\n e -> Const2 n :=> e) (reverse reverseEventsToPerform) (1 :: Word64)
+    eventToPerform <- lift $ mergePerformEventsAndAdd (DMap.fromList numberedEvents) never
+    modify (align eventToPerform d :)
     return result
 
 instance ReflexHost t => MonadReflexCreateTrigger t (PerformEventT t m) where
@@ -131,7 +143,7 @@ hostPerformEventT a = do
               followupEventTriggerRefs <- runHostFrame toPerform
               followupEventTriggers <- forM followupEventTriggerRefs $ \(EventTriggerRef rt :=> x) -> do
                 mt <- readRef rt
-                return $ fmap (\t -> t :=> x) mt
+                return $ fmap (:=> x) mt
               fmap (result':) $ go $ catMaybes followupEventTriggers
     go triggers
 

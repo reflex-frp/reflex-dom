@@ -1,4 +1,19 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, DeriveFunctor, FlexibleInstances, DataKinds, LambdaCase, PolyKinds, RankNTypes, ScopedTypeVariables, PolyKinds, FlexibleContexts, UndecidableInstances, ConstraintKinds, DefaultSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
@@ -9,20 +24,20 @@ import Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.Dom.Deletable.Class
 
+import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
 import Data.Default
-import Data.Functor.Misc
-import Data.Map (Map)
-import Data.Text (Text)
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import Data.Semigroup
+import Data.Functor.Misc
+import Data.Map (Map)
 import Data.Proxy
-import GHC.Exts (Constraint)
+import Data.Semigroup
+import Data.Text (Text)
 import Data.Type.Coercion
-import qualified Control.Category
+import GHC.Exts (Constraint)
 
 data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
 
@@ -49,13 +64,15 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
 type Namespace = Text
 
 data TextNodeConfig t
-   = TextNodeConfig { _textNodeConfig_contents :: Text
+   = TextNodeConfig { _textNodeConfig_initialContents :: Text
+                    , _textNodeConfig_setContents :: Event t Text
                     }
 
-instance Default (TextNodeConfig t) where
+instance (Reflex t) => Default (TextNodeConfig t) where
   {-# INLINABLE def #-}
   def = TextNodeConfig
-    { _textNodeConfig_contents = mempty
+    { _textNodeConfig_initialContents = mempty
+    , _textNodeConfig_setContents = never
     }
 
 data TextNode t = TextNode
@@ -96,6 +113,9 @@ instance Monoid EventFlags where
 preventDefault :: EventFlags
 preventDefault = mempty { _eventFlags_preventDefault = True }
 
+stopPropagation :: EventFlags
+stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
+
 newtype EventFilter d er en = EventFilter (DomHandler d (RawEvent d en) (EventFlags, DomHandler d () (Maybe (er en))))
 
 data ElementConfig er t m
@@ -135,7 +155,7 @@ instance Reflex t => Default (PlaceholderConfig above t m) where
 
 data Placeholder above t
    = Placeholder { _placeholder_insertedAbove :: Event t above
-                 , _placeholder_deleted :: Event t ()
+                 , _placeholder_deletedSelf :: Event t ()
                  }
 
 data InputElementConfig er t m
@@ -244,7 +264,7 @@ instance Functor1 (ElementConfig er t) where
 instance Reflex t => Functor1 (PlaceholderConfig above t) where
   {-# INLINABLE fmap1 #-}
   fmap1 f cfg = cfg
-    { _placeholderConfig_insertAbove = fmap f $ _placeholderConfig_insertAbove cfg
+    { _placeholderConfig_insertAbove = f <$> _placeholderConfig_insertAbove cfg
     }
 
 instance Functor1 (InputElementConfig er t) where
@@ -262,7 +282,7 @@ class HasDomEvent t target eventName where
 instance Reflex t => HasDomEvent t (Element EventResult d t) en where
   type DomEventType (Element EventResult d t) en = EventResultType en
   {-# INLINABLE domEvent #-}
-  domEvent en e = fmap unEventResult $ Reflex.select (_element_events e) (WrapArg en)
+  domEvent en e = unEventResult <$> Reflex.select (_element_events e) (WrapArg en)
 
 instance Reflex t => HasDomEvent t (InputElement EventResult d t) en where
   type DomEventType (InputElement EventResult d t) en = EventResultType en
@@ -307,7 +327,7 @@ instance MonadTransControlStateless (ReaderT r)
 type RunStateless t = forall n b. Monad n => t n b -> n b
 
 liftWithStateless :: forall m t a. (Monad m, MonadTransControlStateless t) => (RunStateless t -> m a) -> t m a
-liftWithStateless a = liftWith $ \run -> a $ \x -> liftM (fromStT (Proxy :: Proxy t)) $ run x
+liftWithStateless a = liftWith $ \run -> a $ \x -> fromStT (Proxy :: Proxy t) <$> run x
 
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode t)
 liftTextNode = lift . textNode

@@ -1,4 +1,9 @@
-{-# LANGUAGE TemplateHaskell, DataKinds, GADTs, KindSignatures, TypeFamilies, PolyKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Builder.Class.Events where
 
 import Data.GADT.Compare.TH

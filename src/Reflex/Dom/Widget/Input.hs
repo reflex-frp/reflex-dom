@@ -1,49 +1,62 @@
-{-# LANGUAGE OverloadedStrings, ConstraintKinds, TypeFamilies, FlexibleContexts, DataKinds, GADTs, ScopedTypeVariables, FlexibleInstances, RecursiveDo, TemplateHaskell, UndecidableInstances, PolyKinds #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
 
 import Prelude
 
-import Reflex.Dom.Class
-import Reflex.Dom.Widget.Basic
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Class
+import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.Widget.Basic
 
 -- For dropdown
-import Reflex.Dom.PerformEvent.Class
-import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
-import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
-import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
-import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
-import Data.Maybe
-import Data.Semigroup
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Maybe
+import Data.Semigroup
+import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
+import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
+import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
+import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
+import Reflex.Dom.PerformEvent.Class
+import qualified Text.Read as T
 
 -- For fileInput
+import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types (File)
-import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.File as File
+-- import qualified GHCJS.DOM.File as File
 import qualified GHCJS.DOM.FileList as FileList
 
 
-import Reflex
-import qualified Data.Map as Map
-import Control.Lens hiding (ix, element)
+import Control.Lens hiding (element, ix)
 import Control.Monad hiding (forM_)
+import qualified Data.Bimap as Bimap
 import Data.Default
-import Data.Map (Map)
-import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
-import qualified Data.Bimap as Bimap
-import Data.Proxy
 import Data.Functor.Misc
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Proxy
+import Data.Text (Text)
+import qualified Data.Text as T
+import Reflex
 
-import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.Event as Event
+import qualified GHCJS.DOM.HTMLInputElement as Input
 
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text
@@ -88,30 +101,10 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     , _textInput_hasFocus = _inputElement_hasFocus i
     , _textInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
     }
-{-
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" inputType) dAttrs
-  Input.setValue e $ Just initial
-  performEvent_ $ fmap (Input.setValue e . Just) eSetValue
-  eChange <- wrapDomEvent e (`on` input) $ fromMaybe "" <$> Input.getValue e
-  postGui <- askPostGui
-  runWithActions <- askRunWithActions
-  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
-    unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
-    unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
-    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
-  dFocus <- holdDyn False eChangeFocus
-  eKeypress <- wrapDomEvent e (`on` keyPress) getKeyEvent
-  eKeydown <- wrapDomEvent e (`on` keyDown) getKeyEvent
-  eKeyup <- wrapDomEvent e (`on` keyUp) getKeyEvent
-  dValue <- holdDyn initial $ leftmost [eSetValue, eChange]
-  return $ TextInput dValue eChange eKeypress eKeydown eKeyup dFocus e
--}
 
 {-# INLINABLE textInputGetEnter #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
-textInputGetEnter i = fmapMaybe (\n -> if n == keycodeEnter then Just () else Nothing) $ _textInput_keypress i
+textInputGetEnter i = fmapMaybe (\n -> if keyCodeLookup n == Enter then Just () else Nothing) $ _textInput_keypress i
 
 data TextAreaConfig t
    = TextAreaConfig { _textAreaConfig_initialValue :: Text
@@ -149,24 +142,6 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_hasFocus = _textAreaElement_hasFocus i
     , _textArea_element = castToHTMLTextAreaElement $ _element_raw $ _textAreaElement_element i
     }
-{-
-  e <- liftM castToHTMLTextAreaElement $ buildEmptyElement "textarea" attrs
-  TextArea.setValue e $ Just initial
-  postGui <- askPostGui
-  runWithActions <- askRunWithActions
-  eChangeFocus <- newEventWithTrigger $ \eChangeFocusTrigger -> do
-    unsubscribeOnblur <- on e blurEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity False]
-    unsubscribeOnfocus <- on e focusEvent $ liftIO $ do
-      postGui $ runWithActions [eChangeFocusTrigger :=> Identity True]
-    return $ liftIO $ unsubscribeOnblur >> unsubscribeOnfocus
-  performEvent_ $ fmap (TextArea.setValue e . Just) eSet
-  f <- holdDyn False eChangeFocus
-  ev <- wrapDomEvent e (`on` input) $ fromMaybe "" <$> TextArea.getValue e
-  v <- holdDyn initial $ leftmost [eSet, ev]
-  eKeypress <- wrapDomEvent e (`on` keyPress) getKeyEvent
-  return $ TextArea v ev e f eKeypress
--}
 
 data CheckboxConfig t
     = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
@@ -190,7 +165,7 @@ data Checkbox t
 checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
   let permanentAttrs = "type" =: "checkbox"
-      dAttrs = fmap (Map.delete "checked" . Map.union permanentAttrs) $ _checkboxConfig_attributes config
+      dAttrs = Map.delete "checked" . Map.union permanentAttrs <$> _checkboxConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialChecked .~ checked
@@ -200,14 +175,6 @@ checkbox checked config = do
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
     }
-{-
-  attrs <- mapDyn (\c -> Map.insert "type" "checkbox" $ (if checked then Map.insert "checked" "checked" else Map.delete "checked") c) (_checkboxConfig_attributes config)
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" attrs
-  eClick <- wrapDomEvent e (`on` click) $ Input.getChecked e
-  performEvent_ $ fmap (\v -> Input.setChecked e $! v) $ _checkboxConfig_setValue config
-  dValue <- holdDyn checked $ leftmost [_checkboxConfig_setValue config, eClick]
-  return $ Checkbox dValue eClick
--}
 
 type family CheckboxViewEventResultType (en :: EventTag) :: * where
   CheckboxViewEventResultType 'ClickTag = Bool
@@ -296,18 +263,7 @@ checkboxView dAttrs dValue = do
         & inputElementConfig_setChecked .~ leftmost [updated dValue, tag (current dValue) postBuild]
         & inputElementConfig_elementConfig .~ elementConfig
   i <- inputElement inputElementConfig
-  return $ fmap unCheckboxViewEventResult $ select (_element_events $ _inputElement_element i) (WrapArg Click)
-{-
-  e <- liftM castToHTMLInputElement $ buildEmptyElement "input" =<< mapDyn (Map.insert "type" "checkbox") dAttrs
-  eClicked <- wrapDomEvent e (`on` click) $ do
-    preventDefault
-    Input.getChecked e
-  schedulePostBuild $ do
-    v <- sample $ current dValue
-    when v $ Input.setChecked e True
-  performEvent_ $ fmap (\v -> Input.setChecked e $! v) $ updated dValue
-  return eClicked
--}
+  return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 
 data FileInput t
    = FileInput { _fileInput_value :: Dynamic t [File]
@@ -325,11 +281,11 @@ fileInput :: forall t m. (MonadIO m, MonadFix m, MonadHold t m, TriggerEvent t m
           => FileInputConfig t -> m (FileInput t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
-      dAttrs = fmap insertType $ _fileInputConfig_attributes config
+      dAttrs = insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   let cfg = (def :: ElementConfig EventResult t m)
               { _elementConfig_modifyAttributes = modifyAttrs
-              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
+              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \_ -> do
                  return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
               }
   (eRaw, _) <- element "input" cfg blank
@@ -337,7 +293,7 @@ fileInput config = do
   eChange <- wrapDomEvent e (`on` Element.change) $ do
       Just files <- Input.getFiles e
       len <- FileList.getLength files
-      mapM (liftM (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) $ [0 .. len-1]
+      mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) [0 .. len-1]
   dValue <- holdDyn [] eChange
   return $ FileInput
     { _fileInput_value = dValue
@@ -418,7 +374,7 @@ regularToDropdownViewEventType en r = case en of
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
+dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), MonadIO m, TriggerEvent t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
 dropdown k0 options (DropdownConfig setK attrs) = do
   optionsWithAddedKeys <- combineDyn Map.union options <=< foldDyn Map.union (k0 =: "") $ fmap (=: "") setK
   defaultKey <- holdDyn k0 setK
@@ -443,11 +399,15 @@ dropdown k0 options (DropdownConfig setK attrs) = do
                 Just1 (EventResult r) -> return $ Just1 $ DropdownViewEventResult $ regularToDropdownViewEventType en r
         }
   (eRaw, _) <- element "select" cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
-    optionAttrs <- mapDyn (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
+    let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
   let e = castToHTMLSelectElement $ _element_raw eRaw
-  performEvent_ $ fmap (HTMLSelectElement.setValue e . Just . show) $ attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
-  eChange <- return never -- attachDynWith (\ks s -> join $ Bimap.lookup <$> join (readMaybe <$> s) <*> pure ks) ixKeys <$> (wrapDomEvent e (`on` Element.change) $ HTMLSelectElement.getValue e)
+  performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
+  let lookupSelected ks value = do
+        v <- value
+        key <- T.readMaybe v
+        Bimap.lookup key ks
+  eChange <- attachDynWith lookupSelected ixKeys <$> wrapDomEvent e (`on` Element.change) (HTMLSelectElement.getValue e)
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
@@ -455,13 +415,13 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- combineDyn readKey ixKeys <=< holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
   return $ Dropdown dValue (attachDynWith readKey ixKeys eChange)
 
-liftM concat $ mapM makeLenses
+concat <$> mapM makeLenses
   [ ''TextAreaConfig
   , ''TextArea
   , ''TextInputConfig
   , ''TextInput
---  , ''FileInputConfig
---  , ''FileInput
+  , ''FileInputConfig
+  , ''FileInput
   , ''DropdownConfig
   , ''Dropdown
   , ''CheckboxConfig
@@ -484,11 +444,9 @@ instance HasAttributes (CheckboxConfig t) where
   type Attrs (CheckboxConfig t) = Dynamic t (Map Text Text)
   attributes = checkboxConfig_attributes
 
-{-
 instance HasAttributes (FileInputConfig t) where
   type Attrs (FileInputConfig t) = Dynamic t (Map Text Text)
   attributes = fileInputConfig_attributes
--}
 
 class HasSetValue a where
   type SetValue a :: *

@@ -50,7 +50,9 @@ library
     zenc == 0.1.*,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
-    monad-control >= 1.0.1 && < 1.1
+    monad-control >= 1.0.1 && < 1.1,
+    keycode == 0.2.*,
+    unbounded-delays == 0.1.0.9
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
@@ -103,6 +105,12 @@ library
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+
+test-suite hlint
+  build-depends: base, hlint == 1.9.*
+  hs-source-dirs: test
+  main-is: hlint.hs
+  type: exitcode-stdio-1.0
 
 source-repository head
   type: git

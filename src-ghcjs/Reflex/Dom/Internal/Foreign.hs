@@ -1,19 +1,19 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE JavaScriptFFI #-}
 module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
                                    , runWebGUI
                                    ) where
 
-import Control.Monad
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Foreign
 import Foreign.C
+import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
 import GHCJS.DOM.Types
+import qualified GHCJS.Marshal.Pure as JS
 import GHCJS.Types
 import JavaScript.TypedArray.ArrayBuffer as JS
-import qualified Data.ByteString as BS
-import qualified GHCJS.Buffer as JS
-import qualified GHCJS.Marshal.Pure as JS
 
 quitWebView :: WebView -> IO ()
 quitWebView = error "quitWebView: unimplemented in GHCJS"
@@ -21,12 +21,12 @@ quitWebView = error "quitWebView: unimplemented in GHCJS"
 foreign import javascript unsafe "location['host']" getLocationHost_ :: IO JSString
 
 getLocationHost :: FromJSString r => a -> IO r
-getLocationHost _ = liftM fromJSString getLocationHost_
+getLocationHost _ = fmap fromJSString getLocationHost_
 
 foreign import javascript unsafe "location['protocol']" getLocationProtocol_ :: IO JSString
 
 getLocationProtocol :: FromJSString r => a -> IO r
-getLocationProtocol _ = liftM fromJSString getLocationProtocol_
+getLocationProtocol _ = fmap fromJSString getLocationProtocol_
 
 withWebViewContext :: a -> (a -> IO b) -> IO b
 withWebViewContext a f = f a
@@ -40,4 +40,4 @@ bsToArrayBuffer _ bs = BS.useAsCString bs $ \cStr -> do
   extractByteArray cStr $ BS.length bs
 
 bsFromArrayBuffer :: a -> JSVal -> IO ByteString
-bsFromArrayBuffer _ ab = liftM (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JS.unsafeFreeze $ JS.pFromJSVal ab
+bsFromArrayBuffer _ ab = fmap (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JS.unsafeFreeze $ JS.pFromJSVal ab

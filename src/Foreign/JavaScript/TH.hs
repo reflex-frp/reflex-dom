@@ -1,4 +1,18 @@
-{-# LANGUAGE ForeignFunctionInterface, CPP, TemplateHaskell, TypeFamilies, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, StandaloneDeriving, GeneralizedNewtypeDeriving, ExistentialQuantification, FunctionalDependencies, EmptyDataDecls, FlexibleContexts, RankNTypes, UndecidableInstances #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 #ifdef __GHCJS__
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
@@ -7,58 +21,58 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              ) where
 
 import Reflex.Class
-import Reflex.Host.Class
-import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.Deletable.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Host.Class
 
 import Language.Haskell.TH
 
 #ifdef __GHCJS__
-import qualified GHCJS.Marshal as JS
-import qualified GHCJS.Marshal.Pure as JS
-import qualified GHCJS.Foreign as JS
-import qualified GHCJS.Foreign.Callback as JS
-import qualified GHCJS.Types as JS
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM
-import GHCJS.DOM.Types hiding (fromJSString, Text)
+import GHCJS.DOM.Types hiding (Text, fromJSString)
 import qualified GHCJS.DOM.Types as JS
+import qualified GHCJS.Foreign as JS
+import qualified GHCJS.Foreign.Callback as JS
+import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
+import qualified GHCJS.Marshal as JS
+import qualified GHCJS.Marshal.Pure as JS
+import qualified GHCJS.Types as JS
 import qualified JavaScript.Array as JS
+import qualified JavaScript.Array.Internal (SomeJSArray (..))
 import qualified JavaScript.Object as JS
 import qualified JavaScript.Object.Internal (Object (..))
-import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
-import qualified JavaScript.Array.Internal (SomeJSArray (..))
 import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
 
-import Data.Word
-import Foreign.Ptr
-import Foreign.C.Types
 import Data.Hashable
+import Data.Word
+import Foreign.C.Types
+import Foreign.Ptr
 import Text.Encoding.Z
 #else
-import System.Glib.FFI
-import Graphics.UI.Gtk.WebKit.WebView
+import Foreign.Marshal
+import Graphics.UI.Gtk.WebKit.DOM.Node
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.DOM.Node
-import Foreign.Marshal
+import Graphics.UI.Gtk.WebKit.WebView
+import System.Glib.FFI
 #endif
 
+import Control.Concurrent
 import Control.Monad
-import Control.Monad.Ref
+import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Control.Monad.Exception
 import Control.Monad.Reader
+import Control.Monad.Ref
 import Control.Monad.State
-import Control.Monad.Trans.Control
 import qualified Control.Monad.State.Strict as Strict
+import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Control.Concurrent
 import Data.Coerce
 import Data.Monoid
 import Data.Text (Text)
@@ -213,15 +227,15 @@ instance IsJSContext JSCtx_IO where
   newtype JSRef JSCtx_IO = JSRef_IO { unJSRef_IO :: JS.JSVal }
 
 instance MonadJS JSCtx_IO IO where
-  runJS (JSFFI f) l = liftM JSRef_IO . f =<< JS.fromListIO (coerce l)
+  runJS (JSFFI f) l = fmap JSRef_IO . f =<< JS.fromListIO (coerce l)
   forkJS = forkIO
   mkJSUndefined = return $ JSRef_IO JS.jsUndefined
   isJSNull (JSRef_IO r) = return $ JS.isNull r
   isJSUndefined (JSRef_IO r) = return $ JS.isUndefined r
   fromJSBool (JSRef_IO r) = return $ JS.fromJSBool r
   fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.pFromJSVal r
-  fromJSArray (JSRef_IO r) = liftM coerce $ JS.toListIO $ coerce r
-  fromJSUint8Array (JSRef_IO r) = liftM (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JSArrayBuffer.unsafeFreeze $ JS.pFromJSVal r --TODO: Assert that this is immutable
+  fromJSArray (JSRef_IO r) = fmap coerce $ JS.toListIO $ coerce r
+  fromJSUint8Array (JSRef_IO r) = fmap (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JSArrayBuffer.unsafeFreeze $ JS.pFromJSVal r --TODO: Assert that this is immutable
   fromJSNumber (JSRef_IO r) = do
     Just n <- JS.fromJSVal r
     return n
@@ -241,7 +255,7 @@ instance MonadJS JSCtx_IO IO where
       l <- JS.toListIO $ coerce args
       JSRef_IO result <- f $ coerce l
       return result
-    liftM (JSFun . JSRef_IO) $ funWithArguments $ coerce cb
+    fmap (JSFun . JSRef_IO) $ funWithArguments $ coerce cb
   freeJSFun (JSFun (JSRef_IO r)) = JS.releaseCallback $ coerce r
   setJSProp s (JSRef_IO v) (JSRef_IO o) = JS.setProp (JS.toJSString s) v $ coerce o
   getJSProp s (JSRef_IO o) = do
@@ -294,7 +308,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     liftIO $ forkIO $ runWithWebView a wv
   mkJSUndefined = do
     jsContext <- askJSContext
-    liftM JSRef_JavaScriptCore $ liftIO $ jsvaluemakeundefined jsContext
+    fmap JSRef_JavaScriptCore $ liftIO $ jsvaluemakeundefined jsContext
   isJSNull (JSRef_JavaScriptCore r) = do
     jsContext <- askJSContext
     liftIO $ jsvalueisnull jsContext r
@@ -343,7 +357,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     lenDouble <- fromJSNumberRaw lenRef
     let len = round lenDouble
     liftIO $ forM [0..len-1] $ \i -> do
-      liftM JSRef_JavaScriptCore $ jsobjectgetpropertyatindex jsContext a i nullPtr --TODO: Exceptions
+      JSRef_JavaScriptCore <$> jsobjectgetpropertyatindex jsContext a i nullPtr --TODO: Exceptions
   fromJSUint8Array a = do
     vals <- fromJSArray a
     doubles <- mapM fromJSNumber vals
@@ -359,7 +373,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
         x <- peekElemOff argv n
         jsvalueprotect jsContext x
         return $ JSRef_JavaScriptCore x --TODO: Unprotect eventually
-      liftM unJSRef_JavaScriptCore $ runWithWebView (a args) wv
+      unJSRef_JavaScriptCore <$> runWithWebView (a args) wv
     cbRef <- liftIO $ jsobjectmakefunctionwithcallback jsContext nullPtr cb
     liftIO $ jsvalueprotect jsContext cbRef
     return $ JSFun $ JSRef_JavaScriptCore cbRef
@@ -373,7 +387,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   getJSProp propName (JSRef_JavaScriptCore objRef) = do
     withJSStringRaw propName $ \propNameRaw -> do
       jsContext <- askJSContext
-      liftIO $ liftM JSRef_JavaScriptCore $ jsobjectgetproperty jsContext objRef propNameRaw nullPtr --TODO: property attribute, exceptions
+      liftIO $ JSRef_JavaScriptCore <$> jsobjectgetproperty jsContext objRef propNameRaw nullPtr --TODO: property attribute, exceptions
   withJSNode = error "withJSNode is only supported in ghcjs"
 
 #endif
@@ -399,7 +413,7 @@ instance FromJS x Text where
 instance FromJS x a => FromJS x (Maybe a) where
   fromJS x = do
     n <- isJSNull x
-    if n then return Nothing else liftM Just $ fromJS x
+    if n then return Nothing else Just <$> fromJS x
 
 class ToJS x a where
   withJS :: MonadJS x m => a -> (JSRef x -> m r) -> m r
@@ -422,7 +436,7 @@ instance ToJS x a => ToJS x (JSArray a) where
   withJS = withJSArrayFromList . unJSArray
 
 instance FromJS x a => FromJS x (JSArray a) where
-  fromJS = liftM JSArray . mapM fromJS <=< fromJSArray
+  fromJS = fmap JSArray . mapM fromJS <=< fromJSArray
 
 withJSArrayFromList :: (ToJS x a, MonadJS x m) => [a] -> (JSRef x -> m r) -> m r
 withJSArrayFromList as f = go as []
@@ -444,7 +458,7 @@ instance ToJS x Int where
   withJS n = withJSNumber $ fromIntegral n --TODO: Check things; throw exceptions
 
 instance FromJS x Int where
-  fromJS = liftM round . fromJSNumber --TODO: Check things; throw exceptions
+  fromJS = fmap round . fromJSNumber --TODO: Check things; throw exceptions
 
 instance ToJS x Double where
   withJS = withJSNumber
