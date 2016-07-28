@@ -850,17 +850,19 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
---TODO preselect a tab on open
 -- | A widget to construct a tabbed view that shows only one of its child widgets at a time.
 --   Creates a header bar containing a <ul> with one <li> per child; clicking a <li> displays
 --   the corresponding child and hides all others.
-tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Show k, Ord k)
+tabDisplay :: forall t m k. (MonadFix m, MonadWidget t m, Ord k)
   => String               -- ^ Class applied to <ul> element
   -> String               -- ^ Class applied to currently active <li> element
   -> Map k (String, m ()) -- ^ Map from (arbitrary) key to (tab label, child widget)
   -> m ()
 tabDisplay ulClass activeClass tabItems = do
-  rec dCurrentTab <- holdDyn Nothing (updated dTabClicks)
+  pb <- getPostBuild
+  let firstTab = listToMaybe $ Map.keys tabItems
+  rec dCurrentTab <- holdDyn Nothing (leftmost [ updated dTabClicks
+                                               , tag (constant firstTab) pb])
       dTabClicks :: Dynamic t (Maybe k) <- elAttr "ul" (Map.singleton "class" ulClass) $ do
         tabClicksList :: [Event t k] <- (liftM Map.elems) $ imapM (\k (s,_) -> headerBarLink s k =<< mapDyn (== (Just k)) dCurrentTab) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
@@ -874,7 +876,7 @@ tabDisplay ulClass activeClass tabItems = do
       elDynAttr "div" dAttrs $ dyn =<< mapDyn snd dTab)
     return ()
   where
-    headerBarLink :: (MonadWidget t m, Ord k) => String -> k -> Dynamic t Bool -> m (Event t k)
+    headerBarLink :: String -> k -> Dynamic t Bool -> m (Event t k)
     headerBarLink x k dBool = do
       dAttributes <- mapDyn (\b -> if b then Map.singleton "class" activeClass else Map.empty) dBool
       elDynAttr "li" dAttributes $ do
