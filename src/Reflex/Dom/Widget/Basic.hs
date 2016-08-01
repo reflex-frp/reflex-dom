@@ -202,7 +202,7 @@ selectViewListWithKey :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m
 selectViewListWithKey selection vals mkChild = do
   let selectionDemux = demux selection -- For good performance, this value must be shared across all children
   selectChild <- listWithKey vals $ \k v -> do
-    selected <- getDemuxed selectionDemux k
+    let selected = demuxed selectionDemux k
     selectSelf <- mkChild k v selected
     return $ fmap ((,) k) selectSelf
   return $ switchPromptlyDyn $ leftmost . Map.elems <$> selectChild
@@ -399,13 +399,13 @@ tabDisplay :: forall t m k. (MonadFix m, DomBuilder t m, MonadHold t m, PostBuil
 tabDisplay ulClass activeClass tabItems = do
   let t0 = listToMaybe $ Map.keys tabItems
   rec currentTab :: Demux t (Maybe k) <- elAttr "ul" ("class" =: ulClass) $ do
-        tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s,_) -> headerBarLink s k =<< getDemuxed currentTab (Just k)) tabItems
+        tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s,_) -> headerBarLink s k $ demuxed currentTab (Just k)) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
         fmap demux $ holdDyn t0 $ fmap Just eTabClicks
   el "div" $ do
     iforM_ tabItems $ \k (_, w) -> do
-      isSelected <- getDemuxed currentTab $ Just k
-      attrs <- forDyn isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
+      let isSelected = demuxed currentTab $ Just k
+          attrs = ffor isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
       elDynAttr "div" attrs w
     return ()
   where

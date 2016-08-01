@@ -179,6 +179,6 @@ inhomogeneousPoisson rnd rate maxRate t0 =
 debounce :: (MonadFix m, MonadHold t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t a)
 debounce dt e = do
   n :: Dynamic t Integer <- count e
-  let tagged = attachDynWith (,) n e
+  let tagged = attachPromptlyDynWith (,) n e
   delayed <- delay dt tagged
   return $ attachWithMaybe (\n' (t, v) -> if n' == t then Just v else Nothing) (current n) delayed

@@ -249,7 +249,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
-    return $ InputElement v (nubDyn c) valueChangedByUI hasFocus e
+    return $ InputElement v (uniqDyn c) valueChangedByUI hasFocus e
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()

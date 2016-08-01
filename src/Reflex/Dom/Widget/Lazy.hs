@@ -54,8 +54,8 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
       scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll container
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
-      window <- combineDyn (findWindow rowPx) heightPx scrollPosition
-      itemsInWindow <- combineDyn (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
+      let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
+          itemsInWindow = zipDynWith (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
   performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i -> do
     liftIO $ setScrollTop (_element_raw container) (i * rowPx)
@@ -70,7 +70,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
                                        "top" =: (T.pack (show t) <> "px")
     toHeightStyle h = toStyleAttr ("height" =: (T.pack (show h) <> "px") <> "overflow" =: "hidden")
     tagWrapper elTag attrs attrsOverride c = do
-      attrs' <- combineDyn Map.union attrsOverride attrs
+      let attrs' = zipDynWith Map.union attrsOverride attrs
       elDynAttr' elTag attrs' c
     findWindow sizeIncrement windowSize startingPosition =
       let (startingIndex, topOffsetPx) = startingPosition `divMod'` sizeIncrement
@@ -100,10 +100,10 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       scrollPosition <- holdDyn 0 $ leftmost [ domEvent Scroll viewport
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
-      window <- combineDyn (findWindow rowPx) heightPx scrollPosition
+      let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
   performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i -> do
     liftIO $ setScrollTop (_element_raw viewport) (i * rowPx)
-  return (nubDyn window, result)
+  return (uniqDyn window, result)
   where
     toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
@@ -144,6 +144,6 @@ virtualListBuffered buffer heightPx rowPx maxIndex i0 setI keyToIndex items0 ite
                  then Nothing
                  else Just (extendWin winOffset winLimit)) (current winBuffered) (updated win)
         winBuffered <- holdDyn (0, 0) $ leftmost [ winHitEdge
-                                                 , attachDynWith (\(x, y) _ -> extendWin x y) win pb
+                                                 , attachPromptlyDynWith (\(x, y) _ -> extendWin x y) win pb
                                                  ]
     return (updated winBuffered, m)

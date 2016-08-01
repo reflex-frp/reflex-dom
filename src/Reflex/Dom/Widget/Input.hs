@@ -376,13 +376,11 @@ regularToDropdownViewEventType en r = case en of
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
 dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), MonadIO m, TriggerEvent t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
 dropdown k0 options (DropdownConfig setK attrs) = do
-  optionsWithAddedKeys <- combineDyn Map.union options <=< foldDyn Map.union (k0 =: "") $ fmap (=: "") setK
+  optionsWithAddedKeys <- fmap (zipDynWith Map.union options) $ foldDyn Map.union (k0 =: "") $ fmap (=: "") setK
   defaultKey <- holdDyn k0 setK
-  (indexedOptions, ixKeys) <- splitDyn <=< forDyn optionsWithAddedKeys $ \os ->
-    let xs =  map (\(ix, (k, v)) -> ((ix, k), ((ix, k), v))) $ zip [0::Int ..] $ Map.toList os
-        ixVals = Map.fromList $ map snd xs
-        ixKeys = Bimap.fromList $ map fst xs
-    in (ixVals, ixKeys)
+  let (indexedOptions, ixKeys) = splitDynPure $ ffor optionsWithAddedKeys $ \os ->
+        let xs = fmap (\(ix, (k, v)) -> ((ix, k), ((ix, k), v))) $ zip [0::Int ..] $ Map.toList os
+        in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = (def :: ElementConfig EventResult t m)
         { _elementConfig_modifyAttributes = modifyAttrs
@@ -402,18 +400,18 @@ dropdown k0 options (DropdownConfig setK attrs) = do
     let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
   let e = castToHTMLSelectElement $ _element_raw eRaw
-  performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachDynWithMaybe (flip Bimap.lookupR) ixKeys setK
+  performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK
   let lookupSelected ks value = do
         v <- value
         key <- T.readMaybe v
         Bimap.lookup key ks
-  eChange <- attachDynWith lookupSelected ixKeys <$> wrapDomEvent e (`on` Element.change) (HTMLSelectElement.getValue e)
+  eChange <- attachPromptlyDynWith lookupSelected ixKeys <$> wrapDomEvent e (`on` Element.change) (HTMLSelectElement.getValue e)
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
         return k
-  dValue <- combineDyn readKey ixKeys <=< holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
-  return $ Dropdown dValue (attachDynWith readKey ixKeys eChange)
+  dValue <- fmap (zipDynWith readKey ixKeys) $ holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
+  return $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange)
 
 concat <$> mapM makeLenses
   [ ''TextAreaConfig
