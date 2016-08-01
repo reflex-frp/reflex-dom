@@ -221,6 +221,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let domInputElement = castToHTMLInputElement domElement
+    Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
     Just v0 <- Input.getValue domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
