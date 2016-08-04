@@ -113,6 +113,9 @@ Some of these widget builders take a configuration record and return a record co
 [ ]   textInputGetEnter :: TextInput -> Event ()
 [W]   textArea :: TextAreaConfig -> m TextArea
 
+-- Range input (slider with float values).
+[W]   rangeInput :: RangeInputConfig -> m RangeInput
+
 -- Checkbox.  The Bool supplies the initial state.
 [W]   checkbox :: Bool -> CheckboxConfig -> m Checkbox
 

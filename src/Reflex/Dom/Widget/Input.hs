@@ -40,7 +40,6 @@ import GHCJS.DOM.Types (File)
 -- import qualified GHCJS.DOM.File as File
 import qualified GHCJS.DOM.FileList as FileList
 
-
 import Control.Lens hiding (element, ix)
 import Control.Monad hiding (forM_)
 import qualified Data.Bimap as Bimap
@@ -105,6 +104,45 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
 {-# INLINABLE textInputGetEnter #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if keyCodeLookup n == Enter then Just () else Nothing) $ _textInput_keypress i
+
+data RangeInputConfig t
+   = RangeInputConfig { _rangeInputConfig_initialValue :: Float
+                      , _rangeInputConfig_setValue :: Event t Float
+                      , _rangeInputConfig_attributes :: Dynamic t (Map Text Text)
+                      }
+
+instance Reflex t => Default (RangeInputConfig t) where
+  {-# INLINABLE def #-}
+  def = RangeInputConfig { _rangeInputConfig_initialValue = 0
+                        , _rangeInputConfig_setValue = never
+                        , _rangeInputConfig_attributes = constDyn mempty
+                        }
+
+data RangeInput t
+   = RangeInput { _rangeInput_value :: Dynamic t Float
+                , _rangeInput_input :: Event t Float
+                , _rangeInput_mouseup :: Event t (Int, Int)
+                , _rangeInput_hasFocus :: Dynamic t Bool
+                , _rangeInput_element :: HTMLInputElement
+                }
+
+-- | Create an input whose value is a float.
+--   https://www.w3.org/wiki/HTML/Elements/input/range
+{-# INLINABLE rangeInput #-}
+rangeInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => RangeInputConfig t -> m (RangeInput t)
+rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.insert "type" "range") dAttrs
+  i <- inputElement $ def
+    & inputElementConfig_initialValue .~ (T.pack . show $ initial)
+    & inputElementConfig_setValue .~ (T.pack . show <$> eSetValue)
+    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+  return $ RangeInput
+    { _rangeInput_value = read . T.unpack <$> _inputElement_value i
+    , _rangeInput_input = read . T.unpack <$> _inputElement_input i
+    , _rangeInput_mouseup = domEvent Mouseup i
+    , _rangeInput_hasFocus = _inputElement_hasFocus i
+    , _rangeInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
+    }
 
 data TextAreaConfig t
    = TextAreaConfig { _textAreaConfig_initialValue :: Text
@@ -418,6 +456,8 @@ concat <$> mapM makeLenses
   , ''TextArea
   , ''TextInputConfig
   , ''TextInput
+  , ''RangeInputConfig
+  , ''RangeInput
   , ''FileInputConfig
   , ''FileInput
   , ''DropdownConfig
@@ -433,6 +473,10 @@ instance HasAttributes (TextAreaConfig t) where
 instance HasAttributes (TextInputConfig t) where
   type Attrs (TextInputConfig t) = Dynamic t (Map Text Text)
   attributes = textInputConfig_attributes
+
+instance HasAttributes (RangeInputConfig t) where
+  type Attrs (RangeInputConfig t) = Dynamic t (Map Text Text)
+  attributes = rangeInputConfig_attributes
 
 instance HasAttributes (DropdownConfig t k) where
   type Attrs (DropdownConfig t k) = Dynamic t (Map Text Text)
@@ -457,6 +501,10 @@ instance HasSetValue (TextAreaConfig t) where
 instance HasSetValue (TextInputConfig t) where
   type SetValue (TextInputConfig t) = Event t Text
   setValue = textInputConfig_setValue
+
+instance HasSetValue (RangeInputConfig t) where
+  type SetValue (RangeInputConfig t) = Event t Float
+  setValue = rangeInputConfig_setValue
 
 instance HasSetValue (DropdownConfig t k) where
   type SetValue (DropdownConfig t k) = Event t k
