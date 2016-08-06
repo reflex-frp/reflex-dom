@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -14,10 +15,12 @@ module Reflex.Dom.Old
        , buildElement
        , buildEmptyElement
        , buildEmptyElementNS
+       , deleteBetweenExclusive
        ) where
 
 import Control.Arrow ((***))
 import Control.Lens ((&), (.~))
+import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -28,6 +31,8 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as DOM
+import GHCJS.DOM.Node (getParentNode, getPreviousSibling, removeChild, toNode)
+import GHCJS.DOM.Types (IsNode)
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
@@ -107,3 +112,17 @@ buildElementInternal :: MonadWidget t m => String -> m a -> ElementConfig en t m
 buildElementInternal elementTag child cfg = do
   (e, result) <- element (T.pack elementTag) cfg child
   return (_element_raw e, result)
+
+-- | s and e must both be children of the same node and s must precede e
+deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> IO ()
+deleteBetweenExclusive s e = do
+  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
+      let go = do
+            Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
+            when (toNode s /= toNode x) $ do
+              _ <- removeChild currentParent $ Just x
+              go
+      go
