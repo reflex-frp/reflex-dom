@@ -1,8 +1,10 @@
 { mkDerivation, pkgs, dependent-map, ghcjs-dom, lens
 , mtl, ref-tf, reflex, text, these
-, transformers, data-default, semigroups, aeson
+, transformers, data-default, semigroups, blaze-builder, aeson
 , ghc, webkitgtk3-javascriptcore, exception-transformers
-, dependent-sum-template, bifunctors, bimap, raw-strings-qq
+, webkitgtk24x, dependent-sum-template, bifunctors, bimap
+, raw-strings-qq, zenc, random, monad-control, keycode, hlint
+, unbounded-delays
 }:
 
 mkDerivation {
@@ -10,22 +12,39 @@ mkDerivation {
   version = "0.3";
   src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
   buildDepends = [
-    reflex
-    dependent-map
-    mtl
-    transformers
-    these
-    lens
-    ghcjs-dom
-    text
-    data-default
-    semigroups
-    ref-tf
     aeson
-    exception-transformers
-    dependent-sum-template
     bifunctors
     bimap
-  ] ++ (if (ghc.pname or null) == "ghcjs" then [ ] else [ webkitgtk3-javascriptcore raw-strings-qq ]);
+    blaze-builder
+    data-default
+    dependent-map
+    dependent-sum-template
+    exception-transformers
+    ghcjs-dom
+    keycode
+    lens
+    monad-control
+    mtl
+    random
+    ref-tf
+    reflex
+    semigroups
+    text
+    these
+    transformers
+    zenc
+    unbounded-delays
+  ] ++ (if ghc.isGhcjs or false then [] else [
+    raw-strings-qq
+    webkitgtk3-javascriptcore
+  ]);
+  testDepends = if ghc.isGhcjs or false then [] else [
+    hlint
+  ];
+  pkgconfigDepends = if ghc.isGhcjs or false then [] else [
+    raw-strings-qq
+    webkitgtk24x
+    webkitgtk3-javascriptcore
+  ];
   license = null;
 }

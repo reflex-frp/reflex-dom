@@ -1,30 +1,32 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, CPP #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE JavaScriptFFI #-}
 
 module Reflex.Dom.WebSocket.Foreign where
 
-import Prelude hiding (div, span, mapM, mapM_, concat, concatMap, all, sequence)
+import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import GHCJS.Types
-import GHCJS.DOM.WebSocket (message, open, closeEvent)
-import qualified GHCJS.DOM.WebSocket as GD
-import GHCJS.DOM.MessageEvent
-import GHCJS.DOM.EventM (on)
-import GHCJS.DOM.Types
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import GHCJS.Buffer
-import JavaScript.TypedArray.ArrayBuffer as JS
-import GHCJS.Marshal.Pure
-import GHCJS.Foreign.Internal
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.Text (Text)
 import Data.Text.Encoding
+import GHCJS.Buffer
+import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.MessageEvent
+import GHCJS.DOM.Types hiding (Text)
+import GHCJS.DOM.WebSocket (closeEvent, message, open)
+import qualified GHCJS.DOM.WebSocket as GD
+import GHCJS.Foreign.Internal
+import GHCJS.Marshal.Pure
+import GHCJS.Types
+import JavaScript.TypedArray.ArrayBuffer as JS
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
 
-newWebSocket :: a -> String -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket :: a -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onOpen onClose = do
-  ws <- GD.newWebSocket url (Just [] :: Maybe [String])
+  ws <- GD.newWebSocket url (Just [] :: Maybe [Text])
   _ <- on ws open $ liftIO onOpen
   GD.setBinaryType ws "arraybuffer"
   _ <- on ws message $ do

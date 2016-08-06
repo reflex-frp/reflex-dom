@@ -2,13 +2,13 @@
 
 module HaltSpec where
 
-import           Control.Monad.IO.Class
-import           Data.Foldable
-import           GHCJS.DOM
+import Control.Monad.IO.Class
+import Data.Foldable
+import GHCJS.DOM
 import qualified Graphics.UI.Gtk as Gtk
-import           Reflex.Dom
-import           Reflex.Spider.Internal (SpiderHostFrame)
-import           Test.Hspec
+import Reflex.Dom
+import Reflex.Spider.Internal (SpiderHostFrame)
+import Test.Hspec
 
 spec :: Spec
 spec = do
@@ -34,7 +34,6 @@ getFirstEventAndHalt action = do
   return ()
 
 haltGui :: WebView -> IO ()
-haltGui wv = do
-  Gtk.postGUIAsync $ do
-    w <- Gtk.widgetGetToplevel wv
-    Gtk.widgetDestroy w
+haltGui wv = Gtk.postGUIAsync $ do
+  w <- Gtk.widgetGetToplevel wv
+  Gtk.widgetDestroy w

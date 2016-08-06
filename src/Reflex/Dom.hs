@@ -1,18 +1,17 @@
-module Reflex.Dom ( module Reflex
-                  , module Reflex.Dom.Class
-                  , module Reflex.Dom.Internal
-                  , module Reflex.Dom.Widget
-                  , module Reflex.Dom.Xhr
-                  , module Reflex.Dom.Time
-                  , module Reflex.Dom.WebSocket
-                  , module Reflex.Dom.Location
-                  ) where
+module Reflex.Dom (module X) where
 
-import Reflex
-import Reflex.Dom.Class
-import Reflex.Dom.Internal
-import Reflex.Dom.Widget
-import Reflex.Dom.Xhr
-import Reflex.Dom.Time
-import Reflex.Dom.WebSocket
-import Reflex.Dom.Location
+import Reflex as X
+import Reflex.Dom.Builder.Class as X
+import Reflex.Dom.Builder.Immediate as X
+import Reflex.Dom.Builder.Static as X
+import Reflex.Dom.Class as X
+import Reflex.Dom.DynamicWriter as X
+import Reflex.Dom.Internal as X
+import Reflex.Dom.Location as X
+import Reflex.Dom.Old as X
+import Reflex.Dom.PerformEvent.Class as X
+import Reflex.Dom.PostBuild.Class as X
+import Reflex.Dom.Time as X
+import Reflex.Dom.WebSocket as X
+import Reflex.Dom.Widget as X
+import Reflex.Dom.Xhr as X

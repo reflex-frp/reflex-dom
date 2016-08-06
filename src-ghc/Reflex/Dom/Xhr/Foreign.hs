@@ -1,21 +1,25 @@
-{-# LANGUAGE QuasiQuotes, ForeignFunctionInterface #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+module Reflex.Dom.Xhr.Foreign ( module Reflex.Dom.Xhr.Foreign
+                              , XhrResponseType
+                              ) where
 
-module Reflex.Dom.Xhr.Foreign where
-
+import Control.Concurrent.MVar
+import Control.Exception.Base
 import Control.Monad
-import qualified Data.Text as T
 import Data.Text (Text)
-import System.Glib.FFI
-import Graphics.UI.Gtk.WebKit.WebView
+import qualified Data.Text as T
+import GHCJS.DOM.File
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
 import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import Reflex.Dom.Xhr.ResponseType
-import Reflex.Dom.Xhr.Exception
-import Control.Concurrent.MVar
-import Control.Exception.Base
 import Graphics.UI.Gtk.WebKit.Types hiding (Text)
+import Reflex.Dom.Xhr.Exception
+import Reflex.Dom.Xhr.ResponseType
+import System.Glib.FFI
 
 import Reflex.Dom.Internal.Foreign
 
@@ -23,20 +27,32 @@ import Text.RawString.QQ
 
 data XMLHttpRequest
    = XMLHttpRequest { xhrValue :: JSValueRef
-                    , xhrContext :: JSContextRef
+                    , xhrContext :: JSContextRef --TODO: Get rid of this
                     }
    deriving (Eq, Ord)
 
-stringToJSValue :: JSContextRef -> String -> IO JSValueRef
-stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring s
+class IsXhrPayload a where
+  xmlHttpRequestSend :: XMLHttpRequest -> a -> IO ()
 
-fromResponseType :: XhrResponseType -> String
+instance IsXhrPayload () where
+  xmlHttpRequestSend xhr _ = xmlHttpRequestSendPayload xhr Nothing
+
+instance IsXhrPayload Text where
+  xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just
+
+instance IsXhrPayload File where
+  xmlHttpRequestSend = error "xmlHttpRequestSend{File}: not implemented"
+
+stringToJSValue :: JSContextRef -> Text -> IO JSValueRef
+stringToJSValue ctx s = jsvaluemakestring ctx =<< jsstringcreatewithutf8cstring (T.unpack s)
+
+fromResponseType :: XhrResponseType -> Text
 fromResponseType XhrResponseType_Default = ""
 fromResponseType XhrResponseType_ArrayBuffer = "arraybuffer"
 fromResponseType XhrResponseType_Blob = "blob"
 fromResponseType XhrResponseType_Text = "text"
 
-toResponseType :: String -> Maybe XhrResponseType
+toResponseType :: Text -> Maybe XhrResponseType
 toResponseType "" = Just XhrResponseType_Default
 toResponseType "arraybuffer" = Just XhrResponseType_ArrayBuffer
 toResponseType "blob" = Just XhrResponseType_Blob
@@ -50,7 +66,7 @@ xmlHttpRequestNew wv = withWebViewContext wv $ \jsContext -> do
   jsvalueprotect jsContext xhr'
   return $ XMLHttpRequest xhr' jsContext
 
-xmlHttpRequestOpen :: XMLHttpRequest -> String -> String -> Bool -> String -> String -> IO ()
+xmlHttpRequestOpen :: XMLHttpRequest -> Text -> Text -> Bool -> Text -> Text -> IO ()
 xmlHttpRequestOpen xhr method url async user password = do
   let c = xhrContext xhr
   method' <- stringToJSValue c method
@@ -97,24 +113,22 @@ xmlHttpRequestGetResponse xhr = do
   script <- jsstringcreatewithutf8cstring "this.response"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
   isNull <- jsvalueisnull c t
-  case isNull of
-       True -> return Nothing
-       False ->  case mrt of
-         Just XhrResponseType_ArrayBuffer -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer c t
-         Just XhrResponseType_Blob -> Just . XhrResponseBody_Blob . Blob . castForeignPtr <$> newForeignPtr_ t
-         Just XhrResponseType_Default -> fmap (XhrResponseBody_Default . T.pack) <$> fromJSStringMaybe c t
-         Just XhrResponseType_Text -> fmap (XhrResponseBody_Text . T.pack) <$> fromJSStringMaybe c t
-         _ -> return Nothing
+  if isNull then return Nothing else case mrt of
+    Just XhrResponseType_ArrayBuffer -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer c t
+    Just XhrResponseType_Blob -> Just . XhrResponseBody_Blob . Blob . castForeignPtr <$> newForeignPtr_ t
+    Just XhrResponseType_Default -> fmap XhrResponseBody_Default <$> fromJSStringMaybe c t
+    Just XhrResponseType_Text -> fmap XhrResponseBody_Text <$> fromJSStringMaybe c t
+    _ -> return Nothing
 
 xmlHttpRequestGetResponseText :: XMLHttpRequest -> IO (Maybe Text)
 xmlHttpRequestGetResponseText xhr = do
   let c = xhrContext xhr
   script <- jsstringcreatewithutf8cstring "this.responseText"
   t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
-  fmap (fmap T.pack) $ fromJSStringMaybe c t
+  fromJSStringMaybe c t
 
-xmlHttpRequestSend :: XMLHttpRequest -> Maybe String -> IO ()
-xmlHttpRequestSend xhr payload = do
+xmlHttpRequestSendPayload :: XMLHttpRequest -> Maybe Text -> IO ()
+xmlHttpRequestSendPayload xhr payload = do
   let c = xhrContext xhr
   result <- newEmptyMVar
   let wrapper' x = wrapper $ \_ _ _ _ _ _ -> putMVar result x >> jsvaluemakeundefined c
@@ -124,17 +138,11 @@ xmlHttpRequestSend xhr payload = do
       onError <- jsobjectmakefunctionwithcallback c nullPtr e
       bracket (wrapper' Nothing) freeHaskellFunPtr $ \l -> do
         onLoad <- jsobjectmakefunctionwithcallback c nullPtr l
-        (o,s) <- case payload of
-                  Nothing -> do
-                    d <- jsvaluemakeundefined c
-                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
-                    s <- jsstringcreatewithutf8cstring send
-                    return (o,s)
-                  Just payload' -> do
-                    d <- stringToJSValue c payload'
-                    o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
-                    s <- jsstringcreatewithutf8cstring send
-                    return (o,s)
+        d <- case payload of
+                  Nothing -> jsvaluemakeundefined c
+                  Just payload' -> stringToJSValue c payload'
+        o <- toJSObject c [xhrValue xhr, d, onError, onAbort, onLoad]
+        s <- jsstringcreatewithutf8cstring send
         _ <- jsevaluatescript c s o nullPtr 1 nullPtr
         takeMVar result >>= mapM_ throwIO
   where
@@ -166,7 +174,7 @@ xmlHttpRequestSend xhr payload = do
       })(this[0], this[1], this[2], this[3], this[4])
     |]
 
-xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> String -> String -> IO ()
+xmlHttpRequestSetRequestHeader :: XMLHttpRequest -> Text -> Text -> IO ()
 xmlHttpRequestSetRequestHeader xhr header value = do
   let c = xhrContext xhr
   header' <- stringToJSValue c header
@@ -176,7 +184,7 @@ xmlHttpRequestSetRequestHeader xhr header value = do
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
 
-xmlHttpRequestSetResponseType :: XMLHttpRequest -> String -> IO ()
+xmlHttpRequestSetResponseType :: XMLHttpRequest -> Text -> IO ()
 xmlHttpRequestSetResponseType xhr t = do
   let c = xhrContext xhr
   t' <- stringToJSValue c t

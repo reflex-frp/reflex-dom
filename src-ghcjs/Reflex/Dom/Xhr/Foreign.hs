@@ -1,4 +1,7 @@
-{-# LANGUAGE ForeignFunctionInterface, JavaScriptFFI, OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
@@ -6,19 +9,20 @@ module Reflex.Dom.Xhr.Foreign (
   , module Reflex.Dom.Xhr.Foreign
 ) where
 
-import Prelude hiding (error)
+import Control.Exception (catch, throwIO)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import GHCJS.DOM.Types hiding (Text)
 import GHCJS.DOM
 import GHCJS.DOM.Enums
-import GHCJS.DOM.XMLHttpRequest
-import Data.Maybe (fromMaybe)
-import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.EventM (EventM, on)
+import GHCJS.DOM.EventTarget (dispatchEvent)
+import GHCJS.DOM.Types hiding (Text)
+import GHCJS.DOM.XMLHttpRequest
+import GHCJS.Types
+import Prelude hiding (error)
 import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
-import Control.Exception (catch, throwIO)
 
 prepareWebView :: WebView -> IO ()
 prepareWebView _ = return ()
@@ -36,9 +40,30 @@ convertException e = case e of
   XHRError -> XhrException_Error
   XHRAborted -> XhrException_Aborted
 
+class IsXhrPayload a where
+  sendXhrPayload :: XMLHttpRequest -> a -> IO ()
+
+instance IsXhrPayload () where
+  sendXhrPayload xhr _ = send xhr
+
+instance IsXhrPayload String where
+  sendXhrPayload = sendString
+
+instance IsXhrPayload FormData where
+  sendXhrPayload = sendFormData
+
+instance IsXhrPayload Document where
+  sendXhrPayload = sendDocument
+
+instance IsXhrPayload Blob where
+  sendXhrPayload = sendBlob
+
+newtype XhrPayload = XhrPayload { unXhrPayload :: JSVal }
+
 -- This used to be a non blocking call, but now it uses an interruptible ffi
-xmlHttpRequestSend :: ToJSString payload => XMLHttpRequest -> Maybe payload -> IO ()
-xmlHttpRequestSend self p = (maybe (send self) (sendString self) p) `catch` (throwIO . convertException)
+xmlHttpRequestSend :: IsXhrPayload payload => XMLHttpRequest -> payload -> IO ()
+xmlHttpRequestSend self p = sendXhrPayload self p `catch` (throwIO . convertException)
+
 
 xmlHttpRequestSetRequestHeader :: (ToJSString header, ToJSString value)
                                => XMLHttpRequest -> header -> value -> IO ()
@@ -141,11 +166,11 @@ xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
   rt <- xmlHttpRequestGetResponseType xhr
   case rt of
-       Just XhrResponseType_Blob -> return $ fmap (XhrResponseBody_Blob . castToBlob) mr
-       Just XhrResponseType_Text -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_Default -> fmap (Just . XhrResponseBody_Text) $ xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_ArrayBuffer -> case (fmap unGObject mr) of
+       Just XhrResponseType_Blob -> return $ XhrResponseBody_Blob . castToBlob <$> mr
+       Just XhrResponseType_Text -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+       Just XhrResponseType_ArrayBuffer -> case fmap unGObject mr of
          Nothing -> return Nothing
-         Just ptr -> fmap (Just . XhrResponseBody_ArrayBuffer) $ bsFromArrayBuffer ptr ptr
+         Just ptr -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer ptr ptr
        _ -> return Nothing
 
