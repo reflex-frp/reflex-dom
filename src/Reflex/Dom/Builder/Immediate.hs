@@ -47,7 +47,7 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
-                       removeChild, toNode, setNodeValue)
+                       removeChild, setNodeValue, toNode)
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
                         WheelEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
 import qualified GHCJS.DOM.Types as DOM
