@@ -16,6 +16,7 @@ module Reflex.Dom.Old
        , buildEmptyElement
        , buildEmptyElementNS
        , deleteBetweenExclusive
+       , onEventName
        ) where
 
 import Control.Arrow ((***))
@@ -31,8 +32,9 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as DOM
+import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.Node (getParentNode, getPreviousSibling, removeChild, toNode)
-import GHCJS.DOM.Types (IsNode)
+import GHCJS.DOM.Types (IsElement, IsNode)
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
@@ -126,3 +128,6 @@ deleteBetweenExclusive s e = do
               _ <- removeChild currentParent $ Just x
               go
       go
+
+onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> IO (IO ())
+onEventName = elementOnEventName
