@@ -11,6 +11,9 @@ module Reflex.Dom.Old
        , addVoidAction
        , AttributeMap
        , Attributes (..)
+       , buildElement
+       , buildEmptyElement
+       , buildEmptyElementNS
        ) where
 
 import Control.Arrow ((***))
@@ -68,11 +71,22 @@ addVoidAction = performEvent_
 
 type AttributeMap = Map String String
 
+buildElement :: Attributes m attrs => String -> attrs -> m a -> m (DOM.Element, a)
+buildElement = buildElementNS Nothing
+
+buildEmptyElement :: Monad m => Attributes m attrs => String -> attrs -> m DOM.Element
+buildEmptyElement elementTag attrs = fst <$> buildElementNS Nothing elementTag attrs blank
+
+buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe String -> String -> attrs -> m DOM.Element
+buildEmptyElementNS ns elementTag attrs = fst <$> buildElementNS ns elementTag attrs blank
+
 class Attributes m attrs where
-  buildElement :: String -> attrs -> m a -> m (DOM.Element, a)
+  buildElementNS :: Maybe String -> String -> attrs -> m a -> m (DOM.Element, a)
 
 instance MonadWidget t m => Attributes m (Map String String) where
-  buildElement elementTag attrs child = buildElementInternal elementTag child =<< addStaticAttributes attrs def
+  buildElementNS ns elementTag attrs child = do
+    let cfg = def & elementConfig_namespace .~ fmap T.pack ns
+    buildElementInternal elementTag child =<< addStaticAttributes attrs cfg
 
 addStaticAttributes :: Applicative m => Map String String -> ElementConfig er t m -> m (ElementConfig er t m)
 addStaticAttributes attrs cfg = do
@@ -80,7 +94,9 @@ addStaticAttributes attrs cfg = do
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
 instance MonadWidget t m => Attributes m (Dynamic t (Map String String)) where
-  buildElement elementTag attrs child = buildElementInternal elementTag child =<< addDynamicAttributes attrs def
+  buildElementNS ns elementTag attrs child = do
+    let cfg = def & elementConfig_namespace .~ fmap T.pack ns
+    buildElementInternal elementTag child =<< addDynamicAttributes attrs cfg
 
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map String String) -> ElementConfig er t m -> m (ElementConfig er t m)
 addDynamicAttributes attrs cfg = do
