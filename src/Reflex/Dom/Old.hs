@@ -17,6 +17,7 @@ module Reflex.Dom.Old
        , buildEmptyElementNS
        , deleteBetweenExclusive
        , onEventName
+       , schedulePostBuild
        ) where
 
 import Control.Arrow ((***))
@@ -131,3 +132,8 @@ deleteBetweenExclusive s e = do
 
 onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> IO (IO ())
 onEventName = elementOnEventName
+
+schedulePostBuild :: (PostBuild t m, PerformEvent t m) => WidgetHost m () -> m ()
+schedulePostBuild w = do
+  postBuild <- getPostBuild
+  performEvent_ $ w <$ postBuild
