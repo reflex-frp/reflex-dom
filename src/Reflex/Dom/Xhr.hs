@@ -34,6 +34,7 @@ module Reflex.Dom.Xhr
   , xhrRequestConfig_responseType
   , xhrRequestConfig_sendData
   , xhrRequestConfig_user
+  , xhrRequestConfig_withCredentials
   , xhrRequest_config
   , xhrRequest_method
   , xhrRequest_url
