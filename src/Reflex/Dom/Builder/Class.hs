@@ -47,13 +47,14 @@ class DomSpace d where
   type DomHandler d :: * -> * -> *
   type DomHandler1 d :: (EventTag -> *) -> (EventTag -> *) -> * --TODO: Why can't this be k -> * ?
   type RawEvent d :: EventTag -> *
+  type RawTextNode d :: *
   type RawElement d :: *
   defaultEventHandler :: proxy d -> DomHandler1 d (Pair1 EventName (RawEvent d)) (Maybe1 EventResult)
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
 class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
-  textNode :: TextNodeConfig t -> m (TextNode t)
+  textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   element :: Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
   -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
   -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
@@ -75,7 +76,9 @@ instance (Reflex t) => Default (TextNodeConfig t) where
     , _textNodeConfig_setContents = never
     }
 
-data TextNode t = TextNode
+data TextNode d t = TextNode
+  { _textNode_raw :: RawTextNode d
+  }
 
 type AttributeName = (Maybe Namespace, Text)
 
@@ -329,7 +332,7 @@ type RunStateless t = forall n b. Monad n => t n b -> n b
 liftWithStateless :: forall m t a. (Monad m, MonadTransControlStateless t) => (RunStateless t -> m a) -> t m a
 liftWithStateless a = liftWith $ \run -> a $ \x -> fromStT (Proxy :: Proxy t) <$> run x
 
-liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode t)
+liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode (DomBuilderSpace m) t)
 liftTextNode = lift . textNode
 
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (f m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)

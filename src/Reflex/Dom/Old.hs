@@ -18,6 +18,7 @@ module Reflex.Dom.Old
        , deleteBetweenExclusive
        , onEventName
        , schedulePostBuild
+       , text'
        ) where
 
 import Control.Arrow ((***))
@@ -32,10 +33,10 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import Foreign.JavaScript.TH
-import qualified GHCJS.DOM.Element as DOM
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.Node (getParentNode, getPreviousSibling, removeChild, toNode)
 import GHCJS.DOM.Types (IsElement, IsNode)
+import qualified GHCJS.DOM.Types as DOM
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
@@ -137,3 +138,6 @@ schedulePostBuild :: (PostBuild t m, PerformEvent t m) => WidgetHost m () -> m (
 schedulePostBuild w = do
   postBuild <- getPostBuild
   performEvent_ $ w <$ postBuild
+
+text' :: MonadWidget t m => String -> m DOM.Text
+text' s = _textNode_raw <$> textNode (def & textNodeConfig_initialContents .~ T.pack s)

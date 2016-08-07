@@ -110,6 +110,7 @@ data StaticDomEvent (a :: k)
 data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 
 instance DomSpace StaticDomSpace where
+  type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ByteString
   type RawEvent StaticDomSpace = StaticDomEvent
   type DomHandler StaticDomSpace = StaticDomHandler
@@ -122,7 +123,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
     let escape = BL.toStrict . toLazyByteString . fromHtmlEscapedText
     modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
-    return TextNode
+    return $ TextNode ()
 
   {-# INLINABLE element #-}
   element elementTag cfg child = do

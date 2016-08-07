@@ -190,6 +190,7 @@ instance DomSpace GhcjsDomSpace where
   type DomHandler GhcjsDomSpace = GhcjsDomHandler
   type DomHandler1 GhcjsDomSpace = GhcjsDomHandler1
   type RawEvent GhcjsDomSpace = GhcjsDomEvent
+  type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.Element
   {-# INLINABLE defaultEventHandler #-}
   defaultEventHandler _ = GhcjsDomHandler1 $ \(Pair1 en (GhcjsDomEvent evt)) -> do
@@ -205,7 +206,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   textNode (TextNodeConfig initialContents eSetContents) = do
     n <- textNodeInternal initialContents
     lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
-    return TextNode
+    return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
   {-# INLINABLE placeholder #-}
