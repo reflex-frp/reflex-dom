@@ -182,6 +182,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (InputElementCo
 data InputElement er d t
    = InputElement { _inputElement_value :: Dynamic t Text
                   , _inputElement_checked :: Dynamic t Bool
+                  , _inputElement_checkedChange :: Event t Bool
                   , _inputElement_input :: Event t Text
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t

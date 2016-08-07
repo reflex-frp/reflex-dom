@@ -194,7 +194,7 @@ instance Reflex t => Default (CheckboxConfig t) where
 
 data Checkbox t
    = Checkbox { _checkbox_value :: Dynamic t Bool
---              , _checkbox_change :: Event t Bool
+              , _checkbox_change :: Event t Bool
               }
 
 -- | Create an editable checkbox
@@ -212,6 +212,7 @@ checkbox checked config = do
     & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
+    , _checkbox_change = _inputElement_checkedChange i
     }
 
 type family CheckboxViewEventResultType (en :: EventTag) :: * where

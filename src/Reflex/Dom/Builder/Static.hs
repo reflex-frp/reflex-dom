@@ -152,7 +152,14 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     let v0 = constDyn $ cfg ^. inputElementConfig_initialValue
     let c0 = constDyn $ cfg ^. inputElementConfig_initialChecked
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
-    return $ InputElement v0 c0 never hasFocus e
+    return $ InputElement
+      { _inputElement_value = v0
+      , _inputElement_checked = c0
+      , _inputElement_checkedChange = never
+      , _inputElement_input = never
+      , _inputElement_hasFocus = hasFocus
+      , _inputElement_element = e
+      }
 
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
