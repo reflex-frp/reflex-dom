@@ -128,10 +128,10 @@ type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, Mona
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  Just e <- ImmediateDomBuilderT $ case cfg ^. namespace of
+  Just e <- ImmediateDomBuilderT $ fmap DOM.castToHTMLElement <$> case cfg ^. namespace of
     Nothing -> createElement doc (Just elementTag)
     Just ens -> createElementNS doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(mAttrNamespace, n) v -> case mAttrNamespace of
@@ -191,7 +191,9 @@ instance DomSpace GhcjsDomSpace where
   type DomHandler1 GhcjsDomSpace = GhcjsDomHandler1
   type RawEvent GhcjsDomSpace = GhcjsDomEvent
   type RawTextNode GhcjsDomSpace = DOM.Text
-  type RawElement GhcjsDomSpace = DOM.Element
+  type RawElement GhcjsDomSpace = DOM.HTMLElement
+  type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
+  type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
   {-# INLINABLE defaultEventHandler #-}
   defaultEventHandler _ = GhcjsDomHandler1 $ \(Pair1 en (GhcjsDomEvent evt)) -> do
     Just t <- withIsEvent en $ Event.getTarget evt
@@ -258,6 +260,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
+      , _inputElement_raw = domInputElement
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
@@ -278,7 +281,13 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
-    return $ TextAreaElement v valueChangedByUI hasFocus e
+    return $ TextAreaElement
+      { _textAreaElement_value = v
+      , _textAreaElement_input = valueChangedByUI
+      , _textAreaElement_hasFocus = hasFocus
+      , _textAreaElement_element = e
+      , _textAreaElement_raw = domTextAreaElement
+      }
 
 {-# INLINABLE insertImmediateAbove #-}
 insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)

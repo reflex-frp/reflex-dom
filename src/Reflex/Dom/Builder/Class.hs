@@ -49,6 +49,8 @@ class DomSpace d where
   type RawEvent d :: EventTag -> *
   type RawTextNode d :: *
   type RawElement d :: *
+  type RawInputElement d :: *
+  type RawTextAreaElement d :: *
   defaultEventHandler :: proxy d -> DomHandler1 d (Pair1 EventName (RawEvent d)) (Maybe1 EventResult)
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
@@ -186,6 +188,7 @@ data InputElement er d t
                   , _inputElement_input :: Event t Text
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
+                  , _inputElement_raw :: RawInputElement d
                   }
 
 data TextAreaElementConfig er t m
@@ -207,6 +210,7 @@ data TextAreaElement er d t
                      , _textAreaElement_input :: Event t Text
                      , _textAreaElement_hasFocus :: Dynamic t Bool
                      , _textAreaElement_element :: Element er d t
+                     , _textAreaElement_raw :: RawTextAreaElement d
                      }
 
 makeLenses ''TextNodeConfig

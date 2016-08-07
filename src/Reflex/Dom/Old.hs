@@ -80,17 +80,17 @@ addVoidAction = performEvent_
 
 type AttributeMap = Map String String
 
-buildElement :: Attributes m attrs => String -> attrs -> m a -> m (DOM.Element, a)
+buildElement :: Attributes m attrs => String -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
 buildElement = buildElementNS Nothing
 
-buildEmptyElement :: Monad m => Attributes m attrs => String -> attrs -> m DOM.Element
+buildEmptyElement :: Monad m => Attributes m attrs => String -> attrs -> m (RawElement GhcjsDomSpace)
 buildEmptyElement elementTag attrs = fst <$> buildElementNS Nothing elementTag attrs blank
 
-buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe String -> String -> attrs -> m DOM.Element
+buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe String -> String -> attrs -> m (RawElement GhcjsDomSpace)
 buildEmptyElementNS ns elementTag attrs = fst <$> buildElementNS ns elementTag attrs blank
 
 class Attributes m attrs where
-  buildElementNS :: Maybe String -> String -> attrs -> m a -> m (DOM.Element, a)
+  buildElementNS :: Maybe String -> String -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
 
 instance MonadWidget t m => Attributes m (Map String String) where
   buildElementNS ns elementTag attrs child = do
@@ -112,7 +112,7 @@ addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.fromList . fmap (T.pack *** T.pack) . Map.toList) attrs
   return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
 
-buildElementInternal :: MonadWidget t m => String -> m a -> ElementConfig en t m -> m (DOM.Element, a)
+buildElementInternal :: MonadWidget t m => String -> m a -> ElementConfig en t m -> m (DOM.HTMLElement, a)
 buildElementInternal elementTag child cfg = do
   (e, result) <- element (T.pack elementTag) cfg child
   return (_element_raw e, result)

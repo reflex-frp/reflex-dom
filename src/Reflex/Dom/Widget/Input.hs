@@ -304,8 +304,9 @@ checkboxView dAttrs dValue = do
   i <- inputElement inputElementConfig
   return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 
-data FileInput t
+data FileInput d t
    = FileInput { _fileInput_value :: Dynamic t [File]
+               , _fileInput_element :: RawInputElement d
                }
 
 data FileInputConfig t
@@ -317,18 +318,19 @@ instance Reflex t => Default (FileInputConfig t) where
                         }
 
 fileInput :: forall t m. (MonadIO m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
-          => FileInputConfig t -> m (FileInput t)
+          => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
       dAttrs = insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
-  let cfg = (def :: ElementConfig EventResult t m)
-              { _elementConfig_modifyAttributes = modifyAttrs
-              , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \_ -> do
-                 return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
-              }
-  (eRaw, _) <- element "input" cfg blank
-  let e = castToHTMLInputElement (_element_raw eRaw)
+  let elCfg = (def :: ElementConfig EventResult t m)
+        { _elementConfig_modifyAttributes = modifyAttrs
+        , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \_ -> do
+            return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
+        }
+      cfg = (def :: InputElementConfig EventResult t m) & inputElementConfig_elementConfig .~ elCfg
+  eRaw <- inputElement cfg
+  let e = _inputElement_raw eRaw
   eChange <- wrapDomEvent e (`on` Element.change) $ do
       Just files <- Input.getFiles e
       len <- FileList.getLength files
@@ -336,6 +338,7 @@ fileInput config = do
   dValue <- holdDyn [] eChange
   return $ FileInput
     { _fileInput_value = dValue
+    , _fileInput_element = e
     }
 
 data Dropdown t k
@@ -527,8 +530,8 @@ instance HasValue (TextInput t) where
   type Value (TextInput t) = Dynamic t Text
   value = _textInput_value
 
-instance HasValue (FileInput t) where
-  type Value (FileInput t) = Dynamic t [File]
+instance HasValue (FileInput d t) where
+  type Value (FileInput d t) = Dynamic t [File]
   value = _fileInput_value
 
 instance HasValue (Dropdown t k) where

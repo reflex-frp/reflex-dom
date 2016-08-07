@@ -112,6 +112,8 @@ data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 instance DomSpace StaticDomSpace where
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
+  type RawInputElement StaticDomSpace = ()
+  type RawTextAreaElement StaticDomSpace = ()
   type RawEvent StaticDomSpace = StaticDomEvent
   type DomHandler StaticDomSpace = StaticDomHandler
   type DomHandler1 StaticDomSpace = StaticDomHandler
@@ -159,14 +161,22 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _inputElement_input = never
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
+      , _inputElement_raw = ()
       }
 
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
+    --TODO: Support setValue event
     (e, _domElement) <- element "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let v0 = constDyn $ cfg ^. textAreaElementConfig_initialValue
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
-    return $ TextAreaElement v0 never hasFocus e
+    return $ TextAreaElement
+      { _textAreaElement_value = v0
+      , _textAreaElement_input = never
+      , _textAreaElement_hasFocus = hasFocus
+      , _textAreaElement_element = e
+      , _textAreaElement_raw = ()
+      }
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
