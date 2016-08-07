@@ -111,7 +111,7 @@ data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 
 instance DomSpace StaticDomSpace where
   type RawTextNode StaticDomSpace = ()
-  type RawElement StaticDomSpace = ByteString
+  type RawElement StaticDomSpace = ()
   type RawEvent StaticDomSpace = StaticDomEvent
   type DomHandler StaticDomSpace = StaticDomHandler
   type DomHandler1 StaticDomSpace = StaticDomHandler
@@ -137,7 +137,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
       let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
       modify $ (:) $ mconcat [open, innerHtml, close]
-      return (Element es (error "Static.element RawElement was used"), result)
+      return (Element es (), result)
 
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
