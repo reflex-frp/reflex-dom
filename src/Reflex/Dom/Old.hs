@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Old
@@ -16,13 +17,15 @@ module Reflex.Dom.Old
        , buildEmptyElement
        , buildEmptyElementNS
        , deleteBetweenExclusive
+       , elWith
+       , elWith'
        , onEventName
        , schedulePostBuild
        , text'
        ) where
 
-import Control.Arrow ((***))
-import Control.Lens ((&), (.~))
+import Control.Arrow (first)
+import Control.Lens ((&), (.~), (^.), makeLenses)
 import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
@@ -31,7 +34,7 @@ import Control.Monad.Ref
 import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Text as T
+import Data.Text
 import Foreign.JavaScript.TH
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.Node (getParentNode, getPreviousSibling, removeChild, toNode)
@@ -44,6 +47,13 @@ import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
+
+data ElConfig attrs = ElConfig
+  { _elConfig_namespace :: Maybe Text
+  , _elConfig_attributes :: attrs
+  }
+
+makeLenses ''ElConfig
 
 --TODO: HasDocument is still not accounted for
 type MonadWidget t m =
@@ -78,43 +88,43 @@ _el_element = _element_raw
 addVoidAction :: MonadWidget t m => Event t (WidgetHost m ()) -> m ()
 addVoidAction = performEvent_
 
-type AttributeMap = Map String String
+type AttributeMap = Map Text Text
 
-buildElement :: Attributes m attrs => String -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
+buildElement :: Attributes m attrs => Text -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
 buildElement = buildElementNS Nothing
 
-buildEmptyElement :: Monad m => Attributes m attrs => String -> attrs -> m (RawElement GhcjsDomSpace)
+buildEmptyElement :: Monad m => Attributes m attrs => Text -> attrs -> m (RawElement GhcjsDomSpace)
 buildEmptyElement elementTag attrs = fst <$> buildElementNS Nothing elementTag attrs blank
 
-buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe String -> String -> attrs -> m (RawElement GhcjsDomSpace)
+buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe Text -> Text -> attrs -> m (RawElement GhcjsDomSpace)
 buildEmptyElementNS ns elementTag attrs = fst <$> buildElementNS ns elementTag attrs blank
 
 class Attributes m attrs where
-  buildElementNS :: Maybe String -> String -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
+  buildElementNS :: Maybe Text -> Text -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
 
-instance MonadWidget t m => Attributes m (Map String String) where
+instance MonadWidget t m => Attributes m (Map Text Text) where
   buildElementNS ns elementTag attrs child = do
-    let cfg = def & elementConfig_namespace .~ fmap T.pack ns
+    let cfg = def & elementConfig_namespace .~ ns
     buildElementInternal elementTag child =<< addStaticAttributes attrs cfg
 
-addStaticAttributes :: Applicative m => Map String String -> ElementConfig er t m -> m (ElementConfig er t m)
+addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t m -> m (ElementConfig er t m)
 addStaticAttributes attrs cfg = do
-  let initialAttrs = Map.fromList $ fmap (((,) Nothing . T.pack) *** T.pack) $ Map.toList attrs
+  let initialAttrs = Map.fromList $ fmap (first ((,) Nothing)) $ Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
-instance MonadWidget t m => Attributes m (Dynamic t (Map String String)) where
+instance MonadWidget t m => Attributes m (Dynamic t (Map Text Text)) where
   buildElementNS ns elementTag attrs child = do
-    let cfg = def & elementConfig_namespace .~ fmap T.pack ns
+    let cfg = def & elementConfig_namespace .~ ns
     buildElementInternal elementTag child =<< addDynamicAttributes attrs cfg
 
-addDynamicAttributes :: PostBuild t m => Dynamic t (Map String String) -> ElementConfig er t m -> m (ElementConfig er t m)
+addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t m -> m (ElementConfig er t m)
 addDynamicAttributes attrs cfg = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.fromList . fmap (T.pack *** T.pack) . Map.toList) attrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
 
-buildElementInternal :: MonadWidget t m => String -> m a -> ElementConfig en t m -> m (DOM.HTMLElement, a)
+buildElementInternal :: MonadWidget t m => Text -> m a -> ElementConfig en t m -> m (DOM.HTMLElement, a)
 buildElementInternal elementTag child cfg = do
-  (e, result) <- element (T.pack elementTag) cfg child
+  (e, result) <- element elementTag cfg child
   return (_element_raw e, result)
 
 -- | s and e must both be children of the same node and s must precede e
@@ -139,5 +149,18 @@ schedulePostBuild w = do
   postBuild <- getPostBuild
   performEvent_ $ w <$ postBuild
 
-text' :: MonadWidget t m => String -> m DOM.Text
-text' s = _textNode_raw <$> textNode (def & textNodeConfig_initialContents .~ T.pack s)
+text' :: MonadWidget t m => Text -> m DOM.Text
+text' s = _textNode_raw <$> textNode (def & textNodeConfig_initialContents .~ s)
+
+instance HasAttributes (ElConfig attrs) where
+  type Attrs (ElConfig attrs) = attrs
+  attributes = elConfig_attributes
+
+instance HasNamespace (ElConfig attrs) where
+  namespace = elConfig_namespace
+
+elWith :: (Functor m, Attributes m attrs) => Text -> ElConfig attrs -> m a -> m a
+elWith elementTag cfg child = snd <$> elWith' elementTag cfg child
+
+elWith' :: Attributes m attrs => Text -> ElConfig attrs -> m a -> m (DOM.HTMLElement, a)
+elWith' elementTag cfg child = buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
