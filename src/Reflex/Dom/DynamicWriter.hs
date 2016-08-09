@@ -205,6 +205,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
       }
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
+  placeRawElement = lift . placeRawElement
   wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }

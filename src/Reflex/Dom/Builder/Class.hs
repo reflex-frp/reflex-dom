@@ -54,6 +54,7 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
   placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
   textAreaElement :: TextAreaElementConfig er t m -> m (TextAreaElement er (DomBuilderSpace m) t)
+  placeRawElement :: RawElement (DomBuilderSpace m) -> m ()
   wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t m -> m (Element er (DomBuilderSpace m) t)
 
 type Namespace = Text
@@ -326,6 +327,7 @@ instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   placeholder = liftPlaceholder
   inputElement = liftInputElement
   textAreaElement = liftTextAreaElement
+  placeRawElement = lift . placeRawElement
   wrapRawElement = liftWrapRawElement
 
 type LiftDomBuilder t f m =

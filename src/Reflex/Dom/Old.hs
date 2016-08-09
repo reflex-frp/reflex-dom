@@ -28,6 +28,7 @@ module Reflex.Dom.Old
        , onEventName
        , schedulePostBuild
        , text'
+       , unsafePlaceElement
        , wrapElement
        ) where
 
@@ -207,3 +208,8 @@ wrapElement eh e = do
         { _ghcjsEventSpec_handler = h
         }
     }
+
+unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResult (DomBuilderSpace m) t)
+unsafePlaceElement e = do
+  placeRawElement e
+  wrapRawElement e def

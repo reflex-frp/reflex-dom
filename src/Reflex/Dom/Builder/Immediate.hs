@@ -305,6 +305,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , _textAreaElement_element = e
       , _textAreaElement_raw = domTextAreaElement
       }
+  placeRawElement = append
   wrapRawElement = wrap
 
 {-# INLINABLE insertImmediateAbove #-}

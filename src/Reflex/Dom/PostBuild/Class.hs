@@ -64,6 +64,7 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftPostBuildTElementConfig
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftPostBuildTElementConfig
+  placeRawElement = lift . placeRawElement
   wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
 
 instance MonadSample t m => MonadSample t (PostBuildT t m) where

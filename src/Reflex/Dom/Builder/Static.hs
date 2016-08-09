@@ -177,7 +177,8 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _textAreaElement_element = e
       , _textAreaElement_raw = ()
       }
-  wrapRawElement _ _ = return $ Element (EventSelector $ const never) ()
+  placeRawElement () = return ()
+  wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
