@@ -425,17 +425,15 @@ type family EventType en where
   EventType 'SelectTag = UIEvent
   EventType 'SubmitTag = DOM.Event
   EventType 'WheelTag = WheelEvent
-  {-
   EventType 'BeforecutTag = DOM.Event
   EventType 'CutTag = DOM.Event
   EventType 'BeforecopyTag = DOM.Event
   EventType 'CopyTag = DOM.Event
   EventType 'BeforepasteTag = DOM.Event
   EventType 'PasteTag = DOM.Event
--}
   EventType 'ResetTag = DOM.Event
   EventType 'SearchTag = DOM.Event
---  EventType 'SelectstartTag = DOM.Event
+  EventType 'SelectstartTag = DOM.Event
   EventType 'TouchstartTag = TouchEvent
   EventType 'TouchmoveTag = TouchEvent
   EventType 'TouchendTag = TouchEvent
@@ -475,17 +473,15 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Mouseover -> return ()
   Select -> return ()
   Submit -> return ()
-  {-
   Beforecut -> return ()
   Cut -> return ()
   Beforecopy -> return ()
   Copy -> return ()
   Beforepaste -> return ()
   Paste -> return ()
--}
   Reset -> return ()
   Search -> return ()
---  Selectstart -> return ()
+  Selectstart -> return ()
   Touchstart -> return ()
   Touchmove -> return ()
   Touchend -> return ()
@@ -527,17 +523,15 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Mouseover -> return ()
   Select -> return ()
   Submit -> return ()
-  {-
   Beforecut -> return ()
   Cut -> return ()
   Beforecopy -> return ()
   Copy -> return ()
   Beforepaste -> return ()
   Paste -> return ()
--}
   Reset -> return ()
   Search -> return ()
---  Selectstart -> return ()
+  Selectstart -> return ()
   Touchstart -> return ()
   Touchmove -> return ()
   Touchend -> return ()
@@ -579,17 +573,15 @@ withIsEvent en r = case en of
   Mouseover -> r
   Select -> r
   Submit -> r
-  {-
   Beforecut -> r
   Cut -> r
   Beforecopy -> r
   Copy -> r
   Beforepaste -> r
   Paste -> r
--}
   Reset -> r
   Search -> r
---  Selectstart -> r
+  Selectstart -> r
   Touchstart -> r
   Touchmove -> r
   Touchend -> r
@@ -633,17 +625,15 @@ elementOnEventName en e = case en of
   Select -> on e Element.select
   Submit -> on e Element.submit
   Wheel -> on e Element.wheel
-  {-
   Beforecut -> on e Element.beforeCut
   Cut -> on e Element.cut
   Beforecopy -> on e Element.beforeCopy
   Copy -> on e Element.copy
   Beforepaste -> on e Element.beforePaste
   Paste -> on e Element.paste
--}
   Reset -> on e Element.reset
   Search -> on e Element.search
---  Selectstart -> on e Element.selectStart
+  Selectstart -> on e Element.selectStart
   Touchstart -> on e Element.touchStart
   Touchmove -> on e Element.touchMove
   Touchend -> on e Element.touchEnd
@@ -685,17 +675,15 @@ windowOnEventName en e = case en of
   Select -> on e Window.select
   Submit -> on e Window.submit
   Wheel -> on e Window.wheel
-  {-
-  Beforecut -> on e Window.beforeCut
-  Cut -> on e Window.cut
-  Beforecopy -> on e Window.beforeCopy
-  Copy -> on e Window.copy
-  Beforepaste -> on e Window.beforePaste
-  Paste -> on e Window.paste
--}
+  Beforecut -> const $ return $ return () --TODO
+  Cut -> const $ return $ return () --TODO
+  Beforecopy -> const $ return $ return () --TODO
+  Copy -> const $ return $ return () --TODO
+  Beforepaste -> const $ return $ return () --TODO
+  Paste -> const $ return $ return () --TODO
   Reset -> on e Window.reset
   Search -> on e Window.search
---  Selectstart -> on e Window.selectStart
+  Selectstart -> const $ return $ return () --TODO
   Touchstart -> on e Window.touchStart
   Touchmove -> on e Window.touchMove
   Touchend -> on e Window.touchEnd

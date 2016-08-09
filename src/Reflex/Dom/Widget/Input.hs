@@ -248,17 +248,15 @@ regularToCheckboxViewEventType en r = case en of
   Select -> r
   Submit -> r
   Wheel -> r
-  {-
   Beforecut -> r
   Cut -> r
   Beforecopy -> r
   Copy -> r
   Beforepaste -> r
   Paste -> r
--}
   Reset -> r
   Search -> r
---  Selectstart -> r
+  Selectstart -> r
   Touchstart -> r
   Touchmove -> r
   Touchend -> r
@@ -392,17 +390,15 @@ regularToDropdownViewEventType en r = case en of
   Select -> r
   Submit -> r
   Wheel -> r
-  {-
   Beforecut -> r
   Cut -> r
   Beforecopy -> r
   Copy -> r
   Beforepaste -> r
   Paste -> r
--}
   Reset -> r
   Search -> r
---  Selectstart -> r
+  Selectstart -> r
   Touchstart -> r
   Touchmove -> r
   Touchend -> r

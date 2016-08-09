@@ -42,17 +42,15 @@ data EventTag
    | SelectTag
    | SubmitTag
    | WheelTag
-     {-
    | BeforecutTag
    | CutTag
    | BeforecopyTag
    | CopyTag
    | BeforepasteTag
    | PasteTag
--}
    | ResetTag
    | SearchTag
---   | SelectstartTag
+   | SelectstartTag
    | TouchstartTag
    | TouchmoveTag
    | TouchendTag
@@ -92,17 +90,15 @@ data EventName :: EventTag -> * where
   Select :: EventName 'SelectTag
   Submit :: EventName 'SubmitTag
   Wheel :: EventName 'WheelTag
-  {-
   Beforecut :: EventName 'BeforecutTag
   Cut :: EventName 'CutTag
   Beforecopy :: EventName 'BeforecopyTag
   Copy :: EventName 'CopyTag
   Beforepaste :: EventName 'BeforepasteTag
   Paste :: EventName 'PasteTag
--}
   Reset :: EventName 'ResetTag
   Search :: EventName 'SearchTag
---  Selectstart :: EventName 'SelectstartTag
+  Selectstart :: EventName 'SelectstartTag
   Touchstart :: EventName 'TouchstartTag
   Touchmove :: EventName 'TouchmoveTag
   Touchend :: EventName 'TouchendTag
@@ -143,17 +139,15 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'MousewheelTag = ()
   EventResultType 'SelectTag = ()
   EventResultType 'SubmitTag = ()
-  {-
   EventResultType 'BeforecutTag = ()
   EventResultType 'CutTag = ()
   EventResultType 'BeforecopyTag = ()
   EventResultType 'CopyTag = ()
   EventResultType 'BeforepasteTag = ()
   EventResultType 'PasteTag = ()
--}
   EventResultType 'ResetTag = ()
   EventResultType 'SearchTag = ()
---  EventResultType 'SelectstartTag = ()
+  EventResultType 'SelectstartTag = ()
   EventResultType 'TouchstartTag = ()
   EventResultType 'TouchmoveTag = ()
   EventResultType 'TouchendTag = ()
