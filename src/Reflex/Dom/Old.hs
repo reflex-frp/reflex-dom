@@ -9,6 +9,7 @@
 module Reflex.Dom.Old
        ( MonadWidget
        , El
+       , _el_clicked
        , _el_element
        , addVoidAction
        , AttributeMap
@@ -173,3 +174,6 @@ emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 
 emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
 emptyElWith' elementTag cfg = liftM fst $ elWith' elementTag cfg $ return ()
+
+_el_clicked :: Reflex t => Element EventResult d t -> Event t ()
+_el_clicked = domEvent Click
