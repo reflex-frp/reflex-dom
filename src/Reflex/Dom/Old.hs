@@ -11,6 +11,7 @@ module Reflex.Dom.Old
        , El
        , _el_clicked
        , _el_element
+       , _el_events
        , addVoidAction
        , AttributeMap
        , Attributes (..)
@@ -35,6 +36,7 @@ import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Ref
 import Data.Default
+import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text
@@ -177,3 +179,6 @@ emptyElWith' elementTag cfg = liftM fst $ elWith' elementTag cfg $ return ()
 
 _el_clicked :: Reflex t => Element EventResult d t -> Event t ()
 _el_clicked = domEvent Click
+
+_el_events :: Element er d t -> EventSelector t (WrapArg er EventName)
+_el_events = _element_events
