@@ -9,7 +9,6 @@ import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
-import Reflex.Dom.Old
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic
@@ -50,13 +49,13 @@ resizeDetectorWithAttrs attrs w = do
       (shrink, _) <- elAttr' "div" containerAttrs $ elAttr "div" ("style" =: (childStyle <> "width: 200%; height: 200%;")) $ return ()
       return (expand, expandChild, shrink, w')
   let reset = do
-        let e = _el_element expand
-            s = _el_element shrink
+        let e = _element_raw expand
+            s = _element_raw shrink
         eow <- getOffsetWidth e
         eoh <- getOffsetHeight e
         let ecw = eow + 10
             ech = eoh + 10
-        setAttribute (_el_element expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
+        setAttribute (_element_raw expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
         esw <- getScrollWidth e
         setScrollLeft e esw
         esh <- getScrollHeight e
@@ -65,18 +64,18 @@ resizeDetectorWithAttrs attrs w = do
         setScrollLeft s ssw
         ssh <- getScrollHeight s
         setScrollTop s ssh
-        lastWidth <- getOffsetWidth (_el_element parent)
-        lastHeight <- getOffsetHeight (_el_element parent)
+        lastWidth <- getOffsetWidth (_element_raw parent)
+        lastHeight <- getOffsetHeight (_element_raw parent)
         return (Just lastWidth, Just lastHeight)
       resetIfChanged ds = do
-        pow <- getOffsetWidth (_el_element parent)
-        poh <- getOffsetHeight (_el_element parent)
+        pow <- getOffsetWidth (_element_raw parent)
+        poh <- getOffsetHeight (_element_raw parent)
         if ds == (Just pow, Just poh)
           then return Nothing
           else fmap Just reset
   pb <- getPostBuild
-  expandScroll <- wrapDomEvent (_el_element expand) (`on` scroll) $ return ()
-  shrinkScroll <- wrapDomEvent (_el_element shrink) (`on` scroll) $ return ()
+  expandScroll <- wrapDomEvent (_element_raw expand) (`on` scroll) $ return ()
+  shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` scroll) $ return ()
   size0 <- performEvent $ fmap (const $ liftIO reset) pb
   rec resize <- performEventAsync $ fmap (\d cb -> liftIO $ cb =<< resetIfChanged d) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]

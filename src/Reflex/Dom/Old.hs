@@ -174,20 +174,22 @@ emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
 emptyElWith' elementTag cfg = liftM fst $ elWith' elementTag cfg $ return ()
 
-{-# DEPRECATED _el_clicked "Use `domEvent Click` instead" #-}
+{-# DEPRECATED _el_clicked "Use 'domEvent Click' instead" #-}
 _el_clicked :: Reflex t => Element EventResult d t -> Event t ()
 _el_clicked = domEvent Click
 
+{-# DEPRECATED _el_element "Use '_element_raw' instead" #-}
 _el_element :: El t -> RawElement GhcjsDomSpace
 _el_element = _element_raw
 
+{-# DEPRECATED _el_events "Use '_element_events' instead; or, if possible, use 'domEvent' instead to retrieve a particular event" #-}
 _el_events :: Element er d t -> EventSelector t (WrapArg er EventName)
 _el_events = _element_events
 
-{-# DEPRECATED _el_keypress "Use `domEvent Keypress` instead" #-}
+{-# DEPRECATED _el_keypress "Use 'domEvent Keypress' instead" #-}
 _el_keypress :: Reflex t => El t -> Event t Int
 _el_keypress = domEvent Keypress
 
-{-# DEPRECATED _el_scrolled "Use `domEvent Scroll` instead" #-}
+{-# DEPRECATED _el_scrolled "Use 'domEvent Scroll' instead" #-}
 _el_scrolled :: Reflex t => El t -> Event t Int
 _el_scrolled = domEvent Scroll
