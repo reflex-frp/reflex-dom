@@ -3,7 +3,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -11,17 +10,16 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.PostBuild.Class where
 
-import Foreign.JavaScript.TH
-import Reflex
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Host.Class
-
 import Control.Lens hiding (element)
 import Control.Monad.Exception
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
+import Foreign.JavaScript.TH
+import Reflex
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Host.Class
 
 class (Reflex t, Monad m) => PostBuild t m | m -> t where
   getPostBuild :: m (Event t ())
@@ -46,8 +44,7 @@ instance Deletable t m => Deletable t (PostBuildT t m) where
 {-# INLINABLE liftPostBuildTElementConfig #-}
 liftPostBuildTElementConfig :: ElementConfig er t (PostBuildT t m) -> ElementConfig er t m
 liftPostBuildTElementConfig cfg = cfg
-  { _elementConfig_eventFilters = _elementConfig_eventFilters cfg
-  , _elementConfig_eventHandler = _elementConfig_eventHandler cfg -- This requires PolyKinds, and will fail to unify types otherwise
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
   }
 
 instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
@@ -67,6 +64,7 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftPostBuildTElementConfig
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftPostBuildTElementConfig
+  wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
 
 instance MonadSample t m => MonadSample t (PostBuildT t m) where
   {-# INLINABLE sample #-}

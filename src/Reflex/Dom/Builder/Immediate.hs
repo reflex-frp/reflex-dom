@@ -10,6 +10,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -127,37 +128,23 @@ type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, Mona
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
-{-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
-makeElement elementTag cfg child = do
-  doc <- askDocument
-  Just e <- ImmediateDomBuilderT $ fmap DOM.castToHTMLElement <$> case cfg ^. namespace of
-    Nothing -> createElement doc (Just elementTag)
-    Just ens -> createElementNS doc (Just ens) (Just elementTag)
-  ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(mAttrNamespace, n) v -> case mAttrNamespace of
-    Nothing -> setAttribute e n v
-    Just ans -> setAttributeNS e (Just ans) n v
+wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
+wrap e cfg = do
   events <- askEvents
-  result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
-    { _immediateDomBuilderEnv_parent = toNode e
-    , _immediateDomBuilderEnv_document = doc
-    , _immediateDomBuilderEnv_events = events
-    }
-  append e
   lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(mAttrNamespace, n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
-  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _elementConfig_eventFilters cfg) $ \(en :=> EventFilter (GhcjsDomHandler f)) -> do
+  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- newIORef Nothing
     _ <- elementOnEventName en e $ do
       evt <- DOM.event
-      (flags, GhcjsDomHandler k) <- liftIO $ f $ GhcjsDomEvent evt
+      (flags, k) <- liftIO $ f $ GhcjsDomEvent evt
       when (_eventFlags_preventDefault flags) $ withIsEvent en DOM.preventDefault
       case _eventFlags_propagation flags of
         Propagation_Continue -> return ()
         Propagation_Stop -> withIsEvent en DOM.stopPropagation
         Propagation_StopImmediate -> withIsEvent en DOM.stopImmediatePropagation
-      mv <- liftIO $ k ()
+      mv <- liftIO k --TODO: Only do this when the event is subscribed
       liftIO $ forM_ mv $ \v -> writeChan events [TriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
   es <- newFanEventWithTrigger $ \(WrapArg en) t -> do
@@ -168,15 +155,35 @@ makeElement elementTag cfg child = do
           writeIORef r Nothing
       Nothing -> elementOnEventName en e $ do
         evt <- DOM.event
-        let GhcjsDomHandler1 h = _elementConfig_eventHandler cfg
-        mv <- liftIO $ h $ Pair1 en (GhcjsDomEvent evt)
+        let h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg
+        mv <- liftIO $ h (en, GhcjsDomEvent evt)
         case mv of
-          Nothing1 -> return ()
-          Just1 v -> liftIO $ do
+          Nothing -> return ()
+          Just v -> liftIO $ do
             --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
             ref <- newIORef $ Just t
             writeChan events [TriggerRef ref :=> TriggerInvocation v (return ())]
-  return ((Element es e, result), e)
+  return $ Element es e
+
+{-# INLINABLE makeElement #-}
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
+makeElement elementTag cfg child = do
+  doc <- askDocument
+  events <- askEvents
+  Just e <- ImmediateDomBuilderT $ fmap DOM.castToHTMLElement <$> case cfg ^. namespace of
+    Nothing -> createElement doc (Just elementTag)
+    Just ens -> createElementNS doc (Just ens) (Just elementTag)
+  ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(mAttrNamespace, n) v -> case mAttrNamespace of
+    Nothing -> setAttribute e n v
+    Just ans -> setAttributeNS e (Just ans) n v
+  result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
+    { _immediateDomBuilderEnv_parent = toNode e
+    , _immediateDomBuilderEnv_document = doc
+    , _immediateDomBuilderEnv_events = events
+    }
+  append e
+  wrapped <- wrap e $ extractRawElementConfig cfg
+  return ((wrapped, result), e)
 
 newtype GhcjsDomHandler a b = GhcjsDomHandler { unGhcjsDomHandler :: a -> IO b }
 
@@ -187,20 +194,30 @@ newtype GhcjsDomEvent en = GhcjsDomEvent { unGhcjsDomEvent :: EventType en }
 data GhcjsDomSpace
 
 instance DomSpace GhcjsDomSpace where
-  type DomHandler GhcjsDomSpace = GhcjsDomHandler
-  type DomHandler1 GhcjsDomSpace = GhcjsDomHandler1
-  type RawEvent GhcjsDomSpace = GhcjsDomEvent
+  type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.HTMLElement
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
-  {-# INLINABLE defaultEventHandler #-}
-  defaultEventHandler _ = GhcjsDomHandler1 $ \(Pair1 en (GhcjsDomEvent evt)) -> do
-    Just t <- withIsEvent en $ Event.getTarget evt
-    mr <- runReaderT (defaultDomEventHandler (Element.castToElement t) en) evt
-    return $ case mr of
-      Nothing -> Nothing1
-      Just r -> Just1 r
+
+newtype GhcjsEventFilter er en = GhcjsEventFilter (GhcjsDomEvent en -> IO (EventFlags, IO (Maybe (er en))))
+
+data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
+
+data Maybe1 f a = Nothing1 | Just1 (f a)
+
+data GhcjsEventSpec er = GhcjsEventSpec
+  { _ghcjsEventSpec_filters :: DMap EventName (GhcjsEventFilter er)
+  , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> IO (Maybe (er en))
+  }
+
+instance er ~ EventResult => Default (GhcjsEventSpec er) where
+  def = GhcjsEventSpec
+    { _ghcjsEventSpec_filters = mempty
+    , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> do
+        Just t <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        runReaderT (defaultDomEventHandler (Element.castToElement t) en) evt
+    }
 
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
   type DomBuilderSpace (ImmediateDomBuilderT t m) = GhcjsDomSpace
@@ -288,6 +305,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , _textAreaElement_element = e
       , _textAreaElement_raw = domTextAreaElement
       }
+  wrapRawElement = wrap
 
 {-# INLINABLE insertImmediateAbove #-}
 insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
@@ -766,3 +784,5 @@ wrapWindow wv _ = do
     { _window_events = events
     , _window_raw = wv
     }
+
+makeLenses ''GhcjsEventSpec

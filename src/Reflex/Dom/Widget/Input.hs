@@ -15,33 +15,10 @@ module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) 
 
 import Prelude
 
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate
-import Reflex.Dom.Class
-import Reflex.Dom.PostBuild.Class
-import Reflex.Dom.Widget.Basic
-
--- For dropdown
+import Control.Lens hiding (element, ix)
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Data.Maybe
-import Data.Semigroup
-import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
-import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
-import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
-import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
-import Reflex.Dom.PerformEvent.Class
-import qualified Text.Read as T
-
--- For fileInput
-import qualified GHCJS.DOM.Element as Element
-import GHCJS.DOM.EventM (on)
-import GHCJS.DOM.Types (File)
--- import qualified GHCJS.DOM.File as File
-import qualified GHCJS.DOM.FileList as FileList
-
-import Control.Lens hiding (element, ix)
-import Control.Monad hiding (forM_)
+import Control.Monad.Reader
 import qualified Data.Bimap as Bimap
 import Data.Default
 import Data.Dependent.Map (DMap)
@@ -49,10 +26,27 @@ import qualified Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Proxy
+import Data.Maybe
+import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
+import GHCJS.DOM.Element (castToElement)
+import qualified GHCJS.DOM.Element as Element
+import GHCJS.DOM.EventM (on)
+import qualified GHCJS.DOM.FileList as FileList
+import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
+import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
+import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
+import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
+import GHCJS.DOM.Types (File)
 import Reflex
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
+import Reflex.Dom.Widget.Basic
+import qualified Text.Read as T
 
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
@@ -279,23 +273,24 @@ checkboxView dAttrs dValue = do
   let permanentAttrs = "type" =: "checkbox"
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
   postBuild <- getPostBuild
-  let filters :: DMap EventName (EventFilter (DomBuilderSpace m) CheckboxViewEventResult)
-      filters = DMap.singleton Click $ EventFilter $ GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
+  let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
+      filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
         Just t <- Event.getTarget evt
         b <- Input.getChecked $ Input.castToHTMLInputElement t
-        return $ (,) preventDefault $ GhcjsDomHandler $ \_ -> return $ Just $ CheckboxViewEventResult b
+        return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
         { _elementConfig_modifyAttributes = modifyAttrs
         , _elementConfig_initialAttributes = Map.mapKeys ((,) Nothing) permanentAttrs
-        , _elementConfig_eventFilters = filters
-        , _elementConfig_eventHandler = GhcjsDomHandler1 $ \p@(Pair1 en _) -> case en of
-            Click -> error "impossible"
-            _ -> do
-              mr <- unGhcjsDomHandler1 (defaultEventHandler (Proxy :: Proxy (DomBuilderSpace m))) p
-              case mr of
-                Nothing1 -> return Nothing1
-                Just1 (EventResult r) -> return $ Just1 $ CheckboxViewEventResult $ regularToCheckboxViewEventType en r
+        , _elementConfig_eventSpec = GhcjsEventSpec
+            { _ghcjsEventSpec_filters = filters
+            , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
+                Click -> error "impossible"
+                _ -> do
+                  Just e <- withIsEvent en $ Event.getTarget evt
+                  mr <- runReaderT (defaultDomEventHandler (castToElement e) en) evt
+                  return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
+            }
         }
       inputElementConfig :: InputElementConfig CheckboxViewEventResult t m
       inputElementConfig = (def :: InputElementConfig EventResult t m)
@@ -323,11 +318,11 @@ fileInput config = do
   let insertType = Map.insert "type" "file"
       dAttrs = insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
-  let elCfg = (def :: ElementConfig EventResult t m)
-        { _elementConfig_modifyAttributes = modifyAttrs
-        , _elementConfig_eventFilters = DMap.singleton Change . EventFilter . GhcjsDomHandler $ \_ -> do
-            return . (,) mempty . GhcjsDomHandler $ \_ -> return . Just $ EventResult ()
-        }
+  let filters = DMap.singleton Change . GhcjsEventFilter $ \_ -> do
+        return . (,) mempty $ return . Just $ EventResult ()
+      elCfg = (def :: ElementConfig EventResult t m)
+        & modifyAttributes .~ modifyAttrs
+        & elementConfig_eventSpec . ghcjsEventSpec_filters .~ filters
       cfg = (def :: InputElementConfig EventResult t m) & inputElementConfig_elementConfig .~ elCfg
   eRaw <- inputElement cfg
   let e = _inputElement_raw eRaw
@@ -426,17 +421,18 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = (def :: ElementConfig EventResult t m)
         { _elementConfig_modifyAttributes = modifyAttrs
-        , _elementConfig_eventFilters = DMap.singleton Change $ EventFilter $ GhcjsDomHandler $ \(GhcjsDomEvent evt) -> do
-            Just t <- Event.getTarget evt
-            Just v <- HTMLSelectElement.getValue $ HTMLSelectElement.castToHTMLSelectElement t
-            return $ (,) mempty $ GhcjsDomHandler $ \_ -> return $ Just $ DropdownViewEventResult v
-        , _elementConfig_eventHandler = GhcjsDomHandler1 $ \p@(Pair1 en _) -> case en of
-            Click -> error "impossible"
-            _ -> do
-              mr <- unGhcjsDomHandler1 (defaultEventHandler (Proxy :: Proxy (DomBuilderSpace m))) p
-              case mr of
-                Nothing1 -> return Nothing1
-                Just1 (EventResult r) -> return $ Just1 $ DropdownViewEventResult $ regularToDropdownViewEventType en r
+        , _elementConfig_eventSpec = GhcjsEventSpec
+            { _ghcjsEventSpec_filters = DMap.singleton Change $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
+                Just t <- Event.getTarget evt
+                Just v <- HTMLSelectElement.getValue $ HTMLSelectElement.castToHTMLSelectElement t
+                return $ (,) mempty $ return $ Just $ DropdownViewEventResult v
+            , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
+                Click -> error "impossible"
+                _ -> do
+                  Just e <- withIsEvent en $ Event.getTarget evt
+                  mr <- runReaderT (defaultDomEventHandler (castToElement e) en) evt
+                  return $ ffor mr $ \(EventResult r) -> DropdownViewEventResult $ regularToDropdownViewEventType en r
+            }
         }
   (eRaw, _) <- element "select" cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
     let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey

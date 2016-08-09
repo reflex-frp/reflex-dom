@@ -29,8 +29,6 @@ import Control.Lens hiding (element)
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
 import Data.Default
-import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
 import Data.Proxy
@@ -39,19 +37,12 @@ import Data.Text (Text)
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
 
-data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
-
-data Maybe1 f a = Nothing1 | Just1 (f a)
-
-class DomSpace d where
-  type DomHandler d :: * -> * -> *
-  type DomHandler1 d :: (EventTag -> *) -> (EventTag -> *) -> * --TODO: Why can't this be k -> * ?
-  type RawEvent d :: EventTag -> *
+class Default (EventSpec d EventResult) => DomSpace d where
+  type EventSpec d :: (EventTag -> *) -> *
   type RawTextNode d :: *
   type RawElement d :: *
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
-  defaultEventHandler :: proxy d -> DomHandler1 d (Pair1 EventName (RawEvent d)) (Maybe1 EventResult)
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
 class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBuilder t m | m -> t where
@@ -63,6 +54,7 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
   placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
   textAreaElement :: TextAreaElementConfig er t m -> m (TextAreaElement er (DomBuilderSpace m) t)
+  wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t m -> m (Element er (DomBuilderSpace m) t)
 
 type Namespace = Text
 
@@ -121,14 +113,11 @@ preventDefault = mempty { _eventFlags_preventDefault = True }
 stopPropagation :: EventFlags
 stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 
-newtype EventFilter d er en = EventFilter (DomHandler d (RawEvent d en) (EventFlags, DomHandler d () (Maybe (er en))))
-
 data ElementConfig er t m
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
                    , _elementConfig_initialAttributes :: Map AttributeName Text
                    , _elementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
-                   , _elementConfig_eventFilters :: DMap EventName (EventFilter (DomBuilderSpace m) er)
-                   , _elementConfig_eventHandler :: DomHandler1 (DomBuilderSpace m) (Pair1 EventName (RawEvent (DomBuilderSpace m))) (Maybe1 er)
+                   , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig er t m) where
@@ -137,8 +126,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
     { _elementConfig_namespace = Nothing
     , _elementConfig_initialAttributes = mempty
     , _elementConfig_modifyAttributes = never
-    , _elementConfig_eventFilters = DMap.empty
-    , _elementConfig_eventHandler = defaultEventHandler (Proxy :: Proxy (DomBuilderSpace m))
+    , _elementConfig_eventSpec = def
     }
 
 data Element er d t
@@ -213,11 +201,29 @@ data TextAreaElement er d t
                      , _textAreaElement_raw :: RawTextAreaElement d
                      }
 
+extractRawElementConfig :: ElementConfig er t m -> RawElementConfig er t m
+extractRawElementConfig cfg = RawElementConfig
+  { _rawElementConfig_modifyAttributes = _elementConfig_modifyAttributes cfg
+  , _rawElementConfig_eventSpec = _elementConfig_eventSpec cfg
+  }
+
+data RawElementConfig er t m = RawElementConfig
+  { _rawElementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
+  , _rawElementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
+  }
+
+instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig EventResult t m) where
+  def = RawElementConfig
+    { _rawElementConfig_modifyAttributes = never
+    , _rawElementConfig_eventSpec = def
+    }
+
 makeLenses ''TextNodeConfig
 makeLenses ''ElementConfig
 makeLenses ''PlaceholderConfig
 makeLenses ''InputElementConfig
 makeLenses ''TextAreaElementConfig
+makeLenses ''RawElementConfig
 
 class CanDeleteSelf t a | a -> t where
   deleteSelf :: Lens' a (Event t ())
@@ -239,12 +245,16 @@ instance InitialAttributes (ElementConfig er t m) where
   {-# INLINABLE initialAttributes #-}
   initialAttributes = elementConfig_initialAttributes
 
-class InitialAttributes a => ModifyAttributes t a | a -> t where
+class ModifyAttributes t a | a -> t where
   modifyAttributes :: Lens' a (Event t (Map AttributeName (Maybe Text)))
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
   modifyAttributes = elementConfig_modifyAttributes
+
+instance ModifyAttributes t (RawElementConfig er t m) where
+  {-# INLINABLE modifyAttributes #-}
+  modifyAttributes = rawElementConfig_modifyAttributes
 
 class HasNamespace a where
   namespace :: Lens' a (Maybe Namespace)
@@ -265,8 +275,7 @@ instance Functor1 (ElementConfig er t) where
   type Functor1Constraint (ElementConfig er t) a b = DomBuilderSpace a ~ DomBuilderSpace b
   {-# INLINABLE fmap1 #-}
   fmap1 _ cfg = cfg
-    { _elementConfig_eventFilters = _elementConfig_eventFilters cfg
-    , _elementConfig_eventHandler = _elementConfig_eventHandler cfg
+    { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
     }
 
 instance Reflex t => Functor1 (PlaceholderConfig above t) where
@@ -282,6 +291,13 @@ instance Functor1 (InputElementConfig er t) where
 instance Functor1 (TextAreaElementConfig er t) where
   type Functor1Constraint (TextAreaElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
   fmap1 f cfg = cfg & textAreaElementConfig_elementConfig %~ fmap1 f
+
+instance Functor1 (RawElementConfig er t) where
+  type Functor1Constraint (RawElementConfig er t) a b = DomBuilderSpace a ~ DomBuilderSpace b
+  {-# INLINABLE fmap1 #-}
+  fmap1 _ cfg = cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
 
 class HasDomEvent t target eventName where
   type DomEventType target eventName :: *
@@ -310,6 +326,7 @@ instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   placeholder = liftPlaceholder
   inputElement = liftInputElement
   textAreaElement = liftTextAreaElement
+  wrapRawElement = liftWrapRawElement
 
 type LiftDomBuilder t f m =
   ( Reflex t
@@ -351,3 +368,6 @@ liftInputElement cfg = liftWithStateless $ \run -> inputElement $ fmap1 run cfg
 
 liftTextAreaElement :: LiftDomBuilder t f m => TextAreaElementConfig er t (f m) -> f m (TextAreaElement er (DomBuilderSpace m) t)
 liftTextAreaElement cfg = liftWithStateless $ \run -> textAreaElement $ fmap1 run cfg
+
+liftWrapRawElement :: LiftDomBuilder t f m => RawElement (DomBuilderSpace m) -> RawElementConfig er t (f m) -> f m (Element er (DomBuilderSpace m) t)
+liftWrapRawElement e es = liftWithStateless $ \run -> wrapRawElement e $ fmap1 run es

@@ -15,9 +15,21 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Blaze.ByteString.Builder.Html.Utf8
+import Control.Lens hiding (element)
+import Control.Monad.Exception
 import Control.Monad.Identity
 import Control.Monad.Ref
+import Control.Monad.State.Strict
+import Control.Monad.Trans.Control
+import Data.ByteString (ByteString)
+import Data.ByteString.Builder (toLazyByteString)
+import qualified Data.ByteString.Lazy as BL
+import Data.Default
 import Data.Dependent.Sum (DSum (..))
+import qualified Data.Map as Map
+import Data.Monoid
+import Data.Text.Encoding
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Base
@@ -25,18 +37,6 @@ import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
 import Reflex.Host.Class
-
-import Blaze.ByteString.Builder.Html.Utf8
-import Control.Lens hiding (element)
-import Control.Monad.Exception
-import Control.Monad.State.Strict
-import Control.Monad.Trans.Control
-import Data.ByteString (ByteString)
-import Data.ByteString.Builder (toLazyByteString)
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Map as Map
-import Data.Monoid
-import Data.Text.Encoding
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -109,24 +109,25 @@ data StaticDomEvent (a :: k)
 -- | Static documents don't process events, so all handlers are equivalent
 data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 
+--TODO: Move this upstream into the data-default package
+instance Default a => Default (Const a b) where
+  def = Const def
+
 instance DomSpace StaticDomSpace where
+  type EventSpec StaticDomSpace = Const ()
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
-  type RawEvent StaticDomSpace = StaticDomEvent
-  type DomHandler StaticDomSpace = StaticDomHandler
-  type DomHandler1 StaticDomSpace = StaticDomHandler
-  defaultEventHandler _ = StaticDomHandler
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
+    --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
     let escape = BL.toStrict . toLazyByteString . fromHtmlEscapedText
     modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
     return $ TextNode ()
-
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
@@ -140,14 +141,12 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
       modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
-
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
     result <- lift $ performEvent (fmap runStaticDomBuilderT toInsertAbove)
     acc <- foldDyn (:) [] (fmap snd result)
     modify $ (:) $ join $ mconcat . reverse <$> current acc
     return $ Placeholder (fmap fst result) never
-
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -163,7 +162,6 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _inputElement_element = e
       , _inputElement_raw = ()
       }
-
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
     --TODO: Support setValue event
@@ -177,6 +175,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _textAreaElement_element = e
       , _textAreaElement_raw = ()
       }
+  wrapRawElement _ _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))

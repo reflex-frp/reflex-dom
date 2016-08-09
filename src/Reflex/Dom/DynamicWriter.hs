@@ -11,13 +11,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.DynamicWriter where
 
-import Reflex
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.Class
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
-import Reflex.Host.Class
-
 import Control.Lens hiding (element)
 import Control.Monad.Exception
 import Control.Monad.IO.Class
@@ -33,6 +26,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Semigroup
 import Data.Traversable
+import Reflex
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.Class
+import Reflex.Dom.PerformEvent.Class
+import Reflex.Dom.PostBuild.Class
+import Reflex.Host.Class
 
 instance MonadTrans (DynamicWriterT t w) where
   lift = DynamicWriterT . lift
@@ -166,8 +165,7 @@ liftDynamicWriterTThroughSync f (DynamicWriterT child) = DynamicWriterT $ do
 {-# INLINABLE liftDynamicWriterTElementConfig #-}
 liftDynamicWriterTElementConfig :: ElementConfig er t (DynamicWriterT t w m) -> ElementConfig er t m
 liftDynamicWriterTElementConfig cfg = cfg
-  { _elementConfig_eventFilters = _elementConfig_eventFilters cfg
-  , _elementConfig_eventHandler = _elementConfig_eventHandler cfg
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
   }
 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
@@ -175,10 +173,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
   textNode = liftTextNode
   element elementTag cfg (DynamicWriterT child) = DynamicWriterT $ do
     s <- get
-    let cfg' = cfg
-          { _elementConfig_eventFilters = _elementConfig_eventFilters cfg
-          , _elementConfig_eventHandler = _elementConfig_eventHandler cfg
-          }
+    let cfg' = liftDynamicWriterTElementConfig cfg
     (el, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
     put newS
     return (el, a)
@@ -210,6 +205,9 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
       }
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
 
 instance (Deletable t m, Reflex t, Monoid w, MonadHold t m, MonadFix m) => Deletable t (DynamicWriterT t w m) where
   deletable delete child = do

@@ -29,7 +29,7 @@ module Reflex.Dom.Old
        ) where
 
 import Control.Arrow (first)
-import Control.Lens ((&), (.~), (^.), makeLenses)
+import Control.Lens (makeLenses, (&), (.~), (^.))
 import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
@@ -102,7 +102,7 @@ buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs t) => Maybe Text -> 
 buildEmptyElementNS ns elementTag attrs = fst <$> buildElementNS ns elementTag attrs blank
 
 buildElementNS :: (MonadWidget t m, Attributes m attrs t) => Maybe Text -> Text -> attrs -> m a -> m (RawElement (DomBuilderSpace m), a)
-buildElementNS ns elementTag attrs child = fmap (first _element_raw) $ buildElementInternal ns elementTag attrs child
+buildElementNS ns elementTag attrs child = first _element_raw <$> buildElementInternal ns elementTag attrs child
 
 class Attributes m attrs t where
   buildElementInternal :: MonadWidget t m => Maybe Text -> Text -> attrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
@@ -114,7 +114,7 @@ instance Attributes m (Map Text Text) t where
 
 addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t m -> m (ElementConfig er t m)
 addStaticAttributes attrs cfg = do
-  let initialAttrs = Map.fromList $ fmap (first ((,) Nothing)) $ Map.toList attrs
+  let initialAttrs = Map.fromList $ first ((,) Nothing) <$> Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
 instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
@@ -166,13 +166,13 @@ elWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m
 elWith elementTag cfg child = snd <$> elWith' elementTag cfg child
 
 elWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
-elWith' elementTag cfg child = buildElementInternal (cfg ^. namespace) elementTag (cfg ^. attributes) child
+elWith' elementTag cfg = buildElementInternal (cfg ^. namespace) elementTag $ cfg ^. attributes
 
 emptyElWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m ()
 emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 
 emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
-emptyElWith' elementTag cfg = liftM fst $ elWith' elementTag cfg $ return ()
+emptyElWith' elementTag cfg = fmap fst $ elWith' elementTag cfg $ return ()
 
 {-# DEPRECATED _el_clicked "Use 'domEvent Click' instead" #-}
 _el_clicked :: Reflex t => Element EventResult d t -> Event t ()
