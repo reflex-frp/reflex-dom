@@ -92,42 +92,43 @@ addVoidAction = performEvent_
 
 type AttributeMap = Map Text Text
 
-buildElement :: Attributes m attrs => Text -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
+buildElement :: (MonadWidget t m, Attributes m attrs t) => Text -> attrs -> m a -> m (RawElement (DomBuilderSpace m), a)
 buildElement = buildElementNS Nothing
 
-buildEmptyElement :: Monad m => Attributes m attrs => Text -> attrs -> m (RawElement GhcjsDomSpace)
+buildEmptyElement :: (MonadWidget t m, Attributes m attrs t) => Text -> attrs -> m (RawElement (DomBuilderSpace m))
 buildEmptyElement elementTag attrs = fst <$> buildElementNS Nothing elementTag attrs blank
 
-buildEmptyElementNS :: Monad m => Attributes m attrs => Maybe Text -> Text -> attrs -> m (RawElement GhcjsDomSpace)
+buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs t) => Maybe Text -> Text -> attrs -> m (RawElement (DomBuilderSpace m))
 buildEmptyElementNS ns elementTag attrs = fst <$> buildElementNS ns elementTag attrs blank
 
-class Attributes m attrs where
-  buildElementNS :: Maybe Text -> Text -> attrs -> m a -> m (RawElement GhcjsDomSpace, a)
+buildElementNS :: (MonadWidget t m, Attributes m attrs t) => Maybe Text -> Text -> attrs -> m a -> m (RawElement (DomBuilderSpace m), a)
+buildElementNS ns elementTag attrs child = fmap (first _element_raw) $ buildElementInternal ns elementTag attrs child
 
-instance MonadWidget t m => Attributes m (Map Text Text) where
-  buildElementNS ns elementTag attrs child = do
+class Attributes m attrs t where
+  buildElementInternal :: MonadWidget t m => Maybe Text -> Text -> attrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+
+instance Attributes m (Map Text Text) t where
+  buildElementInternal ns elementTag attrs child = do
     let cfg = def & elementConfig_namespace .~ ns
-    buildElementInternal elementTag child =<< addStaticAttributes attrs cfg
+    buildElementCommon elementTag child =<< addStaticAttributes attrs cfg
 
 addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t m -> m (ElementConfig er t m)
 addStaticAttributes attrs cfg = do
   let initialAttrs = Map.fromList $ fmap (first ((,) Nothing)) $ Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
-instance MonadWidget t m => Attributes m (Dynamic t (Map Text Text)) where
-  buildElementNS ns elementTag attrs child = do
+instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
+  buildElementInternal ns elementTag attrs child = do
     let cfg = def & elementConfig_namespace .~ ns
-    buildElementInternal elementTag child =<< addDynamicAttributes attrs cfg
+    buildElementCommon elementTag child =<< addDynamicAttributes attrs cfg
 
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t m -> m (ElementConfig er t m)
 addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
 
-buildElementInternal :: MonadWidget t m => Text -> m a -> ElementConfig en t m -> m (DOM.HTMLElement, a)
-buildElementInternal elementTag child cfg = do
-  (e, result) <- element elementTag cfg child
-  return (_element_raw e, result)
+buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> m (Element er (DomBuilderSpace m) t, a)
+buildElementCommon elementTag child cfg = element elementTag cfg child
 
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> IO ()
@@ -161,14 +162,14 @@ instance HasAttributes (ElConfig attrs) where
 instance HasNamespace (ElConfig attrs) where
   namespace = elConfig_namespace
 
-elWith :: (Functor m, Attributes m attrs) => Text -> ElConfig attrs -> m a -> m a
+elWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m a -> m a
 elWith elementTag cfg child = snd <$> elWith' elementTag cfg child
 
-elWith' :: Attributes m attrs => Text -> ElConfig attrs -> m a -> m (DOM.HTMLElement, a)
-elWith' elementTag cfg child = buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
+elWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elWith' elementTag cfg child = buildElementInternal (cfg ^. namespace) elementTag (cfg ^. attributes) child
 
-emptyElWith :: (Monad m, Attributes m attrs) => Text -> ElConfig attrs -> m ()
+emptyElWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m ()
 emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 
-emptyElWith' :: (Monad m, Attributes m attrs) => Text -> ElConfig attrs -> m DOM.HTMLElement
-emptyElWith' elementTag cfg = liftM fst $ buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) $ return ()
+emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
+emptyElWith' elementTag cfg = liftM fst $ elWith' elementTag cfg $ return ()
