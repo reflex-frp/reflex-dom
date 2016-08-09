@@ -25,6 +25,7 @@ module Reflex.Dom.Old
        , elWith'
        , emptyElWith
        , emptyElWith'
+       , getQuitWidget
        , namedNodeMapGetNames
        , nodeClear
        , onEventName
@@ -59,6 +60,7 @@ import qualified GHCJS.DOM.Types as DOM
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic
@@ -236,3 +238,7 @@ nodeClear n = do
     Just fc -> do
       _ <- removeChild n $ Just fc
       nodeClear n
+
+getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
+getQuitWidget = return $ do WebViewSingleton wv <- askWebView
+                            liftIO $ quitWebView wv
