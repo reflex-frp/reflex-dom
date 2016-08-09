@@ -25,6 +25,8 @@ module Reflex.Dom.Old
        , elWith'
        , emptyElWith
        , emptyElWith'
+       , namedNodeMapGetNames
+       , nodeClear
        , onEventName
        , schedulePostBuild
        , text'
@@ -44,10 +46,14 @@ import Data.Default
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text
 import Foreign.JavaScript.TH
 import GHCJS.DOM.EventM (EventM)
-import GHCJS.DOM.Node (getParentNode, getPreviousSibling, removeChild, toNode)
+import GHCJS.DOM.NamedNodeMap as NNM
+import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild, toNode)
 import GHCJS.DOM.Types (IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex
@@ -213,3 +219,20 @@ unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResu
 unsafePlaceElement e = do
   placeRawElement e
   wrapRawElement e def
+
+namedNodeMapGetNames :: DOM.NamedNodeMap -> IO (Set String)
+namedNodeMapGetNames self = do
+  l <- NNM.getLength self
+  let locations = if l == 0 then [] else [0..l-1] -- Can't use 0..l-1 if l is 0 because l is unsigned and will wrap around
+  liftM (Set.fromList . catMaybes) $ forM locations $ \i -> do
+    Just n <- NNM.item self i
+    getNodeName n
+
+nodeClear :: IsNode self => self -> IO ()
+nodeClear n = do
+  mfc <- getFirstChild n
+  case mfc of
+    Nothing -> return ()
+    Just fc -> do
+      _ <- removeChild n $ Just fc
+      nodeClear n
