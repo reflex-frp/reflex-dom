@@ -19,6 +19,8 @@ module Reflex.Dom.Old
        , deleteBetweenExclusive
        , elWith
        , elWith'
+       , emptyElWith
+       , emptyElWith'
        , onEventName
        , schedulePostBuild
        , text'
@@ -164,3 +166,9 @@ elWith elementTag cfg child = snd <$> elWith' elementTag cfg child
 
 elWith' :: Attributes m attrs => Text -> ElConfig attrs -> m a -> m (DOM.HTMLElement, a)
 elWith' elementTag cfg child = buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
+
+emptyElWith :: (Monad m, Attributes m attrs) => Text -> ElConfig attrs -> m ()
+emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
+
+emptyElWith' :: (Monad m, Attributes m attrs) => Text -> ElConfig attrs -> m DOM.HTMLElement
+emptyElWith' elementTag cfg = liftM fst $ buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) $ return ()
