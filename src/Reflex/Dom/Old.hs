@@ -3,6 +3,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -26,6 +28,7 @@ module Reflex.Dom.Old
        , onEventName
        , schedulePostBuild
        , text'
+       , wrapElement
        ) where
 
 import Control.Arrow (first)
@@ -34,6 +37,7 @@ import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Control.Monad.Ref
 import Data.Default
 import Data.Functor.Misc
@@ -193,3 +197,13 @@ _el_keypress = domEvent Keypress
 {-# DEPRECATED _el_scrolled "Use 'domEvent Scroll' instead" #-}
 _el_scrolled :: Reflex t => El t -> Event t Int
 _el_scrolled = domEvent Scroll
+
+wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.HTMLElement -> m (El t)
+wrapElement eh e = do
+  let h :: (EventName en, GhcjsDomEvent en) -> IO (Maybe (EventResult en))
+      h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
+  wrapRawElement e $ (def :: RawElementConfig EventResult t m)
+    { _rawElementConfig_eventSpec = def
+        { _ghcjsEventSpec_handler = h
+        }
+    }

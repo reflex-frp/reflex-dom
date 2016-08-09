@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -30,6 +31,7 @@ import Data.Dependent.Sum (DSum (..))
 import qualified Data.Map as Map
 import Data.Monoid
 import Data.Text.Encoding
+import GHC.Generics
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.PerformEvent.Base
@@ -109,12 +111,12 @@ data StaticDomEvent (a :: k)
 -- | Static documents don't process events, so all handlers are equivalent
 data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 
---TODO: Move this upstream into the data-default package
-instance Default a => Default (Const a b) where
-  def = Const def
+data StaticEventSpec (er :: EventTag -> *) = StaticEventSpec deriving (Generic)
+
+instance Default (StaticEventSpec er)
 
 instance DomSpace StaticDomSpace where
-  type EventSpec StaticDomSpace = Const ()
+  type EventSpec StaticDomSpace = StaticEventSpec
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
