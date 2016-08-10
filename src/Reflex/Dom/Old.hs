@@ -21,6 +21,7 @@ module Reflex.Dom.Old
        , buildEmptyElement
        , buildEmptyElementNS
        , deleteBetweenExclusive
+       , elStopPropagationNS
        , elWith
        , elWith'
        , emptyElWith
@@ -245,9 +246,9 @@ getQuitWidget = return $ do
   WebViewSingleton wv <- askWebView
   liftIO $ quitWebView wv
 
-elStopPropagationNS :: forall t m en a. (MonadWidget t m, DOM.IsEvent (EventType en)) => Maybe Text -> Text -> EventName en -> m a -> m a
+elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a
 elStopPropagationNS ns elementTag en child = do
-  let f = GhcjsEventFilter $ \en (GhcjsDomEvent evt) -> do
+  let f = GhcjsEventFilter $ \_ -> do
         return (stopPropagation, return Nothing)
       cfg = (def :: ElementConfig EventResult t m)
         & namespace .~ ns
