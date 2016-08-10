@@ -223,7 +223,7 @@ unsafePlaceElement e = do
   placeRawElement e
   wrapRawElement e def
 
-namedNodeMapGetNames :: DOM.NamedNodeMap -> IO (Set String)
+namedNodeMapGetNames :: DOM.NamedNodeMap -> IO (Set Text)
 namedNodeMapGetNames self = do
   l <- NNM.getLength self
   let locations = if l == 0 then [] else [0..l-1] -- Can't use 0..l-1 if l is 0 because l is unsigned and will wrap around
