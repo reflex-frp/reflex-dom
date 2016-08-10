@@ -241,8 +241,9 @@ nodeClear n = do
       nodeClear n
 
 getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
-getQuitWidget = return $ do WebViewSingleton wv <- askWebView
-                            liftIO $ quitWebView wv
+getQuitWidget = return $ do
+  WebViewSingleton wv <- askWebView
+  liftIO $ quitWebView wv
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m, DOM.IsEvent (EventType en)) => Maybe Text -> Text -> EventName en -> m a -> m a
 elStopPropagationNS ns elementTag en child = do
