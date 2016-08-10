@@ -36,7 +36,7 @@ module Reflex.Dom.Old
        ) where
 
 import Control.Arrow (first)
-import Control.Lens (makeLenses, (&), (.~), (^.))
+import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
 import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
@@ -44,6 +44,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Data.Default
+import Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -242,3 +243,12 @@ nodeClear n = do
 getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
 getQuitWidget = return $ do WebViewSingleton wv <- askWebView
                             liftIO $ quitWebView wv
+
+elStopPropagationNS :: forall t m en a. (MonadWidget t m, DOM.IsEvent (EventType en)) => Maybe Text -> Text -> EventName en -> m a -> m a
+elStopPropagationNS ns elementTag en child = do
+  let f = GhcjsEventFilter $ \en (GhcjsDomEvent evt) -> do
+        return (stopPropagation, return Nothing)
+      cfg = (def :: ElementConfig EventResult t m)
+        & namespace .~ ns
+        & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
+  snd <$> element elementTag cfg child
