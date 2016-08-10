@@ -21,6 +21,8 @@ module Reflex.Dom.Old
        , buildEmptyElement
        , buildEmptyElementNS
        , deleteBetweenExclusive
+       , elDynHtml'
+       , elDynHtmlAttr'
        , elStopPropagationNS
        , elWith
        , elWith'
@@ -54,6 +56,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text
 import Foreign.JavaScript.TH
+import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild, toNode)
@@ -254,3 +257,14 @@ elStopPropagationNS ns elementTag en child = do
         & namespace .~ ns
         & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
   snd <$> element elementTag cfg child
+
+elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
+elDynHtmlAttr' elementTag attrs html = do
+  let cfg = def & initialAttributes .~ Map.mapKeys ((,) Nothing) attrs
+  (e, _) <- element elementTag cfg $ return ()
+  postBuild <- getPostBuild
+  performEvent_ $ Element.setInnerHTML (_element_raw e) . Just <$> leftmost [updated html, tag (current html) postBuild]
+  return e
+
+elDynHtml' :: MonadWidget t m => Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
+elDynHtml' elementTag = elDynHtmlAttr' elementTag mempty
