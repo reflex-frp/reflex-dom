@@ -35,6 +35,7 @@ module Reflex.Dom.Old
        , schedulePostBuild
        , text'
        , unsafePlaceElement
+       , WidgetHost
        , wrapElement
        ) where
 
