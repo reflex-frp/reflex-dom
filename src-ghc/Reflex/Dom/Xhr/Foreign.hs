@@ -222,3 +222,28 @@ xmlHttpRequestSetWithCredentials xhr b = do
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
 
+xmlHttpRequestGetAllResponseHeaders :: XMLHttpRequest -> IO Text
+xmlHttpRequestGetAllResponseHeaders xhr = do
+  let c = xhrContext xhr
+  script <- jsstringcreatewithutf8cstring "this.getAllResponseHeaders()"
+  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  j <- jsvaluetostringcopy c t nullPtr
+  l <- jsstringgetmaximumutf8cstringsize j
+  s <- allocaBytes (fromIntegral l) $ \ps -> do
+         _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
+         peekCString ps
+  return $ T.pack s
+
+xmlHttpRequestGetResponseHeader :: XMLHttpRequest -> Text -> IO Text
+xmlHttpRequestGetResponseHeader xhr hdr = do
+  let c = xhrContext xhr
+  t' <- stringToJSValue c hdr
+  o <- toJSObject c [xhrValue xhr, t']
+  script <- jsstringcreatewithutf8cstring "this[0].getResponseHeader(this[1])"
+  t <- jsevaluatescript c script o nullPtr 1 nullPtr
+  j <- jsvaluetostringcopy c t nullPtr
+  l <- jsstringgetmaximumutf8cstringsize j
+  s <- allocaBytes (fromIntegral l) $ \ps -> do
+         _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
+         peekCString ps
+  return $ T.pack s
