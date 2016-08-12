@@ -283,6 +283,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domTextAreaElement = castToHTMLTextAreaElement domElement
+    TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
     Just v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
