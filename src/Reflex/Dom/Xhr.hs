@@ -12,6 +12,7 @@ module Reflex.Dom.Xhr
   , XhrRequestConfig (..)
   , XhrResponse (..)
   , XhrResponseBody (..)
+  , XhrResponseHeaders (..)
   , XhrResponseType (..)
   , XhrException (..)
   , IsXhrPayload (..)
