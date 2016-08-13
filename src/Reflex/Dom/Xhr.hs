@@ -80,7 +80,6 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
--- import GHCJS.DOM.XMLHttpRequest (getAllResponseHeaders)
 import Data.List
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
