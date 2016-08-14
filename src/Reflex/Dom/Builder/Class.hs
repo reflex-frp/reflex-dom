@@ -24,19 +24,25 @@ module Reflex.Dom.Builder.Class
 import Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.Deletable.Class
+import Reflex.DynamicWriter
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
+import Data.Foldable
 import Data.Functor.Misc
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Proxy
 import Data.Semigroup
 import Data.Text (Text)
+import Data.Traversable
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
 
@@ -267,6 +273,18 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
     , _elementConfig_eventSpec = def
     }
 
+{-# INLINABLE liftPostBuildTElementConfig #-}
+liftPostBuildTElementConfig :: ElementConfig er t (PostBuildT t m) -> ElementConfig er t m
+liftPostBuildTElementConfig cfg = cfg
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
+  }
+
+{-# INLINABLE liftDynamicWriterTElementConfig #-}
+liftDynamicWriterTElementConfig :: ElementConfig er t (DynamicWriterT t w m) -> ElementConfig er t m
+liftDynamicWriterTElementConfig cfg = cfg
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
+  }
+
 instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
   type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
   {-# INLINABLE textNode #-}
@@ -287,11 +305,47 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   placeRawElement = lift . placeRawElement
   wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
 
-{-# INLINABLE liftPostBuildTElementConfig #-}
-liftPostBuildTElementConfig :: ElementConfig er t (PostBuildT t m) -> ElementConfig er t m
-liftPostBuildTElementConfig cfg = cfg
-  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
-  }
+instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
+  type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (DynamicWriterT child) = DynamicWriterT $ do
+    s <- get
+    let cfg' = liftDynamicWriterTElementConfig cfg
+    (el, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
+    put newS
+    return (el, a)
+  placeholder cfg = do
+    let cfg' = cfg
+          { _placeholderConfig_insertAbove = runDynamicWriterTInternal <$> _placeholderConfig_insertAbove cfg
+          }
+    let manageChildren :: Event t (NonEmpty (Replaceable t (Dynamic t w))) -- ^ Add nodes on the right; these are in reverse order
+                       -> Event t () -- ^ No more nodes will be added after this event fires
+                       -> m (Replaceable t (Dynamic t w))
+        manageChildren newChildren additionsCeased = do
+          rec nextId <- hold (0 :: Int) newNextId -- We assume this will never wrap around
+              let numberedNewChildren :: Event t (Int, PatchMap (Map Int (Replaceable t (Dynamic t w))))
+                  numberedNewChildren = flip pushAlways newChildren $ \rcs -> do
+                    let cs = reverse $ toList rcs
+                    myFirstId <- sample nextId
+                    let (myNextId, numbered) = mapAccumL (\n v -> (succ n, (n, Just v))) myFirstId cs
+                    return (myNextId, PatchMap $ Map.fromList numbered)
+                  newNextId = fst <$> numberedNewChildren
+          mconcatIncrementalReplaceableDynMap Map.empty (snd <$> numberedNewChildren) additionsCeased
+    rec children <- lift $ manageChildren childOutputs $ cfg ^. deleteSelf
+        p <- DynamicWriterT $ do
+          modify (children:)
+          lift $ placeholder cfg'
+        let result = fst <$> _placeholder_insertedAbove p
+            childOutputs = fmapMaybe (nonEmpty . snd) $ _placeholder_insertedAbove p
+    return $ p
+      { _placeholder_insertedAbove = result
+      }
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftDynamicWriterTElementConfig
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
 
 -- * Convenience functions
 

@@ -5,7 +5,6 @@ import Reflex.Dom.Builder.Class as X
 import Reflex.Dom.Builder.Immediate as X
 import Reflex.Dom.Builder.Static as X
 import Reflex.Dom.Class as X
-import Reflex.Dom.DynamicWriter as X
 import Reflex.Dom.Internal as X
 import Reflex.Dom.Location as X
 import Reflex.Dom.Old as X

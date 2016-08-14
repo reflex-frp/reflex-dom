@@ -22,6 +22,7 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 
 import Reflex.Class
 import Reflex.Deletable.Class
+import Reflex.DynamicWriter
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
@@ -96,12 +97,16 @@ instance HasWebView m => HasWebView (Strict.StateT r m) where
   type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
   askWebView = lift askWebView
 
+instance HasWebView m => HasWebView (PostBuildT t m) where
+  type WebViewPhantom (PostBuildT t m) = WebViewPhantom m
+  askWebView = lift askWebView
+
 instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t m) where
   type WebViewPhantom (PerformEventT t m) = WebViewPhantom (HostFrame t)
   askWebView = PerformEventT $ lift askWebView
 
-instance HasWebView m => HasWebView (PostBuildT t m) where
-  type WebViewPhantom (PostBuildT t m) = WebViewPhantom m
+instance HasWebView m => HasWebView (DynamicWriterT t w m) where
+  type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
   askWebView = lift askWebView
 
 newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
@@ -201,12 +206,16 @@ instance HasJS x m => HasJS x (ReaderT r m) where
   type JSM (ReaderT r m) = JSM m
   liftJS = lift . liftJS
 
+instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
+  type JSM (PostBuildT t m) = JSM m
+  liftJS = lift . liftJS
+
 instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
   type JSM (PerformEventT t m) = JSM (HostFrame t)
   liftJS = PerformEventT . lift . liftJS
 
-instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
-  type JSM (PostBuildT t m) = JSM m
+instance HasJS x m => HasJS x (DynamicWriterT t w m) where
+  type JSM (DynamicWriterT t w m) = JSM m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
