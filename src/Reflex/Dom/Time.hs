@@ -7,7 +7,7 @@
 module Reflex.Dom.Time where
 
 import Reflex
-import Reflex.Dom.PerformEvent.Class
+import Reflex.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 
 import Control.Concurrent

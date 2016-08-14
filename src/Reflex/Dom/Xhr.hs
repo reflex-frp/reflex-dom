@@ -57,7 +57,7 @@ where
 
 import Reflex
 import Reflex.Dom.Class
-import Reflex.Dom.PerformEvent.Class
+import Reflex.PerformEvent.Class
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType

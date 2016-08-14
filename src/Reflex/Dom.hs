@@ -9,7 +9,6 @@ import Reflex.Dom.DynamicWriter as X
 import Reflex.Dom.Internal as X
 import Reflex.Dom.Location as X
 import Reflex.Dom.Old as X
-import Reflex.Dom.PerformEvent.Class as X
 import Reflex.Dom.PostBuild.Class as X
 import Reflex.Dom.Time as X
 import Reflex.Dom.WebSocket as X

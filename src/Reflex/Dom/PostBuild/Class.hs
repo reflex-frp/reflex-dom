@@ -18,7 +18,7 @@ import Control.Monad.Trans.Control
 import Foreign.JavaScript.TH
 import Reflex
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.PerformEvent.Class
+import Reflex.PerformEvent.Class
 import Reflex.Host.Class
 
 class (Reflex t, Monad m) => PostBuild t m | m -> t where

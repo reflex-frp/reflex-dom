@@ -34,8 +34,8 @@ import Data.Text.Encoding
 import GHC.Generics
 import Reflex
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.PerformEvent.Base
-import Reflex.Dom.PerformEvent.Class
+import Reflex.PerformEvent.Base
+import Reflex.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
 import Reflex.Host.Class

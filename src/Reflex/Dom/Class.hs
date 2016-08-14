@@ -10,7 +10,7 @@ import Reflex.Class
 import Web.KeyCode
 
 import Foreign.JavaScript.TH
-import Reflex.Dom.PerformEvent.Class
+import Reflex.PerformEvent.Class
 import Reflex.Dom.PostBuild.Class
 
 import Prelude hiding (concat, mapM, mapM_, sequence)
