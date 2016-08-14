@@ -84,7 +84,6 @@ library
     Reflex.Dom.Internal
     Reflex.Dom.Internal.Foreign
     Reflex.Dom.Location
-    Reflex.Dom.PostBuild.Class
     Reflex.Dom.Old
     Reflex.Dom.Time
     Reflex.Dom.WebSocket

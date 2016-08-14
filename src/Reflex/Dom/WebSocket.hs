@@ -26,7 +26,7 @@ import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 import Reflex
 import Reflex.Dom.Class
 import Reflex.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 import Reflex.Dom.WebSocket.Foreign
 
 import Control.Concurrent

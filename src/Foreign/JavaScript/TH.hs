@@ -24,6 +24,7 @@ import Reflex.Class
 import Reflex.Deletable.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 import Reflex.Host.Class
 
 import Language.Haskell.TH
@@ -98,6 +99,10 @@ instance HasWebView m => HasWebView (Strict.StateT r m) where
 instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t m) where
   type WebViewPhantom (PerformEventT t m) = WebViewPhantom (HostFrame t)
   askWebView = PerformEventT $ lift askWebView
+
+instance HasWebView m => HasWebView (PostBuildT t m) where
+  type WebViewPhantom (PostBuildT t m) = WebViewPhantom m
+  askWebView = lift askWebView
 
 newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
 
@@ -199,6 +204,10 @@ instance HasJS x m => HasJS x (ReaderT r m) where
 instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
   type JSM (PerformEventT t m) = JSM (HostFrame t)
   liftJS = PerformEventT . lift . liftJS
+
+instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
+  type JSM (PostBuildT t m) = JSM m
+  liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
 class Monad m => MonadJS x m | m -> x where

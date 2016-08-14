@@ -20,7 +20,7 @@ import Foreign.JavaScript.TH
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 import Reflex.Host.Class
 
 import Control.Concurrent.Chan

@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -23,6 +24,8 @@ module Reflex.Dom.Builder.Class
 import Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.Deletable.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -44,7 +47,7 @@ class Default (EventSpec d EventResult) => DomSpace d where
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
 
--- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
+-- | @'DomBuildek' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
 class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
@@ -120,15 +123,6 @@ data ElementConfig er t m
                    , _elementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
-
-instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig er t m) where
-  {-# INLINABLE def #-}
-  def = ElementConfig
-    { _elementConfig_namespace = Nothing
-    , _elementConfig_initialAttributes = mempty
-    , _elementConfig_modifyAttributes = never
-    , _elementConfig_eventSpec = def
-    }
 
 data Element er d t
    = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
@@ -263,6 +257,41 @@ class HasNamespace a where
 instance HasNamespace (ElementConfig er t m) where
   {-# INLINABLE namespace #-}
   namespace = elementConfig_namespace
+
+instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig er t m) where
+  {-# INLINABLE def #-}
+  def = ElementConfig
+    { _elementConfig_namespace = Nothing
+    , _elementConfig_initialAttributes = mempty
+    , _elementConfig_modifyAttributes = never
+    , _elementConfig_eventSpec = def
+    }
+
+instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
+  type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
+  {-# INLINABLE textNode #-}
+  textNode = lift . textNode
+  {-# INLINABLE element #-}
+  element t cfg child = liftWith $ \run -> element t (liftPostBuildTElementConfig cfg) $ run child
+  {-# INLINABLE placeholder #-}
+  placeholder cfg = lift $ do
+    rec childPostBuild <- deletable (_placeholder_deletedSelf p) $ performEvent $ return () <$ _placeholder_insertedAbove p
+        p <- placeholder $ cfg
+          { _placeholderConfig_insertAbove = ffor (_placeholderConfig_insertAbove cfg) $ \a -> runPostBuildT a =<< headE childPostBuild
+          }
+    return p
+  {-# INLINABLE inputElement #-}
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftPostBuildTElementConfig
+  {-# INLINABLE textAreaElement #-}
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftPostBuildTElementConfig
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
+
+{-# INLINABLE liftPostBuildTElementConfig #-}
+liftPostBuildTElementConfig :: ElementConfig er t (PostBuildT t m) -> ElementConfig er t m
+liftPostBuildTElementConfig cfg = cfg
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
+  }
 
 -- * Convenience functions
 

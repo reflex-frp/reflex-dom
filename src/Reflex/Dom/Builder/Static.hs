@@ -36,7 +36,7 @@ import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
 import Reflex.Host.Class
 

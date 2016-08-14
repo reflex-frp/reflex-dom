@@ -19,7 +19,7 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign
 import Reflex.PerformEvent.Base
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 import Reflex.Host.Class
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 

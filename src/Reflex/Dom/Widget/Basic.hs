@@ -15,7 +15,7 @@ module Reflex.Dom.Widget.Basic where
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 
 import Control.Arrow
 import Control.Lens hiding (children, element)

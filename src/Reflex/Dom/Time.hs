@@ -8,7 +8,7 @@ module Reflex.Dom.Time where
 
 import Reflex
 import Reflex.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
+import Reflex.PostBuild.Class
 
 import Control.Concurrent
 import qualified Control.Concurrent.Thread.Delay as Concurrent
