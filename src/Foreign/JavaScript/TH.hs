@@ -21,7 +21,7 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              ) where
 
 import Reflex.Class
-import Reflex.Dom.Deletable.Class
+import Reflex.Deletable.Class
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Host.Class
 

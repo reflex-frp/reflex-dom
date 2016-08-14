@@ -13,7 +13,7 @@ module Reflex.Dom.PerformEvent.Base where
 
 import Foreign.JavaScript.TH
 import Reflex
-import Reflex.Dom.Deletable.Class
+import Reflex.Deletable.Class
 import Reflex.Dom.PerformEvent.Class
 import Reflex.Host.Class
 

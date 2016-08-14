@@ -80,7 +80,6 @@ library
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
-    Reflex.Dom.Deletable.Class
     Reflex.Dom.DynamicWriter
     Reflex.Dom.Internal
     Reflex.Dom.Internal.Foreign

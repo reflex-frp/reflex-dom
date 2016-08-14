@@ -17,12 +17,12 @@
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
-       , module Reflex.Dom.Deletable.Class
+       , module Reflex.Deletable.Class
        ) where
 
 import Reflex
 import Reflex.Dom.Builder.Class.Events
-import Reflex.Dom.Deletable.Class
+import Reflex.Deletable.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
