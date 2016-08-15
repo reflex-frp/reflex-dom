@@ -18,8 +18,8 @@ import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign
-import Reflex.Dom.PerformEvent.Base
-import Reflex.Dom.PostBuild.Class
+import Reflex.PerformEvent.Base
+import Reflex.PostBuild.Class
 import Reflex.Host.Class
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 

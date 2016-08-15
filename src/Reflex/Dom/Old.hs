@@ -67,8 +67,8 @@ import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Internal.Foreign
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
 
