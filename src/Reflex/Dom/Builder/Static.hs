@@ -123,6 +123,7 @@ instance DomSpace StaticDomSpace where
   type RawElement StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
+  addEventSpecFlags _ _ _ _ = StaticEventSpec
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace

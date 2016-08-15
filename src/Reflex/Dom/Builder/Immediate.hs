@@ -38,6 +38,7 @@ import Data.Dependent.Sum
 import Data.Functor.Misc
 import Data.IORef
 import Data.Maybe
+import Data.Monoid
 import Data.Text (Text)
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
@@ -200,6 +201,19 @@ instance DomSpace GhcjsDomSpace where
   type RawElement GhcjsDomSpace = DOM.HTMLElement
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
+  addEventSpecFlags _ en f es = es
+    { _ghcjsEventSpec_filters =
+        let f' = Just . GhcjsEventFilter . \case
+              Nothing -> \evt -> do
+                mEventResult <- _ghcjsEventSpec_handler es (en, evt)
+                return (f mEventResult, return mEventResult)
+              Just (GhcjsEventFilter oldFilter) -> \evt -> do
+                (oldFlags, oldContinuation) <- oldFilter evt
+                mEventResult <- oldContinuation
+                let newFlags = oldFlags <> f mEventResult
+                return (newFlags, return mEventResult)
+        in DMap.alter f' en $ _ghcjsEventSpec_filters es
+    }
 
 newtype GhcjsEventFilter er en = GhcjsEventFilter (GhcjsDomEvent en -> IO (EventFlags, IO (Maybe (er en))))
 
