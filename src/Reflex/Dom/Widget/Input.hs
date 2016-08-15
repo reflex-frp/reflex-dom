@@ -34,10 +34,8 @@ import GHCJS.DOM.Element (castToElement)
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
-import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
 import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
 import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
-import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
 import GHCJS.DOM.Types (File)
 import Reflex.Class
 import Reflex.Dynamic
@@ -52,14 +50,14 @@ import qualified Text.Read as T
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
 
-data TextInput t
+data TextInput d t
    = TextInput { _textInput_value :: Dynamic t Text
                , _textInput_input :: Event t Text
                , _textInput_keypress :: Event t Int
                , _textInput_keydown :: Event t Int
                , _textInput_keyup :: Event t Int
                , _textInput_hasFocus :: Dynamic t Bool
-               , _textInput_element :: HTMLInputElement
+               , _textInput_element :: RawElement d
                }
 
 data TextInputConfig t
@@ -79,7 +77,7 @@ instance Reflex t => Default (TextInputConfig t) where
 
 -- | Create an input whose value is a string.  By default, the "type" attribute is set to "text", but it can be changed using the _textInputConfig_inputType field.  Note that only types for which the value is always a string will work - types whose value may be null will not work properly with this widget.
 {-# INLINABLE textInput #-}
-textInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextInputConfig t -> m (TextInput t)
+textInput :: (DomBuilder t m, PostBuild t m) => TextInputConfig t -> m (TextInput (DomBuilderSpace m) t)
 textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.insert "type" inputType) dAttrs
   i <- inputElement $ def
@@ -93,11 +91,11 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     , _textInput_keydown = domEvent Keydown i
     , _textInput_keyup = domEvent Keyup i
     , _textInput_hasFocus = _inputElement_hasFocus i
-    , _textInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
+    , _textInput_element = _element_raw $ _inputElement_element i
     }
 
 {-# INLINABLE textInputGetEnter #-}
-textInputGetEnter :: Reflex t => TextInput t -> Event t ()
+textInputGetEnter :: Reflex t => TextInput d t -> Event t ()
 textInputGetEnter i = fmapMaybe (\n -> if keyCodeLookup n == Enter then Just () else Nothing) $ _textInput_keypress i
 
 data RangeInputConfig t
@@ -113,18 +111,18 @@ instance Reflex t => Default (RangeInputConfig t) where
                         , _rangeInputConfig_attributes = constDyn mempty
                         }
 
-data RangeInput t
+data RangeInput d t
    = RangeInput { _rangeInput_value :: Dynamic t Float
                 , _rangeInput_input :: Event t Float
                 , _rangeInput_mouseup :: Event t (Int, Int)
                 , _rangeInput_hasFocus :: Dynamic t Bool
-                , _rangeInput_element :: HTMLInputElement
+                , _rangeInput_element :: RawInputElement d
                 }
 
 -- | Create an input whose value is a float.
 --   https://www.w3.org/wiki/HTML/Elements/input/range
 {-# INLINABLE rangeInput #-}
-rangeInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => RangeInputConfig t -> m (RangeInput t)
+rangeInput :: (DomBuilder t m, PostBuild t m) => RangeInputConfig t -> m (RangeInput (DomBuilderSpace m) t)
 rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.insert "type" "range") dAttrs
   i <- inputElement $ def
@@ -136,7 +134,7 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
     , _rangeInput_input = read . T.unpack <$> _inputElement_input i
     , _rangeInput_mouseup = domEvent Mouseup i
     , _rangeInput_hasFocus = _inputElement_hasFocus i
-    , _rangeInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
+    , _rangeInput_element = _inputElement_raw i
     }
 
 data TextAreaConfig t
@@ -152,16 +150,16 @@ instance Reflex t => Default (TextAreaConfig t) where
                        , _textAreaConfig_attributes = constDyn mempty
                        }
 
-data TextArea t
+data TextArea d t
    = TextArea { _textArea_value :: Dynamic t Text
               , _textArea_input :: Event t Text
               , _textArea_hasFocus :: Dynamic t Bool
               , _textArea_keypress :: Event t Int
-              , _textArea_element :: HTMLTextAreaElement
+              , _textArea_element :: RawTextAreaElement d
               }
 
 {-# INLINABLE textArea #-}
-textArea :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextAreaConfig t -> m (TextArea t)
+textArea :: (DomBuilder t m, PostBuild t m) => TextAreaConfig t -> m (TextArea (DomBuilderSpace m) t)
 textArea (TextAreaConfig initial eSet attrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   i <- textAreaElement $ def
@@ -173,7 +171,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_input = _textAreaElement_input i
     , _textArea_keypress = domEvent Keypress i
     , _textArea_hasFocus = _textAreaElement_hasFocus i
-    , _textArea_element = castToHTMLTextAreaElement $ _element_raw $ _textAreaElement_element i
+    , _textArea_element = _textAreaElement_raw i
     }
 
 data CheckboxConfig t
@@ -515,12 +513,12 @@ class HasValue a where
   type Value a :: *
   value :: a -> Value a
 
-instance HasValue (TextArea t) where
-  type Value (TextArea t) = Dynamic t Text
+instance HasValue (TextArea d t) where
+  type Value (TextArea d t) = Dynamic t Text
   value = _textArea_value
 
-instance HasValue (TextInput t) where
-  type Value (TextInput t) = Dynamic t Text
+instance HasValue (TextInput d t) where
+  type Value (TextInput d t) = Dynamic t Text
   value = _textInput_value
 
 instance HasValue (FileInput d t) where
