@@ -33,6 +33,7 @@ import Data.Dependent.Sum (DSum (..))
 import Data.IORef
 import Data.Maybe
 import Data.Monoid ((<>))
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import GHCJS.DOM hiding (runWebGUI)
@@ -102,6 +103,13 @@ attachWidget' rootElement wv w = do
   setInnerHTML rootElement $ Just (""::String)
   _ <- appendChild rootElement $ Just df
   return (result, fc)
+
+-- | Run a reflex-dom application inside of an existing DOM element with the given ID
+mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> IO ()
+mainWidgetInElementById eid w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSing -> do
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
+  Just root <- getElementById doc eid
+  attachWidget root webViewSing w
 
 data AppInput t = AppInput
   { _appInput_window :: Window t
