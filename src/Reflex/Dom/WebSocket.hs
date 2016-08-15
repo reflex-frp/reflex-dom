@@ -23,7 +23,7 @@ module Reflex.Dom.WebSocket where
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class

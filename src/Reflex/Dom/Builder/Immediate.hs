@@ -17,7 +17,8 @@
 module Reflex.Dom.Builder.Immediate where
 
 import Foreign.JavaScript.TH
-import Reflex
+import Reflex.Class as Reflex
+import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class

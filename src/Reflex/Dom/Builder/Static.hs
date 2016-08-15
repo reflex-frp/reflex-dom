@@ -32,13 +32,15 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Data.Text.Encoding
 import GHC.Generics
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
+import Reflex.Dom.Widget.Basic (applyMap)
+import Reflex.Dynamic
+import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Dom.Widget.Basic (applyMap)
-import Reflex.Host.Class
+import Reflex.Spider
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT

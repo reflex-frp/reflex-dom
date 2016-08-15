@@ -39,7 +39,8 @@ import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
 import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
 import GHCJS.DOM.Types (File)
-import Reflex
+import Reflex.Class
+import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class

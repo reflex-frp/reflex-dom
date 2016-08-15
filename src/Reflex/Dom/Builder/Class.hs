@@ -21,7 +21,7 @@ module Reflex.Dom.Builder.Class
        , module Reflex.Deletable.Class
        ) where
 
-import Reflex
+import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.Deletable.Class
 import Reflex.DynamicWriter

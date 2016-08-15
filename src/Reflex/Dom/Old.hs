@@ -63,7 +63,7 @@ import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild, toNode)
 import GHCJS.DOM.Types (IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Internal.Foreign

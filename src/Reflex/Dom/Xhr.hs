@@ -55,7 +55,7 @@ module Reflex.Dom.Xhr
   )
 where
 
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.PerformEvent.Class
 import Reflex.Dom.Xhr.Exception

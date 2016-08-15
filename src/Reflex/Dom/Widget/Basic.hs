@@ -12,9 +12,11 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Basic where
 
+import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
+import Reflex.Dynamic
 import Reflex.PostBuild.Class
 
 import Control.Arrow
@@ -36,7 +38,6 @@ import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
-import Reflex
 
 widgetHoldInternal :: DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 child' = do

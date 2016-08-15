@@ -6,7 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Time where
 
-import Reflex
+import Reflex.Class
+import Reflex.Dynamic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
