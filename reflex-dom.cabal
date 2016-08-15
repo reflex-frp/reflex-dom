@@ -51,7 +51,7 @@ library
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     monad-control >= 1.0.1 && < 1.1,
-    keycode == 0.2.*,
+    keycode >= 0.2.1 && < 0.3,
     unbounded-delays >= 0.1.0.9 && < 0.2
 
   if impl(ghcjs)
