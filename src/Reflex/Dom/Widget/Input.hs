@@ -515,6 +515,14 @@ class HasValue a where
   type Value a :: *
   value :: a -> Value a
 
+instance HasValue (InputElement er d t) where
+  type Value (InputElement er d t) = Dynamic t Text
+  value = _inputElement_value
+
+instance HasValue (TextAreaElement er d t) where
+  type Value (TextAreaElement er d t) = Dynamic t Text
+  value = _textAreaElement_value
+
 instance HasValue (TextArea t) where
   type Value (TextArea t) = Dynamic t Text
   value = _textArea_value
