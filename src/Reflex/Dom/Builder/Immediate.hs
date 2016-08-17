@@ -47,12 +47,14 @@ import qualified GHCJS.DOM.Event as Event
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.HTMLInputElement as Input
+import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
                        removeChild, setNodeValue, toNode)
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
-                        WheelEvent, castToHTMLInputElement, castToHTMLTextAreaElement)
+                        WheelEvent, castToHTMLInputElement, castToHTMLSelectElement,
+                        castToHTMLTextAreaElement)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
@@ -133,7 +135,7 @@ newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IOR
 wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
-  lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(mAttrNamespace, n) mv -> case mAttrNamespace of
+  lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
@@ -175,7 +177,7 @@ makeElement elementTag cfg child = do
   Just e <- ImmediateDomBuilderT $ fmap DOM.castToHTMLElement <$> case cfg ^. namespace of
     Nothing -> createElement doc (Just elementTag)
     Just ens -> createElementNS doc (Just ens) (Just elementTag)
-  ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(mAttrNamespace, n) v -> case mAttrNamespace of
+  ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> setAttribute e n v
     Just ans -> setAttributeNS e (Just ans) n v
   result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
@@ -201,6 +203,7 @@ instance DomSpace GhcjsDomSpace where
   type RawElement GhcjsDomSpace = DOM.HTMLElement
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
+  type RawSelectElement GhcjsDomSpace = DOM.HTMLSelectElement
   addEventSpecFlags _ en f es = es
     { _ghcjsEventSpec_filters =
         let f' = Just . GhcjsEventFilter . \case
@@ -309,11 +312,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
-    let initialFocus = False --TODO: Is this correct?
-    hasFocus <- holdDyn initialFocus $ leftmost
-      [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-      , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-      ]
+    hasFocus <- mkHasFocus e
     return $ TextAreaElement
       { _textAreaElement_value = v
       , _textAreaElement_input = valueChangedByUI
@@ -321,8 +320,40 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , _textAreaElement_element = e
       , _textAreaElement_raw = domTextAreaElement
       }
+  {-# INLINABLE selectElement #-}
+  selectElement cfg child = do
+    ((e, result), domElement) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
+    let domSelectElement = castToHTMLSelectElement domElement
+    Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
+    Just v0 <- Select.getValue domSelectElement
+    let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
+    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Select)
+    valueChangedBySetValue <- performEvent $ ffor (cfg ^. selectElementConfig_setValue) $ \v' -> do
+      Select.setValue domSelectElement $ Just v'
+      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    v <- holdDyn v0 $ leftmost
+      [ valueChangedBySetValue
+      , valueChangedByUI
+      ]
+    hasFocus <- mkHasFocus e
+    let wrapped = SelectElement
+          { _selectElement_value = v
+          , _selectElement_change = valueChangedByUI
+          , _selectElement_hasFocus = hasFocus
+          , _selectElement_element = e
+          , _selectElement_raw = domSelectElement
+          }
+    return (wrapped, result)
   placeRawElement = append
   wrapRawElement = wrap
+
+mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
+mkHasFocus e = do
+  let initialFocus = False --TODO: Actually get the initial focus of the element
+  holdDyn initialFocus $ leftmost
+    [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+    , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+    ]
 
 {-# INLINABLE insertImmediateAbove #-}
 insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)

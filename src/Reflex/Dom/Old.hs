@@ -133,7 +133,7 @@ instance Attributes m (Map Text Text) t where
 
 addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t m -> m (ElementConfig er t m)
 addStaticAttributes attrs cfg = do
-  let initialAttrs = Map.fromList $ first ((,) Nothing) <$> Map.toList attrs
+  let initialAttrs = Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
 instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
@@ -261,7 +261,7 @@ elStopPropagationNS ns elementTag en child = do
 
 elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
-  let cfg = def & initialAttributes .~ Map.mapKeys ((,) Nothing) attrs
+  let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
   (e, _) <- element elementTag cfg $ return ()
   postBuild <- getPostBuild
   performEvent_ $ Element.setInnerHTML (_element_raw e) . Just <$> leftmost [updated html, tag (current html) postBuild]

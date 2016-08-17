@@ -34,10 +34,8 @@ import GHCJS.DOM.Element (castToElement)
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
-import GHCJS.DOM.HTMLInputElement (HTMLInputElement, castToHTMLInputElement)
-import GHCJS.DOM.HTMLSelectElement (castToHTMLSelectElement)
-import qualified GHCJS.DOM.HTMLSelectElement as HTMLSelectElement
-import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement, castToHTMLTextAreaElement)
+import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
+import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (File)
 import Reflex.Class
 import Reflex.Dynamic
@@ -59,8 +57,15 @@ data TextInput t
                , _textInput_keydown :: Event t Int
                , _textInput_keyup :: Event t Int
                , _textInput_hasFocus :: Dynamic t Bool
-               , _textInput_element :: HTMLInputElement
+               , _textInput_builderElement :: InputElement EventResult GhcjsDomSpace t
                }
+
+_textInput_element :: TextInput t -> HTMLInputElement
+_textInput_element = _inputElement_raw . _textInput_builderElement
+
+instance Reflex t => HasDomEvent t (TextInput t) en where
+  type DomEventType (TextInput t) en = DomEventType (InputElement EventResult GhcjsDomSpace t) en
+  domEvent en = domEvent en . _textInput_builderElement
 
 data TextInputConfig t
    = TextInputConfig { _textInputConfig_inputType :: Text
@@ -93,12 +98,17 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     , _textInput_keydown = domEvent Keydown i
     , _textInput_keyup = domEvent Keyup i
     , _textInput_hasFocus = _inputElement_hasFocus i
-    , _textInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
+    , _textInput_builderElement = i
     }
 
-{-# INLINABLE textInputGetEnter #-}
+{-# INLINE textInputGetEnter #-}
+{-# DEPRECATED textInputGetEnter "Use 'keypress Enter' instead" #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
-textInputGetEnter i = fmapMaybe (\n -> if keyCodeLookup n == Enter then Just () else Nothing) $ _textInput_keypress i
+textInputGetEnter = keypress Enter
+
+{-# INLINABLE keypress #-}
+keypress :: (Reflex t, HasDomEvent t e 'KeypressTag, DomEventType e 'KeypressTag ~ Int) => Key -> e -> Event t ()
+keypress key i = fmapMaybe (\n -> if keyCodeLookup n == key then Just () else Nothing) $ domEvent Keypress i
 
 data RangeInputConfig t
    = RangeInputConfig { _rangeInputConfig_initialValue :: Float
@@ -136,7 +146,7 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
     , _rangeInput_input = read . T.unpack <$> _inputElement_input i
     , _rangeInput_mouseup = domEvent Mouseup i
     , _rangeInput_hasFocus = _inputElement_hasFocus i
-    , _rangeInput_element = castToHTMLInputElement $ _element_raw $ _inputElement_element i
+    , _rangeInput_element = _inputElement_raw i
     }
 
 data TextAreaConfig t
@@ -173,7 +183,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_input = _textAreaElement_input i
     , _textArea_keypress = domEvent Keypress i
     , _textArea_hasFocus = _textAreaElement_hasFocus i
-    , _textArea_element = castToHTMLTextAreaElement $ _element_raw $ _textAreaElement_element i
+    , _textArea_element = _textAreaElement_raw i
     }
 
 data CheckboxConfig t
@@ -203,7 +213,7 @@ checkbox checked config = do
   i <- inputElement $ def
     & inputElementConfig_initialChecked .~ checked
     & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
-    & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ Map.mapKeys ((,) Nothing) permanentAttrs
+    & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ Map.mapKeys (AttributeName Nothing) permanentAttrs
     & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
@@ -280,7 +290,7 @@ checkboxView dAttrs dValue = do
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
         { _elementConfig_modifyAttributes = modifyAttrs
-        , _elementConfig_initialAttributes = Map.mapKeys ((,) Nothing) permanentAttrs
+        , _elementConfig_initialAttributes = Map.mapKeys (AttributeName Nothing) permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
             { _ghcjsEventSpec_filters = filters
             , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
@@ -408,7 +418,7 @@ regularToDropdownViewEventType en r = case en of
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), MonadIO m, TriggerEvent t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
+dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
 dropdown k0 options (DropdownConfig setK attrs) = do
   optionsWithAddedKeys <- fmap (zipDynWith Map.union options) $ foldDyn Map.union (k0 =: "") $ fmap (=: "") setK
   defaultKey <- holdDyn k0 setK
@@ -416,31 +426,16 @@ dropdown k0 options (DropdownConfig setK attrs) = do
         let xs = fmap (\(ix, (k, v)) -> ((ix, k), ((ix, k), v))) $ zip [0::Int ..] $ Map.toList os
         in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  let cfg = (def :: ElementConfig EventResult t m)
-        { _elementConfig_modifyAttributes = modifyAttrs
-        , _elementConfig_eventSpec = GhcjsEventSpec
-            { _ghcjsEventSpec_filters = DMap.singleton Change $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
-                Just t <- Event.getTarget evt
-                Just v <- HTMLSelectElement.getValue $ HTMLSelectElement.castToHTMLSelectElement t
-                return $ (,) mempty $ return $ Just $ DropdownViewEventResult v
-            , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
-                Click -> error "impossible"
-                _ -> do
-                  Just e <- withIsEvent en $ Event.getTarget evt
-                  mr <- runReaderT (defaultDomEventHandler (castToElement e) en) evt
-                  return $ ffor mr $ \(EventResult r) -> DropdownViewEventResult $ regularToDropdownViewEventType en r
-            }
-        }
-  (eRaw, _) <- element "select" cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
+  let cfg = def
+        & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+        & selectElementConfig_setValue .~ fmap (T.pack . show) (attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK)
+  (eRaw, _) <- selectElement cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
     let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
-  let e = castToHTMLSelectElement $ _element_raw eRaw
-  performEvent_ $ HTMLSelectElement.setValue e . Just . show <$> attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK
-  let lookupSelected ks value = do
-        v <- value
-        key <- T.readMaybe v
+  let lookupSelected ks v = do
+        key <- T.readMaybe $ T.unpack v
         Bimap.lookup key ks
-  eChange <- attachPromptlyDynWith lookupSelected ixKeys <$> wrapDomEvent e (`on` Element.change) (HTMLSelectElement.getValue e)
+  let eChange = attachPromptlyDynWith lookupSelected ixKeys $ _selectElement_change eRaw
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
