@@ -26,11 +26,14 @@ import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (toLazyByteString)
 import qualified Data.ByteString.Lazy as BL
+import Data.Constraint
+import Data.Constraint.Possibly
 import Data.Default
 import Data.Dependent.Sum (DSum (..))
 import qualified Data.Map as Map
 import Data.Monoid
 import Data.Text.Encoding
+import Foreign.JavaScript.TH
 import GHC.Generics
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -197,6 +200,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
+
+instance (HasJS x m, ReflexHost t) => HasJS x (StaticDomBuilderT t m) where
+  type JSM (StaticDomBuilderT t m) = JSM m
+  liftJS = lift . liftJS
+
+instance (Possibly (HasJS x m), ReflexHost t) => Possibly (HasJS x (StaticDomBuilderT t m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x m)) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
 
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do

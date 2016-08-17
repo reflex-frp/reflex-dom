@@ -31,6 +31,8 @@ import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
 import Data.Bitraversable
+import Data.Constraint (Dict (..))
+import Data.Constraint.Possibly
 import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
@@ -437,6 +439,11 @@ instance MonadAtomicRef m => MonadAtomicRef (ImmediateDomBuilderT t m) where
 instance (HasJS x m, ReflexHost t) => HasJS x (ImmediateDomBuilderT t m) where
   type JSM (ImmediateDomBuilderT t m) = JSM m
   liftJS = lift . liftJS
+
+instance (Possibly (HasJS x m), ReflexHost t) => Possibly (HasJS x (ImmediateDomBuilderT t m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x m)) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
 
 type family EventType en where
   EventType 'AbortTag = UIEvent

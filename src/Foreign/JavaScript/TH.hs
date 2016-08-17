@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -77,6 +78,8 @@ import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Coerce
+import Data.Constraint
+import Data.Constraint.Possibly
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -206,17 +209,37 @@ instance HasJS x m => HasJS x (ReaderT r m) where
   type JSM (ReaderT r m) = JSM m
   liftJS = lift . liftJS
 
+instance (Possibly (HasJS x m)) => Possibly (HasJS x (ReaderT r m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x m)) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
+
 instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
   type JSM (PostBuildT t m) = JSM m
   liftJS = lift . liftJS
+
+instance (Possibly (HasJS x m), ReflexHost t) => Possibly (HasJS x (PostBuildT t m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x m)) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
 
 instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
   type JSM (PerformEventT t m) = JSM (HostFrame t)
   liftJS = PerformEventT . lift . liftJS
 
+instance (Possibly (HasJS x (HostFrame t)), ReflexHost t) => Possibly (HasJS x (PerformEventT t m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x (HostFrame t))) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
+
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSM (DynamicWriterT t w m) = JSM m
   liftJS = lift . liftJS
+
+instance (Possibly (HasJS x m)) => Possibly (HasJS x (DynamicWriterT t w m)) where
+  getPossibly = case getPossibly :: Maybe (Dict (HasJS x m)) of
+    Just Dict -> Just Dict
+    Nothing -> Nothing
 
 -- | A Monad that is capable of executing JavaScript
 class Monad m => MonadJS x m | m -> x where
@@ -249,6 +272,9 @@ data JSCtx_IO
 instance MonadIO m => HasJS JSCtx_IO (WithWebView x m) where
   type JSM (WithWebView x m) = IO
   liftJS = liftIO
+
+instance MonadIO m => Possibly (HasJS JSCtx_IO (WithWebView x m)) where
+  getPossibly = Just Dict
 
 instance IsJSContext JSCtx_IO where
   newtype JSRef JSCtx_IO = JSRef_IO { unJSRef_IO :: JS.JSVal }
@@ -323,6 +349,10 @@ instance MonadIO m => HasJS (JSCtx_JavaScriptCore x) (WithWebView x m) where
   liftJS a = do
     wv <- askWebView
     liftIO $ runWithWebView a wv
+
+-- | Unless we're in GHCJS, we don't have JS in IO
+instance Possibly (HasJS x IO) where
+  getPossibly = Nothing
 
 instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   runJS (JSFFI body) args = do
