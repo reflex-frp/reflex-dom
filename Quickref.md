@@ -160,13 +160,13 @@ Convenience functions for XMLHttpRequest.  see Reflex.Dom.Xhr
 
 ```haskell
 -- Given method, URL, and config record (with default instance), construct a request.
-[ ]   xhrRequest :: Text -> Text -> XhrRequestConfig -> XhrRequest
+[ ]   xhrRequest :: Text -> Text -> XhrRequestConfig a -> XhrRequest a
 
 -- Given Event of requests, issue them and produce Event of responses.
-[W]   performRequestAsync :: Event XhrRequest -> m (Event XhrResponse)
+[W]   performRequestAsync :: Event (XhrRequest a) -> m (Event XhrResponse)
 
 -- Issue a collection of requests, wait for them ALL to complete, return collected results.
-[W]   performRequestsAsync :: Traversable f => Event (f XhrRequest) -> m (Event (f XhrResponse))
+[W]   performRequestsAsync :: Traversable f => Event (f (XhrRequest a)) -> m (Event (f XhrResponse))
 
 -- Convenience function to decode JSON-encoded responses.
 [ ]   decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
