@@ -103,6 +103,15 @@ instance (Monad m, Ref m ~ Ref IO, Reflex t) => TriggerEvent t (StaticDomBuilder
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete _ = return never
 
+instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
+  type Ref (StaticDomBuilderT t m) = Ref m
+  newRef = lift . newRef
+  readRef = lift . readRef
+  writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (StaticDomBuilderT t m) where
+  atomicModifyRef r = lift . atomicModifyRef r
+
 type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
 data StaticDomSpace
