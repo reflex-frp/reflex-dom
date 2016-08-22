@@ -78,6 +78,7 @@ library
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
+    Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Internal

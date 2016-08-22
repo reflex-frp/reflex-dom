@@ -3,6 +3,7 @@ module Reflex.Dom (module X) where
 import Reflex as X
 import Reflex.Dom.Builder.Class as X
 import Reflex.Dom.Builder.Immediate as X
+import Reflex.Dom.Builder.InputDisabled as X
 import Reflex.Dom.Builder.Static as X
 import Reflex.Dom.Class as X
 import Reflex.Dom.Internal as X
