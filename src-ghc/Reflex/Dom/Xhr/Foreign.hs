@@ -40,6 +40,9 @@ instance IsXhrPayload () where
 instance IsXhrPayload Text where
   xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just
 
+instance IsXhrPayload String where
+  xmlHttpRequestSend xhr = xmlHttpRequestSendPayload xhr . Just . T.pack
+
 instance IsXhrPayload File where
   xmlHttpRequestSend = error "xmlHttpRequestSend{File}: not implemented"
 
