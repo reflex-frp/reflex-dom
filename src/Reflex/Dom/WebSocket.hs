@@ -42,11 +42,11 @@ import Data.IORef
 import Data.Maybe (isJust)
 import Data.Text
 
-data WebSocketConfig t
-   = WebSocketConfig { _webSocketConfig_send :: Event t [ByteString]
+data WebSocketConfig t a
+   = WebSocketConfig { _webSocketConfig_send :: Event t [a]
                      }
 
-instance Reflex t => Default (WebSocketConfig t) where
+instance Reflex t => Default (WebSocketConfig t a) where
   def = WebSocketConfig never
 
 data WebSocket t
@@ -54,7 +54,13 @@ data WebSocket t
                , _webSocket_open :: Event t ()
                }
 
-webSocket :: (MonadIO m, MonadIO (Performable m), HasWebView m, PerformEvent t m, TriggerEvent t m, PostBuild t m) => Text -> WebSocketConfig t -> m (WebSocket t)
+-- This can be used to send either binary or text messages for the same websocket connection
+instance (IsWebSocketMessage a, IsWebSocketMessage b) => IsWebSocketMessage (Either a b) where
+  webSocketSend jws (Left a) = webSocketSend jws a
+  webSocketSend jws (Right a) = webSocketSend jws a
+
+
+webSocket :: (MonadIO m, MonadIO (Performable m), HasWebView m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
 webSocket url config = do
   wv <- fmap unWebViewSingleton askWebView
   (eRecv, onMessage) <- newTriggerEvent
