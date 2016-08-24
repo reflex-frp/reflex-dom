@@ -327,7 +327,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
-    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Select)
+    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
     valueChangedBySetValue <- performEvent $ ffor (cfg ^. selectElementConfig_setValue) $ \v' -> do
       Select.setValue domSelectElement $ Just v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
