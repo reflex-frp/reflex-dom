@@ -176,6 +176,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
       , _inputElement_raw = ()
+      , _inputElement_files = never
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do

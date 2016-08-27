@@ -46,6 +46,7 @@ import Data.Text (Text)
 import Data.Traversable
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
+import GHCJS.DOM.File (File)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
@@ -261,6 +262,7 @@ data InputElement er d t
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
+                  , _inputElement_files :: Event t [File]
                   }
 
 data TextAreaElementConfig er t m
