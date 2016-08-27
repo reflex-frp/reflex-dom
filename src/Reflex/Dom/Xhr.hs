@@ -179,16 +179,16 @@ newXMLHttpRequestWithError req cb = do
       status <- liftIO $ xmlHttpRequestGetStatus xhr
       statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
       when (readyState == 4) $ do
-        t <- if rt == Just XhrResponseType_Text || rt == Nothing
+        t <- if rt == Just XhrResponseType_Text || isNothing rt
              then liftIO $ xmlHttpRequestGetResponseText xhr
              else  return Nothing
         r <- liftIO $ xmlHttpRequestGetResponse xhr
         h <- case _xhrRequestConfig_responseHeaders c of
-          AllHeaders -> liftIO $ fmap parseAllHeadersString $
+          AllHeaders -> liftIO $ parseAllHeadersString <$>
             xmlHttpRequestGetAllResponseHeaders xhr
-          OnlyHeaders xs -> liftIO $ fmap Map.fromList $ traverse
+          OnlyHeaders xs -> liftIO $ Map.fromList <$> traverse
             (\x -> (x,) <$> xmlHttpRequestGetResponseHeader xhr x) xs
-        _ <- liftIO $ cb $ Right $
+        _ <- liftIO $ cb $ Right
              XhrResponse { _xhrResponse_status = status
                          , _xhrResponse_statusText = statusText
                          , _xhrResponse_response = r
@@ -201,7 +201,7 @@ newXMLHttpRequestWithError req cb = do
   return xhr
 
 parseAllHeadersString :: Text -> Map Text Text
-parseAllHeadersString s = Map.fromList $ fmap (stripBoth . (T.span (/=':'))) $
+parseAllHeadersString s = Map.fromList $ fmap (stripBoth . T.span (/=':')) $
   dropWhileEnd T.null $ T.splitOn (T.pack "\r\n") s
   where stripBoth (txt1, txt2) = (T.strip txt1, T.strip $ T.drop 1 txt2)
 
