@@ -21,8 +21,11 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              ) where
 
 import Reflex.Class
-import Reflex.Dom.Deletable.Class
-import Reflex.Dom.PerformEvent.Class
+import Reflex.Deletable.Class
+import Reflex.DynamicWriter
+import Reflex.PerformEvent.Base
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 import Reflex.Host.Class
 
 import Language.Haskell.TH
@@ -92,6 +95,18 @@ instance HasWebView m => HasWebView (StateT r m) where
 
 instance HasWebView m => HasWebView (Strict.StateT r m) where
   type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+instance HasWebView m => HasWebView (PostBuildT t m) where
+  type WebViewPhantom (PostBuildT t m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t m) where
+  type WebViewPhantom (PerformEventT t m) = WebViewPhantom (HostFrame t)
+  askWebView = PerformEventT $ lift askWebView
+
+instance HasWebView m => HasWebView (DynamicWriterT t w m) where
+  type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
   askWebView = lift askWebView
 
 newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
@@ -191,6 +206,18 @@ instance HasJS x m => HasJS x (ReaderT r m) where
   type JSM (ReaderT r m) = JSM m
   liftJS = lift . liftJS
 
+instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
+  type JSM (PostBuildT t m) = JSM m
+  liftJS = lift . liftJS
+
+instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
+  type JSM (PerformEventT t m) = JSM (HostFrame t)
+  liftJS = PerformEventT . lift . liftJS
+
+instance HasJS x m => HasJS x (DynamicWriterT t w m) where
+  type JSM (DynamicWriterT t w m) = JSM m
+  liftJS = lift . liftJS
+
 -- | A Monad that is capable of executing JavaScript
 class Monad m => MonadJS x m | m -> x where
   runJS :: JSFFI -> [JSRef x] -> m (JSRef x)
@@ -269,18 +296,13 @@ foreign import javascript unsafe "function(){ return $1(arguments); }" funWithAr
 
 #else
 
-askJSContext :: MonadIO m => WithWebView x m JSContextRef
-askJSContext = do
-  wv <- askWebView
-  liftIO $ webFrameGetGlobalContext =<< webViewGetMainFrame (unWebViewSingleton wv)
-
 -- | Make a JS string available that is not wrapped up as a JSValueRef
 withJSStringRaw :: MonadAsyncException m => String -> (JSStringRef -> m r) -> m r
 withJSStringRaw str a = do
   bracket (liftIO $ jsstringcreatewithutf8cstring str) (liftIO . jsstringrelease) $ \strRef -> do
     a strRef
 
-fromJSNumberRaw :: MonadIO m => JSValueRef -> WithWebView x m Double
+fromJSNumberRaw :: (MonadIO m, HasJSContext m) => JSValueRef -> m Double
 fromJSNumberRaw val = do
   jsContext <- askJSContext
   liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
@@ -297,15 +319,70 @@ instance MonadIO m => HasJS (JSCtx_JavaScriptCore x) (WithWebView x m) where
     wv <- askWebView
     liftIO $ runWithWebView a wv
 
+newtype WithJSContext x m a = WithJSContext { unWithJSContext :: ReaderT JSContextRef m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+
+runWithJSContext :: WithJSContext x m a -> JSContextRef -> m a
+runWithJSContext = runReaderT . unWithJSContext
+
+class Monad m => HasJSContext m where
+  askJSContext :: m JSContextRef
+
+instance MonadIO m => HasJSContext (WithWebView x m) where
+  askJSContext = do
+    wv <- askWebView
+    liftIO $ webFrameGetGlobalContext =<< webViewGetMainFrame (unWebViewSingleton wv)
+
+instance Monad m => HasJSContext (WithJSContext x m) where
+  askJSContext = WithJSContext ask
+
+lowerWithJSContext :: (HasJSContext m, MonadIO m) => WithJSContext x IO a -> m a
+lowerWithJSContext a = do
+  c <- askJSContext
+  liftIO $ runWithJSContext a c
+
+liftWithWebViewThroughWithJSContext :: (HasJSContext m, HasWebView m, MonadIO m, MonadTrans t, Monad m1)
+                                    => ((t1 -> t m1 a) -> WithJSContext x IO b)
+                                    -> (t1 -> WithWebView (WebViewPhantom m) m1 a)
+                                    -> m b
+liftWithWebViewThroughWithJSContext f a = do
+  wv <- askWebView
+  lowerWithJSContext $ f $ \b' -> lift $ runWithWebView (a b') wv
+
 instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
+  forkJS a = do
+    wv <- askWebView
+    liftIO $ forkIO $ runWithWebView a wv
+  mkJSFun a = do
+    wv <- askWebView
+    lowerWithJSContext $ mkJSFun $ \args -> lift $ runWithWebView (a args) wv
+  runJS expr args = lowerWithJSContext $ runJS expr args
+  mkJSUndefined = lowerWithJSContext mkJSUndefined
+  isJSNull = lowerWithJSContext . isJSNull
+  isJSUndefined = lowerWithJSContext . isJSUndefined
+  fromJSBool = lowerWithJSContext . fromJSBool
+  fromJSString = lowerWithJSContext . fromJSString
+  fromJSArray = lowerWithJSContext . fromJSArray
+  fromJSUint8Array = lowerWithJSContext . fromJSUint8Array
+  fromJSNumber = lowerWithJSContext . fromJSNumber
+  freeJSFun = lowerWithJSContext . freeJSFun
+  withJSBool = liftWithWebViewThroughWithJSContext . withJSBool
+  withJSString = liftWithWebViewThroughWithJSContext . withJSString
+  withJSNumber = liftWithWebViewThroughWithJSContext . withJSNumber
+  withJSArray = liftWithWebViewThroughWithJSContext . withJSArray
+  withJSUint8Array = liftWithWebViewThroughWithJSContext . withJSUint8Array
+  withJSNode = liftWithWebViewThroughWithJSContext . withJSNode
+  setJSProp propName valRef objRef = lowerWithJSContext $ setJSProp propName valRef objRef
+  getJSProp propName objRef = lowerWithJSContext $ getJSProp propName objRef
+
+instance MonadJS (JSCtx_JavaScriptCore x) (WithJSContext x IO) where
   runJS (JSFFI body) args = do
     jsContext <- askJSContext
     withJSArray args $ \(JSRef_JavaScriptCore this) -> liftIO $ do
       result <- bracket (jsstringcreatewithutf8cstring body) jsstringrelease $ \script -> jsevaluatescript jsContext script this nullPtr 1 nullPtr
       return $ JSRef_JavaScriptCore result --TODO: Protect and unprotect result
   forkJS a = do
-    wv <- askWebView
-    liftIO $ forkIO $ runWithWebView a wv
+    c <- askJSContext
+    liftIO $ forkIO $ runWithJSContext a c
   mkJSUndefined = do
     jsContext <- askJSContext
     fmap JSRef_JavaScriptCore $ liftIO $ jsvaluemakeundefined jsContext
@@ -366,14 +443,13 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
     jsContext <- askJSContext
     liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
   mkJSFun a = do
-    wv <- askWebView
     jsContext <- askJSContext
     cb <- liftIO $ mkJSObjectCallAsFunctionCallback $ \_ _ _ argc argv _ -> do --TODO: Use the exception pointer to handle haskell exceptions
       args <- forM [0..fromIntegral (argc-1)] $ \n -> do
         x <- peekElemOff argv n
         jsvalueprotect jsContext x
         return $ JSRef_JavaScriptCore x --TODO: Unprotect eventually
-      unJSRef_JavaScriptCore <$> runWithWebView (a args) wv
+      unJSRef_JavaScriptCore <$> runWithJSContext (a args) jsContext
     cbRef <- liftIO $ jsobjectmakefunctionwithcallback jsContext nullPtr cb
     liftIO $ jsvalueprotect jsContext cbRef
     return $ JSFun $ JSRef_JavaScriptCore cbRef

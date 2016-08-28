@@ -10,6 +10,7 @@ import Control.Monad.Reader
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Text (Text)
+import qualified Data.Text as T (unpack)
 import Data.Text.Encoding
 import GHCJS.Buffer
 import GHCJS.DOM.EventM (on)
@@ -23,6 +24,23 @@ import GHCJS.Types
 import JavaScript.TypedArray.ArrayBuffer as JS
 
 data JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
+
+class IsWebSocketMessage a where
+  webSocketSend :: JSWebSocket -> a -> IO ()
+
+-- Use binary websocket communication for ByteString
+-- Note: Binary websockets may not work correctly in IE 11 and below
+instance IsWebSocketMessage ByteString where
+  webSocketSend (JSWebSocket ws) bs = do
+    let (b, off, len) = fromByteString bs
+    ab <- ArrayBuffer <$> if BS.length bs == 0 --TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
+                          then jsval . getArrayBuffer <$> create 0
+                          else return $ js_dataView off len $ jsval $ getArrayBuffer b
+    GD.send ws $ Just ab
+
+-- Use plaintext websocket communication for Text, and String
+instance IsWebSocketMessage Text where
+  webSocketSend (JSWebSocket ws) = GD.sendString ws . T.unpack
 
 newWebSocket :: a -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onOpen onClose = do
@@ -39,13 +57,5 @@ newWebSocket _ url onMessage onOpen onClose = do
         onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
   _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
-
-webSocketSend :: JSWebSocket -> ByteString -> IO ()
-webSocketSend (JSWebSocket ws) bs = do
-  let (b, off, len) = fromByteString bs
-  ab <- ArrayBuffer <$> if BS.length bs == 0 --TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
-                        then jsval . getArrayBuffer <$> create 0
-                        else return $ js_dataView off len $ jsval $ getArrayBuffer b
-  GD.send ws $ Just ab
 
 foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal

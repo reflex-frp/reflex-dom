@@ -49,6 +49,9 @@ instance IsXhrPayload () where
 instance IsXhrPayload String where
   sendXhrPayload = sendString
 
+instance IsXhrPayload Text where
+  sendXhrPayload = sendString
+  
 instance IsXhrPayload FormData where
   sendXhrPayload = sendFormData
 

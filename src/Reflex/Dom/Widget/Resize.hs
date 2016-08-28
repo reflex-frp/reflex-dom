@@ -5,13 +5,13 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Resize where
 
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 
 import Control.Monad
 import Control.Monad.Fix

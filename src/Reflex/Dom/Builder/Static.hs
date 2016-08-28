@@ -32,13 +32,15 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Data.Text.Encoding
 import GHC.Generics
-import Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.PerformEvent.Base
-import Reflex.Dom.PerformEvent.Class
-import Reflex.Dom.PostBuild.Class
 import Reflex.Dom.Widget.Basic (applyMap)
+import Reflex.Dynamic
 import Reflex.Host.Class
+import Reflex.PerformEvent.Base
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
+import Reflex.Spider
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -101,6 +103,15 @@ instance (Monad m, Ref m ~ Ref IO, Reflex t) => TriggerEvent t (StaticDomBuilder
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete _ = return never
 
+instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
+  type Ref (StaticDomBuilderT t m) = Ref m
+  newRef = lift . newRef
+  readRef = lift . readRef
+  writeRef r = lift . writeRef r
+
+instance MonadAtomicRef m => MonadAtomicRef (StaticDomBuilderT t m) where
+  atomicModifyRef r = lift . atomicModifyRef r
+
 type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
 
 data StaticDomSpace
@@ -121,6 +132,8 @@ instance DomSpace StaticDomSpace where
   type RawElement StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
+  type RawSelectElement StaticDomSpace = ()
+  addEventSpecFlags _ _ _ _ = StaticEventSpec
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
@@ -132,7 +145,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     return $ TextNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
-    let toAttr (_mns, k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
+    let toAttr (AttributeName _mns k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
@@ -177,6 +190,17 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _textAreaElement_element = e
       , _textAreaElement_raw = ()
       }
+  selectElement cfg child = do
+    (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) child
+    v <- holdDyn (cfg ^. selectElementConfig_initialValue) (cfg ^. selectElementConfig_setValue)
+    let wrapped = SelectElement
+          { _selectElement_value = v
+          , _selectElement_change = never
+          , _selectElement_hasFocus = constDyn False --TODO: How do we make sure this is correct?
+          , _selectElement_element = e
+          , _selectElement_raw = ()
+          }
+    return (wrapped, result)
   placeRawElement () = return ()
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 

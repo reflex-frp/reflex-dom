@@ -78,16 +78,12 @@ library
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
+    Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
-    Reflex.Dom.Deletable.Class
-    Reflex.Dom.DynamicWriter
     Reflex.Dom.Internal
     Reflex.Dom.Internal.Foreign
     Reflex.Dom.Location
-    Reflex.Dom.PerformEvent.Base
-    Reflex.Dom.PerformEvent.Class
-    Reflex.Dom.PostBuild.Class
     Reflex.Dom.Old
     Reflex.Dom.Time
     Reflex.Dom.WebSocket

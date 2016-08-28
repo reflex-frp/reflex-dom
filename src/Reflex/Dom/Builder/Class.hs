@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -17,23 +18,32 @@
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
-       , module Reflex.Dom.Deletable.Class
+       , module Reflex.Deletable.Class
        ) where
 
-import Reflex
+import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
-import Reflex.Dom.Deletable.Class
+import Reflex.Deletable.Class
+import Reflex.DynamicWriter
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
+import Data.Foldable
 import Data.Functor.Misc
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Proxy
 import Data.Semigroup
+import Data.String
 import Data.Text (Text)
+import Data.Traversable
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
 
@@ -43,19 +53,97 @@ class Default (EventSpec d EventResult) => DomSpace d where
   type RawElement d :: *
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
+  type RawSelectElement d :: *
+  addEventSpecFlags :: proxy d -> EventName en -> (Maybe (er en) -> EventFlags) -> EventSpec d er -> EventSpec d er
 
--- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building dynamic DOM in the 'Reflex' timeline @t@
+{-# INLINABLE liftElementConfig #-}
+liftElementConfig :: (DomBuilderSpace (f m) ~ DomBuilderSpace m) => ElementConfig er t (f m) -> ElementConfig er t m
+liftElementConfig cfg = cfg
+  { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
+  }
+
+-- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
+-- dynamic DOM in the 'Reflex' timeline @t@
 class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
+  default textNode :: ( MonadTrans f
+                      , m ~ f m'
+                      , DomBuilderSpace m' ~ DomBuilderSpace m
+                      , DomBuilder t m'
+                      )
+                   => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
+  textNode = lift . textNode
+  {-# INLINABLE textNode #-}
   element :: Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
+  default element :: ( MonadTransControl f
+                     , StT f a ~ a
+                     , m ~ f m'
+                     , DomBuilderSpace m' ~ DomBuilderSpace m
+                     , DomBuilder t m'
+                     )
+                  => Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
+  element t cfg child = liftWith $ \run -> element t (liftElementConfig cfg) $ run child
+  {-# INLINABLE element #-}
   -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
   -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
   placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
+  default inputElement :: ( MonadTransControl f
+                          , m ~ f m'
+                          , DomBuilderSpace m' ~ DomBuilderSpace m
+                          , DomBuilder t m'
+                          )
+                       => InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
+  inputElement cfg = lift $ inputElement $ cfg
+    { _inputElementConfig_elementConfig = liftElementConfig $ _inputElementConfig_elementConfig cfg
+    }
+  {-# INLINABLE inputElement #-}
   textAreaElement :: TextAreaElementConfig er t m -> m (TextAreaElement er (DomBuilderSpace m) t)
+  default textAreaElement :: ( MonadTransControl f
+                             , m ~ f m'
+                             , DomBuilderSpace m' ~ DomBuilderSpace m
+                             , DomBuilder t m'
+                             )
+                          => TextAreaElementConfig er t m -> m (TextAreaElement er (DomBuilderSpace m) t)
+  textAreaElement cfg = lift $ textAreaElement $ cfg
+    { _textAreaElementConfig_elementConfig = liftElementConfig $ _textAreaElementConfig_elementConfig cfg
+    }
+  {-# INLINABLE textAreaElement #-}
+  selectElement :: SelectElementConfig er t m -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
+  default selectElement :: ( MonadTransControl f
+                           , StT f a ~ a
+                           , m ~ f m'
+                           , DomBuilderSpace m' ~ DomBuilderSpace m
+                           , DomBuilder t m'
+                           )
+                        => SelectElementConfig er t m -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
+  selectElement cfg child = do
+    let cfg' = cfg
+          { _selectElementConfig_elementConfig = liftElementConfig $ _selectElementConfig_elementConfig cfg
+          }
+    liftWith $ \run -> selectElement cfg' $ run child
+  {-# INLINABLE selectElement #-}
   placeRawElement :: RawElement (DomBuilderSpace m) -> m ()
+  default placeRawElement :: ( MonadTrans f
+                             , m ~ f m'
+                             , DomBuilderSpace m' ~ DomBuilderSpace m
+                             , DomBuilder t m'
+                             )
+                          => RawElement (DomBuilderSpace m) -> m ()
+  placeRawElement = lift . placeRawElement
+  {-# INLINABLE placeRawElement #-}
   wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t m -> m (Element er (DomBuilderSpace m) t)
+  default wrapRawElement :: ( MonadTrans f
+                            , m ~ f m'
+                            , DomBuilderSpace m' ~ DomBuilderSpace m
+                            , DomBuilder t m'
+                            )
+                         => RawElement (DomBuilderSpace m) -> RawElementConfig er t m -> m (Element er (DomBuilderSpace m) t)
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
+  {-# INLINABLE wrapRawElement #-}
 
 type Namespace = Text
 
@@ -75,7 +163,11 @@ data TextNode d t = TextNode
   { _textNode_raw :: RawTextNode d
   }
 
-type AttributeName = (Maybe Namespace, Text)
+data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
+
+-- | By default, AttributeNames are unnamespaced
+instance IsString AttributeName where
+  fromString = AttributeName Nothing . fromString
 
 data Propagation
    = Propagation_Continue
@@ -120,15 +212,6 @@ data ElementConfig er t m
                    , _elementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
-
-instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig er t m) where
-  {-# INLINABLE def #-}
-  def = ElementConfig
-    { _elementConfig_namespace = Nothing
-    , _elementConfig_initialAttributes = mempty
-    , _elementConfig_modifyAttributes = never
-    , _elementConfig_eventSpec = def
-    }
 
 data Element er d t
    = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
@@ -219,12 +302,36 @@ instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig E
     , _rawElementConfig_eventSpec = def
     }
 
-makeLenses ''TextNodeConfig
-makeLenses ''ElementConfig
-makeLenses ''PlaceholderConfig
-makeLenses ''InputElementConfig
-makeLenses ''TextAreaElementConfig
-makeLenses ''RawElementConfig
+data SelectElementConfig er t m = SelectElementConfig
+  { _selectElementConfig_initialValue :: Text
+  , _selectElementConfig_setValue :: Event t Text
+  , _selectElementConfig_elementConfig :: ElementConfig er t m
+  }
+
+instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (SelectElementConfig er t m) where
+  def = SelectElementConfig
+    { _selectElementConfig_initialValue = ""
+    , _selectElementConfig_setValue = never
+    , _selectElementConfig_elementConfig = def
+    }
+
+data SelectElement er d t = SelectElement
+  { _selectElement_element :: Element er d t
+  , _selectElement_value :: Dynamic t Text
+  , _selectElement_change :: Event t Text -- ^ Fires when the value is changed by the user, but not when it is set by setValue
+  , _selectElement_hasFocus :: Dynamic t Bool
+  , _selectElement_raw :: RawSelectElement d
+  }
+
+concat <$> mapM makeLenses
+  [ ''TextNodeConfig
+  , ''ElementConfig
+  , ''PlaceholderConfig
+  , ''InputElementConfig
+  , ''TextAreaElementConfig
+  , ''SelectElementConfig
+  , ''RawElementConfig
+  ]
 
 class CanDeleteSelf t a | a -> t where
   deleteSelf :: Lens' a (Event t ())
@@ -246,12 +353,28 @@ instance InitialAttributes (ElementConfig er t m) where
   {-# INLINABLE initialAttributes #-}
   initialAttributes = elementConfig_initialAttributes
 
+instance InitialAttributes (InputElementConfig er t m) where
+  {-# INLINABLE initialAttributes #-}
+  initialAttributes = inputElementConfig_elementConfig . elementConfig_initialAttributes
+
+instance InitialAttributes (TextAreaElementConfig er t m) where
+  {-# INLINABLE initialAttributes #-}
+  initialAttributes = textAreaElementConfig_elementConfig . elementConfig_initialAttributes
+
 class ModifyAttributes t a | a -> t where
   modifyAttributes :: Lens' a (Event t (Map AttributeName (Maybe Text)))
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
   modifyAttributes = elementConfig_modifyAttributes
+
+instance ModifyAttributes t (InputElementConfig er t m) where
+  {-# INLINABLE modifyAttributes #-}
+  modifyAttributes = inputElementConfig_elementConfig . elementConfig_modifyAttributes
+
+instance ModifyAttributes t (TextAreaElementConfig er t m) where
+  {-# INLINABLE modifyAttributes #-}
+  modifyAttributes = textAreaElementConfig_elementConfig . elementConfig_modifyAttributes
 
 instance ModifyAttributes t (RawElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
@@ -263,6 +386,74 @@ class HasNamespace a where
 instance HasNamespace (ElementConfig er t m) where
   {-# INLINABLE namespace #-}
   namespace = elementConfig_namespace
+
+instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig er t m) where
+  {-# INLINABLE def #-}
+  def = ElementConfig
+    { _elementConfig_namespace = Nothing
+    , _elementConfig_initialAttributes = mempty
+    , _elementConfig_modifyAttributes = never
+    , _elementConfig_eventSpec = def
+    }
+
+instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
+  type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
+  {-# INLINABLE placeholder #-}
+  placeholder cfg = lift $ do
+    rec childPostBuild <- deletable (_placeholder_deletedSelf p) $ performEvent $ return () <$ _placeholder_insertedAbove p
+        p <- placeholder $ cfg
+          { _placeholderConfig_insertAbove = ffor (_placeholderConfig_insertAbove cfg) $ \a -> runPostBuildT a =<< headE childPostBuild
+          }
+    return p
+  wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
+
+instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
+  type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (DynamicWriterT child) = DynamicWriterT $ do
+    s <- get
+    let cfg' = liftElementConfig cfg
+    (el, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
+    put newS
+    return (el, a)
+  placeholder cfg = do
+    let cfg' = cfg
+          { _placeholderConfig_insertAbove = runDynamicWriterTInternal <$> _placeholderConfig_insertAbove cfg
+          }
+    let manageChildren :: Event t (NonEmpty (Replaceable t (Dynamic t w))) -- ^ Add nodes on the right; these are in reverse order
+                       -> Event t () -- ^ No more nodes will be added after this event fires
+                       -> m (Replaceable t (Dynamic t w))
+        manageChildren newChildren additionsCeased = do
+          rec nextId <- hold (0 :: Int) newNextId -- We assume this will never wrap around
+              let numberedNewChildren :: Event t (Int, PatchMap (Map Int (Replaceable t (Dynamic t w))))
+                  numberedNewChildren = flip pushAlways newChildren $ \rcs -> do
+                    let cs = reverse $ toList rcs
+                    myFirstId <- sample nextId
+                    let (myNextId, numbered) = mapAccumL (\n v -> (succ n, (n, Just v))) myFirstId cs
+                    return (myNextId, PatchMap $ Map.fromList numbered)
+                  newNextId = fst <$> numberedNewChildren
+          mconcatIncrementalReplaceableDynMap Map.empty (snd <$> numberedNewChildren) additionsCeased
+    rec children <- lift $ manageChildren childOutputs $ cfg ^. deleteSelf
+        p <- DynamicWriterT $ do
+          modify (children:)
+          lift $ placeholder cfg'
+        let result = fst <$> _placeholder_insertedAbove p
+            childOutputs = fmapMaybe (nonEmpty . snd) $ _placeholder_insertedAbove p
+    return $ p
+      { _placeholder_insertedAbove = result
+      }
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  selectElement cfg (DynamicWriterT child) = DynamicWriterT $ do
+    s <- get
+    let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
+    (el, (a, newS)) <- lift $ selectElement cfg' $ runStateT child s
+    put newS
+    return (el, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
 
 -- * Convenience functions
 
@@ -293,6 +484,10 @@ instance Functor1 (TextAreaElementConfig er t) where
   type Functor1Constraint (TextAreaElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
   fmap1 f cfg = cfg & textAreaElementConfig_elementConfig %~ fmap1 f
 
+instance Functor1 (SelectElementConfig er t) where
+  type Functor1Constraint (SelectElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
+  fmap1 f cfg = cfg & selectElementConfig_elementConfig %~ fmap1 f
+
 instance Functor1 (RawElementConfig er t) where
   type Functor1Constraint (RawElementConfig er t) a b = DomBuilderSpace a ~ DomBuilderSpace b
   {-# INLINABLE fmap1 #-}
@@ -321,14 +516,7 @@ instance Reflex t => HasDomEvent t (TextAreaElement EventResult d t) en where
 
 instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   type DomBuilderSpace (ReaderT r m) = DomBuilderSpace m
-  {-# INLINABLE textNode #-}
-  textNode = liftTextNode
-  element = liftElement
   placeholder = liftPlaceholder
-  inputElement = liftInputElement
-  textAreaElement = liftTextAreaElement
-  placeRawElement = lift . placeRawElement
-  wrapRawElement = liftWrapRawElement
 
 type LiftDomBuilder t f m =
   ( Reflex t

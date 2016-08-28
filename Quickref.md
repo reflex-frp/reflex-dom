@@ -23,41 +23,38 @@ Widgets may return any type (this is 'a' in many of the functions below).  Often
 ```haskell
 -- Simplest form.  Create a widget of given type containing the given child.
 -- Return whatever the child returns.
-[W]   el         :: String ->                                m a -> m a
+[W]   el         :: Text ->                                  m a -> m a
 
 -- This version returns the 'El' as well.
-[W]   el'        :: String ->                                m a -> m (El, a)
+[W]   el'        :: Text ->                                  m a -> m (El, a)
 
 -- These two additionally apply attributes to the element, such as ("class" =: "blah")
-[W]   elAttr     :: String ->          Map String String  -> m a -> m a
-[W]   elAttr'    :: String ->          Map String String  -> m a -> m (El, a)
+[W]   elAttr     :: Text ->            Map Text Text ->      m a -> m a
+[W]   elAttr'    :: Text ->            Map Text Text ->      m a -> m (El, a)
 
 -- As above, but now the attribute map is Dynamic
-[W]   elDynAttr  :: String -> Dynamic (Map String String) -> m a -> m a
-[W]   elDynAttr' :: String -> Dynamic (Map String String) -> m a -> m (El, a)
+[W]   elDynAttr  :: Text ->   Dynamic (Map Text Text) ->     m a -> m a
+[W]   elDynAttr' :: Text ->   Dynamic (Map Text Text) ->     m a -> m (El, a)
 
 -- Shortcut for elAttr when you only want to set the "class" attribute.
-[W]   elClass    :: String ->                     String  -> m a -> m a
+[W]   elClass    :: Text ->                       Text ->    m a -> m a
 
 -- Even shorter-cut for above when element type is "div".  Create a div of given class.
-[W]   divClass   ::                               String  -> m a -> m a
+[W]   divClass   ::                               Text ->    m a -> m a
 
 -- Create a widget of given type with arbitrary, Dymamic HTML inside.
-[W]   elDynHtml'     :: String ->                      Dynamic String -> m El
-[W]   elDynHtmlAttr' :: String -> Map String String -> Dynamic String -> m El
-
--- Shortcut for elDynHtml' where the type is "div" and you don't need the 'El'.
-[W]   dynHtml        ::                                Dynamic String -> m ()
+[W]   elDynHtml'     :: Text ->                        Dynamic Text ->   m El
+[W]   elDynHtmlAttr' :: Text ->   Map Text Text ->     Dynamic Text ->   m El
 
 -- Create a static text element
-[W]   text    ::              String -> m ()
+[W]   text    ::              Text ->   m ()
 
 -- Create a dynamic text element
-[W]   dynText ::      Dynamic String -> m ()
+[W]   dynText ::      Dynamic Text ->   m ()
 [W]   display :: Show a => Dynamic a -> m ()
 
 -- Create a "button" element with given label, return onClick Event
-[W]   button :: String -> m (Event ())
+[W]   button :: Text -> m (Event ())
 
 -- Empty widget
 [W]   blank :: m ()
@@ -121,13 +118,13 @@ Some of these widget builders take a configuration record and return a record co
 
 -- Dropdown with Dynamic options.  First argument is initial state.
 [W]   dropdown :: (Ord k, Show k, Read k) =>
-          k -> Dynamic (Map k String) -> DropdownConfig k -> m (Dropdown k)
+          k -> Dynamic (Map k Text) -> DropdownConfig k -> m (Dropdown k)
 
 -- Table with static columns and dynamic rows.
 [W]   tableDynAttr :: ...        -- See Reflex.Dom.Widget.Basic
 
 -- Tabbed view that shows only one of its child widgets at a time.
-[W]   tabDisplay :: (Show k, Ord k) => String -> String -> Map k (String, m ()) -> m ()
+[W]   tabDisplay :: (Show k, Ord k) => Text -> Text -> Map k (Text, m ()) -> m ()
 
 -- Widget to efficiently display long scrolling lists.
 [W]   virtualListWithSelection :: ...        -- See Reflex.Dom.Widget.Lazy
@@ -163,19 +160,19 @@ Convenience functions for XMLHttpRequest.  see Reflex.Dom.Xhr
 
 ```haskell
 -- Given method, URL, and config record (with default instance), construct a request.
-[ ]   xhrRequest :: String -> String -> XhrRequestConfig -> XhrRequest
+[ ]   xhrRequest :: Text -> Text -> XhrRequestConfig a -> XhrRequest a
 
 -- Given Event of requests, issue them and produce Event of responses.
-[W]   performRequestAsync :: Event XhrRequest -> m (Event XhrResponse)
+[W]   performRequestAsync :: Event (XhrRequest a) -> m (Event XhrResponse)
 
 -- Issue a collection of requests, wait for them ALL to complete, return collected results.
-[W]   performRequestsAsync :: Traversable f => Event (f XhrRequest) -> m (Event (f XhrResponse))
+[W]   performRequestsAsync :: Traversable f => Event (f (XhrRequest a)) -> m (Event (f XhrResponse))
 
 -- Convenience function to decode JSON-encoded responses.
 [ ]   decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 
 -- Simplified interface to "GET" URLs and return decoded results.
-[W]   getAndDecode :: FromJSON a => Event String -> m (Event (Maybe a))
+[W]   getAndDecode :: FromJSON a => Event Text -> m (Event (Maybe a))
 ```
 
 ### Time

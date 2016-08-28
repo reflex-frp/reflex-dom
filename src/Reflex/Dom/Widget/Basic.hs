@@ -12,10 +12,12 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Basic where
 
+import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
-import Reflex.Dom.PostBuild.Class
+import Reflex.Dynamic
+import Reflex.PostBuild.Class
 
 import Control.Arrow
 import Control.Lens hiding (children, element)
@@ -36,7 +38,6 @@ import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
-import Reflex
 
 widgetHoldInternal :: DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 child' = do
@@ -214,32 +215,6 @@ selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t 
   -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
 selectViewListWithKey_ selection vals mkChild = fmap fst <$> selectViewListWithKey selection vals mkChild
 
-{-
-{-# INLINABLE elWith #-}
-elWith :: (DomBuilder t m, Attributes m attrs) => Text -> ElConfig attrs -> m a -> m a
-elWith elementTag cfg child = do
-  (_, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
-  return result
-
-{-# INLINABLE elWith' #-}
-elWith' :: (DomBuilder t m, Attributes m attrs) => Text -> ElConfig attrs -> m a -> m (El t, a)
-elWith' elementTag cfg child = do
-  (e, result) <- buildElementNS (cfg ^. namespace) elementTag (cfg ^. attributes) child
-  e' <- wrapElement defaultDomEventHandler e
-  return (e', result)
-
-{-# INLINABLE emptyElWith #-}
-emptyElWith :: (DomBuilder t m, Attributes m attrs) => Text -> ElConfig attrs -> m ()
-emptyElWith elementTag cfg = do
-  _ <- buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
-  return ()
-
-{-# INLINABLE emptyElWith' #-}
-emptyElWith' :: (DomBuilder t m, Attributes m attrs) => Text -> ElConfig attrs -> m (El t)
-emptyElWith' elementTag cfg = do
-  wrapElement defaultDomEventHandler =<< buildEmptyElementNS (cfg ^. namespace) elementTag (cfg ^. attributes)
--}
-
 {-# INLINABLE el #-}
 el :: forall t m a. DomBuilder t m => Text -> m a -> m a
 el elementTag child = snd <$> el' elementTag child
@@ -267,7 +242,7 @@ el' elementTag = element elementTag def
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elAttr' elementTag attrs = element elementTag $ def
-  & initialAttributes .~ Map.mapKeys (\k -> (Nothing, k)) attrs
+  & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
 
 {-# INLINABLE elClass' #-}
 elClass' :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
@@ -299,7 +274,7 @@ dynamicAttributesToModifyAttributes d = do
         That new -> do
           old <- sample $ current d
           return $ diffMap old new
-  return $ Map.fromList . fmap (\(k, v) -> ((Nothing, k), v)) . Map.toList <$> modificationsNeeded
+  return $ Map.fromList . fmap (first (AttributeName Nothing)) . Map.toList <$> modificationsNeeded
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
