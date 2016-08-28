@@ -5,7 +5,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TupleSections #-}
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
   , XhrRequest (..)
@@ -78,6 +77,7 @@ import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.List
@@ -115,12 +115,12 @@ data XhrResponse
    deriving (Typeable)
 
 data XhrResponseHeaders =
-    OnlyHeaders [Text] -- ^ Parse a subset of headers from the XHR Response
+    OnlyHeaders (Set.Set Text) -- ^ Parse a subset of headers from the XHR Response
   | AllHeaders -- ^ Parse all headers from the XHR Response
   deriving (Show, Read, Eq, Ord, Typeable)
 
 instance Default XhrResponseHeaders where
-  def = OnlyHeaders []
+  def = OnlyHeaders mempty
 
 {-# DEPRECATED _xhrResponse_body "Use _xhrResponse_response or _xhrResponse_responseText instead." #-}
 _xhrResponse_body :: XhrResponse -> Maybe Text
@@ -181,13 +181,13 @@ newXMLHttpRequestWithError req cb = do
       when (readyState == 4) $ do
         t <- if rt == Just XhrResponseType_Text || isNothing rt
              then liftIO $ xmlHttpRequestGetResponseText xhr
-             else  return Nothing
+             else return Nothing
         r <- liftIO $ xmlHttpRequestGetResponse xhr
         h <- case _xhrRequestConfig_responseHeaders c of
           AllHeaders -> liftIO $ parseAllHeadersString <$>
             xmlHttpRequestGetAllResponseHeaders xhr
-          OnlyHeaders xs -> liftIO $ Map.fromList <$> traverse
-            (\x -> (x,) <$> xmlHttpRequestGetResponseHeader xhr x) xs
+          OnlyHeaders xs -> liftIO $ traverse (xmlHttpRequestGetResponseHeader xhr)
+            (Map.fromSet id xs)
         _ <- liftIO $ cb $ Right
              XhrResponse { _xhrResponse_status = status
                          , _xhrResponse_statusText = statusText
