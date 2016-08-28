@@ -80,7 +80,7 @@ import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.List
+import qualified Data.List as L
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B
@@ -202,7 +202,7 @@ newXMLHttpRequestWithError req cb = do
 
 parseAllHeadersString :: Text -> Map Text Text
 parseAllHeadersString s = Map.fromList $ fmap (stripBoth . T.span (/=':')) $
-  dropWhileEnd T.null $ T.splitOn (T.pack "\r\n") s
+  L.dropWhileEnd T.null $ T.splitOn (T.pack "\r\n") s
   where stripBoth (txt1, txt2) = (T.strip txt1, T.strip $ T.drop 1 txt2)
 
 newXMLHttpRequest :: (HasWebView m, MonadIO m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> IO ()) -> m XMLHttpRequest
