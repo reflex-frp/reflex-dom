@@ -11,6 +11,7 @@ module Reflex.Dom.Xhr
   , XhrRequestConfig (..)
   , XhrResponse (..)
   , XhrResponseBody (..)
+  , XhrResponseHeaders (..)
   , XhrResponseType (..)
   , XhrException (..)
   , IsXhrPayload (..)
@@ -35,6 +36,7 @@ module Reflex.Dom.Xhr
   , xhrRequestConfig_sendData
   , xhrRequestConfig_user
   , xhrRequestConfig_withCredentials
+  , xhrRequestConfig_responseHeaders
   , xhrRequest_config
   , xhrRequest_method
   , xhrRequest_url
@@ -43,6 +45,7 @@ module Reflex.Dom.Xhr
   , xhrResponse_responseText
   , xhrResponse_status
   , xhrResponse_statusText
+  , xhrResponse_headers
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
   , xmlHttpRequestGetStatus
@@ -74,7 +77,10 @@ import Data.Default
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.List as L
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B
@@ -95,6 +101,7 @@ data XhrRequestConfig a
                       , _xhrRequestConfig_responseType :: Maybe XhrResponseType
                       , _xhrRequestConfig_sendData :: a
                       , _xhrRequestConfig_withCredentials :: Bool
+                      , _xhrRequestConfig_responseHeaders :: XhrResponseHeaders
                       }
    deriving (Show, Read, Eq, Ord, Typeable, Functor)
 
@@ -103,8 +110,17 @@ data XhrResponse
                  , _xhrResponse_statusText :: Text
                  , _xhrResponse_response :: Maybe XhrResponseBody
                  , _xhrResponse_responseText :: Maybe Text
+                 , _xhrResponse_headers :: Map Text Text
                  }
    deriving (Typeable)
+
+data XhrResponseHeaders =
+    OnlyHeaders (Set.Set Text) -- ^ Parse a subset of headers from the XHR Response
+  | AllHeaders -- ^ Parse all headers from the XHR Response
+  deriving (Show, Read, Eq, Ord, Typeable)
+
+instance Default XhrResponseHeaders where
+  def = OnlyHeaders mempty
 
 {-# DEPRECATED _xhrResponse_body "Use _xhrResponse_response or _xhrResponse_responseText instead." #-}
 _xhrResponse_body :: XhrResponse -> Maybe Text
@@ -121,6 +137,7 @@ instance a ~ () => Default (XhrRequestConfig a) where
                          , _xhrRequestConfig_responseType  = Nothing
                          , _xhrRequestConfig_sendData  = ()
                          , _xhrRequestConfig_withCredentials = False
+                         , _xhrRequestConfig_responseHeaders = def
                          }
 
 -- | Construct a request object from method, URL, and config record.
@@ -163,19 +180,30 @@ newXMLHttpRequestWithError req cb = do
       statusText <- liftIO $ xmlHttpRequestGetStatusText xhr
       when (readyState == 4) $ do
         t <- if rt == Just XhrResponseType_Text || isNothing rt
-               then liftIO $ xmlHttpRequestGetResponseText xhr
-               else return Nothing
+             then liftIO $ xmlHttpRequestGetResponseText xhr
+             else return Nothing
         r <- liftIO $ xmlHttpRequestGetResponse xhr
-        _ <- liftIO $ cb $ Right $ XhrResponse
-          { _xhrResponse_status = status
-          , _xhrResponse_statusText = statusText
-          , _xhrResponse_response = r
-          , _xhrResponse_responseText = t
-          }
+        h <- case _xhrRequestConfig_responseHeaders c of
+          AllHeaders -> liftIO $ parseAllHeadersString <$>
+            xmlHttpRequestGetAllResponseHeaders xhr
+          OnlyHeaders xs -> liftIO $ traverse (xmlHttpRequestGetResponseHeader xhr)
+            (Map.fromSet id xs)
+        _ <- liftIO $ cb $ Right
+             XhrResponse { _xhrResponse_status = status
+                         , _xhrResponse_statusText = statusText
+                         , _xhrResponse_response = r
+                         , _xhrResponse_responseText = t
+                         , _xhrResponse_headers = h
+                         }
         return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
     return ()
   return xhr
+
+parseAllHeadersString :: Text -> Map Text Text
+parseAllHeadersString s = Map.fromList $ fmap (stripBoth . T.span (/=':')) $
+  L.dropWhileEnd T.null $ T.splitOn (T.pack "\r\n") s
+  where stripBoth (txt1, txt2) = (T.strip txt1, T.strip $ T.drop 1 txt2)
 
 newXMLHttpRequest :: (HasWebView m, MonadIO m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> IO ()) -> m XMLHttpRequest
 newXMLHttpRequest req cb = newXMLHttpRequestWithError req $ mapM_ cb
@@ -269,4 +297,3 @@ concat <$> mapM makeLenses
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
-

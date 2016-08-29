@@ -205,16 +205,8 @@ xmlHttpRequestGetStatus xhr = do
   return $ truncate d
 
 xmlHttpRequestGetStatusText :: XMLHttpRequest -> IO Text
-xmlHttpRequestGetStatusText xhr = do
-  let c = xhrContext xhr
-  script <- jsstringcreatewithutf8cstring "this.statusText"
-  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
-  j <- jsvaluetostringcopy c t nullPtr
-  l <- jsstringgetmaximumutf8cstringsize j
-  s <- allocaBytes (fromIntegral l) $ \ps -> do
-         _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
-         peekCString ps
-  return $ T.pack s
+xmlHttpRequestGetStatusText xhr =
+  xmlAuxHttpRequestGetWithJS xhr "this.statusText"
 
 xmlHttpRequestSetWithCredentials :: XMLHttpRequest -> Bool -> IO ()
 xmlHttpRequestSetWithCredentials xhr b = do
@@ -224,4 +216,33 @@ xmlHttpRequestSetWithCredentials xhr b = do
   script <- jsstringcreatewithutf8cstring "this[0].withCredentials = this[1]"
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
+
+xmlHttpRequestGetAllResponseHeaders :: XMLHttpRequest -> IO Text
+xmlHttpRequestGetAllResponseHeaders xhr =
+  xmlAuxHttpRequestGetWithJS xhr "this.getAllResponseHeaders()"
+
+xmlHttpRequestGetResponseHeader :: XMLHttpRequest -> Text -> IO Text
+xmlHttpRequestGetResponseHeader xhr hdr = do
+  let c = xhrContext xhr
+  t' <- stringToJSValue c hdr
+  o <- toJSObject c [xhrValue xhr, t']
+  script <- jsstringcreatewithutf8cstring "this[0].getResponseHeader(this[1])"
+  t <- jsevaluatescript c script o nullPtr 1 nullPtr
+  xmlAuxJsGetString c t
+
+xmlAuxHttpRequestGetWithJS :: XMLHttpRequest -> String -> IO Text
+xmlAuxHttpRequestGetWithJS xhr jsScript = do
+  let c = xhrContext xhr
+  script <- jsstringcreatewithutf8cstring jsScript
+  t <- jsevaluatescript c script (xhrValue xhr) nullPtr 1 nullPtr
+  xmlAuxJsGetString c t
+
+xmlAuxJsGetString :: JSContextRef -> JSValueRef -> IO Text
+xmlAuxJsGetString c t = do
+  j <- jsvaluetostringcopy c t nullPtr
+  l <- jsstringgetmaximumutf8cstringsize j
+  s <- allocaBytes (fromIntegral l) $ \ps -> do
+         _ <- jsstringgetutf8cstring'_ j ps (fromIntegral l)
+         peekCString ps
+  return $ T.pack s
 
