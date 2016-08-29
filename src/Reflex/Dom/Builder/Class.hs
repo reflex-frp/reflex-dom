@@ -46,12 +46,12 @@ import Data.Text (Text)
 import Data.Traversable
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
-import GHCJS.DOM.File (File)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
   type RawTextNode d :: *
   type RawElement d :: *
+  type RawFile d :: *
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
   type RawSelectElement d :: *
@@ -262,7 +262,7 @@ data InputElement er d t
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
-                  , _inputElement_files :: Dynamic t [File]
+                  , _inputElement_files :: Dynamic t [RawFile d]
                   }
 
 data TextAreaElementConfig er t m

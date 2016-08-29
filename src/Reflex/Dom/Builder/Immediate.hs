@@ -46,7 +46,7 @@ import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
-import qualified GHCJS.DOM.FileList as File
+import qualified GHCJS.DOM.FileList as FileList
 import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
@@ -202,6 +202,7 @@ instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.HTMLElement
+  type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
   type RawSelectElement GhcjsDomSpace = DOM.HTMLSelectElement
@@ -291,7 +292,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       ]
     files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Element.change) $ do
       mfiles <- Input.getFiles domInputElement
-      let getMyFiles xs = fmap catMaybes . mapM (File.item xs) . flip take [0..] . fromIntegral =<< File.getLength xs
+      let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
       maybe (return []) getMyFiles mfiles
     return $ InputElement
       { _inputElement_value = v

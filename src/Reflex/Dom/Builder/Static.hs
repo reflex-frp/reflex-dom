@@ -130,6 +130,7 @@ instance DomSpace StaticDomSpace where
   type EventSpec StaticDomSpace = StaticEventSpec
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
+  type RawFile StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
