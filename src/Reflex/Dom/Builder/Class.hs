@@ -262,7 +262,7 @@ data InputElement er d t
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
-                  , _inputElement_files :: Event t [File]
+                  , _inputElement_files :: Dynamic t [File]
                   }
 
 data TextAreaElementConfig er t m

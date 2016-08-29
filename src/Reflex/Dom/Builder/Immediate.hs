@@ -289,9 +289,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
-    files <- wrapDomEvent domInputElement (`on` Element.change) $ do
-      -- TODO emit files only for `file` input type
-      -- ghcjs-dom > 0.3 exposes Input.getType
+    files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Element.change) $ do
       mfiles <- Input.getFiles domInputElement
       let getMyFiles xs = fmap catMaybes . mapM (File.item xs) . flip take [0..] . fromIntegral =<< File.getLength xs
       maybe (return []) getMyFiles mfiles
