@@ -362,7 +362,6 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
---TODO preselect a tab on open
 -- | A widget to construct a tabbed view that shows only one of its child widgets at a time.
 --   Creates a header bar containing a <ul> with one <li> per child; clicking a <li> displays
 --   the corresponding child and hides all others.
