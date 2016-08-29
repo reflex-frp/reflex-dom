@@ -130,6 +130,7 @@ instance DomSpace StaticDomSpace where
   type EventSpec StaticDomSpace = StaticEventSpec
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
+  type RawFile StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
@@ -176,6 +177,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
       , _inputElement_raw = ()
+      , _inputElement_files = constDyn mempty
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do

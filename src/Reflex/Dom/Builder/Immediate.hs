@@ -46,6 +46,7 @@ import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
+import qualified GHCJS.DOM.FileList as FileList
 import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
@@ -201,6 +202,7 @@ instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.HTMLElement
+  type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
   type RawSelectElement GhcjsDomSpace = DOM.HTMLSelectElement
@@ -288,6 +290,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
+    files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Element.change) $ do
+      mfiles <- Input.getFiles domInputElement
+      let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
+      maybe (return []) getMyFiles mfiles
     return $ InputElement
       { _inputElement_value = v
       , _inputElement_checked = uniqDyn c
@@ -296,6 +302,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
       , _inputElement_raw = domInputElement
+      , _inputElement_files = files
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
