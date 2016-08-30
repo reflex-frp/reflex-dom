@@ -11,6 +11,7 @@
 module Reflex.Dom.Old
        ( MonadWidget
        , El
+       , ElConfig (..)
        , _el_clicked
        , _el_element
        , _el_events
