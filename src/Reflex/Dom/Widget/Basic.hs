@@ -262,19 +262,24 @@ elDynAttrNS' mns elementTag attrs child = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = def
         & elementConfig_namespace .~ mns
-        & modifyAttributes .~ modifyAttrs
+        & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
   element elementTag cfg child
 
-dynamicAttributesToModifyAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> m (Event t (Map AttributeName (Maybe Text)))
-dynamicAttributesToModifyAttributes d = do
+dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
+dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty
+
+dynamicAttributesToModifyAttributesWithInitial :: (Ord k, PostBuild t m) => Map k Text -> Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
+dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
   postBuild <- getPostBuild
   let modificationsNeeded = flip pushAlways (align postBuild $ updated d) $ \case
-        This () -> fmap (fmap Just) $ sample $ current d
-        These () new -> return $ fmap Just new
+        This () -> do
+          new <- sample $ current d
+          return $ diffMap attrs0 new
+        These () new -> return $ diffMap attrs0 new
         That new -> do
           old <- sample $ current d
           return $ diffMap old new
-  return $ Map.fromList . fmap (first (AttributeName Nothing)) . Map.toList <$> modificationsNeeded
+  return modificationsNeeded
 
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class

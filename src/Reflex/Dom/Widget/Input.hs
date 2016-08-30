@@ -90,7 +90,7 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   i <- inputElement $ def
     & inputElementConfig_initialValue .~ initial
     & inputElementConfig_setValue .~ eSetValue
-    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
   return $ TextInput
     { _textInput_value = _inputElement_value i
     , _textInput_input = _inputElement_input i
@@ -140,7 +140,7 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
   i <- inputElement $ def
     & inputElementConfig_initialValue .~ (T.pack . show $ initial)
     & inputElementConfig_setValue .~ (T.pack . show <$> eSetValue)
-    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
   return $ RangeInput
     { _rangeInput_value = read . T.unpack <$> _inputElement_value i
     , _rangeInput_input = read . T.unpack <$> _inputElement_input i
@@ -177,7 +177,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
   i <- textAreaElement $ def
     & textAreaElementConfig_initialValue .~ initial
     & textAreaElementConfig_setValue .~ eSet
-    & textAreaElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+    & textAreaElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
   return $ TextArea
     { _textArea_value = _textAreaElement_value i
     , _textArea_input = _textAreaElement_input i
@@ -214,7 +214,7 @@ checkbox checked config = do
     & inputElementConfig_initialChecked .~ checked
     & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
     & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ Map.mapKeys (AttributeName Nothing) permanentAttrs
-    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+    & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
     , _checkbox_change = _inputElement_checkedChange i
@@ -289,7 +289,7 @@ checkboxView dAttrs dValue = do
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
-        { _elementConfig_modifyAttributes = modifyAttrs
+        { _elementConfig_modifyAttributes = fmap mapKeysToAttributeName modifyAttrs
         , _elementConfig_initialAttributes = Map.mapKeys (AttributeName Nothing) permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
             { _ghcjsEventSpec_filters = filters
@@ -330,7 +330,7 @@ fileInput config = do
   let filters = DMap.singleton Change . GhcjsEventFilter $ \_ -> do
         return . (,) mempty $ return . Just $ EventResult ()
       elCfg = (def :: ElementConfig EventResult t m)
-        & modifyAttributes .~ modifyAttrs
+        & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
         & elementConfig_eventSpec . ghcjsEventSpec_filters .~ filters
       cfg = (def :: InputElementConfig EventResult t m) & inputElementConfig_elementConfig .~ elCfg
   eRaw <- inputElement cfg
@@ -427,7 +427,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
         in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = def
-        & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
+        & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
         & selectElementConfig_setValue .~ fmap (T.pack . show) (attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK)
   (eRaw, _) <- selectElement cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
     let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey

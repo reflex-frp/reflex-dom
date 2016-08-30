@@ -166,6 +166,9 @@ data TextNode d t = TextNode
 
 data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
 
+mapKeysToAttributeName :: Map Text v -> Map AttributeName v
+mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
+
 -- | By default, AttributeNames are unnamespaced
 instance IsString AttributeName where
   fromString = AttributeName Nothing . fromString

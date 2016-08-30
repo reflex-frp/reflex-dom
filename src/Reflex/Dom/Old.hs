@@ -145,7 +145,7 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t m -> m (ElementConfig er t m)
 addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
+  return $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
