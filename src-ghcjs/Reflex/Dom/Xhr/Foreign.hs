@@ -2,6 +2,7 @@
 {-# LANGUAGE JavaScriptFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
@@ -20,7 +21,8 @@ import GHCJS.DOM.Types hiding (Text)
 import GHCJS.DOM.XMLHttpRequest
 import GHCJS.Types
 import Prelude hiding (error)
-import Reflex.Dom.Internal.Foreign
+import Reflex.Dom.Internal.Foreign hiding (getLocationProtocol)
+import Reflex.Dom.Location (getLocationProtocol)
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
 
@@ -51,7 +53,7 @@ instance IsXhrPayload String where
 
 instance IsXhrPayload Text where
   sendXhrPayload = sendString
-  
+
 instance IsXhrPayload FormData where
   sendXhrPayload = sendFormData
 
@@ -177,3 +179,9 @@ xmlHttpRequestGetResponse xhr = do
          Just ptr -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer ptr ptr
        _ -> return Nothing
 
+localFilesystemCheck :: WebViewSingleton -> IO ()
+localFilesystemCheck wv = do
+  p :: String <- getLocationProtocol wv
+  when ("file" == take 4 p) $ consoleWarn
+    ("Warning: XHR requests made from a page served directly from the local filesystem "
+    ++ "(file:///) may not work." :: String)

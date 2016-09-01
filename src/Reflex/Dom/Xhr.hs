@@ -142,6 +142,7 @@ newXMLHttpRequestWithError
     -- ^ The XHR request, which could for example be aborted.
 newXMLHttpRequestWithError req cb = do
   wv <- askWebView
+  liftIO $ localFilesystemCheck wv
   xhr <- liftIO $ xmlHttpRequestNew $ unWebViewSingleton wv
   void $ liftIO $ forkIO $ handle (cb . Left) $ void $ do
     let c = _xhrRequest_config req
@@ -269,4 +270,3 @@ concat <$> mapM makeLenses
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
-

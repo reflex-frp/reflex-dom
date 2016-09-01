@@ -225,3 +225,7 @@ xmlHttpRequestSetWithCredentials xhr b = do
   _ <- jsevaluatescript c script o nullPtr 1 nullPtr
   return ()
 
+-- Checking 'window.location' is skipped for webkitgtk apps because
+-- they are always served from the local filesystem
+localFilesystemCheck :: a -> IO ()
+localFilesystemCheck _ = return ()
