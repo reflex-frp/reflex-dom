@@ -30,6 +30,7 @@ import Data.Default
 import Data.Dependent.Sum (DSum (..))
 import qualified Data.Map as Map
 import Data.Monoid
+import qualified Data.Set as Set
 import Data.Text.Encoding
 import GHC.Generics
 import Reflex.Class
@@ -146,6 +147,8 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     return $ TextNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
+    -- https://www.w3.org/TR/html-markup/syntax.html#syntax-elements
+    let voidElements = Set.fromList ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"]
     let toAttr (AttributeName _mns k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
@@ -153,9 +156,12 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
-      let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
-      let close = constant $ "</" <> tagBS <> ">" -- TODO handle elements without closing tags
-      modify $ (:) $ mconcat [open, innerHtml, close]
+      if Set.member elementTag voidElements
+        then modify $ (:) $ mconcat [constant ("<" <> tagBS), attrs1, constant " />"]
+        else do
+          let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
+          let close = constant $ "</" <> tagBS <> ">"
+          modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
