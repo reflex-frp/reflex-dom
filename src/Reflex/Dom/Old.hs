@@ -81,7 +81,7 @@ data ElConfig attrs = ElConfig
 makeLenses ''ElConfig
 
 --TODO: HasDocument is still not accounted for
-type MonadWidget t m =
+type MonadWidgetConstraints t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
   , MonadFix m
@@ -102,6 +102,9 @@ type MonadWidget t m =
   , MonadRef (Performable m)
   , Ref (Performable m) ~ Ref IO
   )
+
+class MonadWidgetConstraints t m => MonadWidget t m
+instance MonadWidgetConstraints t m => MonadWidget t m
 
 type WidgetHost m = Performable m
 
