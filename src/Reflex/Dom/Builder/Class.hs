@@ -462,14 +462,20 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
 
 -- * Convenience functions
 
+class Unconstrained g h
+instance Unconstrained g h
+
+class DomBuilderSpace a ~ DomBuilderSpace b => SameDomBuilderSpace a b
+instance DomBuilderSpace a ~ DomBuilderSpace b => SameDomBuilderSpace a b
+
 --TODO: Move/replace
 class Functor1 (f :: (k -> *) -> *) where
-  type Functor1Constraint f (a :: k -> *) (b :: k -> *) :: Constraint
-  type Functor1Constraint f a b = ()
+  type Functor1Constraint f :: (k -> *) -> (k -> *) -> Constraint
+  type Functor1Constraint f = Unconstrained
   fmap1 :: Functor1Constraint f a b => (forall x. a x -> b x) -> f a -> f b
 
 instance Functor1 (ElementConfig er t) where
-  type Functor1Constraint (ElementConfig er t) a b = DomBuilderSpace a ~ DomBuilderSpace b
+  type Functor1Constraint (ElementConfig er t) = SameDomBuilderSpace
   {-# INLINABLE fmap1 #-}
   fmap1 _ cfg = cfg
     { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
@@ -482,19 +488,19 @@ instance Reflex t => Functor1 (PlaceholderConfig above t) where
     }
 
 instance Functor1 (InputElementConfig er t) where
-  type Functor1Constraint (InputElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
+  type Functor1Constraint (InputElementConfig er t) = Functor1Constraint (ElementConfig er t)
   fmap1 f cfg = cfg & inputElementConfig_elementConfig %~ fmap1 f
 
 instance Functor1 (TextAreaElementConfig er t) where
-  type Functor1Constraint (TextAreaElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
+  type Functor1Constraint (TextAreaElementConfig er t) = Functor1Constraint (ElementConfig er t)
   fmap1 f cfg = cfg & textAreaElementConfig_elementConfig %~ fmap1 f
 
 instance Functor1 (SelectElementConfig er t) where
-  type Functor1Constraint (SelectElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
+  type Functor1Constraint (SelectElementConfig er t) = Functor1Constraint (ElementConfig er t)
   fmap1 f cfg = cfg & selectElementConfig_elementConfig %~ fmap1 f
 
 instance Functor1 (RawElementConfig er t) where
-  type Functor1Constraint (RawElementConfig er t) a b = DomBuilderSpace a ~ DomBuilderSpace b
+  type Functor1Constraint (RawElementConfig er t) = SameDomBuilderSpace
   {-# INLINABLE fmap1 #-}
   fmap1 _ cfg = cfg
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
