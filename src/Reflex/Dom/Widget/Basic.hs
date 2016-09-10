@@ -10,7 +10,73 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-module Reflex.Dom.Widget.Basic where
+module Reflex.Dom.Widget.Basic
+  ( partitionMapBySetLT
+  , listHoldWithKey
+  , ChildResult (..)
+  , listHoldWithKey
+
+  -- * Displaying Values
+  , text
+  , dynText
+  , display
+  , button
+  , dyn
+  , widgetHold
+
+  -- * Working with Maps
+  , diffMapNoEq
+  , diffMap
+  , applyMap
+  , mapPartitionEithers
+  , applyMapKeysSet
+
+  -- * Widgets on Collections
+  , listWithKey
+  , listWithKey'
+  , listWithKeyShallowDiff
+  , listViewWithKey
+  , selectViewListWithKey
+  , selectViewListWithKey_
+
+  -- * Creating DOM Elements
+  , el
+  , elAttr
+  , elClass
+  , elDynAttr
+  , elDynClass
+
+  -- ** With Element Results
+  , el'
+  , elAttr'
+  , elClass'
+  , elDynAttr'
+  , elDynClass'
+  , elDynAttrNS'
+  , dynamicAttributesToModifyAttributes
+
+  -- * List Utils
+  , list
+  , simpleList
+
+  -- * Specific DOM Elements
+  , Link (..)
+  , linkClass
+  , link
+  , divClass
+  , dtdd
+  , blank
+
+  -- * Workflows
+  , Workflow (..)
+  , workflow
+  , workflowView
+  , mapWorkflow
+
+  -- * Tables and Lists
+  , tableDynAttr
+  , tabDisplay
+  ) where
 
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
@@ -215,43 +281,65 @@ selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t 
   -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
 selectViewListWithKey_ selection vals mkChild = fmap fst <$> selectViewListWithKey selection vals mkChild
 
+-- | Create a DOM element
+-- > el "div" (text "Hello World")
+-- <div>Hello World</div>
 {-# INLINABLE el #-}
 el :: forall t m a. DomBuilder t m => Text -> m a -> m a
 el elementTag child = snd <$> el' elementTag child
 
+-- | Create a DOM element with attributes
+-- > elAttr "a" ("href" =: "http://google.com") (text "Google!")
+-- <a href="http://google.com">Google!</a>
 {-# INLINABLE elAttr #-}
 elAttr :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m a
 elAttr elementTag attrs child = snd <$> elAttr' elementTag attrs child
 
+-- | Create a DOM element with classes
+-- > elClass "div" "row" (return ())
+-- <div class="row"></div>
 {-# INLINABLE elClass #-}
 elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
 elClass elementTag c child = snd <$> elClass' elementTag c child
 
+-- | Create a DOM element with Dynamic Attributes
+-- > elClass "div" (constDyn ("class" =: "row")) (return ())
+-- <div class="row"></div>
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
 elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
 
+-- | Create a DOM element with a Dynamic Class
+-- > elDynClass "div" (constDyn "row") (return ())
+-- <div class="row"></div>
 {-# INLINABLE elDynClass #-}
 elDynClass :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m a
 elDynClass elementTag c child = snd <$> elDynClass' elementTag c child
 
+-- | Create a DOM element and return the element
+-- > do (e, _) <- el' "div" (text "Click")
+-- >    return $ domEvent Click e
 {-# INLINABLE el' #-}
 el' :: forall t m a. DomBuilder t m => Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 el' elementTag = element elementTag def
 
+-- | Create a DOM element with attributes and return the element
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elAttr' elementTag attrs = element elementTag $ def
   & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
 
+-- | Create a DOM element with a class and return the element
 {-# INLINABLE elClass' #-}
 elClass' :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elClass' elementTag c = elAttr' elementTag ("class" =: c)
 
+-- | Create a DOM element with Dynamic Attributes and return the element
 {-# INLINABLE elDynAttr' #-}
 elDynAttr' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elDynAttr' = elDynAttrNS' Nothing
 
+-- | Create a DOM element with a Dynamic class and return the element
 {-# INLINABLE elDynClass' #-}
 elDynClass' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elDynClass' elementTag c = elDynAttr' elementTag (fmap ("class" =:) c)
@@ -324,6 +412,17 @@ linkClass s c = do
 link :: DomBuilder t m => Text -> m (Link t)
 link s = linkClass s ""
 
+divClass :: forall t m a. DomBuilder t m => Text -> m a -> m a
+divClass = elClass "div"
+
+dtdd :: forall t m a. DomBuilder t m => Text -> m a -> m a
+dtdd h w = do
+  el "dt" $ text h
+  el "dd" w
+
+blank :: forall m. Monad m => m ()
+blank = return ()
+
 newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
 
 workflow :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m) => Workflow t m a -> m (Dynamic t a)
@@ -339,17 +438,6 @@ workflowView w0 = do
 
 mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
 mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
-
-divClass :: forall t m a. DomBuilder t m => Text -> m a -> m a
-divClass = elClass "div"
-
-dtdd :: forall t m a. DomBuilder t m => Text -> m a -> m a
-dtdd h w = do
-  el "dt" $ text h
-  el "dd" w
-
-blank :: forall m. Monad m => m ()
-blank = return ()
 
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
