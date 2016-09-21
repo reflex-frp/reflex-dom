@@ -14,7 +14,6 @@ module Reflex.Dom.Widget.Basic
   ( partitionMapBySetLT
   , listHoldWithKey
   , ChildResult (..)
-  , listHoldWithKey
 
   -- * Displaying Values
   , text
