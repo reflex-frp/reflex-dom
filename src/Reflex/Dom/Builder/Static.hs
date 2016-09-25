@@ -24,14 +24,21 @@ import Control.Monad.Ref
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.ByteString.Builder (toLazyByteString)
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
+import Data.Dependent.Map (DMap)
+import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
+import Data.Functor.Compose
+import Data.Functor.Constant
+import Data.Functor.Misc
 import qualified Data.Map as Map
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Text.Encoding
+import Data.Tuple
 import GHC.Generics
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -45,7 +52,7 @@ import Reflex.Spider
 
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
-    { unStaticDomBuilderT :: StateT [Behavior t ByteString] m a -- Accumulated Html will be in revesed order
+    { unStaticDomBuilderT :: StateT [Behavior t ByteString] m a -- Accumulated Html will be in reversed order
     }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
@@ -87,15 +94,6 @@ instance MonadHold t m => MonadHold t (StaticDomBuilderT t m) where
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 v' = lift $ holdIncremental v0 v'
 
-instance (Reflex t, Monad m, MonadHold t (StateT [Behavior t ByteString] m)) => Deletable t (StaticDomBuilderT t m) where
-  {-# INLINABLE deletable #-}
-  deletable delete (StaticDomBuilderT a) = StaticDomBuilderT $ do
-    (result, a') <- lift $ runStateT a []
-    let html = mconcat $ reverse a'
-    b <- hold html (mempty <$ delete)
-    modify (join b:)
-    return result
-
 instance (Monad m, Ref m ~ Ref IO, Reflex t) => TriggerEvent t (StaticDomBuilderT t m) where
   {-# INLINABLE newTriggerEvent #-}
   newTriggerEvent = return (never, const $ return ())
@@ -113,7 +111,7 @@ instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
 instance MonadAtomicRef m => MonadAtomicRef (StaticDomBuilderT t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
+type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, MonadAdjust t m)
 
 data StaticDomSpace
 
@@ -136,6 +134,27 @@ instance DomSpace StaticDomSpace where
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
+
+instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomBuilderT t m) where
+  sequenceDMapWithAdjust (dm0 :: DMap k (StaticDomBuilderT t m)) dm' = do
+    let loweredDm0 = mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> fmap swap (runStaticDomBuilderT v)) dm0
+        loweredDm' = ffor dm' $ \(PatchDMap p) -> PatchDMap $
+          mapKeyValuePairsMonotonic (\(k :=> Compose mv) -> WrapArg k :=> Compose (fmap (fmap swap . runStaticDomBuilderT) mv)) p
+    (children0, children') <- lift $ sequenceDMapWithAdjust loweredDm0 loweredDm'
+    let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, v)) -> k :=> Identity v) children0
+        result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
+          mapKeyValuePairsMonotonic (\(WrapArg k :=> mv) -> k :=> fmap snd mv) p
+        outputs0 :: DMap k (Constant (Behavior t ByteString))
+        outputs0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (o, _)) -> k :=> Constant o) children0
+        outputs' :: Event t (PatchDMap (DMap k (Constant (Behavior t ByteString))))
+        outputs' = ffor children' $ \(PatchDMap p) -> PatchDMap $
+          mapKeyValuePairsMonotonic (\(WrapArg k :=> Compose mv) -> k :=> Compose (fmap (Constant . fst . runIdentity) mv)) p
+    outputs <- holdIncremental outputs0 outputs'
+    StaticDomBuilderT $ modify $ (:) $ pull $ do
+      os <- sample $ currentIncremental outputs
+      fmap BS.concat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
+        sample o
+    return (result0, result')
 
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
@@ -163,12 +182,6 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
           let close = constant $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
-  {-# INLINABLE placeholder #-}
-  placeholder (PlaceholderConfig toInsertAbove _delete) = StaticDomBuilderT $ do
-    result <- lift $ performEvent (fmap runStaticDomBuilderT toInsertAbove)
-    acc <- foldDyn (:) [] (fmap snd result)
-    modify $ (:) $ join $ mconcat . reverse <$> current acc
-    return $ Placeholder (fmap fst result) never
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()

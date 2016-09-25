@@ -43,7 +43,6 @@ module Reflex.Dom.Old
 import Control.Arrow (first)
 import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
 import Control.Monad
-import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -95,8 +94,6 @@ type MonadWidgetConstraints t m =
   , TriggerEvent t m
   , HasWebView m
   , HasWebView (Performable m)
-  , MonadAsyncException m
-  , MonadAsyncException (Performable m)
   , MonadRef m
   , Ref m ~ Ref IO
   , MonadRef (Performable m)

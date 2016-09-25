@@ -21,7 +21,6 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              ) where
 
 import Reflex.Class
-import Reflex.Deletable.Class
 import Reflex.DynamicWriter
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -81,6 +80,8 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Unsafe.Coerce
+
 class Monad m => HasWebView m where
   type WebViewPhantom m :: *
   askWebView :: m (WebViewSingleton (WebViewPhantom m))
@@ -110,6 +111,9 @@ instance HasWebView m => HasWebView (DynamicWriterT t w m) where
   askWebView = lift askWebView
 
 newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+
+instance MonadAdjust t m => MonadAdjust t (WithWebView x m) where
+  sequenceDMapWithAdjust dm0 dm' = WithWebView $ sequenceDMapWithAdjust (coerce dm0) (unsafeCoerce dm')
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -153,10 +157,6 @@ instance PerformEvent t m => PerformEvent t (WithWebView x m) where
   performEvent_ e = liftWith $ \run -> performEvent_ $ fmap run e
   {-# INLINABLE performEvent #-}
   performEvent e = liftWith $ \run -> performEvent $ fmap run e
-
-instance Deletable t m => Deletable t (WithWebView x m) where
-  {-# INLINABLE deletable #-}
-  deletable = liftThrough . deletable
 
 runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
 runWithWebView = runReaderT . unWithWebView

@@ -91,26 +91,34 @@ import Control.Lens hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
 import Data.Default
+import Data.Dependent.Map (DMap, GCompare)
+import qualified Data.Dependent.Map as DMap
 import Data.Either
 import Data.Foldable
+import Data.Functor.Compose
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Some (Some)
+import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
 
-widgetHoldInternal :: DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
+--TODO: Implement this specially
+widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 child' = do
-  childResult0 <- deletable (void child') child0
-  childResult' <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (deletable (void child')) child'
-  return (childResult0, _placeholder_insertedAbove childResult')
+  (result0, result') <- sequenceDMapWithAdjust (DMap.singleton LeftTag child0) $ fmap (PatchDMap . DMap.insert LeftTag (Compose Nothing) . DMap.singleton RightTag . Compose . Just) child'
+  let e :: forall x. x
+      e = error "widgetHoldInternal: missing child (should be impossible)"
+  return ( runIdentity $ DMap.findWithDefault e LeftTag result0
+         , ffor result' $ \(PatchDMap p) -> runIdentity $ fromMaybe e $ getCompose $ DMap.findWithDefault e RightTag p
+         )
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.
@@ -129,28 +137,27 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
                         then go t geq
                         else (Left h, lt) : go t geq
 
+partitionDMapBySetLT :: forall k v. GCompare k => Set (Some k) -> DMap k v -> Map (Either (Some k) ()) (DMap k v)
+partitionDMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
+  where go :: [Some k] -> DMap k v -> [(Either (Some k) (), DMap k v)]
+        go [] m = if DMap.null m
+                  then []
+                  else [(Right (), m)]
+        go (sh@(Some.This h) : t) m =
+          let (lt, eq, gt) = DMap.splitLookup h m
+              geq = maybe id (DMap.insert h) eq gt
+          in if DMap.null lt
+             then go t geq
+             else (Left sh, lt) : go t geq
+
 newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (Maybe (ChildResult t k a)))) }
 
-listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m, MonadFix m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
-listHoldWithKey initialChildren modifyChildren buildChild = do
-  let deleteChildSelector = fanMap $ fmap void modifyChildren
-  liveChildren :: Dynamic t (Set k) <- foldDyn applyMapKeysSet (Map.keysSet initialChildren) modifyChildren
-  let placeChildSelector = fanMap $ attachWith partitionMapBySetLT (current liveChildren) $ fmap (Map.mapMaybe id) modifyChildren
-      buildAugmentedChild :: k -> v -> m (ChildResult t k a)
-      buildAugmentedChild k v = do
-        let delete = select deleteChildSelector $ Const2 k
-            myCfg = def
-              & insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Left k)
-              & deleteSelf .~ delete
-        ph <- placeholder myCfg
-        result <- deletable delete $ buildChild k v
-        return $ ChildResult (result, (fmap Just <$> _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deletedSelf ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
-  rec initialAugmentedResults <- iforM initialChildren buildAugmentedChild
-      augmentedResults <- foldDyn applyMap initialAugmentedResults $ newInsertedBelow <> newInsertedAbove
-      let newInsertedAbove = switch $ mconcat . reverse . fmap (snd . unChildResult) . Map.elems <$> current augmentedResults
-      belowAll <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Right ())
-      let newInsertedBelow = fmap Just <$> _placeholder_insertedAbove belowAll
-  return $ fmap (fmap (fst . unChildResult)) augmentedResults
+listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
+listHoldWithKey m0 m' f = do
+  let dm0 = mapWithFunctorToDMap $ Map.mapWithKey f m0
+      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> Compose $ fmap (f k) v)) m'
+  (a0, a') <- sequenceDMapWithAdjust dm0 dm'
+  fmap dmapToMap . incrementalToDynamic <$> holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t

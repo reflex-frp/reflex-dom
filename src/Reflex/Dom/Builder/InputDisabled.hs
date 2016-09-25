@@ -7,17 +7,18 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.InputDisabled where
 
-import Control.Lens
 import Control.Monad.Fix
 import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
+import Data.Coerce
 import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 import Reflex
-import Reflex.Deletable.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Host.Class
+
+import Unsafe.Coerce
 
 -- | A DomBuilder transformer that disables all 'inputElement's,
 -- 'textAreaElement's, and 'selectElement's by adding the "disabled" HTML
@@ -53,9 +54,6 @@ disableElementConfig cfg = cfg
   , _elementConfig_modifyAttributes = Map.delete "disabled" <$> _elementConfig_modifyAttributes cfg
   }
 
-instance Deletable t m => Deletable t (InputDisabledT m) where
-  deletable d = liftThrough $ deletable d
-
 instance PostBuild t m => PostBuild t (InputDisabledT m) where
   getPostBuild = lift getPostBuild
 
@@ -65,10 +63,15 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabl
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
+instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
+  sequenceDMapWithAdjust dm0 dm' = InputDisabledT $ sequenceDMapWithAdjust (coerce dm0) (unsafeCoerce dm') --TODO: Eliminate unsafeCoerce
+
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m
+  {-
   placeholder cfg = lift $ placeholder $ cfg
     & placeholderConfig_insertAbove %~ fmap runInputDisabledT
+  -}
   inputElement cfg = lift $ inputElement $ cfg
     { _inputElementConfig_elementConfig = liftElementConfig $ disableElementConfig $ _inputElementConfig_elementConfig cfg
     }
