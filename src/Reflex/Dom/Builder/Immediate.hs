@@ -28,6 +28,7 @@ import Reflex.Host.Class
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
 import Control.Monad.Exception
+import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
@@ -80,6 +81,10 @@ data ImmediateDomBuilderEnv t
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+
+instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
+  type PrimState (ImmediateDomBuilderT x m) = PrimState m
+  primitive = lift . primitive
 
 instance MonadTransControl (ImmediateDomBuilderT t) where
   type StT (ImmediateDomBuilderT t) a = StT (ReaderT (ImmediateDomBuilderEnv t)) a

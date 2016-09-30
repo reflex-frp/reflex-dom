@@ -24,6 +24,7 @@ import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.DynamicWriter
 import Reflex.PerformEvent.Class
+import Reflex.PerformEvent.Base
 import Reflex.PostBuild.Class
 
 import qualified Control.Category
@@ -417,6 +418,30 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
     s <- get
     let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
     (el, (a, newS)) <- lift $ selectElement cfg' $ runStateT child s
+    put newS
+    return (el, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
+
+instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequestT t request response m) where
+  type DomBuilderSpace (RequestT t request response m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (RequestT child) = RequestT $ do
+    r <- ask
+    s <- get
+    let cfg' = liftElementConfig cfg
+    (el, (a, newS)) <- lift $ lift $ element elementTag cfg' $ runReaderT (runStateT child s) r
+    put newS
+    return (el, a)
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  selectElement cfg (RequestT child) = RequestT $ do
+    r <- ask
+    s <- get
+    let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
+    (el, (a, newS)) <- lift $ lift $ selectElement cfg' $ runReaderT (runStateT child s) r
     put newS
     return (el, a)
   placeRawElement = lift . placeRawElement

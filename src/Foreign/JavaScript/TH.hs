@@ -68,6 +68,7 @@ import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State
@@ -110,7 +111,15 @@ instance HasWebView m => HasWebView (DynamicWriterT t w m) where
   type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
   askWebView = lift askWebView
 
+instance HasWebView m => HasWebView (RequestT t request response m) where
+  type WebViewPhantom (RequestT t request response m) = WebViewPhantom m
+  askWebView = lift askWebView
+
 newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+
+instance PrimMonad m => PrimMonad (WithWebView x m) where
+  type PrimState (WithWebView x m) = PrimState m
+  primitive = lift . primitive
 
 instance MonadAdjust t m => MonadAdjust t (WithWebView x m) where
   sequenceDMapWithAdjust dm0 dm' = WithWebView $ sequenceDMapWithAdjust (coerce dm0) (unsafeCoerce dm')
@@ -216,6 +225,10 @@ instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) wh
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSM (DynamicWriterT t w m) = JSM m
+  liftJS = lift . liftJS
+
+instance HasJS x m => HasJS x (RequestT t request response m) where
+  type JSM (RequestT t request response m) = JSM m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
