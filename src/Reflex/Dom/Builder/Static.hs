@@ -31,7 +31,6 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
-import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
 import qualified Data.Map as Map
@@ -139,16 +138,16 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
   sequenceDMapWithAdjust (dm0 :: DMap k (StaticDomBuilderT t m)) dm' = do
     let loweredDm0 = mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> fmap swap (runStaticDomBuilderT v)) dm0
         loweredDm' = ffor dm' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(k :=> Compose mv) -> WrapArg k :=> Compose (fmap (fmap swap . runStaticDomBuilderT) mv)) p
+          mapKeyValuePairsMonotonic (\(k :=> ComposeMaybe mv) -> WrapArg k :=> ComposeMaybe (fmap (fmap swap . runStaticDomBuilderT) mv)) p
     (children0, children') <- lift $ sequenceDMapWithAdjust loweredDm0 loweredDm'
     let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, v)) -> k :=> Identity v) children0
         result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
           mapKeyValuePairsMonotonic (\(WrapArg k :=> mv) -> k :=> fmap snd mv) p
         outputs0 :: DMap k (Constant (Behavior t ByteString))
         outputs0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (o, _)) -> k :=> Constant o) children0
-        outputs' :: Event t (PatchDMap (DMap k (Constant (Behavior t ByteString))))
+        outputs' :: Event t (PatchDMap k (Constant (Behavior t ByteString)))
         outputs' = ffor children' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(WrapArg k :=> Compose mv) -> k :=> Compose (fmap (Constant . fst . runIdentity) mv)) p
+          mapKeyValuePairsMonotonic (\(WrapArg k :=> ComposeMaybe mv) -> k :=> ComposeMaybe (fmap (Constant . fst . runIdentity) mv)) p
     outputs <- holdIncremental outputs0 outputs'
     StaticDomBuilderT $ modify $ (:) $ pull $ do
       os <- sample $ currentIncremental outputs

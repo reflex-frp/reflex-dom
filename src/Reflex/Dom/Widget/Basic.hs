@@ -91,19 +91,15 @@ import Control.Lens hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
 import Data.Default
-import Data.Dependent.Map (DMap, GCompare)
 import qualified Data.Dependent.Map as DMap
 import Data.Either
 import Data.Foldable
-import Data.Functor.Compose
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Some (Some)
-import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.These
@@ -113,11 +109,11 @@ import Prelude hiding (mapM, mapM_, sequence, sequence_)
 --TODO: Implement this specially
 widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
 widgetHoldInternal child0 child' = do
-  (result0, result') <- sequenceDMapWithAdjust (DMap.singleton LeftTag child0) $ fmap (PatchDMap . DMap.insert LeftTag (Compose Nothing) . DMap.singleton RightTag . Compose . Just) child'
+  (result0, result') <- sequenceDMapWithAdjust (DMap.singleton LeftTag child0) $ fmap (PatchDMap . DMap.insert LeftTag (ComposeMaybe Nothing) . DMap.singleton RightTag . ComposeMaybe . Just) child'
   let e :: forall x. x
       e = error "widgetHoldInternal: missing child (should be impossible)"
   return ( runIdentity $ DMap.findWithDefault e LeftTag result0
-         , ffor result' $ \(PatchDMap p) -> runIdentity $ fromMaybe e $ getCompose $ DMap.findWithDefault e RightTag p
+         , ffor result' $ \(PatchDMap p) -> runIdentity $ fromMaybe e $ getComposeMaybe $ DMap.findWithDefault e RightTag p
          )
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
@@ -155,7 +151,7 @@ newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (M
 listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
 listHoldWithKey m0 m' f = do
   let dm0 = mapWithFunctorToDMap $ Map.mapWithKey f m0
-      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> Compose $ fmap (f k) v)) m'
+      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> ComposeMaybe $ fmap (f k) v)) m'
   (a0, a') <- sequenceDMapWithAdjust dm0 dm'
   fmap dmapToMap . incrementalToDynamic <$> holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 

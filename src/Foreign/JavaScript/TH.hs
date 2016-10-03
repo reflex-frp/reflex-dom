@@ -81,8 +81,6 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Unsafe.Coerce
-
 class Monad m => HasWebView m where
   type WebViewPhantom m :: *
   askWebView :: m (WebViewSingleton (WebViewPhantom m))
@@ -122,7 +120,7 @@ instance PrimMonad m => PrimMonad (WithWebView x m) where
   primitive = lift . primitive
 
 instance MonadAdjust t m => MonadAdjust t (WithWebView x m) where
-  sequenceDMapWithAdjust dm0 dm' = WithWebView $ sequenceDMapWithAdjust (coerce dm0) (unsafeCoerce dm')
+  sequenceDMapWithAdjust dm0 dm' = WithWebView $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
   {-# INLINABLE newEventWithTrigger #-}

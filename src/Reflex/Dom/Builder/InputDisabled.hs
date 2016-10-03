@@ -18,8 +18,6 @@ import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Host.Class
 
-import Unsafe.Coerce
-
 -- | A DomBuilder transformer that disables all 'inputElement's,
 -- 'textAreaElement's, and 'selectElement's by adding the "disabled" HTML
 -- attribute.  Note that 'element's that happen to have "input", "textarea", or
@@ -64,7 +62,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabl
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
-  sequenceDMapWithAdjust dm0 dm' = InputDisabledT $ sequenceDMapWithAdjust (coerce dm0) (unsafeCoerce dm') --TODO: Eliminate unsafeCoerce
+  sequenceDMapWithAdjust dm0 dm' = InputDisabledT $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
 
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m

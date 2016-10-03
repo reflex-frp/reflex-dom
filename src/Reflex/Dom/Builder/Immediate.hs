@@ -37,7 +37,6 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
-import Data.Functor.Compose
 import Data.Functor.Misc
 import Data.IORef
 import Data.Map (Map)
@@ -393,21 +392,21 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
             { _immediateDomBuilderEnv_parent = toNode df
             }
         updateChildren = ffor dm' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(k :=> Compose mv) -> WrapArg k :=> Compose (fmap drawChildUpdate mv)) p
-    (children0, children') <- lift $ sequenceDMapWithAdjust (mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> drawChildInitial v) dm0) (updateChildren :: Event t (PatchDMap (DMap (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) m))) --TODO: Update stuff
+          mapKeyValuePairsMonotonic (\(k :=> ComposeMaybe mv) -> WrapArg k :=> ComposeMaybe (fmap drawChildUpdate mv)) p
+    (children0, children') <- lift $ sequenceDMapWithAdjust (mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> drawChildInitial v) dm0) (updateChildren :: Event t (PatchDMap (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) m)) --TODO: Update stuff
     let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, _, v)) -> k :=> Identity v) children0
         placeholders0 = dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, ph, _)) -> Const2 (Some.This k) :=> Identity ph) children0
         result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
           mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> k :=> fmap (\(_, _, r) -> r) v) p
         placeholders' = ffor children' $ \(PatchDMap p) -> PatchMap $
-          dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> Const2 (Some.This k) :=> Identity (fmap ((\(_, ph, _) -> ph) . runIdentity) (getCompose v))) p
+          dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> Const2 (Some.This k) :=> Identity (fmap ((\(_, ph, _) -> ph) . runIdentity) (getComposeMaybe v))) p
     placeholders :: Behavior t (Map (Some k) DOM.Text) <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
     lastPlaceholder <- textNodeInternal ("" :: Text)
     performEvent_ $ flip push children' $ \(PatchDMap p) -> do
       phs <- sample placeholders
       if DMap.null p then return Nothing else return $ Just $ do
-        let f :: DSum (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) (Compose Maybe Identity) -> Performable m ()
-            f (WrapArg k :=> Compose mv) = do
+        let f :: DSum (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) (ComposeMaybe Identity) -> Performable m ()
+            f (WrapArg k :=> ComposeMaybe mv) = do
               let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phs
               forM_ (Map.lookup (Some.This k) phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
               forM_ mv $ \(Identity (df, _, _)) -> df `insertBefore` nextPlaceholder
