@@ -133,19 +133,6 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
                         then go t geq
                         else (Left h, lt) : go t geq
 
-partitionDMapBySetLT :: forall k v. GCompare k => Set (Some k) -> DMap k v -> Map (Either (Some k) ()) (DMap k v)
-partitionDMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
-  where go :: [Some k] -> DMap k v -> [(Either (Some k) (), DMap k v)]
-        go [] m = if DMap.null m
-                  then []
-                  else [(Right (), m)]
-        go (sh@(Some.This h) : t) m =
-          let (lt, eq, gt) = DMap.splitLookup h m
-              geq = maybe id (DMap.insert h) eq gt
-          in if DMap.null lt
-             then go t geq
-             else (Left sh, lt) : go t geq
-
 newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (Maybe (ChildResult t k a)))) }
 
 listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
