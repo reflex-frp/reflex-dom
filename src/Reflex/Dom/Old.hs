@@ -217,7 +217,7 @@ _el_keypress = domEvent Keypress
 _el_scrolled :: Reflex t => El t -> Event t Int
 _el_scrolled = domEvent Scroll
 
-wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.HTMLElement -> m (El t)
+wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.Element -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.Element -> m (El t)
 wrapElement eh e = do
   let h :: (EventName en, GhcjsDomEvent en) -> IO (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
@@ -227,7 +227,7 @@ wrapElement eh e = do
         }
     }
 
-unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResult (DomBuilderSpace m) t)
+unsafePlaceElement :: MonadWidget t m => DOM.Element -> m (Element EventResult (DomBuilderSpace m) t)
 unsafePlaceElement e = do
   placeRawElement e
   wrapRawElement e def

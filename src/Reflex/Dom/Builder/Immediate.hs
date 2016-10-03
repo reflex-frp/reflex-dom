@@ -171,11 +171,11 @@ wrap e cfg = do
   return $ Element es e
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   events <- askEvents
-  Just e <- ImmediateDomBuilderT $ fmap DOM.castToHTMLElement <$> case cfg ^. namespace of
+  Just e <- ImmediateDomBuilderT $ fmap DOM.castToElement <$> case cfg ^. namespace of
     Nothing -> createElement doc (Just elementTag)
     Just ens -> createElementNS doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
@@ -201,7 +201,7 @@ data GhcjsDomSpace
 instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
-  type RawElement GhcjsDomSpace = DOM.HTMLElement
+  type RawElement GhcjsDomSpace = DOM.Element
   type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
