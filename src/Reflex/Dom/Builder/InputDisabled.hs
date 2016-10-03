@@ -8,6 +8,7 @@
 module Reflex.Dom.Builder.InputDisabled where
 
 import Control.Monad.Fix
+import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
@@ -47,6 +48,10 @@ instance PerformEvent t m => PerformEvent t (InputDisabledT m) where
   type Performable (InputDisabledT m) = Performable m
   performEvent_ = lift . performEvent_
   performEvent = lift . performEvent
+
+instance PrimMonad m => PrimMonad (InputDisabledT m) where
+  type PrimState (InputDisabledT m) = PrimState m
+  primitive = lift . primitive
 
 disableElementConfig :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 disableElementConfig cfg = cfg

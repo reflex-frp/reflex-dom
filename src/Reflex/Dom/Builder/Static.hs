@@ -20,6 +20,7 @@ import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
 import Control.Monad.Exception
 import Control.Monad.Identity
+import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
@@ -55,6 +56,10 @@ newtype StaticDomBuilderT t m a = StaticDomBuilderT
     { unStaticDomBuilderT :: StateT [Behavior t ByteString] m a -- Accumulated Html will be in reversed order
     }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+
+instance PrimMonad m => PrimMonad (StaticDomBuilderT x m) where
+  type PrimState (StaticDomBuilderT x m) = PrimState m
+  primitive = lift . primitive
 
 instance MonadTransControl (StaticDomBuilderT t) where
   type StT (StaticDomBuilderT t) a = StT (StateT [Behavior t ByteString]) a
