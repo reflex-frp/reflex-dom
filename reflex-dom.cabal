@@ -42,7 +42,7 @@ library
     blaze-builder,
     bytestring == 0.10.*,
     data-default >= 0.5 && < 0.8,
-    aeson >= 0.8 && < 0.12,
+    aeson >= 0.8 && < 1.1,
     time >= 1.4 && < 1.7,
     exception-transformers == 0.4.*,
     directory == 1.2.*,
