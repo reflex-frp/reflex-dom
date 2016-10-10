@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -71,7 +72,11 @@ import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
+#if MIN_VERSION_aeson(1,0,0)
+import Data.Aeson.Text
+#else
 import Data.Aeson.Encode
+#endif
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Map (Map)
