@@ -1,7 +1,10 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 
-module Reflex.Dom.WebSocket.Foreign where
+module Reflex.Dom.WebSocket.Foreign
+  ( module Reflex.Dom.WebSocket.Foreign
+  , JSVal
+  ) where
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
@@ -42,7 +45,7 @@ instance IsWebSocketMessage ByteString where
 instance IsWebSocketMessage Text where
   webSocketSend (JSWebSocket ws) = GD.sendString ws . T.unpack
 
-newWebSocket :: a -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket :: a -> Text -> (Either ByteString JSVal -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket _ url onMessage onOpen onClose = do
   ws <- GD.newWebSocket url (Just [] :: Maybe [Text])
   _ <- on ws open $ liftIO onOpen
@@ -51,11 +54,14 @@ newWebSocket _ url onMessage onOpen onClose = do
     e <- ask
     d <- getData e
     liftIO $ case jsTypeOf d of
-      String -> onMessage $ encodeUtf8 $ pFromJSVal d
+      String -> onMessage $ Right d
       _ -> do
         ab <- unsafeFreeze $ pFromJSVal d
-        onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
+        onMessage $ Left $ toByteString 0 Nothing $ createFromArrayBuffer ab
   _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
 
 foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal
+
+onBSMessage :: Either ByteString JSVal -> ByteString
+onBSMessage = either id (encodeUtf8 . pFromJSVal)

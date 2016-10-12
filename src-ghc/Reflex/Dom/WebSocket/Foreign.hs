@@ -67,7 +67,7 @@ instance IsWebSocketMessage ByteString where
 instance IsWebSocketMessage Text where
   webSocketSend jws t = sendWSTextData jws (T.unpack t)
 
-newWebSocket :: WebView -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
+newWebSocket :: WebView -> Text -> (Either ByteString a -> IO ()) -> IO () -> IO () -> IO JSWebSocket
 newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
   url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring (T.unpack url)
   newWSArgs <- toJSObject c [url']
@@ -80,7 +80,7 @@ newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
     msg' <- fromJSStringMaybe c msg
     case msg' of
       Nothing -> return ()
-      Just m -> onMessage $ encodeUtf8 m
+      Just m -> onMessage $ Left $ encodeUtf8 m
     jsvaluemakeundefined c
   onMessageCb <- jsobjectmakefunctionwithcallback c nullPtr onMessage'
   onOpen' <- wrapper $ \_ _ _ _ _ _ -> do
@@ -95,3 +95,8 @@ newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
   addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onopen'] = this[2]; this[0]['onclose'] = this[3];"
   _ <- jsevaluatescript c addCbs o nullPtr 1 nullPtr
   return $ JSWebSocket ws c
+
+onBSMessage :: Either ByteString b -> ByteString
+onBSMessage = either id (error "onBSMessage: ghc env expects ByteString.")
+
+type JSVal = ()
