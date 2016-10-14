@@ -51,6 +51,7 @@ import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
 
 import Data.Hashable
 import Data.Word
+import Data.Coerce (coerce)
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z

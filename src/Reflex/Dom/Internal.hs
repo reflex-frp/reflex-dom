@@ -73,8 +73,10 @@ mainWidgetWithCss css w = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (w
 
 type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 
+#ifndef __GHCJS__
 instance MonadJSM m => MonadJSM (PostBuildT t m) where
     liftJSM' = PostBuildT . liftJSM'
+#endif
 
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> JSM a
