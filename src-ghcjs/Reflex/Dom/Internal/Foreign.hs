@@ -2,6 +2,7 @@
 {-# LANGUAGE JavaScriptFFI #-}
 module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
                                    , runWebGUI
+                                   , WebView
                                    ) where
 
 import Data.ByteString (ByteString)
@@ -14,6 +15,11 @@ import GHCJS.DOM.Types
 import qualified GHCJS.Marshal.Pure as JS
 import GHCJS.Types
 import JavaScript.TypedArray.ArrayBuffer as JS
+
+data WebView = WebView
+
+runWebGUI :: ((WebView, JSContextRef) -> IO ()) -> IO ()
+runWebGUI main = run 0 (main (WebView, ()))
 
 quitWebView :: WebView -> IO ()
 quitWebView = error "quitWebView: unimplemented in GHCJS"

@@ -36,7 +36,7 @@ import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
-import GHCJS.DOM.Types (File)
+import GHCJS.DOM.Types (MonadJSM, File)
 import Reflex.Class
 import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
@@ -285,7 +285,7 @@ checkboxView dAttrs dValue = do
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
         Just t <- Event.getTarget evt
-        b <- Input.getChecked $ Input.castToHTMLInputElement t
+        b <- Input.getChecked =<< Input.castToHTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
@@ -297,7 +297,8 @@ checkboxView dAttrs dValue = do
                 Click -> error "impossible"
                 _ -> do
                   Just e <- withIsEvent en $ Event.getTarget evt
-                  mr <- runReaderT (defaultDomEventHandler (castToElement e) en) evt
+                  element <- castToElement e
+                  mr <- runReaderT (defaultDomEventHandler element en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
         }
@@ -321,7 +322,7 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: forall t m. (MonadIO m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"

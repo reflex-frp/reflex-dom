@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -53,9 +54,12 @@ import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
                        removeChild, setNodeValue, toNode)
-import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
-                        WheelEvent, castToHTMLInputElement, castToHTMLSelectElement,
-                        castToHTMLTextAreaElement)
+import GHCJS.DOM.Types
+       (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
+        FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
+        ToDOMString, TouchEvent, WheelEvent, castToHTMLInputElement,
+        castToHTMLSelectElement, castToHTMLTextAreaElement,
+        strictEqual)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
@@ -64,7 +68,7 @@ import Debug.Trace hiding (traceEvent)
 
 data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
 
-data TriggerInvocation a = TriggerInvocation a (IO ())
+data TriggerInvocation a = TriggerInvocation a (JSM ())
 
 data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
@@ -73,6 +77,11 @@ data ImmediateDomBuilderEnv t
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+
+#ifndef __GHCJS__
+instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
+    liftJSM' = ImmediateDomBuilderT . liftJSM'
+#endif
 
 instance MonadTransControl (ImmediateDomBuilderT t) where
   type StT (ImmediateDomBuilderT t) a = StT (ReaderT (ImmediateDomBuilderEnv t)) a
@@ -99,23 +108,23 @@ askEvents :: Monad m => ImmediateDomBuilderT t m (Chan [DSum (TriggerRef t) Trig
 askEvents = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_events
 
 {-# INLINABLE append #-}
-append :: (IsNode n, MonadIO m) => n -> ImmediateDomBuilderT t m ()
+append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
 append n = do
   p <- askParent
-  _ <- liftIO $ appendChild p $ Just n
+  _ <- liftJSM $ appendChild p $ Just n
   return ()
 
 {-# INLINABLE textNodeInternal #-}
-textNodeInternal :: (MonadIO m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
+textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
 textNodeInternal t = do
   doc <- askDocument
-  Just n <- liftIO $ createTextNode doc t
+  Just n <- liftJSM $ createTextNode doc t
   append n
   return n
 
 -- | s and e must both be children of the same node and s must precede e
 {-# INLINABLE deleteBetweenInclusive #-}
-deleteBetweenInclusive :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenInclusive s e = do
   mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   case mCurrentParent of
@@ -124,12 +133,14 @@ deleteBetweenInclusive s e = do
       let go = do
             Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
             _ <- removeChild currentParent $ Just x
-            when (toNode s /= toNode x) go
+            liftJSM (strictEqual s x) >>= \case
+                True  -> return ()
+                False -> go
       go
       _ <- removeChild currentParent $ Just e
       return ()
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref IO)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref JSM)
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
@@ -139,35 +150,37 @@ wrap e cfg = do
   lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
-  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
-    triggerRef <- newIORef Nothing
+  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
+    triggerRef <- liftIO $ newIORef Nothing
     _ <- elementOnEventName en e $ do
       evt <- DOM.event
-      (flags, k) <- liftIO $ f $ GhcjsDomEvent evt
+      (flags, k) <- liftJSM $ f $ GhcjsDomEvent evt
       when (_eventFlags_preventDefault flags) $ withIsEvent en DOM.preventDefault
       case _eventFlags_propagation flags of
         Propagation_Continue -> return ()
         Propagation_Stop -> withIsEvent en DOM.stopPropagation
         Propagation_StopImmediate -> withIsEvent en DOM.stopImmediatePropagation
-      mv <- liftIO k --TODO: Only do this when the event is subscribed
+      mv <- liftJSM k --TODO: Only do this when the event is subscribed
       liftIO $ forM_ mv $ \v -> writeChan events [TriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
-  es <- newFanEventWithTrigger $ \(WrapArg en) t -> do
-    case DMap.lookup en eventTriggerRefs of
-      Just (EventFilterTriggerRef r) -> do
-        writeIORef r $ Just t
-        return $ do
-          writeIORef r Nothing
-      Nothing -> elementOnEventName en e $ do
-        evt <- DOM.event
-        let h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg
-        mv <- liftIO $ h (en, GhcjsDomEvent evt)
-        case mv of
-          Nothing -> return ()
-          Just v -> liftIO $ do
-            --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
-            ref <- newIORef $ Just t
-            writeChan events [TriggerRef ref :=> TriggerInvocation v (return ())]
+  es <- do
+    ctx <- askJSM
+    newFanEventWithTrigger $ \(WrapArg en) t ->
+      case DMap.lookup en eventTriggerRefs of
+        Just (EventFilterTriggerRef r) -> do
+          writeIORef r $ Just t
+          return $ do
+            writeIORef r Nothing
+        Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
+          evt <- DOM.event
+          let h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg
+          mv <- lift $ h (en, GhcjsDomEvent evt)
+          case mv of
+            Nothing -> return ()
+            Just v -> liftIO $ do
+              --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
+              ref <- newIORef $ Just t
+              writeChan events [TriggerRef ref :=> TriggerInvocation v (return ())])
   return $ Element es e
 
 {-# INLINABLE makeElement #-}
@@ -175,12 +188,12 @@ makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> Eleme
 makeElement elementTag cfg child = do
   doc <- askDocument
   events <- askEvents
-  Just e <- ImmediateDomBuilderT $ fmap DOM.castToElement <$> case cfg ^. namespace of
+  Just e <- liftJSM $ case cfg ^. namespace of
     Nothing -> createElement doc (Just elementTag)
     Just ens -> createElementNS doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
-    Nothing -> setAttribute e n v
-    Just ans -> setAttributeNS e (Just ans) n v
+    Nothing -> lift $ setAttribute e n v
+    Just ans -> lift $ setAttributeNS e (Just ans) n v
   result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
     { _immediateDomBuilderEnv_parent = toNode e
     , _immediateDomBuilderEnv_document = doc
@@ -190,9 +203,9 @@ makeElement elementTag cfg child = do
   wrapped <- wrap e $ extractRawElementConfig cfg
   return ((wrapped, result), e)
 
-newtype GhcjsDomHandler a b = GhcjsDomHandler { unGhcjsDomHandler :: a -> IO b }
+newtype GhcjsDomHandler a b = GhcjsDomHandler { unGhcjsDomHandler :: a -> JSM b }
 
-newtype GhcjsDomHandler1 a b = GhcjsDomHandler1 { unGhcjsDomHandler1 :: forall (x :: EventTag). a x -> IO (b x) }
+newtype GhcjsDomHandler1 a b = GhcjsDomHandler1 { unGhcjsDomHandler1 :: forall (x :: EventTag). a x -> JSM (b x) }
 
 newtype GhcjsDomEvent en = GhcjsDomEvent { unGhcjsDomEvent :: EventType en }
 
@@ -220,7 +233,7 @@ instance DomSpace GhcjsDomSpace where
         in DMap.alter f' en $ _ghcjsEventSpec_filters es
     }
 
-newtype GhcjsEventFilter er en = GhcjsEventFilter (GhcjsDomEvent en -> IO (EventFlags, IO (Maybe (er en))))
+newtype GhcjsEventFilter er en = GhcjsEventFilter (GhcjsDomEvent en -> JSM (EventFlags, JSM (Maybe (er en))))
 
 data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
 
@@ -228,7 +241,7 @@ data Maybe1 f a = Nothing1 | Just1 (f a)
 
 data GhcjsEventSpec er = GhcjsEventSpec
   { _ghcjsEventSpec_filters :: DMap EventName (GhcjsEventFilter er)
-  , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> IO (Maybe (er en))
+  , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
   }
 
 instance er ~ EventResult => Default (GhcjsEventSpec er) where
@@ -236,7 +249,8 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> do
         Just t <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
-        runReaderT (defaultDomEventHandler (Element.castToElement t) en) evt
+        e <- Element.castToElement t
+        runReaderT (defaultDomEventHandler e en) evt
     }
 
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
@@ -260,7 +274,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
-    let domInputElement = castToHTMLInputElement domElement
+    domInputElement <- liftJSM $ castToHTMLInputElement domElement
     Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
     Just v0 <- Input.getValue domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
@@ -307,7 +321,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
-    let domTextAreaElement = castToHTMLTextAreaElement domElement
+    domTextAreaElement <- liftJSM $ castToHTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
     Just v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
@@ -330,7 +344,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
     ((e, result), domElement) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
-    let domSelectElement = castToHTMLSelectElement domElement
+    domSelectElement <- liftJSM $ castToHTMLSelectElement domElement
     Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
@@ -363,7 +377,7 @@ mkHasFocus e = do
     ]
 
 {-# INLINABLE insertImmediateAbove #-}
-insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
+insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadJSM (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
 insertImmediateAbove n toInsertAbove = do
   events <- askEvents
   lift $ performEvent $ ffor toInsertAbove $ \new -> do
@@ -416,13 +430,13 @@ instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => 
   newTriggerEventWithOnComplete = do
     events <- askEvents
     (eResult, reResultTrigger) <- lift newEventWithTriggerRef
-    return $ (,) eResult $ \a cb -> writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a cb]
+    return $ (,) eResult $ \a cb -> writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a (liftIO cb)]
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete f = do
     events <- askEvents
     lift $ newEventWithTrigger $ \t -> f $ \a cb -> do
       reResultTrigger <- newIORef $ Just t
-      writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a cb]
+      writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a (liftIO cb)]
 
 instance HasWebView m => HasWebView (ImmediateDomBuilderT t m) where
   type WebViewPhantom (ImmediateDomBuilderT t m) = WebViewPhantom m
@@ -442,7 +456,7 @@ instance MonadAtomicRef m => MonadAtomicRef (ImmediateDomBuilderT t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
 instance (HasJS x m, ReflexHost t) => HasJS x (ImmediateDomBuilderT t m) where
-  type JSM (ImmediateDomBuilderT t m) = JSM m
+  type JSX (ImmediateDomBuilderT t m) = JSX m
   liftJS = lift . liftJS
 
 type family EventType en where
@@ -643,9 +657,58 @@ withIsEvent en r = case en of
   Mousewheel -> r
   Wheel -> r
 
+showEventName :: EventName en -> String
+showEventName en = case en of
+  Abort -> "Abort"
+  Blur -> "Blur"
+  Change -> "Change"
+  Click -> "Click"
+  Contextmenu -> "Contextmenu"
+  Dblclick -> "Dblclick"
+  Drag -> "Drag"
+  Dragend -> "Dragend"
+  Dragenter -> "Dragenter"
+  Dragleave -> "Dragleave"
+  Dragover -> "Dragover"
+  Dragstart -> "Dragstart"
+  Drop -> "Drop"
+  Error -> "Error"
+  Focus -> "Focus"
+  Input -> "Input"
+  Invalid -> "Invalid"
+  Keydown -> "Keydown"
+  Keypress -> "Keypress"
+  Keyup -> "Keyup"
+  Load -> "Load"
+  Mousedown -> "Mousedown"
+  Mouseenter -> "Mouseenter"
+  Mouseleave -> "Mouseleave"
+  Mousemove -> "Mousemove"
+  Mouseout -> "Mouseout"
+  Mouseover -> "Mouseover"
+  Mouseup -> "Mouseup"
+  Mousewheel -> "Mousewheel"
+  Scroll -> "Scroll"
+  Select -> "Select"
+  Submit -> "Submit"
+  Wheel -> "Wheel"
+  Beforecut -> "Beforecut"
+  Cut -> "Cut"
+  Beforecopy -> "Beforecopy"
+  Copy -> "Copy"
+  Beforepaste -> "Beforepaste"
+  Paste -> "Paste"
+  Reset -> "Reset"
+  Search -> "Search"
+  Selectstart -> "Selectstart"
+  Touchstart -> "Touchstart"
+  Touchmove -> "Touchmove"
+  Touchend -> "Touchend"
+  Touchcancel -> "Touchcancel"
+
 {-# INLINABLE elementOnEventName #-}
-elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> IO (IO ())
-elementOnEventName en e = case en of
+elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
+elementOnEventName en e = \x -> liftIO (putStrLn $ "element event handler added " <> showEventName en) >> (case en of
   Abort -> on e Element.abort
   Blur -> on e Element.blurEvent
   Change -> on e Element.change
@@ -691,11 +754,12 @@ elementOnEventName en e = case en of
   Touchstart -> on e Element.touchStart
   Touchmove -> on e Element.touchMove
   Touchend -> on e Element.touchEnd
-  Touchcancel -> on e Element.touchCancel
+  Touchcancel -> on e Element.touchCancel) (liftIO (putStrLn $ "element event fired " <> showEventName en) >> x)
+    >>= \y -> return (liftIO (putStrLn $ "element event removed " <> showEventName en) >> y)
 
 {-# INLINABLE windowOnEventName #-}
-windowOnEventName :: EventName en -> DOM.Window -> EventM DOM.Window (EventType en) () -> IO (IO ())
-windowOnEventName en e = case en of
+windowOnEventName :: EventName en -> DOM.Window -> EventM DOM.Window (EventType en) () -> JSM (JSM ())
+windowOnEventName en e = \x -> liftIO (putStrLn $ "window event handler added " <> showEventName en) >> (case en of
   Abort -> on e Window.abort
   Blur -> on e Window.blurEvent
   Change -> on e Window.change
@@ -741,18 +805,19 @@ windowOnEventName en e = case en of
   Touchstart -> on e Window.touchStart
   Touchmove -> on e Window.touchMove
   Touchend -> on e Window.touchEnd
-  Touchcancel -> on e Window.touchCancel
+  Touchcancel -> on e Window.touchCancel) (liftIO (putStrLn $ "window event fired " <> showEventName en) >> x)
+    >>= \y -> return (liftIO (putStrLn $ "windo event removed " <> showEventName en) >> y)
 
 {-# INLINABLE wrapDomEvent #-}
-wrapDomEvent :: TriggerEvent t m => e -> (e -> EventM e event () -> IO (IO ())) -> EventM e event a -> m (Event t a)
+wrapDomEvent :: (TriggerEvent t m, MonadJSM m) => e -> (e -> EventM e event () -> JSM (JSM ())) -> EventM e event a -> m (Event t a)
 wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ fmap Just getValue
 
 {-# INLINABLE subscribeDomEvent #-}
-subscribeDomEvent :: (EventM e event () -> IO (IO ()))
+subscribeDomEvent :: (EventM e event () -> JSM (JSM ()))
                   -> EventM e event (Maybe a)
                   -> Chan [DSum (TriggerRef t) TriggerInvocation]
                   -> EventTrigger t a
-                  -> IO (IO ())
+                  -> JSM (JSM ())
 subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
   mv <- getValue
   forM_ mv $ \v -> liftIO $ do
@@ -761,25 +826,28 @@ subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
     writeChan eventChan [TriggerRef etr :=> TriggerInvocation v (return ())]
 
 {-# INLINABLE wrapDomEventMaybe #-}
-wrapDomEventMaybe :: TriggerEvent t m
+wrapDomEventMaybe :: (TriggerEvent t m, MonadJSM m)
                   => e
-                  -> (e -> EventM e event () -> IO (IO ()))
+                  -> (e -> EventM e event () -> JSM (JSM ()))
                   -> EventM e event (Maybe a)
                   -> m (Event t a)
 wrapDomEventMaybe el elementOnevent getValue = do
-  newEventWithLazyTriggerWithOnComplete $ \trigger -> elementOnevent el $ do
+  ctx <- askJSM
+  newEventWithLazyTriggerWithOnComplete $ \trigger -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnevent el $ do
     mv <- getValue
-    forM_ mv $ \v -> liftIO $ trigger v $ return ()
+    forM_ mv $ \v -> liftIO $ trigger v $ return ())
 
 {-# INLINABLE wrapDomEventsMaybe #-}
-wrapDomEventsMaybe :: (MonadIO m, MonadReflexCreateTrigger t m)
+wrapDomEventsMaybe :: (MonadJSM m, MonadReflexCreateTrigger t m)
                    => e
                    -> (forall en. IsEvent (EventType en) => EventName en -> EventM e (EventType en) (Maybe (f en)))
-                   -> (forall en. EventName en -> e -> EventM e (EventType en) () -> IO (IO ()))
+                   -> (forall en. EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ()))
                    -> ImmediateDomBuilderT t m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe target handlers onEventName = do
+  ctx <- askJSM
   eventChan <- askEvents
-  e <- lift $ newFanEventWithTrigger $ \(WrapArg en) -> withIsEvent en $ subscribeDomEvent (onEventName en target) (handlers en) eventChan
+  e <- lift $ newFanEventWithTrigger $ \(WrapArg en) -> withIsEvent en
+    (((`runJSM` ctx) <$>) . (`runJSM` ctx) . subscribeDomEvent (onEventName en target) (handlers en) eventChan)
   return $! e
 
 {-# INLINABLE getKeyEvent #-}
@@ -820,7 +888,7 @@ data Window t = Window
   , _window_raw :: DOM.Window
   }
 
-wrapWindow :: (MonadIO m, MonadReflexCreateTrigger t m) => DOM.Window -> WindowConfig t -> ImmediateDomBuilderT t m (Window t)
+wrapWindow :: (MonadJSM m, MonadReflexCreateTrigger t m) => DOM.Window -> WindowConfig t -> ImmediateDomBuilderT t m (Window t)
 wrapWindow wv _ = do
   events <- wrapDomEventsMaybe wv (defaultDomWindowEventHandler wv) windowOnEventName
   return $ Window

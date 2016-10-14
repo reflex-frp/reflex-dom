@@ -82,7 +82,6 @@ module Reflex.Dom.Widget.Basic
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
-import Reflex.Dom.Internal.Foreign ()
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
 

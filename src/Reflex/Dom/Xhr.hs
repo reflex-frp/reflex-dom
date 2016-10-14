@@ -62,9 +62,6 @@ where
 import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.PerformEvent.Class
-import Reflex.Dom.Xhr.Exception
-import Reflex.Dom.Xhr.Foreign
-import Reflex.Dom.Xhr.ResponseType
 
 import Control.Concurrent
 import Control.Exception (handle)
@@ -91,6 +88,11 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
 import Data.Typeable
+import Reflex.Dom.Xhr.ResponseType
+       (XhrResponseBody, XhrResponseType)
+import Foreign.JavaScript.TH (HasWebView)
+import Reflex.Dom.Xhr.Foreign (IsXhrPayload)
+import Reflex.Dom.Xhr.Exception (XhrException)
 
 data XhrRequest a
    = XhrRequest { _xhrRequest_method :: Text

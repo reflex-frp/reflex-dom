@@ -16,7 +16,6 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
 import Control.Monad.Fix
-import Control.Monad.IO.Class
 import Data.Fixed
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -24,9 +23,10 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.Element
+import GHCJS.DOM.Types (MonadJSM)
 
 -- |A list view for long lists. Creates a scrollable element and only renders child row elements near the current scroll position.
-virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
   => Dynamic t Int -- ^ The height of the visible region in pixels
   -> Int -- ^ The height of each row in pixels
   -> Dynamic t Int -- ^ The total number of items
@@ -58,8 +58,8 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
       let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
           itemsInWindow = zipDynWith (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
-  performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i -> do
-    liftIO $ setScrollTop (_element_raw container) (i * rowPx)
+  performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i ->
+    setScrollTop (_element_raw container) (i * rowPx)
   let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
@@ -80,7 +80,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           preItems = min startingIndex numItems
       in (topPx - preItems * sizeIncrement, (startingIndex - preItems, preItems + numItems * 2))
 
-virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
   => Dynamic t Int -- ^ A 'Dynamic' of the visible region's height in pixels
   -> Int -- ^ The fixed height of each row in pixels
   -> Dynamic t Int -- ^ A 'Dynamic' of the total number of items
@@ -102,8 +102,8 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
                                              , fmap (const (i0 * rowPx)) pb
                                              ]
       let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
-  performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i -> do
-    liftIO $ setScrollTop (_element_raw viewport) (i * rowPx)
+  performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i ->
+    setScrollTop (_element_raw viewport) (i * rowPx)
   return (uniqDyn window, result)
   where
     toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
@@ -124,7 +124,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       in (startingIndex, numItems)
 
 virtualListBuffered
-  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadIO (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
   => Int
   -> Dynamic t Int
   -> Int

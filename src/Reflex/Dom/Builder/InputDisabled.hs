@@ -86,5 +86,5 @@ instance HasWebView m => HasWebView (InputDisabledT m) where
   askWebView = lift askWebView
 
 instance HasJS js m => HasJS js (InputDisabledT m) where
-  type JSM (InputDisabledT m) = JSM m
+  type JSX (InputDisabledT m) = JSX m
   liftJS = lift . liftJS

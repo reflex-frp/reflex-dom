@@ -20,6 +20,7 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
                              , Safety (..)
                              ) where
 
+import Prelude hiding((!!))
 import Reflex.Class
 import Reflex.Deletable.Class
 import Reflex.DynamicWriter
@@ -30,10 +31,11 @@ import Reflex.Host.Class
 
 import Language.Haskell.TH
 
+import GHCJS.DOM.Types
+       (toJSString, liftJSM, askJSM, runJSM, JSContextRef,
+        Node(..), MonadJSM(..), toJSVal, JSVal)
 #ifdef __GHCJS__
 import qualified GHCJS.Buffer as JS
-import GHCJS.DOM
-import GHCJS.DOM.Types hiding (Text, fromJSString)
 import qualified GHCJS.DOM.Types as JS
 import qualified GHCJS.Foreign as JS
 import qualified GHCJS.Foreign.Callback as JS
@@ -52,16 +54,17 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
+
+import Reflex.Dom.Internal.Foreign (WebView)
 #else
-import Foreign.Marshal
-import Graphics.UI.Gtk.WebKit.DOM.Node
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSBase
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSObjectRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSStringRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
-import Graphics.UI.Gtk.WebKit.JavaScriptCore.WebFrame
-import Graphics.UI.Gtk.WebKit.WebView
-import System.Glib.FFI
+import Data.Word (Word8)
+import GI.WebKit2 (WebView)
+import Control.Lens.Operators ((^.))
+import Language.Javascript.JSaddle
+       (eval, valMakeString, valToNumber, function,
+        valMakeNumber, valBool, valToText, valToBool, valIsUndefined,
+        valUndefined, valIsNull, Function(..), (!!),
+        js, js1, jss, array, freeFunction)
 #endif
 
 import Control.Concurrent
@@ -76,7 +79,6 @@ import qualified Control.Monad.State.Strict as Strict
 import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Coerce
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -174,11 +176,11 @@ instance MonadRef m => MonadRef (WithWebView x m) where
 instance MonadAtomicRef m => MonadAtomicRef (WithWebView x m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
+withWebViewSingleton :: (WebView, JSContextRef) -> (forall x. WebViewSingleton x -> r) -> r
 withWebViewSingleton wv f = f $ WebViewSingleton wv
 
 -- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
-newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
+newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: (WebView, JSContextRef) }
 
 #ifdef __GHCJS__
 type JSFFI_Internal = JS.MutableJSArray -> IO JS.JSVal
@@ -187,35 +189,36 @@ newtype JSFFI = JSFFI JSFFI_Internal
 newtype JSFFI = JSFFI String
 #endif
 
-newtype JSFun x = JSFun { unJSFun :: JSRef x }
+data JSFun x = JSFun { unJSFun :: JSRef x
+#ifndef __GHCJS__
+    , unJSFunction :: Function
+#endif
+    }
 
 instance ToJS x (JSFun x) where
-  withJS (JSFun r) f = f r
-
-instance FromJS x (JSFun x) where
-  fromJS = return . JSFun
+  withJS r f = f (unJSFun r)
 
 class IsJSContext x where
   data JSRef x
 
-class (Monad m, MonadIO (JSM m), MonadFix (JSM m), MonadJS x (JSM m)) => HasJS x m | m -> x where
-  type JSM m :: * -> *
-  liftJS :: JSM m a -> m a
+class (Monad m, MonadIO (JSX m), MonadFix (JSX m), MonadJS x (JSX m)) => HasJS x m | m -> x where
+  type JSX m :: * -> *
+  liftJS :: JSX m a -> m a
 
 instance HasJS x m => HasJS x (ReaderT r m) where
-  type JSM (ReaderT r m) = JSM m
+  type JSX (ReaderT r m) = JSX m
   liftJS = lift . liftJS
 
 instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
-  type JSM (PostBuildT t m) = JSM m
+  type JSX (PostBuildT t m) = JSX m
   liftJS = lift . liftJS
 
 instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
-  type JSM (PerformEventT t m) = JSM (HostFrame t)
+  type JSX (PerformEventT t m) = JSX (HostFrame t)
   liftJS = PerformEventT . lift . liftJS
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
-  type JSM (DynamicWriterT t w m) = JSM m
+  type JSX (DynamicWriterT t w m) = JSX m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
@@ -247,7 +250,7 @@ class Monad m => MonadJS x m | m -> x where
 data JSCtx_IO
 
 instance MonadIO m => HasJS JSCtx_IO (WithWebView x m) where
-  type JSM (WithWebView x m) = IO
+  type JSX (WithWebView x m) = IO
   liftJS = liftIO
 
 instance IsJSContext JSCtx_IO where
@@ -296,25 +299,13 @@ foreign import javascript unsafe "function(){ return $1(arguments); }" funWithAr
 
 #else
 
--- | Make a JS string available that is not wrapped up as a JSValueRef
-withJSStringRaw :: MonadAsyncException m => String -> (JSStringRef -> m r) -> m r
-withJSStringRaw str a = do
-  bracket (liftIO $ jsstringcreatewithutf8cstring str) (liftIO . jsstringrelease) $ \strRef -> do
-    a strRef
-
-fromJSNumberRaw :: (MonadIO m, HasJSContext m) => JSValueRef -> m Double
-fromJSNumberRaw val = do
-  jsContext <- askJSContext
-  liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
-
-
 data JSCtx_JavaScriptCore x
 
 instance IsJSContext (JSCtx_JavaScriptCore x) where
-  newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSValueRef }
+  newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSVal }
 
 instance MonadIO m => HasJS (JSCtx_JavaScriptCore x) (WithWebView x m) where
-  type JSM (WithWebView x m) = WithWebView x IO
+  type JSX (WithWebView x m) = WithWebView x IO
   liftJS a = do
     wv <- askWebView
     liftIO $ runWithWebView a wv
@@ -324,23 +315,21 @@ newtype WithJSContext x m a = WithJSContext { unWithJSContext :: ReaderT JSConte
 runWithJSContext :: WithJSContext x m a -> JSContextRef -> m a
 runWithJSContext = runReaderT . unWithJSContext
 
-class Monad m => HasJSContext m where
-  askJSContext :: m JSContextRef
-
-instance MonadIO m => HasJSContext (WithWebView x m) where
-  askJSContext = do
+instance MonadIO m => MonadJSM (WithWebView x m) where
+  liftJSM' f = do
     wv <- askWebView
-    liftIO $ webFrameGetGlobalContext =<< webViewGetMainFrame (unWebViewSingleton wv)
+    runJSM f . snd $ unWebViewSingleton wv
 
-instance Monad m => HasJSContext (WithJSContext x m) where
-  askJSContext = WithJSContext ask
+instance MonadIO m => MonadJSM (WithJSContext x m) where
+  liftJSM' f =
+    runJSM f =<< WithJSContext ask
 
-lowerWithJSContext :: (HasJSContext m, MonadIO m) => WithJSContext x IO a -> m a
+lowerWithJSContext :: MonadJSM m => WithJSContext x IO a -> m a
 lowerWithJSContext a = do
-  c <- askJSContext
+  c <- askJSM
   liftIO $ runWithJSContext a c
 
-liftWithWebViewThroughWithJSContext :: (HasJSContext m, HasWebView m, MonadIO m, MonadTrans t, Monad m1)
+liftWithWebViewThroughWithJSContext :: (HasWebView m, MonadJSM m, MonadTrans t, Monad m1)
                                     => ((t1 -> t m1 a) -> WithJSContext x IO b)
                                     -> (t1 -> WithWebView (WebViewPhantom m) m1 a)
                                     -> m b
@@ -375,96 +364,45 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   getJSProp propName objRef = lowerWithJSContext $ getJSProp propName objRef
 
 instance MonadJS (JSCtx_JavaScriptCore x) (WithJSContext x IO) where
-  runJS (JSFFI body) args = do
-    jsContext <- askJSContext
-    withJSArray args $ \(JSRef_JavaScriptCore this) -> liftIO $ do
-      result <- bracket (jsstringcreatewithutf8cstring body) jsstringrelease $ \script -> jsevaluatescript jsContext script this nullPtr 1 nullPtr
-      return $ JSRef_JavaScriptCore result --TODO: Protect and unprotect result
+  runJS (JSFFI body) args =
+    withJSArray args $ \(JSRef_JavaScriptCore this) -> do
+      result <- liftJSM $ eval ("(function(){ return (" <> body <> "); })") ^. js1 "apply" this
+      return $ JSRef_JavaScriptCore result
   forkJS a = do
-    c <- askJSContext
-    liftIO $ forkIO $ runWithJSContext a c
-  mkJSUndefined = do
-    jsContext <- askJSContext
-    fmap JSRef_JavaScriptCore $ liftIO $ jsvaluemakeundefined jsContext
-  isJSNull (JSRef_JavaScriptCore r) = do
-    jsContext <- askJSContext
-    liftIO $ jsvalueisnull jsContext r
-  isJSUndefined (JSRef_JavaScriptCore r) = do
-    jsContext <- askJSContext
-    liftIO $ jsvalueisundefined jsContext r
-  fromJSBool (JSRef_JavaScriptCore r) = do
-    jsContext <- askJSContext
-    liftIO $ jsvaluetoboolean jsContext r
-  fromJSString (JSRef_JavaScriptCore r) = do
-    jsContext <- askJSContext
-    liftIO $ do
-      s <- jsvaluetostringcopy jsContext r nullPtr --TODO: Deal with exceptions
-      l <- jsstringgetmaximumutf8cstringsize s
-      allocaBytes (fromIntegral l) $ \ps -> do
-        _ <- jsstringgetutf8cstring'_ s ps (fromIntegral l)
-        peekCString ps
-  withJSBool b a = do
-    jsContext <- askJSContext
-    valRef <- liftIO $ jsvaluemakeboolean jsContext b
-    a $ JSRef_JavaScriptCore valRef
-  withJSString str a = do
-    jsContext <- askJSContext
-    withJSStringRaw str $ \strRef -> do
-      valRef <- liftIO $ jsvaluemakestring jsContext strRef
-      a $ JSRef_JavaScriptCore valRef --TODO: Protect/unprotect valRef
-  withJSNumber n a = do
-    jsContext <- askJSContext
-    valRef <- liftIO $ jsvaluemakenumber jsContext n
-    a $ JSRef_JavaScriptCore valRef --TODO: Protect/unprotect valRef
-  withJSArray elems a = do
-    jsContext <- askJSContext
-    let numElems = length elems
-    bracket (liftIO $ mallocArray numElems) (liftIO . free) $ \elemsArr -> do
-      liftIO $ pokeArray elemsArr $ coerce elems
-      bracket (liftIO $ jsobjectmakearray jsContext (fromIntegral numElems) elemsArr nullPtr) (const $ return ()) $ \arrRef -> do --TODO: Do we need to protect/unprotect the array object?
-        a $ JSRef_JavaScriptCore arrRef --TODO: Protect/unprotect valRef
-  --TODO: When supported by webkitgtk3-javascriptcore, go directly from C string to Uint8Array without creating each item individually
+    c <- askJSM
+    liftIO . forkIO $ runWithJSContext a c
+  mkJSUndefined = return $ JSRef_JavaScriptCore valUndefined
+  isJSNull (JSRef_JavaScriptCore r) = liftJSM $ valIsNull r
+  isJSUndefined (JSRef_JavaScriptCore r) = liftJSM $ valIsUndefined r
+  fromJSBool (JSRef_JavaScriptCore r) = liftJSM $ valToBool r
+  fromJSString (JSRef_JavaScriptCore r) = liftJSM (T.unpack <$> valToText r)
+  withJSBool b a = a $ JSRef_JavaScriptCore (valBool b)
+  withJSString str a = a . JSRef_JavaScriptCore =<< liftJSM (valMakeString $ toJSString str)
+  withJSNumber n a = a . JSRef_JavaScriptCore =<< liftJSM (valMakeNumber n)
+  withJSArray elems a = a . JSRef_JavaScriptCore =<< liftJSM
+    (toJSVal =<< array (map (\(JSRef_JavaScriptCore r) -> r) elems))
   withJSUint8Array payload f = withJSArrayFromList (BS.unpack payload) $ \x -> do
     payloadRef <- runJS (JSFFI "new Uint8Array(this[0])") [x]
     f $ JSUint8Array payloadRef
-  fromJSArray (JSRef_JavaScriptCore a) = do
-    jsContext <- askJSContext
-    lenRef <- withJSStringRaw "length" $ \lengthStr -> do
-      liftIO $ jsobjectgetproperty jsContext a lengthStr nullPtr --TODO: Exceptions
-    lenDouble <- fromJSNumberRaw lenRef
-    let len = round lenDouble
-    liftIO $ forM [0..len-1] $ \i -> do
-      JSRef_JavaScriptCore <$> jsobjectgetpropertyatindex jsContext a i nullPtr --TODO: Exceptions
+  fromJSArray (JSRef_JavaScriptCore a) = liftJSM $ do
+    len <- round <$> (valToNumber =<< (a ^. js "length"))
+    forM [0..len-1] $ \i -> JSRef_JavaScriptCore <$> a !! i
   fromJSUint8Array a = do
     vals <- fromJSArray a
     doubles <- mapM fromJSNumber vals
     return $ BS.pack $ map round doubles
-  fromJSNumber (JSRef_JavaScriptCore val) = do
-    jsContext <- askJSContext
-    liftIO $ jsvaluetonumber jsContext val nullPtr --TODO: Exceptions
-  mkJSFun a = do
-    jsContext <- askJSContext
-    cb <- liftIO $ mkJSObjectCallAsFunctionCallback $ \_ _ _ argc argv _ -> do --TODO: Use the exception pointer to handle haskell exceptions
-      args <- forM [0..fromIntegral (argc-1)] $ \n -> do
-        x <- peekElemOff argv n
-        jsvalueprotect jsContext x
-        return $ JSRef_JavaScriptCore x --TODO: Unprotect eventually
-      unJSRef_JavaScriptCore <$> runWithJSContext (a args) jsContext
-    cbRef <- liftIO $ jsobjectmakefunctionwithcallback jsContext nullPtr cb
-    liftIO $ jsvalueprotect jsContext cbRef
-    return $ JSFun $ JSRef_JavaScriptCore cbRef
-  freeJSFun (JSFun (JSRef_JavaScriptCore f)) = do
-    jsContext <- askJSContext
-    liftIO $ jsvalueunprotect jsContext f
-  setJSProp propName (JSRef_JavaScriptCore valRef) (JSRef_JavaScriptCore objRef) = do
-    withJSStringRaw propName $ \propNameRaw -> do
-      jsContext <- askJSContext
-      liftIO $ jsobjectsetproperty jsContext objRef propNameRaw valRef 0 nullPtr --TODO: property attribute, exceptions
-  getJSProp propName (JSRef_JavaScriptCore objRef) = do
-    withJSStringRaw propName $ \propNameRaw -> do
-      jsContext <- askJSContext
-      liftIO $ JSRef_JavaScriptCore <$> jsobjectgetproperty jsContext objRef propNameRaw nullPtr --TODO: property attribute, exceptions
-  withJSNode = error "withJSNode is only supported in ghcjs"
+  fromJSNumber (JSRef_JavaScriptCore val) = liftJSM $ valToNumber val
+  mkJSFun a = liftJSM $ do
+    ctx <- askJSM
+    f <- function $ \_ _ args -> liftIO $ void $ runWithJSContext (a $ map JSRef_JavaScriptCore args) ctx
+    fRef <- toJSVal f
+    return $ JSFun (JSRef_JavaScriptCore fRef) f
+  freeJSFun (JSFun _ f) = liftJSM $ freeFunction f
+  setJSProp propName (JSRef_JavaScriptCore valRef) (JSRef_JavaScriptCore objRef) =
+    liftJSM $ objRef ^. jss propName valRef
+  getJSProp propName (JSRef_JavaScriptCore objRef) =
+    JSRef_JavaScriptCore <$> liftJSM (objRef ^. js propName)
+  withJSNode n f = f . JSRef_JavaScriptCore =<< liftJSM (toJSVal n)
 
 #endif
 

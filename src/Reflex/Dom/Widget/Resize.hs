@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -23,19 +24,20 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.Element hiding (reset)
 import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM)
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from github.com/marcj/css-element-queries
-resizeDetector :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadFix m) => m a -> m (Event t (), a)
+resizeDetector :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m) => m a -> m (Event t (), a)
 resizeDetector = resizeDetectorWithStyle ""
 
-resizeDetectorWithStyle :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadFix m)
+resizeDetectorWithStyle :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m)
   => Text -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithStyle styleString = resizeDetectorWithAttrs ("style" =: styleString)
 
-resizeDetectorWithAttrs :: (DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadIO (Performable m), MonadFix m)
+resizeDetectorWithAttrs :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m)
   => Map Text Text -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
@@ -74,9 +76,10 @@ resizeDetectorWithAttrs attrs w = do
           then return Nothing
           else fmap Just reset
   pb <- getPostBuild
+  ctx <- askJSM
   expandScroll <- wrapDomEvent (_element_raw expand) (`on` scroll) $ return ()
   shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` scroll) $ return ()
-  size0 <- performEvent $ fmap (const $ liftIO reset) pb
-  rec resize <- performEventAsync $ fmap (\d cb -> liftIO $ cb =<< resetIfChanged d) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
+  size0 <- performEvent $ fmap (const $ runJSM reset ctx) pb
+  rec resize <- performEventAsync $ fmap (\d cb -> liftIO $ cb =<< runJSM (resetIfChanged d) ctx) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]
   return (fmapMaybe void resize, w')

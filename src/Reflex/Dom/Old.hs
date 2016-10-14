@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -8,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE LambdaCase #-}
 module Reflex.Dom.Old
        ( MonadWidget
        , El
@@ -61,8 +63,10 @@ import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
-import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild, toNode)
-import GHCJS.DOM.Types (IsElement, IsNode)
+import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild)
+import GHCJS.DOM.Types
+       (MonadJSM, askJSM, runJSM, strictEqual, liftJSM, JSM, IsElement,
+        IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -92,6 +96,10 @@ type MonadWidgetConstraints t m =
   , PerformEvent t m
   , MonadIO m
   , MonadIO (Performable m)
+#ifndef ghcjs_HOST_OS
+  , MonadJSM m
+  , MonadJSM (Performable m)
+#endif
   , TriggerEvent t m
   , HasWebView m
   , HasWebView (Performable m)
@@ -154,7 +162,7 @@ buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> 
 buildElementCommon elementTag child cfg = element elementTag cfg child
 
 -- | s and e must both be children of the same node and s must precede e
-deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> IO ()
+deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> JSM ()
 deleteBetweenExclusive s e = do
   mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   case mCurrentParent of
@@ -162,12 +170,14 @@ deleteBetweenExclusive s e = do
     Just currentParent -> do
       let go = do
             Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            when (toNode s /= toNode x) $ do
-              _ <- removeChild currentParent $ Just x
-              go
+            liftJSM (strictEqual s x) >>= \case
+                True  -> return ()
+                False -> do
+                  _ <- removeChild currentParent $ Just x
+                  go
       go
 
-onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> IO (IO ())
+onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
 onEventName = elementOnEventName
 
 schedulePostBuild :: (PostBuild t m, PerformEvent t m) => WidgetHost m () -> m ()
@@ -219,7 +229,7 @@ _el_scrolled = domEvent Scroll
 
 wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.Element -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.Element -> m (El t)
 wrapElement eh e = do
-  let h :: (EventName en, GhcjsDomEvent en) -> IO (Maybe (EventResult en))
+  let h :: (EventName en, GhcjsDomEvent en) -> JSM (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
   wrapRawElement e $ (def :: RawElementConfig EventResult t m)
     { _rawElementConfig_eventSpec = def
@@ -232,7 +242,7 @@ unsafePlaceElement e = do
   placeRawElement e
   wrapRawElement e def
 
-namedNodeMapGetNames :: DOM.NamedNodeMap -> IO (Set Text)
+namedNodeMapGetNames :: DOM.NamedNodeMap -> JSM (Set Text)
 namedNodeMapGetNames self = do
   l <- NNM.getLength self
   let locations = if l == 0 then [] else [0..l-1] -- Can't use 0..l-1 if l is 0 because l is unsigned and will wrap around
@@ -240,7 +250,7 @@ namedNodeMapGetNames self = do
     Just n <- NNM.item self i
     getNodeName n
 
-nodeClear :: IsNode self => self -> IO ()
+nodeClear :: IsNode self => self -> JSM ()
 nodeClear n = do
   mfc <- getFirstChild n
   case mfc of
@@ -251,7 +261,7 @@ nodeClear n = do
 
 getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
 getQuitWidget = return $ do
-  WebViewSingleton wv <- askWebView
+  WebViewSingleton (wv, _) <- askWebView
   liftIO $ quitWebView wv
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a
@@ -263,12 +273,13 @@ elStopPropagationNS ns elementTag en child = do
         & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
   snd <$> element elementTag cfg child
 
-elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
+elDynHtmlAttr' :: (DOM.MonadJSM m, MonadWidget t m) => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
   let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
   (e, _) <- element elementTag cfg $ return ()
   postBuild <- getPostBuild
-  performEvent_ $ Element.setInnerHTML (_element_raw e) . Just <$> leftmost [updated html, tag (current html) postBuild]
+  ctx <- askJSM
+  performEvent_ $ (`runJSM` ctx) . Element.setInnerHTML (_element_raw e) . Just <$> leftmost [updated html, tag (current html) postBuild]
   return e
 
 elDynHtml' :: MonadWidget t m => Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
