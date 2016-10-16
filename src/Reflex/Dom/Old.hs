@@ -65,8 +65,7 @@ import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild)
 import GHCJS.DOM.Types
-       (MonadJSM, askJSM, runJSM, strictEqual, liftJSM, JSM, IsElement,
-        IsNode)
+       (MonadJSM, strictEqual, liftJSM, JSM, IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class

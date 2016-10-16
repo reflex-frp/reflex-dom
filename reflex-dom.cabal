@@ -35,7 +35,7 @@ library
     these >= 0.4 && < 0.8,
     ref-tf == 0.4.*,
     random == 1.1.*,
-    ghcjs-dom >= 0.4.0.0 && < 0.5,
+    ghcjs-dom >= 0.5.0.0 && < 0.6,
     transformers >= 0.3 && < 0.6,
     lens >= 4.7 && < 5,
     text == 1.2.*,

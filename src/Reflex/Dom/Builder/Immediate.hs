@@ -57,9 +57,7 @@ import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPrevious
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
-        ToDOMString, TouchEvent, WheelEvent, castToHTMLInputElement,
-        castToHTMLSelectElement, castToHTMLTextAreaElement,
-        strictEqual)
+        ToDOMString, TouchEvent, WheelEvent, strictEqual, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
@@ -248,8 +246,8 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> do
-        Just t <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
-        e <- Element.castToElement t
+        Just (t :: DOM.EventTarget) <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
 
@@ -274,7 +272,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
-    domInputElement <- liftJSM $ castToHTMLInputElement domElement
+    let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
     Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
     Just v0 <- Input.getValue domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
@@ -321,7 +319,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
-    domTextAreaElement <- liftJSM $ castToHTMLTextAreaElement domElement
+    let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
     Just v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
@@ -344,7 +342,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
     ((e, result), domElement) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
-    domSelectElement <- liftJSM $ castToHTMLSelectElement domElement
+    let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
     Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement

@@ -30,13 +30,13 @@ import Data.Maybe
 import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
-import GHCJS.DOM.Element (castToElement)
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
-import GHCJS.DOM.Types (MonadJSM, File)
+import GHCJS.DOM.Types (MonadJSM, File, unsafeCastTo)
+import qualified GHCJS.DOM.Types as DOM (Element(..), EventTarget(..))
 import Reflex.Class
 import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
@@ -285,7 +285,7 @@ checkboxView dAttrs dValue = do
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
         Just t <- Event.getTarget evt
-        b <- Input.getChecked =<< Input.castToHTMLInputElement t
+        b <- Input.getChecked =<< unsafeCastTo Input.HTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
@@ -296,8 +296,8 @@ checkboxView dAttrs dValue = do
             , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
                 Click -> error "impossible"
                 _ -> do
-                  Just e <- withIsEvent en $ Event.getTarget evt
-                  element <- castToElement e
+                  Just (e :: DOM.EventTarget) <- withIsEvent en $ Event.getTarget evt
+                  element <- unsafeCastTo DOM.Element e
                   mr <- runReaderT (defaultDomEventHandler element en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
