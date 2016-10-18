@@ -80,6 +80,12 @@ data ElConfig attrs = ElConfig
   , _elConfig_attributes :: attrs
   }
 
+instance attrs ~ Map Text Text => Default (ElConfig attrs) where
+  def = ElConfig
+    { _elConfig_namespace = Nothing
+    , _elConfig_attributes = mempty
+    }
+
 makeLenses ''ElConfig
 
 --TODO: HasDocument is still not accounted for
