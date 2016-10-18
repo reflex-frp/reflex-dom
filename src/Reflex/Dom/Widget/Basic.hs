@@ -79,7 +79,7 @@ module Reflex.Dom.Widget.Basic
   , HasAttributes (..)
   ) where
 
-import Reflex.Class as Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
@@ -228,14 +228,15 @@ applyMapKeysSet patch old = Map.keysSet insertions `Set.union` (old `Set.differe
 listWithKey :: forall t k v m a. (Ord k, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 listWithKey vals mkChild = do
   postBuild <- getPostBuild
+  let childValChangedSelector = fanMap $ updated vals
   rec sentVals :: Dynamic t (Map k v) <- foldDyn applyMap Map.empty changeVals
       let changeVals :: Event t (Map k (Maybe v))
           changeVals = attachWith diffMapNoEq (current sentVals) $ leftmost
                          [ updated vals
                          , tag (current vals) postBuild --TODO: This should probably be added to the attachWith, not to the updated; if we were using diffMap instead of diffMapNoEq, I think it might not work
                          ]
-  listWithKeyShallowDiff Map.empty changeVals $ \k v0 dv -> do
-    mkChild k =<< holdDyn v0 dv
+  listHoldWithKey Map.empty changeVals $ \k v ->
+    mkChild k =<< holdDyn v (select childValChangedSelector $ Const2 k)
 
 {-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
 listWithKey' :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
@@ -250,7 +251,7 @@ listWithKeyShallowDiff initialVals valsChanged mkChild = do
         Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
         Just _ -> Nothing -- We don't want to let spurious re-creations of items through
   listHoldWithKey initialVals (attachWith (flip (Map.differenceWith relevantPatch)) (current sentVals) valsChanged) $ \k v ->
-    mkChild k v $ Reflex.select childValChangedSelector $ Const2 k
+    mkChild k v $ select childValChangedSelector $ Const2 k
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 -- | Create a dynamically-changing set of Event-valued widgets.
