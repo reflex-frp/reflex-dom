@@ -44,14 +44,23 @@ import Data.Text
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
+                     , _webSocketConfig_close :: Event t (Word, Text)
+                     , _webSocketConfig_reconnect :: Bool
                      }
 
 instance Reflex t => Default (WebSocketConfig t a) where
-  def = WebSocketConfig never
+  def = WebSocketConfig never never True
 
 data WebSocket t
    = WebSocket { _webSocket_recv :: Event t ByteString
                , _webSocket_open :: Event t ()
+               , _webSocket_error :: Event t () -- eror event does not carry any data and is always
+                                                -- followed by termination of the connection
+                                                -- for details see the close event
+               , _webSocket_close :: Event t ( Bool -- wasClean
+                                             , Word -- code
+                                             , Text -- reason
+                                             )
                }
 
 -- This can be used to send either binary or text messages for the same websocket connection
@@ -65,25 +74,34 @@ webSocket url config = do
   wv <- fmap unWebViewSingleton askWebView
   (eRecv, onMessage) <- newTriggerEvent
   currentSocketRef <- liftIO $ newIORef Nothing
-  --TODO: Disconnect if value no longer needed
   (eOpen, triggerEOpen) <- newTriggerEventWithOnComplete
+  (eError, triggerEError) <- newTriggerEvent
+  (eClose, triggerEClose) <- newTriggerEvent
   payloadQueue <- liftIO newTQueueIO
   isOpen       <- liftIO newEmptyTMVarIO
-  let onOpen = triggerEOpen () $ do
-        liftIO $ void $ atomically $ tryPutTMVar isOpen ()
-      --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?
-      onClose = void $ forkIO $ do
-        _ <- liftIO $ atomically $ tryTakeTMVar isOpen
-        liftIO $ writeIORef currentSocketRef Nothing
-        liftIO $ threadDelay 1000000
-        start
+  let onOpen = triggerEOpen () $ liftIO $ void $ atomically $ tryPutTMVar isOpen ()
+      onError = triggerEError ()
+      onClose args = do
+        triggerEClose args
+        --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?
+        void $ forkIO $ do
+          _ <- liftIO $ atomically $ tryTakeTMVar isOpen
+          liftIO $ writeIORef currentSocketRef Nothing
+          when (_webSocketConfig_reconnect config) $ do
+            liftIO $ threadDelay 1000000
+            start
       start = do
-        ws <- liftIO $ newWebSocket wv url onMessage onOpen onClose
+        ws <- liftIO $ newWebSocket wv url onMessage onOpen onError onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
         return ()
   performEvent_ . (liftIO start <$) =<< getPostBuild
   performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> forM_ payloads $ \payload ->
     liftIO $ atomically $ writeTQueue payloadQueue payload
+  performEvent_ $ ffor (_webSocketConfig_close config) $ \(code,reason) -> liftIO $ do
+    mws <- readIORef currentSocketRef
+    case mws of
+      Nothing -> return ()
+      Just ws -> closeWebSocket ws (fromIntegral code) reason
 
   _ <- liftIO $ forkIO $ forever $ do
     payload <- atomically $ do
@@ -98,6 +116,6 @@ webSocket url config = do
                          `catch`
                          (\(_ :: SomeException) -> return False))
     unless success $ atomically $ unGetTQueue payloadQueue payload
-  return $ WebSocket eRecv eOpen
+  return $ WebSocket eRecv eOpen eError eClose
 
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig

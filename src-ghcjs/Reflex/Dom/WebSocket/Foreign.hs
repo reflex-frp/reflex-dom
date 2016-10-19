@@ -14,9 +14,10 @@ import qualified Data.Text as T (unpack)
 import Data.Text.Encoding
 import GHCJS.Buffer
 import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.EventTargetClosures (EventName, unsafeEventName)
 import GHCJS.DOM.MessageEvent
+import GHCJS.DOM.CloseEvent
 import GHCJS.DOM.Types hiding (Text)
-import GHCJS.DOM.WebSocket (closeEvent, message, open)
 import qualified GHCJS.DOM.WebSocket as GD
 import GHCJS.Foreign.Internal
 import GHCJS.Marshal.Pure
@@ -42,12 +43,34 @@ instance IsWebSocketMessage ByteString where
 instance IsWebSocketMessage Text where
   webSocketSend (JSWebSocket ws) = GD.sendString ws . T.unpack
 
-newWebSocket :: a -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
-newWebSocket _ url onMessage onOpen onClose = do
+closeWebSocket :: JSWebSocket -> Word -> Text -> IO ()
+closeWebSocket (JSWebSocket ws) = GD.close ws
+
+-- TODO: remove after upgrade to ghcjs-dom >= 0.3
+-- in ghcjs-dom 0.2 this has type Event, we want CloseEvent
+closeEvent :: EventName WebSocket CloseEvent
+closeEvent = unsafeEventName (toJSString "close")
+
+newWebSocket
+  :: a
+  -> Text -- url
+  -> (ByteString -> IO ()) -- onmessage
+  -> IO () -- onopen
+  -> IO () -- onerror
+  -> ((Bool, Word, Text) -> IO ()) -- onclose
+  -> IO JSWebSocket
+newWebSocket _ url onMessage onOpen onError onClose = do
   ws <- GD.newWebSocket url (Just [] :: Maybe [Text])
-  _ <- on ws open $ liftIO onOpen
   GD.setBinaryType ws "arraybuffer"
-  _ <- on ws message $ do
+  _ <- on ws GD.open $ liftIO onOpen
+  _ <- on ws GD.error $ liftIO onError
+  _ <- on ws closeEvent $ do
+    e <- ask
+    wasClean <- getWasClean e
+    code <- getCode e
+    reason <- getReason e
+    liftIO $ onClose (wasClean, code, reason)
+  _ <- on ws GD.message $ do
     e <- ask
     d <- getData e
     liftIO $ case jsTypeOf d of
@@ -55,7 +78,6 @@ newWebSocket _ url onMessage onOpen onClose = do
       _ -> do
         ab <- unsafeFreeze $ pFromJSVal d
         onMessage $ toByteString 0 Nothing $ createFromArrayBuffer ab
-  _ <- on ws closeEvent $ liftIO onClose
   return $ JSWebSocket ws
 
 foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> JSVal
