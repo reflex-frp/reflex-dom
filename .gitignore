@@ -35,3 +35,4 @@ hsenv.log
 .cabal-sandbox/
 cabal.sandbox.config
 .stack-work
+codex.tags
