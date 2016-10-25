@@ -422,7 +422,7 @@ mkHasFocus e = do
     ]
 
 {-# INLINABLE insertImmediateAbove #-}
-insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
+insertImmediateAbove :: (IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
 insertImmediateAbove n toInsertAbove = do
   events <- askEvents
   lift $ performEvent $ ffor toInsertAbove $ \new -> do
