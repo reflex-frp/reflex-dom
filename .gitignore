@@ -32,3 +32,5 @@ hsenv.log
 \#*#
 .#*
 *_stub.h
+*.dump-*
+*.verbose-core2core
