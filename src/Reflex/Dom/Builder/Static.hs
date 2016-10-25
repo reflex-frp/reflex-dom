@@ -25,9 +25,8 @@ import Control.Monad.Ref
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import Data.ByteString.Builder (toLazyByteString)
-import qualified Data.ByteString.Lazy as BL
+import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
@@ -50,9 +49,8 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.Spider
 
-
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
-    { unStaticDomBuilderT :: StateT [Behavior t ByteString] m a -- Accumulated Html will be in reversed order
+    { unStaticDomBuilderT :: StateT [Behavior t Builder] m a -- Accumulated Html will be in reversed order
     }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
@@ -61,14 +59,14 @@ instance PrimMonad m => PrimMonad (StaticDomBuilderT x m) where
   primitive = lift . primitive
 
 instance MonadTransControl (StaticDomBuilderT t) where
-  type StT (StaticDomBuilderT t) a = StT (StateT [Behavior t ByteString]) a
+  type StT (StaticDomBuilderT t) a = StT (StateT [Behavior t Builder]) a
   liftWith = defaultLiftWith StaticDomBuilderT unStaticDomBuilderT
   restoreT = defaultRestoreT StaticDomBuilderT
 
 instance MonadTrans (StaticDomBuilderT t) where
   lift = StaticDomBuilderT . lift
 
-runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> m (a, Behavior t ByteString)
+runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> m (a, Behavior t Builder)
 runStaticDomBuilderT (StaticDomBuilderT a) = do
   (result, a') <- runStateT a []
   return (result, mconcat $ reverse a')
@@ -148,15 +146,15 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
     let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, v)) -> k :=> Identity v) children0
         result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
           mapKeyValuePairsMonotonic (\(WrapArg k :=> mv) -> k :=> fmap snd mv) p
-        outputs0 :: DMap k (Constant (Behavior t ByteString))
+        outputs0 :: DMap k (Constant (Behavior t Builder))
         outputs0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (o, _)) -> k :=> Constant o) children0
-        outputs' :: Event t (PatchDMap k (Constant (Behavior t ByteString)))
+        outputs' :: Event t (PatchDMap k (Constant (Behavior t Builder)))
         outputs' = ffor children' $ \(PatchDMap p) -> PatchDMap $
           mapKeyValuePairsMonotonic (\(WrapArg k :=> ComposeMaybe mv) -> k :=> ComposeMaybe (fmap (Constant . fst . runIdentity) mv)) p
     outputs <- holdIncremental outputs0 outputs'
     StaticDomBuilderT $ modify $ (:) $ pull $ do
       os <- sample $ currentIncremental outputs
-      fmap BS.concat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
+      fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
         sample o
     return (result0, result')
 
@@ -165,14 +163,14 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
     --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
-    let escape = BL.toStrict . toLazyByteString . fromHtmlEscapedText
+    let escape = fromHtmlEscapedText
     modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
     return $ TextNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     -- https://www.w3.org/TR/html-markup/syntax.html#syntax-elements
     let voidElements = Set.fromList ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"]
-    let toAttr (AttributeName _mns k) v = encodeUtf8 k <> "=\"" <> BL.toStrict (toLazyByteString $ fromHtmlEscapedText v) <> "\""
+    let toAttr (AttributeName _mns k) v = byteString (encodeUtf8 k) <> byteString "=\"" <> fromHtmlEscapedText v <> byteString "\""
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       (result, innerHtml) <- lift $ runStaticDomBuilderT child
@@ -180,10 +178,10 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
-        then modify $ (:) $ mconcat [constant ("<" <> tagBS), attrs1, constant " />"]
+        then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs1, constant (byteString " />")]
         else do
-          let open = mconcat [constant ("<" <> tagBS <> " "), attrs1, constant ">"]
-          let close = constant $ "</" <> tagBS <> ">"
+          let open = mconcat [constant ("<" <> byteString tagBS <> " "), attrs1, constant (byteString ">")]
+          let close = constant $ byteString $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
   {-# INLINABLE inputElement #-}
@@ -232,6 +230,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
 
+{-# INLINE renderStatic #-}
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do
   runSpiderHost $ do
@@ -240,4 +239,4 @@ renderStatic w = do
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     bs' <- sample bs
-    return (res, bs')
+    return (res, LBS.toStrict $ toLazyByteString bs')
