@@ -21,6 +21,7 @@ module Reflex.Dom.Old
        , AttributeMap
        , Attributes (..)
        , buildElement
+       , buildElementNS
        , buildEmptyElement
        , buildEmptyElementNS
        , deleteBetweenExclusive
