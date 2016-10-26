@@ -551,7 +551,7 @@ type family EventType en where
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
-  Dblclick -> return ()
+  Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> getScrollTop e
   Keydown -> getKeyEvent
@@ -601,7 +601,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
 defaultDomWindowEventHandler :: DOM.Window -> EventName en -> EventM DOM.Window (EventType en) (Maybe (EventResult en))
 defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
-  Dblclick -> return ()
+  Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> Window.getScrollY w
   Keydown -> getKeyEvent
