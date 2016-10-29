@@ -25,7 +25,8 @@ import GHCJS.DOM.Window
 import System.Directory
 import qualified GI.Gtk.Functions as Gtk (init, main)
 import GI.WebKit2
-       (webViewLoadUri, webViewLoadHtml, webViewGetInspector,
+       (settingsSetEnableAccelerated2dCanvas, webInspectorShow,
+        webViewLoadUri, webViewLoadHtml, webViewGetInspector,
         onWebViewLoadChanged, webViewSetSettings,
         settingsSetEnableDeveloperExtras, settingsSetUserAgent,
         settingsGetUserAgent, webViewGetSettings, webViewNew, WebView)
@@ -71,19 +72,22 @@ runWebGUI main = do
   putStrLn "forking server!"
   _ <- forkIO $ run 3706 $ do
     ctx <- askJSM
-    liftIO $ forkIO $ forever $ do
-        threadDelay 1000000
-        runJSM syncPoint ctx
---    liftIO $ threadDelay 20000000
---    idleAdd PRIORITY_DEFAULT $ do
-    liftIO $ main (webView, ctx)
-    liftIO $ putStrLn "main exited"
+--    liftIO $ forkIO $ forever $ do
+--        threadDelay 1000000
+--        runJSM syncPoint ctx
+    liftIO $ threadDelay 2000000
+    idleAdd PRIORITY_DEFAULT $ do
+        liftIO $ main (webView, ctx)
+        liftIO $ putStrLn "main exited"
+        return False
    --     return False
     forever $ do
         liftIO $ threadDelay 100000
+        runJSM syncPoint ctx
   settings <- webViewGetSettings webView
   -- TODO settingsSetEnableUniversalAccessFromFileUris settings True
   settingsSetEnableDeveloperExtras settings True
+  settingsSetEnableAccelerated2dCanvas settings False
   webViewSetSettings webView settings
   window `containerAdd` scrollWin
   scrollWin `containerAdd` webView
@@ -93,6 +97,7 @@ runWebGUI main = do
 --    -- TODO run jsaddle.js when load is finished
 --    return ()
   inspector <- webViewGetInspector webView
+  webInspectorShow inspector
 --  _ <- inspector `on` inspectWebView $ \_ -> do
 --    inspectorWindow <- windowNew
 --    windowSetDefaultSize inspectorWindow 900 600
