@@ -849,7 +849,7 @@ getKeyEvent = do
 getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
   e <- event
-  bisequence (getX e, getY e)
+  bisequence (getClientX e, getClientY e)
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}
