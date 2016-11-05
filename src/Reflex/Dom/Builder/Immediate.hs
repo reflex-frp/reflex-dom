@@ -136,6 +136,20 @@ deleteBetweenInclusive s e = do
       _ <- removeChild currentParent $ Just e
       return ()
 
+-- | s and e must both be children of the same node and s must precede e
+deleteBetweenExclusive :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteBetweenExclusive s e = do
+  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
+      let go = do
+            Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
+            when (toNode s /= toNode x) $ do
+              _ <- removeChild currentParent $ Just x
+              go
+      go
+
 -- | s and e must both be children of the same node and s must precede e; s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
@@ -381,6 +395,24 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   wrapRawElement = wrap
 
 instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
+  runWithReplace a0 a' = do
+    initialEnv <- ImmediateDomBuilderT ask
+    before <- textNodeInternal ("" :: Text)
+    -- We draw 'after' in this roundabout way to avoid using MonadFix
+    Just after <- createTextNode (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
+    let drawInitialChild = do
+          result <- a0
+          append after
+          return result
+    (result0, result') <- lift $ runWithReplace (runImmediateDomBuilderT drawInitialChild initialEnv) $ ffor a' $ \child -> do
+      Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+      result <- runImmediateDomBuilderT child $ initialEnv
+        { _immediateDomBuilderEnv_parent = toNode df
+        }
+      deleteBetweenExclusive before after
+      insertBefore df after
+      return result
+    return (result0, result')
   sequenceDMapWithAdjust (dm0 :: DMap k (ImmediateDomBuilderT t m)) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
     let drawChildInitial :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)

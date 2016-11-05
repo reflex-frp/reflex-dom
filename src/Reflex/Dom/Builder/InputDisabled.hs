@@ -67,6 +67,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabl
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
+  runWithReplace a0 a' = InputDisabledT $ runWithReplace (coerce a0) (coerceEvent a')
   sequenceDMapWithAdjust dm0 dm' = InputDisabledT $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
 
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where

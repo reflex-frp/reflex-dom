@@ -91,7 +91,6 @@ import Control.Lens hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
 import Data.Default
-import qualified Data.Dependent.Map as DMap
 import Data.Either
 import Data.Foldable
 import Data.Functor.Misc
@@ -106,15 +105,8 @@ import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
 
---TODO: Implement this specially
 widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
-widgetHoldInternal child0 child' = do
-  (result0, result') <- sequenceDMapWithAdjust (DMap.singleton LeftTag child0) $ fmap (PatchDMap . DMap.insert LeftTag (ComposeMaybe Nothing) . DMap.singleton RightTag . ComposeMaybe . Just) child'
-  let e :: forall x. x
-      e = error "widgetHoldInternal: missing child (should be impossible)"
-  return ( runIdentity $ DMap.findWithDefault e LeftTag result0
-         , ffor result' $ \(PatchDMap p) -> runIdentity $ fromMaybe e $ getComposeMaybe $ DMap.findWithDefault e RightTag p
-         )
+widgetHoldInternal = runWithReplace
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.

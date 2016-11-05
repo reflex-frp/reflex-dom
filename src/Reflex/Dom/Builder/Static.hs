@@ -138,6 +138,11 @@ instance DomSpace StaticDomSpace where
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
 instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomBuilderT t m) where
+  runWithReplace a0 a' = do
+    (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0) (runStaticDomBuilderT <$> a')
+    o <- hold (snd result0) $ snd <$> result'
+    StaticDomBuilderT $ modify $ (:) $ join o
+    return (fst result0, fst <$> result')
   sequenceDMapWithAdjust (dm0 :: DMap k (StaticDomBuilderT t m)) dm' = do
     let loweredDm0 = mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> fmap swap (runStaticDomBuilderT v)) dm0
         loweredDm' = ffor dm' $ \(PatchDMap p) -> PatchDMap $
