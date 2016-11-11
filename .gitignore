@@ -36,3 +36,5 @@ hsenv.log
 cabal.sandbox.config
 .stack-work
 codex.tags
+*.dump-*
+*.verbose-core2core

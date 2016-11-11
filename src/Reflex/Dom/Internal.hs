@@ -15,6 +15,7 @@ module Reflex.Dom.Internal where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
+import qualified Reflex as R
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign
@@ -74,23 +75,49 @@ type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (P
 attachWidget :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
-{-# INLINABLE attachWidget' #-}
-attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
-attachWidget' rootElement wv w = do
+mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> IO ()
+mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingleton webView $ \wv -> fmap fst $ attachWidget'' $ \events -> do
+  let (headWidget, bodyWidget) = widgets
+  Just doc <- liftIO $ fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
+  Just headElement <- getHead doc
+  Just bodyElement <- getBody doc
+  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+  rec b <- unsafeReplaceElementContentsWithWidget events postBuild headElement wv $ headWidget a
+      a <- unsafeReplaceElementContentsWithWidget events postBuild bodyElement wv $ bodyWidget b
+  return ((), postBuildTriggerRef)
+
+unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> WebViewSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
+unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w = do
   Just doc <- getOwnerDocument rootElement
   Just df <- createDocumentFragment doc
+  let builderEnv = ImmediateDomBuilderEnv
+        { _immediateDomBuilderEnv_document = doc
+        , _immediateDomBuilderEnv_parent = toNode df
+        , _immediateDomBuilderEnv_events = events
+        }
+  result <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+  setInnerHTML rootElement $ Just ("" :: String)
+  _ <- appendChild rootElement $ Just df
+  return result
+
+{-# INLINABLE attachWidget' #-}
+attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
+attachWidget' rootElement wv w = attachWidget'' $ \events -> do
+  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+  result <- unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w
+  return (result, postBuildTriggerRef)
+
+type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
+
+{-# INLINABLE attachWidget'' #-}
+attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
+attachWidget'' w = do
   events <- newChan
   (result, fc@(FireCommand fire)) <- runSpiderHost $ do
-    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let builderEnv = ImmediateDomBuilderEnv
-          { _immediateDomBuilderEnv_document = doc
-          , _immediateDomBuilderEnv_parent = toNode df
-          , _immediateDomBuilderEnv_events = events
-          }
-    results@(_, FireCommand fire) <- hostPerformEventT $ runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+    ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w events
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
-    return results
+    return (result, fc)
   void $ forkIO $ forever $ do
     ers <- readChan events
     _ <- postGUISync $ runSpiderHost $ do
@@ -100,8 +127,6 @@ attachWidget' rootElement wv w = do
       _ <- fire (catMaybes mes) $ return ()
       liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
     return ()
-  setInnerHTML rootElement $ Just (""::String)
-  _ <- appendChild rootElement $ Just df
   return (result, fc)
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID

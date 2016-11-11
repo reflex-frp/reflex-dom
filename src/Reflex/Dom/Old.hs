@@ -24,7 +24,6 @@ module Reflex.Dom.Old
        , buildElementNS
        , buildEmptyElement
        , buildEmptyElementNS
-       , deleteBetweenExclusive
        , elDynHtml'
        , elDynHtmlAttr'
        , elStopPropagationNS
@@ -46,7 +45,6 @@ module Reflex.Dom.Old
 import Control.Arrow (first)
 import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
 import Control.Monad
-import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -64,7 +62,7 @@ import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
-import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild, toNode)
+import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChild)
 import GHCJS.DOM.Types (IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
@@ -104,8 +102,6 @@ type MonadWidgetConstraints t m =
   , TriggerEvent t m
   , HasWebView m
   , HasWebView (Performable m)
-  , MonadAsyncException m
-  , MonadAsyncException (Performable m)
   , MonadRef m
   , Ref m ~ Ref IO
   , MonadRef (Performable m)
@@ -161,20 +157,6 @@ addDynamicAttributes attrs cfg = do
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
-
--- | s and e must both be children of the same node and s must precede e
-deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> IO ()
-deleteBetweenExclusive s e = do
-  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  case mCurrentParent of
-    Nothing -> return () --TODO: Is this the right behavior?
-    Just currentParent -> do
-      let go = do
-            Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            when (toNode s /= toNode x) $ do
-              _ <- removeChild currentParent $ Just x
-              go
-      go
 
 onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> IO (IO ())
 onEventName = elementOnEventName

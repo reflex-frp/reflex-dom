@@ -77,7 +77,7 @@ closeWebSocket (JSWebSocket ws c) code reason = do
 newWebSocket
   :: WebView
   -> Text -- url
-  -> (ByteString -> IO ()) -- onmessage
+  -> (Either ByteString a -> IO ()) -- onmessage
   -> IO () -- onopen
   -> IO () -- onerror
   -> ((Bool, Word, Text) -> IO ()) -- onclose
@@ -94,7 +94,7 @@ newWebSocket wv url onMessage onOpen onError onClose = withWebViewContext wv $ \
     msg' <- fromJSStringMaybe c msg
     case msg' of
       Nothing -> return ()
-      Just m -> onMessage $ encodeUtf8 m
+      Just m -> onMessage $ Left $ encodeUtf8 m
     jsvaluemakeundefined c
   onMessageCb <- jsobjectmakefunctionwithcallback c nullPtr onMessage'
   onOpen' <- wrapper $ \_ _ _ _ _ _ -> do
@@ -123,3 +123,8 @@ newWebSocket wv url onMessage onOpen onError onClose = withWebViewContext wv $ \
   addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onopen'] = this[2]; this[0]['onerror'] = this[3]; this[0]['onclose'] = this[4];"
   _ <- jsevaluatescript c addCbs o nullPtr 1 nullPtr
   return $ JSWebSocket ws c
+
+onBSMessage :: Either ByteString b -> ByteString
+onBSMessage = either id (error "onBSMessage: ghc env expects ByteString.")
+
+type JSVal = ()

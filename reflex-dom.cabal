@@ -20,39 +20,45 @@ extra-source-files: src-ghc/Reflex/Dom/Internal/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
 
+flag use-reflex-optimizer
+  description: Use the GHC plugin Reflex.Optimizer on some of the modules in the package.  This is still experimental.
+  default: False
+  manual: True
+
 library
   hs-source-dirs: src
   build-depends:
-    base >= 4.7 && < 4.10,
-    template-haskell,
-    stm == 2.4.*,
-    reflex == 0.5.*,
-    dependent-sum == 0.3.*,
-    dependent-map == 0.2.*,
-    semigroups >= 0.16 && < 0.19,
-    mtl >= 2.1 && < 2.3,
-    containers == 0.5.*,
-    these >= 0.4 && < 0.8,
-    ref-tf == 0.4.*,
-    random == 1.1.*,
-    ghcjs-dom >= 0.2.1 && < 0.3,
-    transformers >= 0.3 && < 0.6,
-    lens >= 4.7 && < 5,
-    text == 1.2.*,
-    blaze-builder,
-    bytestring == 0.10.*,
-    data-default >= 0.5 && < 0.8,
     aeson >= 0.8 && < 1.1,
-    time >= 1.4 && < 1.7,
-    exception-transformers == 0.4.*,
-    directory == 1.2.*,
-    dependent-sum-template >= 0.0.0.4 && < 0.1,
-    zenc == 0.1.*,
+    base >= 4.7 && < 4.10,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
-    monad-control >= 1.0.1 && < 1.1,
+    blaze-builder,
+    bytestring == 0.10.*,
+    containers == 0.5.*,
+    data-default >= 0.5 && < 0.8,
+    dependent-map == 0.2.*,
+    dependent-sum == 0.3.*,
+    dependent-sum-template >= 0.0.0.4 && < 0.1,
+    directory == 1.2.*,
+    exception-transformers == 0.4.*,
+    ghcjs-dom >= 0.2.1 && < 0.3,
     keycode == 0.2.*,
-    unbounded-delays >= 0.1.0.9 && < 0.2
+    lens >= 4.7 && < 5,
+    monad-control >= 1.0.1 && < 1.1,
+    mtl >= 2.1 && < 2.3,
+    primitive >= 0.5 && < 0.7,
+    random == 1.1.*,
+    ref-tf == 0.4.*,
+    reflex == 0.5.*,
+    semigroups >= 0.16 && < 0.19,
+    stm == 2.4.*,
+    template-haskell,
+    text == 1.2.*,
+    these >= 0.4 && < 0.8,
+    time >= 1.4 && < 1.7,
+    transformers >= 0.3 && < 0.6,
+    unbounded-delays >= 0.1.0.9 && < 0.2,
+    zenc == 0.1.*
 
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
@@ -101,6 +107,8 @@ library
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  if flag(use-reflex-optimizer)
+    ghc-options: -fplugin=Reflex.Optimizer
 
 test-suite hlint
   build-depends: base, hlint == 1.9.*
