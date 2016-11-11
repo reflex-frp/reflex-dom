@@ -130,13 +130,13 @@ fromJSBoolMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Bool)
 fromJSBoolMaybe c t = do
   isBool <- jsvalueisboolean c t
   if not isBool then return Nothing else
-    fmap Just $ jsvaluetoboolean c t
+    Just <$> jsvaluetoboolean c t
 
 fromJSNumMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Double)
 fromJSNumMaybe c t = do
   isNum <- jsvalueisnumber c t
   if not isNum then return Nothing else
-    fmap Just $ jsvaluetonumber c t nullPtr
+    Just <$> jsvaluetonumber c t nullPtr
 
 getLocationHost :: WebView -> IO Text
 getLocationHost wv = withWebViewContext wv $ \c -> do
