@@ -189,7 +189,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       if Set.member elementTag voidElements
         then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs1, constant (byteString " />")]
         else do
-          let open = mconcat [constant ("<" <> byteString tagBS <> " "), attrs1, constant (byteString ">")]
+          let open = mconcat [constant ("<" <> byteString tagBS), attrs1, constant (byteString ">")]
           let close = constant $ byteString $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
