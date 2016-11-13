@@ -58,11 +58,6 @@ instance PrimMonad m => PrimMonad (StaticDomBuilderT x m) where
   type PrimState (StaticDomBuilderT x m) = PrimState m
   primitive = lift . primitive
 
-instance MonadTransControl (StaticDomBuilderT t) where
-  type StT (StaticDomBuilderT t) a = StT (StateT [Behavior t Builder]) a
-  liftWith = defaultLiftWith StaticDomBuilderT unStaticDomBuilderT
-  restoreT = defaultRestoreT StaticDomBuilderT
-
 instance MonadTrans (StaticDomBuilderT t) where
   lift = StaticDomBuilderT . lift
 
