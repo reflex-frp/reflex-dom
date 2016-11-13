@@ -38,13 +38,13 @@ import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (File)
 import Reflex.Class
-import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
+import Reflex.Dom.Widget.Basic
+import Reflex.Dynamic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Dom.Widget.Basic
 import qualified Text.Read as T
 
 import qualified GHCJS.DOM.Event as Event

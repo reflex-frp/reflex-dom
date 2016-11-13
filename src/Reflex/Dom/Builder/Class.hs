@@ -23,8 +23,8 @@ module Reflex.Dom.Builder.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.DynamicWriter
-import Reflex.PerformEvent.Class
 import Reflex.PerformEvent.Base
+import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
 import qualified Control.Category

@@ -22,10 +22,10 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 
 import Reflex.Class
 import Reflex.DynamicWriter
+import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Host.Class
 
 import Language.Haskell.TH
 

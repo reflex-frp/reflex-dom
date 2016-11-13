@@ -16,10 +16,10 @@ import Data.Text (Text)
 import qualified Data.Text as T (unpack)
 import Data.Text.Encoding
 import GHCJS.Buffer
+import GHCJS.DOM.CloseEvent
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.EventTargetClosures (EventName, unsafeEventName)
 import GHCJS.DOM.MessageEvent
-import GHCJS.DOM.CloseEvent
 import GHCJS.DOM.Types hiding (Text)
 import qualified GHCJS.DOM.WebSocket as GD
 import GHCJS.Foreign.Internal

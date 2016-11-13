@@ -19,11 +19,11 @@ module Reflex.Dom.Builder.Immediate where
 
 import Foreign.JavaScript.TH
 import Reflex.Class as Reflex
-import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
+import Reflex.Dynamic
+import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Host.Class
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
@@ -57,8 +57,8 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
-import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling,
-                       removeChild, setNodeValue, toNode)
+import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, removeChild,
+                       setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
                         WheelEvent, castToHTMLInputElement, castToHTMLSelectElement,

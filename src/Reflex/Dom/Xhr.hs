@@ -61,10 +61,10 @@ where
 
 import Reflex.Class
 import Reflex.Dom.Class
-import Reflex.PerformEvent.Class
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
+import Reflex.PerformEvent.Class
 
 import Control.Concurrent
 import Control.Exception (handle)
@@ -79,13 +79,13 @@ import Data.Aeson.Encode
 #endif
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
+import qualified Data.List as L
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.List as L
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B
