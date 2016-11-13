@@ -23,7 +23,6 @@ import Control.Monad.Identity
 import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Control
 import Control.Monad.Trans.Reader
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
@@ -37,7 +36,6 @@ import Data.Functor.Misc
 import qualified Data.Map as Map
 import Data.Monoid
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
