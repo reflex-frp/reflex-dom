@@ -72,10 +72,6 @@ instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
 
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m
-  {-
-  placeholder cfg = lift $ placeholder $ cfg
-    & placeholderConfig_insertAbove %~ fmap runInputDisabledT
-  -}
   inputElement cfg = lift $ inputElement $ cfg
     { _inputElementConfig_elementConfig = liftElementConfig $ disableElementConfig $ _inputElementConfig_elementConfig cfg
     }
