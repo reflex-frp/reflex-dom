@@ -108,6 +108,7 @@ library
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
 

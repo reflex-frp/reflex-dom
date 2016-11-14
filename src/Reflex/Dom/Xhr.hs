@@ -65,6 +65,7 @@ import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.Foreign
 import Reflex.Dom.Xhr.ResponseType
 import Reflex.PerformEvent.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Exception (handle)

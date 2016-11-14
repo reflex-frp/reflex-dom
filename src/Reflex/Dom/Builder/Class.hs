@@ -23,9 +23,9 @@ module Reflex.Dom.Builder.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.DynamicWriter
-import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
+import Reflex.PostBuild.Base
+import Reflex.Requester.Base
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -425,10 +425,10 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
 
-instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequestT t request response m) where
-  type DomBuilderSpace (RequestT t request response m) = DomBuilderSpace m
+instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT t request response m) where
+  type DomBuilderSpace (RequesterT t request response m) = DomBuilderSpace m
   textNode = liftTextNode
-  element elementTag cfg (RequestT child) = RequestT $ do
+  element elementTag cfg (RequesterT child) = RequesterT $ do
     r <- ask
     s <- get
     let cfg' = liftElementConfig cfg
@@ -437,7 +437,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequestT t
     return (el, a)
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
-  selectElement cfg (RequestT child) = RequestT $ do
+  selectElement cfg (RequesterT child) = RequesterT $ do
     r <- ask
     s <- get
     let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig

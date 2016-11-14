@@ -21,8 +21,9 @@ import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
-import Reflex.PostBuild.Class
+import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
+import Reflex.TriggerEvent.Base
 
 import Control.Concurrent
 import Control.Lens

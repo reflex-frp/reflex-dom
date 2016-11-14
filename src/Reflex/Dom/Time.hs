@@ -10,6 +10,7 @@ import Reflex.Class
 import Reflex.Dynamic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import qualified Control.Concurrent.Thread.Delay as Concurrent

@@ -28,6 +28,7 @@ import Reflex.Dom.Class
 import Reflex.Dom.WebSocket.Foreign
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM

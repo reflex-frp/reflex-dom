@@ -24,6 +24,8 @@ import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
+import Reflex.TriggerEvent.Base hiding (askEvents)
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
@@ -70,8 +72,6 @@ import qualified GHCJS.DOM.Window as Window
 import Debug.Trace hiding (traceEvent)
 
 data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
-
-data TriggerInvocation a = TriggerInvocation a (IO ())
 
 data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
