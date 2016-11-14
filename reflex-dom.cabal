@@ -42,7 +42,8 @@ library
     directory == 1.2.*,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.2.1 && < 0.3,
-    keycode == 0.2.*,
+    -- keycode-0.2 has a bug on firefox
+    keycode >= 0.2.1 && < 0.3,
     lens >= 4.7 && < 5,
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
