@@ -20,7 +20,6 @@ import GHCJS.DOM.Types hiding (Text)
 import GHCJS.DOM.XMLHttpRequest
 import GHCJS.Types
 import Prelude hiding (error)
-import Reflex.Dom.Internal.Foreign
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
 
@@ -51,7 +50,7 @@ instance IsXhrPayload String where
 
 instance IsXhrPayload Text where
   sendXhrPayload = sendString
-  
+
 instance IsXhrPayload FormData where
   sendXhrPayload = sendFormData
 

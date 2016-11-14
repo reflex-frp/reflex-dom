@@ -19,7 +19,6 @@ import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
-import Reflex.Dom.Internal.Foreign
 import Reflex.PerformEvent.Base
 import Reflex.PostBuild.Class
 import Reflex.Host.Class
@@ -46,32 +45,41 @@ import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.Types (MonadJSM(..), runJSM, askJSM, JSM)
 
 {-# INLINABLE mainWidget #-}
-mainWidget :: (forall x. Widget x ()) -> IO ()
-mainWidget w = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (webView, ctx) $ \webViewSing -> (`runJSM` ctx) $ do
+mainWidget :: (forall x. Widget x ()) -> JSM ()
+mainWidget w = withJSContextSingleton $ \jsSing -> do
   Just doc <- currentDocument
   Just body <- getBody doc
-  attachWidget body webViewSing w
+  attachWidget body jsSing w
+  forever $ do
+    liftIO $ threadDelay 100000
+    syncPoint
 
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
-mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> IO ()
-mainWidgetWithHead h b = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (webView, ctx) $ \webViewSing -> (`runJSM` ctx) $ do
+mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> JSM ()
+mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
   Just doc <- currentDocument
   Just headElement <- getHead doc
-  attachWidget headElement webViewSing h
+  attachWidget headElement jsSing h
   Just body <- getBody doc
-  attachWidget body webViewSing b
+  attachWidget body jsSing b
+  forever $ do
+    liftIO $ threadDelay 100000
+    syncPoint
 
 {-# INLINABLE mainWidgetWithCss #-}
-mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> IO ()
-mainWidgetWithCss css w = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (webView, ctx) $ \webViewSing -> (`runJSM` ctx) $ do
+mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
+mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   Just doc <- currentDocument
   Just headElement <- getHead doc
   setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   Just body <- getBody doc
-  attachWidget body webViewSing w
+  attachWidget body jsSing w
+  forever $ do
+    liftIO $ threadDelay 100000
+    syncPoint
 
-type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
+type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better
 
 #ifndef __GHCJS__
 instance MonadJSM m => MonadJSM (PostBuildT t m) where
@@ -79,11 +87,11 @@ instance MonadJSM m => MonadJSM (PostBuildT t m) where
 #endif
 
 {-# INLINABLE attachWidget #-}
-attachWidget :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> JSM a
+attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
 {-# INLINABLE attachWidget' #-}
-attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> JSM (a, FireCommand Spider (SpiderHost Global))
+attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand Spider (SpiderHost Global))
 attachWidget' rootElement wv w = do
   ctx <- askJSM
   Just doc <- getOwnerDocument rootElement
@@ -96,7 +104,7 @@ attachWidget' rootElement wv w = do
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_events = events
           }
-    results@(_, FireCommand fire) <- hostPerformEventT $ runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+    results@(_, FireCommand fire) <- hostPerformEventT $ runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return results
@@ -114,11 +122,14 @@ attachWidget' rootElement wv w = do
   return (result, fc)
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
-mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> IO ()
-mainWidgetInElementById eid w = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (webView, ctx) $ \webViewSing -> (`runJSM` ctx) $ do
+mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
+mainWidgetInElementById eid w = withJSContextSingleton $ \jsSing -> do
   Just doc <- currentDocument
   Just root <- getElementById doc eid
-  attachWidget root webViewSing w
+  attachWidget root jsSing w
+  forever $ do
+    liftIO $ threadDelay 100000
+    syncPoint
 
 data AppInput t = AppInput
   { _appInput_window :: Window t
@@ -128,14 +139,16 @@ data AppOutput t = AppOutput --TODO: Add quit event
   { _appOutput_windowConfig :: WindowConfig t
   }
 
-runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> IO ()
-runApp' app = runWebGUI $ \(webView, ctx) -> withWebViewSingleton (webView, ctx) $ \webViewSing -> (`runJSM` ctx) $ do
+runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> JSM ()
+runApp' app = withJSContextSingleton $ \jsSing -> do
   Just doc <- currentDocument
   Just body <- getBody doc
   Just win <- getDefaultView doc
-  rec o <- attachWidget body webViewSing $ do
+  rec o <- attachWidget body jsSing $ do
         w <- lift $ wrapWindow win $ _appOutput_windowConfig o
         app $ AppInput
           { _appInput_window = w
           }
-  return ()
+  forever $ do
+    liftIO $ threadDelay 100000
+    syncPoint

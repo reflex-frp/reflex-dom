@@ -34,7 +34,6 @@ import Graphics.UI.Gtk.WebKit.JavaScriptCore.JSValueRef
 import Graphics.UI.Gtk.WebKit.WebView
 
 import Foreign.JavaScript.TH
-import Reflex.Dom.Internal.Foreign
 
 data JSWebSocket = JSWebSocket { wsValue :: JSValueRef
                                , wsContext :: JSContextRef

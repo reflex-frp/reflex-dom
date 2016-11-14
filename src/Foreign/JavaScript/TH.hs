@@ -9,7 +9,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -55,11 +54,8 @@ import Data.Coerce (coerce)
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
-
-import Reflex.Dom.Internal.Foreign (WebView)
 #else
 import Data.Word (Word8)
-import GI.WebKit2 (WebView)
 import Control.Lens.Operators ((^.))
 import Language.Javascript.JSaddle
        (eval, valMakeString, valToNumber, function,
@@ -84,58 +80,58 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 
-class Monad m => HasWebView m where
-  type WebViewPhantom m :: *
-  askWebView :: m (WebViewSingleton (WebViewPhantom m))
+class Monad m => HasJSContext m where
+  type JSContextPhantom m :: *
+  askJSContext :: m (JSContextSingleton (JSContextPhantom m))
 
-instance HasWebView m => HasWebView (ReaderT r m) where
-  type WebViewPhantom (ReaderT r m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (ReaderT r m) where
+  type JSContextPhantom (ReaderT r m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
-instance HasWebView m => HasWebView (StateT r m) where
-  type WebViewPhantom (StateT r m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (StateT r m) where
+  type JSContextPhantom (StateT r m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
-instance HasWebView m => HasWebView (Strict.StateT r m) where
-  type WebViewPhantom (Strict.StateT r m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (Strict.StateT r m) where
+  type JSContextPhantom (Strict.StateT r m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
-instance HasWebView m => HasWebView (PostBuildT t m) where
-  type WebViewPhantom (PostBuildT t m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (PostBuildT t m) where
+  type JSContextPhantom (PostBuildT t m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
-instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t m) where
-  type WebViewPhantom (PerformEventT t m) = WebViewPhantom (HostFrame t)
-  askWebView = PerformEventT $ lift askWebView
+instance (ReflexHost t, HasJSContext (HostFrame t)) => HasJSContext (PerformEventT t m) where
+  type JSContextPhantom (PerformEventT t m) = JSContextPhantom (HostFrame t)
+  askJSContext = PerformEventT $ lift askJSContext
 
-instance HasWebView m => HasWebView (DynamicWriterT t w m) where
-  type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (DynamicWriterT t w m) where
+  type JSContextPhantom (DynamicWriterT t w m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
-newtype WithWebView x m a = WithWebView { unWithWebView :: ReaderT (WebViewSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
 
-instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithJSContextSingleton x m) where
   {-# INLINABLE newEventWithTrigger #-}
   newEventWithTrigger = lift . newEventWithTrigger
   {-# INLINABLE newFanEventWithTrigger #-}
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
-instance MonadSubscribeEvent t m => MonadSubscribeEvent t (WithWebView x m) where
+instance MonadSubscribeEvent t m => MonadSubscribeEvent t (WithJSContextSingleton x m) where
   {-# INLINABLE subscribeEvent #-}
   subscribeEvent = lift . subscribeEvent
 
-instance MonadReflexHost t m => MonadReflexHost t (WithWebView x m) where
-  type ReadPhase (WithWebView x m) = ReadPhase m
+instance MonadReflexHost t m => MonadReflexHost t (WithJSContextSingleton x m) where
+  type ReadPhase (WithJSContextSingleton x m) = ReadPhase m
   {-# INLINABLE fireEventsAndRead #-}
   fireEventsAndRead dm a = lift $ fireEventsAndRead dm a
   {-# INLINABLE runHostFrame #-}
   runHostFrame = lift . runHostFrame
 
-instance MonadSample t m => MonadSample t (WithWebView x m) where
+instance MonadSample t m => MonadSample t (WithJSContextSingleton x m) where
   {-# INLINABLE sample #-}
   sample = lift . sample
 
-instance MonadHold t m => MonadHold t (WithWebView x m) where
+instance MonadHold t m => MonadHold t (WithJSContextSingleton x m) where
   {-# INLINABLE hold #-}
   hold v0 = lift . hold v0
   {-# INLINABLE holdDyn #-}
@@ -143,45 +139,45 @@ instance MonadHold t m => MonadHold t (WithWebView x m) where
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 = lift . holdIncremental v0
 
-instance MonadTransControl (WithWebView x) where
-  type StT (WithWebView x) a = StT (ReaderT (WebViewSingleton x)) a
+instance MonadTransControl (WithJSContextSingleton x) where
+  type StT (WithJSContextSingleton x) a = StT (ReaderT (JSContextSingleton x)) a
   {-# INLINABLE liftWith #-}
-  liftWith = defaultLiftWith WithWebView unWithWebView
+  liftWith = defaultLiftWith WithJSContextSingleton unWithJSContextSingleton
   {-# INLINABLE restoreT #-}
-  restoreT = defaultRestoreT WithWebView
+  restoreT = defaultRestoreT WithJSContextSingleton
 
-instance PerformEvent t m => PerformEvent t (WithWebView x m) where
-  type Performable (WithWebView x m) = WithWebView x (Performable m)
+instance PerformEvent t m => PerformEvent t (WithJSContextSingleton x m) where
+  type Performable (WithJSContextSingleton x m) = WithJSContextSingleton x (Performable m)
   {-# INLINABLE performEvent_ #-}
   performEvent_ e = liftWith $ \run -> performEvent_ $ fmap run e
   {-# INLINABLE performEvent #-}
   performEvent e = liftWith $ \run -> performEvent $ fmap run e
 
-instance Deletable t m => Deletable t (WithWebView x m) where
+instance Deletable t m => Deletable t (WithJSContextSingleton x m) where
   {-# INLINABLE deletable #-}
   deletable = liftThrough . deletable
 
-runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
-runWithWebView = runReaderT . unWithWebView
+runWithJSContextSingleton :: WithJSContextSingleton x m a -> JSContextSingleton x -> m a
+runWithJSContextSingleton = runReaderT . unWithJSContextSingleton
 
-instance (Monad m) => HasWebView (WithWebView x m) where
-  type WebViewPhantom (WithWebView x m) = x
-  askWebView = WithWebView ask
+instance (Monad m) => HasJSContext (WithJSContextSingleton x m) where
+  type JSContextPhantom (WithJSContextSingleton x m) = x
+  askJSContext = WithJSContextSingleton ask
 
-instance MonadRef m => MonadRef (WithWebView x m) where
-  type Ref (WithWebView x m) = Ref m
+instance MonadRef m => MonadRef (WithJSContextSingleton x m) where
+  type Ref (WithJSContextSingleton x m) = Ref m
   newRef = lift . newRef
   readRef = lift . readRef
   writeRef r = lift . writeRef r
 
-instance MonadAtomicRef m => MonadAtomicRef (WithWebView x m) where
+instance MonadAtomicRef m => MonadAtomicRef (WithJSContextSingleton x m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-withWebViewSingleton :: (WebView, JSContextRef) -> (forall x. WebViewSingleton x -> r) -> r
-withWebViewSingleton wv f = f $ WebViewSingleton wv
+withJSContextSingleton :: MonadJSM m => (forall x. JSContextSingleton x -> m r) -> m r
+withJSContextSingleton f = askJSM >>= f . JSContextSingleton
 
--- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
-newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: (WebView, JSContextRef) }
+-- | A singleton type for a given JS Context; we use this to statically guarantee that different JSContexts (and thus different javscript contexts) don't get mixed up
+newtype JSContextSingleton x = JSContextSingleton { unJSContextSingleton :: JSContextRef }
 
 #ifdef __GHCJS__
 type JSFFI_Internal = JS.MutableJSArray -> IO JS.JSVal
@@ -250,8 +246,8 @@ class Monad m => MonadJS x m | m -> x where
 
 data JSCtx_IO
 
-instance MonadIO m => HasJS JSCtx_IO (WithWebView x m) where
-  type JSX (WithWebView x m) = IO
+instance MonadIO m => HasJS JSCtx_IO (WithJSContextSingleton x m) where
+  type JSX (WithJSContextSingleton x m) = IO
   liftJS = liftIO
 
 instance IsJSContext JSCtx_IO where
@@ -305,21 +301,21 @@ data JSCtx_JavaScriptCore x
 instance IsJSContext (JSCtx_JavaScriptCore x) where
   newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSVal }
 
-instance MonadIO m => HasJS (JSCtx_JavaScriptCore x) (WithWebView x m) where
-  type JSX (WithWebView x m) = WithWebView x IO
+instance MonadIO m => HasJS (JSCtx_JavaScriptCore x) (WithJSContextSingleton x m) where
+  type JSX (WithJSContextSingleton x m) = WithJSContextSingleton x IO
   liftJS a = do
-    wv <- askWebView
-    liftIO $ runWithWebView a wv
+    wv <- askJSContext
+    liftIO $ runWithJSContextSingleton a wv
 
 newtype WithJSContext x m a = WithJSContext { unWithJSContext :: ReaderT JSContextRef m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
 
 runWithJSContext :: WithJSContext x m a -> JSContextRef -> m a
 runWithJSContext = runReaderT . unWithJSContext
 
-instance MonadIO m => MonadJSM (WithWebView x m) where
+instance MonadIO m => MonadJSM (WithJSContextSingleton x m) where
   liftJSM' f = do
-    wv <- askWebView
-    runJSM f . snd $ unWebViewSingleton wv
+    wv <- askJSContext
+    runJSM f $ unJSContextSingleton wv
 
 instance MonadIO m => MonadJSM (WithJSContext x m) where
   liftJSM' f =
@@ -330,21 +326,21 @@ lowerWithJSContext a = do
   c <- askJSM
   liftIO $ runWithJSContext a c
 
-liftWithWebViewThroughWithJSContext :: (HasWebView m, MonadJSM m, MonadTrans t, Monad m1)
+liftWithJSContextSingletonThroughWithJSContext :: (HasJSContext m, MonadJSM m, MonadTrans t, Monad m1)
                                     => ((t1 -> t m1 a) -> WithJSContext x IO b)
-                                    -> (t1 -> WithWebView (WebViewPhantom m) m1 a)
+                                    -> (t1 -> WithJSContextSingleton (JSContextPhantom m) m1 a)
                                     -> m b
-liftWithWebViewThroughWithJSContext f a = do
-  wv <- askWebView
-  lowerWithJSContext $ f $ \b' -> lift $ runWithWebView (a b') wv
+liftWithJSContextSingletonThroughWithJSContext f a = do
+  wv <- askJSContext
+  lowerWithJSContext $ f $ \b' -> lift $ runWithJSContextSingleton (a b') wv
 
-instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
+instance MonadJS (JSCtx_JavaScriptCore x) (WithJSContextSingleton x IO) where
   forkJS a = do
-    wv <- askWebView
-    liftIO $ forkIO $ runWithWebView a wv
+    wv <- askJSContext
+    liftIO $ forkIO $ runWithJSContextSingleton a wv
   mkJSFun a = do
-    wv <- askWebView
-    lowerWithJSContext $ mkJSFun $ \args -> lift $ runWithWebView (a args) wv
+    wv <- askJSContext
+    lowerWithJSContext $ mkJSFun $ \args -> lift $ runWithJSContextSingleton (a args) wv
   runJS expr args = lowerWithJSContext $ runJS expr args
   mkJSUndefined = lowerWithJSContext mkJSUndefined
   isJSNull = lowerWithJSContext . isJSNull
@@ -355,12 +351,12 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithWebView x IO) where
   fromJSUint8Array = lowerWithJSContext . fromJSUint8Array
   fromJSNumber = lowerWithJSContext . fromJSNumber
   freeJSFun = lowerWithJSContext . freeJSFun
-  withJSBool = liftWithWebViewThroughWithJSContext . withJSBool
-  withJSString = liftWithWebViewThroughWithJSContext . withJSString
-  withJSNumber = liftWithWebViewThroughWithJSContext . withJSNumber
-  withJSArray = liftWithWebViewThroughWithJSContext . withJSArray
-  withJSUint8Array = liftWithWebViewThroughWithJSContext . withJSUint8Array
-  withJSNode = liftWithWebViewThroughWithJSContext . withJSNode
+  withJSBool = liftWithJSContextSingletonThroughWithJSContext . withJSBool
+  withJSString = liftWithJSContextSingletonThroughWithJSContext . withJSString
+  withJSNumber = liftWithJSContextSingletonThroughWithJSContext . withJSNumber
+  withJSArray = liftWithJSContextSingletonThroughWithJSContext . withJSArray
+  withJSUint8Array = liftWithJSContextSingletonThroughWithJSContext . withJSUint8Array
+  withJSNode = liftWithJSContextSingletonThroughWithJSContext . withJSNode
   setJSProp propName valRef objRef = lowerWithJSContext $ setJSProp propName valRef objRef
   getJSProp propName objRef = lowerWithJSContext $ getJSProp propName objRef
 
@@ -485,6 +481,8 @@ instance ToJS x Node where
   withJS = withJSNode
 
 
+#if 0
+
 importJS :: Safety -> String -> String -> Q Type -> Q [Dec]
 importJS safety body name qt = do
   t <- qt
@@ -532,3 +530,5 @@ parseType (ForallT _ [AppT (AppT (ConT monadJs) (VarT _)) (VarT m)] funType)
             | m' == m -> ([], result)
           _ -> error $ "parseType: can't parse type " <> show t
 parseType t = error $ "parseType: can't parse type " <> show t
+
+#endif

@@ -2,7 +2,6 @@ module Reflex.Dom.Location (getLocationHost, getLocationProtocol) where
 
 import Data.Text (Text)
 import Reflex.Dom.Class
-import qualified Reflex.Dom.Internal.Foreign as F
 
 import Control.Monad.IO.Class
 

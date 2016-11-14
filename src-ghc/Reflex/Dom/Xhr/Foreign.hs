@@ -21,8 +21,6 @@ import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
 import System.Glib.FFI
 
-import Reflex.Dom.Internal.Foreign
-
 import Text.RawString.QQ
 
 data XMLHttpRequest

@@ -11,7 +11,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -31,6 +30,7 @@ import Control.Monad.Exception
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
+import Data.Functor.Contravariant (phantom)
 import Data.Bitraversable
 import Data.Default
 import Data.Dependent.Map (DMap)
@@ -242,6 +242,17 @@ data GhcjsEventSpec er = GhcjsEventSpec
   , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
   }
 
+phantom2 :: (Functor f, Contravariant f) => f a -> f b
+phantom2 = phantom
+{-# INLINE phantom2 #-}
+
+ghcjsEventSpec_filters :: forall er . Lens' (GhcjsEventSpec er) (DMap EventName (GhcjsEventFilter er))
+ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (\a' -> GhcjsEventSpec a' b) <$> f a
+{-# INLINE ghcjsEventSpec_filters #-}
+ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)))
+ghcjsEventSpec_handler f (GhcjsEventSpec _ b) = phantom2 (f b)
+{-# INLINE ghcjsEventSpec_handler #-}
+
 instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
@@ -436,9 +447,9 @@ instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => 
       reResultTrigger <- newIORef $ Just t
       writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a (liftIO cb)]
 
-instance HasWebView m => HasWebView (ImmediateDomBuilderT t m) where
-  type WebViewPhantom (ImmediateDomBuilderT t m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (ImmediateDomBuilderT t m) where
+  type JSContextPhantom (ImmediateDomBuilderT t m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
 instance MonadRef m => MonadRef (ImmediateDomBuilderT t m) where
   type Ref (ImmediateDomBuilderT t m) = Ref m
@@ -894,4 +905,3 @@ wrapWindow wv _ = do
     , _window_raw = wv
     }
 
-makeLenses ''GhcjsEventSpec

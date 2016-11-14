@@ -6,7 +6,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE LambdaCase #-}
@@ -31,7 +30,6 @@ module Reflex.Dom.Old
        , elWith'
        , emptyElWith
        , emptyElWith'
-       , getQuitWidget
        , namedNodeMapGetNames
        , nodeClear
        , onEventName
@@ -43,7 +41,7 @@ module Reflex.Dom.Old
        ) where
 
 import Control.Arrow (first)
-import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
+import Control.Lens (Lens, Lens', (%~), (&), (.~), (^.))
 import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
@@ -70,7 +68,6 @@ import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
-import Reflex.Dom.Internal.Foreign
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.Dom.Widget.Basic
@@ -81,7 +78,12 @@ data ElConfig attrs = ElConfig
   , _elConfig_attributes :: attrs
   }
 
-makeLenses ''ElConfig
+elConfig_namespace :: Lens' (ElConfig attrs1) (Maybe Text)
+elConfig_namespace f (ElConfig a b) = (\a' -> ElConfig a' b) <$> f a
+{-# INLINE elConfig_namespace #-}
+elConfig_attributes :: Lens (ElConfig attrs1) (ElConfig attrs2) attrs1 attrs2
+elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
+{-# INLINE elConfig_attributes #-}
 
 --TODO: HasDocument is still not accounted for
 type MonadWidgetConstraints t m =
@@ -100,8 +102,8 @@ type MonadWidgetConstraints t m =
   , MonadJSM (Performable m)
 #endif
   , TriggerEvent t m
-  , HasWebView m
-  , HasWebView (Performable m)
+  , HasJSContext m
+  , HasJSContext (Performable m)
   , MonadAsyncException m
   , MonadAsyncException (Performable m)
   , MonadRef m
@@ -257,11 +259,6 @@ nodeClear n = do
     Just fc -> do
       _ <- removeChild n $ Just fc
       nodeClear n
-
-getQuitWidget :: MonadWidget t m => m (WidgetHost m ())
-getQuitWidget = return $ do
-  WebViewSingleton (wv, _) <- askWebView
-  liftIO $ quitWebView wv
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a
 elStopPropagationNS ns elementTag en child = do

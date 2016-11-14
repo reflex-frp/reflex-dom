@@ -8,7 +8,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
@@ -444,20 +443,150 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- fmap (zipDynWith readKey ixKeys) $ holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
   return $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange)
 
-concat <$> mapM makeLenses
-  [ ''TextAreaConfig
-  , ''TextArea
-  , ''TextInputConfig
-  , ''TextInput
-  , ''RangeInputConfig
-  , ''RangeInput
-  , ''FileInputConfig
-  , ''FileInput
-  , ''DropdownConfig
-  , ''Dropdown
-  , ''CheckboxConfig
-  , ''Checkbox
-  ]
+--concat <$> mapM makeLenses
+--  [ ''TextAreaConfig
+--  , ''TextArea
+--  , ''TextInputConfig
+--  , ''TextInput
+--  , ''RangeInputConfig
+--  , ''RangeInput
+--  , ''FileInputConfig
+--  , ''FileInput
+--  , ''DropdownConfig
+--  , ''Dropdown
+--  , ''CheckboxConfig
+--  , ''Checkbox
+--  ]
+textAreaConfig_attributes :: Lens' (TextAreaConfig t) (Dynamic t (Map Text Text))
+textAreaConfig_attributes f (TextAreaConfig x1 x2 x3) = (\y -> TextAreaConfig x1 x2 y) <$> f x3
+{-# INLINE textAreaConfig_attributes #-}
+textAreaConfig_initialValue :: Lens' (TextAreaConfig t) Text
+textAreaConfig_initialValue f (TextAreaConfig x1 x2 x3) = (\y -> TextAreaConfig y x2 x3) <$> f x1
+{-# INLINE textAreaConfig_initialValue #-}
+textAreaConfig_setValue :: Lens' (TextAreaConfig t) (Event t Text)
+textAreaConfig_setValue f (TextAreaConfig x1 x2 x3) = (\y -> TextAreaConfig x1 y x3) <$> f x2
+{-# INLINE textAreaConfig_setValue #-}
+textArea_element :: Lens' (TextArea t) HTMLTextAreaElement
+textArea_element f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 x2 x3 x4 y) <$> f x5
+{-# INLINE textArea_element #-}
+textArea_hasFocus :: Lens' (TextArea t) (Dynamic t Bool)
+textArea_hasFocus f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 x2 y x4 x5) <$> f x3
+{-# INLINE textArea_hasFocus #-}
+textArea_input :: Lens' (TextArea t) (Event t Text)
+textArea_input f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 y x3 x4 x5) <$> f x2
+{-# INLINE textArea_input #-}
+textArea_keypress :: Lens' (TextArea t) (Event t Int)
+textArea_keypress f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 x2 x3 y x5) <$> f x4
+{-# INLINE textArea_keypress #-}
+textArea_value :: Lens' (TextArea t) (Dynamic t Text)
+textArea_value f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea y x2 x3 x4 x5) <$> f x1
+{-# INLINE textArea_value #-}
+textInputConfig_attributes :: Lens' (TextInputConfig t) (Dynamic t (Map Text Text))
+textInputConfig_attributes f (TextInputConfig x1 x2 x3 x4) = (\y -> TextInputConfig x1 x2 x3 y) <$> f x4
+{-# INLINE textInputConfig_attributes #-}
+textInputConfig_initialValue :: Lens' (TextInputConfig t) Text
+textInputConfig_initialValue f (TextInputConfig x1 x2 x3 x4) = (\y -> TextInputConfig x1 y x3 x4) <$> f x2
+{-# INLINE textInputConfig_initialValue #-}
+textInputConfig_inputType :: Lens' (TextInputConfig t) Text
+textInputConfig_inputType f (TextInputConfig x1 x2 x3 x4) = (\y -> TextInputConfig y x2 x3 x4) <$> f x1
+{-# INLINE textInputConfig_inputType #-}
+textInputConfig_setValue :: Lens' (TextInputConfig t) (Event t Text)
+textInputConfig_setValue f (TextInputConfig x1 x2 x3 x4) = (\y -> TextInputConfig x1 x2 y x4) <$> f x3
+{-# INLINE textInputConfig_setValue #-}
+textInput_builderElement :: Lens' (TextInput t) (InputElement EventResult GhcjsDomSpace t)
+textInput_builderElement f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 x4 x5 x6 y) <$> f x7
+{-# INLINE textInput_builderElement #-}
+textInput_hasFocus :: Lens' (TextInput t) (Dynamic t Bool)
+textInput_hasFocus f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 x4 x5 y x7) <$> f x6
+{-# INLINE textInput_hasFocus #-}
+textInput_input :: Lens' (TextInput t) (Event t Text)
+textInput_input f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 y x3 x4 x5 x6 x7) <$> f x2
+{-# INLINE textInput_input #-}
+textInput_keydown :: Lens' (TextInput t) (Event t Int)
+textInput_keydown f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 y x5 x6 x7) <$> f x4
+{-# INLINE textInput_keydown #-}
+textInput_keypress :: Lens' (TextInput t) (Event t Int)
+textInput_keypress f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 y x4 x5 x6 x7) <$> f x3
+{-# INLINE textInput_keypress #-}
+textInput_keyup :: Lens' (TextInput t) (Event t Int)
+textInput_keyup f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 x4 y x6 x7) <$> f x5
+{-# INLINE textInput_keyup #-}
+textInput_value :: Lens' (TextInput t) (Dynamic t Text)
+textInput_value f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput y x2 x3 x4 x5 x6 x7) <$> f x1
+{-# INLINE textInput_value #-}
+rangeInputConfig_attributes :: Lens' (RangeInputConfig t) (Dynamic t (Map Text Text))
+rangeInputConfig_attributes f (RangeInputConfig x1 x2 x3) = (\y -> RangeInputConfig x1 x2 y) <$> f x3
+{-# INLINE rangeInputConfig_attributes #-}
+rangeInputConfig_initialValue :: Lens' (RangeInputConfig t) Float
+rangeInputConfig_initialValue f (RangeInputConfig x1 x2 x3) = (\y -> RangeInputConfig y x2 x3) <$> f x1
+{-# INLINE rangeInputConfig_initialValue #-}
+rangeInputConfig_setValue :: Lens' (RangeInputConfig t) (Event t Float)
+rangeInputConfig_setValue f (RangeInputConfig x1 x2 x3) = (\y -> RangeInputConfig x1 y x3) <$> f x2
+{-# INLINE rangeInputConfig_setValue #-}
+rangeInput_element :: Lens' (RangeInput t) HTMLInputElement
+rangeInput_element f (RangeInput x1 x2 x3 x4 x5) = (\y -> RangeInput x1 x2 x3 x4 y) <$> f x5
+{-# INLINE rangeInput_element #-}
+rangeInput_hasFocus :: Lens' (RangeInput t) (Dynamic t Bool)
+rangeInput_hasFocus f (RangeInput x1 x2 x3 x4 x5) = (\y -> RangeInput x1 x2 x3 y x5) <$> f x4
+{-# INLINE rangeInput_hasFocus #-}
+rangeInput_input :: Lens' (RangeInput t) (Event t Float)
+rangeInput_input f (RangeInput x1 x2 x3 x4 x5) = (\y -> RangeInput x1 y x3 x4 x5) <$> f x2
+{-# INLINE rangeInput_input #-}
+rangeInput_mouseup :: Lens' (RangeInput t) (Event t (Int, Int))
+rangeInput_mouseup f (RangeInput x1 x2 x3 x4 x5) = (\y -> RangeInput x1 x2 y x4 x5) <$> f x3
+{-# INLINE rangeInput_mouseup #-}
+rangeInput_value :: Lens' (RangeInput t) (Dynamic t Float)
+rangeInput_value f (RangeInput x1 x2 x3 x4 x5) = (\y -> RangeInput y x2 x3 x4 x5) <$> f x1
+{-# INLINE rangeInput_value #-}
+fileInputConfig_attributes :: Iso
+    (FileInputConfig t1)
+    (FileInputConfig t2)
+    (Dynamic t1 (Map Text Text))
+    (Dynamic t2 (Map Text Text))
+fileInputConfig_attributes = iso (\(FileInputConfig x) -> x) FileInputConfig
+{-# INLINE fileInputConfig_attributes #-}
+fileInput_element :: Lens
+    (FileInput d1 t)
+    (FileInput d2 t)
+    (RawInputElement d1)
+    (RawInputElement d2)
+fileInput_element f (FileInput x1 x2) = (\y -> FileInput x1 y) <$> f x2
+{-# INLINE fileInput_element #-}
+fileInput_value :: Lens
+    (FileInput d t1)
+    (FileInput d t2)
+    (Dynamic t1 [File])
+    (Dynamic t2 [File])
+fileInput_value f (FileInput x1 x2) = (\y -> FileInput y x2) <$> f x1
+{-# INLINE fileInput_value #-}
+dropdownConfig_attributes :: Lens' (DropdownConfig t k) (Dynamic t (Map Text Text))
+dropdownConfig_attributes f (DropdownConfig x1 x2) = (\y -> DropdownConfig x1 y) <$> f x2
+{-# INLINE dropdownConfig_attributes #-}
+dropdownConfig_setValue :: Lens
+    (DropdownConfig t k1)
+    (DropdownConfig t k2)
+    (Event t k1)
+    (Event t k2)
+dropdownConfig_setValue f (DropdownConfig x1 x2) = (\y -> DropdownConfig y x2) <$> f x1
+{-# INLINE dropdownConfig_setValue #-}
+dropdown_change :: Lens' (Dropdown t k) (Event t k)
+dropdown_change f (Dropdown x1 x2) = (\y -> Dropdown x1 y) <$> f x2
+{-# INLINE dropdown_change #-}
+dropdown_value :: Lens' (Dropdown t k) (Dynamic t k)
+dropdown_value f (Dropdown x1 x2) = (\y -> Dropdown y x2) <$> f x1
+{-# INLINE dropdown_value #-}
+checkboxConfig_attributes :: Lens' (CheckboxConfig t) (Dynamic t (Map Text Text))
+checkboxConfig_attributes f (CheckboxConfig x1 x2) = (\y -> CheckboxConfig x1 y) <$> f x2
+{-# INLINE checkboxConfig_attributes #-}
+checkboxConfig_setValue :: Lens' (CheckboxConfig t) (Event t Bool)
+checkboxConfig_setValue f (CheckboxConfig x1 x2) = (\y -> CheckboxConfig y x2) <$> f x1
+{-# INLINE checkboxConfig_setValue #-}
+checkbox_change :: Lens' (Checkbox t) (Event t Bool)
+checkbox_change f (Checkbox x1 x2) = (\y -> Checkbox x1 y) <$> f x2
+{-# INLINE checkbox_change #-}
+checkbox_value :: Lens' (Checkbox t) (Dynamic t Bool)
+checkbox_value f (Checkbox x1 x2) = (\y -> Checkbox y x2) <$> f x1
+{-# INLINE checkbox_value #-}
 
 instance HasAttributes (TextAreaConfig t) where
   type Attrs (TextAreaConfig t) = Dynamic t (Map Text Text)

@@ -1,7 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
-module Reflex.Dom.Internal.Foreign ( module Reflex.Dom.Internal.Foreign
-                                   , runWebGUI
+module Reflex.Dom.Internal.Foreign ( runWebGUI
                                    , WebView
                                    ) where
 

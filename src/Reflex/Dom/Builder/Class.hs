@@ -12,7 +12,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Class
@@ -153,6 +152,17 @@ data TextNodeConfig t
                     , _textNodeConfig_setContents :: Event t Text
                     }
 
+textNodeConfig_initialContents :: Lens' (TextNodeConfig t) Text
+textNodeConfig_initialContents f (TextNodeConfig a b) = (\a' -> TextNodeConfig a' b) <$> f a
+{-# INLINE textNodeConfig_initialContents #-}
+textNodeConfig_setContents :: Lens
+    (TextNodeConfig t1)
+    (TextNodeConfig t2)
+    (Event t1 Text)
+    (Event t2 Text)
+textNodeConfig_setContents f (TextNodeConfig a b) = (\b' -> TextNodeConfig a b') <$> f b
+{-# INLINE textNodeConfig_setContents #-}
+
 instance (Reflex t) => Default (TextNodeConfig t) where
   {-# INLINABLE def #-}
   def = TextNodeConfig
@@ -217,6 +227,27 @@ data ElementConfig er t m
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
 
+elementConfig_namespace :: Lens' (ElementConfig er t m) (Maybe Namespace)
+elementConfig_namespace f (ElementConfig a b c d) = (\a' -> ElementConfig a' b c d) <$> f a
+{-# INLINE elementConfig_namespace #-}
+elementConfig_initialAttributes :: Lens' (ElementConfig er t m) (Map AttributeName Text)
+elementConfig_initialAttributes f (ElementConfig a b c d) = (\b' -> ElementConfig a b' c d) <$> f b
+{-# INLINE elementConfig_initialAttributes #-}
+elementConfig_modifyAttributes :: Lens
+    (ElementConfig er t1 m)
+    (ElementConfig er t2 m)
+    (Event t1 (Map AttributeName (Maybe Text)))
+    (Event t2 (Map AttributeName (Maybe Text)))
+elementConfig_modifyAttributes f (ElementConfig a b c d) = (\c' -> ElementConfig a b c' d) <$> f c
+{-# INLINE elementConfig_modifyAttributes #-}
+elementConfig_eventSpec :: Lens
+    (ElementConfig er1 t m1)
+    (ElementConfig er2 t m2)
+    (EventSpec (DomBuilderSpace m1) er1)
+    (EventSpec (DomBuilderSpace m2) er2)
+elementConfig_eventSpec f (ElementConfig a b c d) = (\d' -> ElementConfig a b c d') <$> f d
+{-# INLINE elementConfig_eventSpec #-}
+
 data Element er d t
    = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
              , _element_raw :: RawElement d
@@ -226,6 +257,17 @@ data PlaceholderConfig above t m
    = PlaceholderConfig { _placeholderConfig_insertAbove :: Event t (m above)
                        , _placeholderConfig_deleteSelf :: Event t ()
                        }
+
+placeholderConfig_insertAbove :: Lens
+    (PlaceholderConfig above1 t m1)
+    (PlaceholderConfig above2 t m2)
+    (Event t (m1 above1))
+    (Event t (m2 above2))
+placeholderConfig_insertAbove f (PlaceholderConfig a b) = (\a' -> PlaceholderConfig a' b) <$> f a
+{-# INLINE placeholderConfig_insertAbove #-}
+placeholderConfig_deleteSelf :: Lens' (PlaceholderConfig above t m) (Event t ())
+placeholderConfig_deleteSelf f (PlaceholderConfig a b) = (\b' -> PlaceholderConfig a b') <$> f b
+{-# INLINE placeholderConfig_deleteSelf #-}
 
 instance Reflex t => Default (PlaceholderConfig above t m) where
   {-# INLINABLE def #-}
@@ -246,6 +288,26 @@ data InputElementConfig er t m
                         , _inputElementConfig_setChecked :: Event t Bool
                         , _inputElementConfig_elementConfig :: ElementConfig er t m
                         }
+
+inputElementConfig_initialValue :: Lens' (InputElementConfig er t m) Text
+inputElementConfig_initialValue f (InputElementConfig a b c d e) = (\a' -> InputElementConfig a' b c d e) <$> f a
+{-# INLINE inputElementConfig_initialValue #-}
+inputElementConfig_setValue :: Lens' (InputElementConfig er t m) (Event t Text)
+inputElementConfig_setValue f (InputElementConfig a b c d e) = (\b' -> InputElementConfig a b' c d e) <$> f b
+{-# INLINE inputElementConfig_setValue #-}
+inputElementConfig_initialChecked :: Lens' (InputElementConfig er t m) Bool
+inputElementConfig_initialChecked f (InputElementConfig a b c d e) = (\c' -> InputElementConfig a b c' d e) <$> f c
+{-# INLINE inputElementConfig_initialChecked #-}
+inputElementConfig_setChecked :: Lens' (InputElementConfig er t m) (Event t Bool)
+inputElementConfig_setChecked f (InputElementConfig a b c d e) = (\d' -> InputElementConfig a b c d' e) <$> f d
+{-# INLINE inputElementConfig_setChecked #-}
+inputElementConfig_elementConfig :: Lens
+    (InputElementConfig er1 t m1)
+    (InputElementConfig er2 t m2)
+    (ElementConfig er1 t m1)
+    (ElementConfig er2 t m2)
+inputElementConfig_elementConfig f (InputElementConfig a b c d e) = (\e' -> InputElementConfig a b c d e') <$> f e
+{-# INLINE inputElementConfig_elementConfig #-}
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (InputElementConfig er t m) where
   {-# INLINABLE def #-}
@@ -274,6 +336,20 @@ data TextAreaElementConfig er t m
                            , _textAreaElementConfig_elementConfig :: ElementConfig er t m
                            }
 
+textAreaElementConfig_initialValue :: Lens' (TextAreaElementConfig er t m) Text
+textAreaElementConfig_initialValue f (TextAreaElementConfig a b c) = (\a' -> TextAreaElementConfig a' b c) <$> f a
+{-# INLINE textAreaElementConfig_initialValue #-}
+textAreaElementConfig_setValue :: Lens' (TextAreaElementConfig er t m) (Event t Text)
+textAreaElementConfig_setValue f (TextAreaElementConfig a b c) = (\b' -> TextAreaElementConfig a b' c) <$> f b
+{-# INLINE textAreaElementConfig_setValue #-}
+textAreaElementConfig_elementConfig :: Lens
+    (TextAreaElementConfig er1 t m1)
+    (TextAreaElementConfig er2 t m2)
+    (ElementConfig er1 t m1)
+    (ElementConfig er2 t m2)
+textAreaElementConfig_elementConfig f (TextAreaElementConfig a b c) = (\c' -> TextAreaElementConfig a b c') <$> f c
+{-# INLINE textAreaElementConfig_elementConfig #-}
+
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (TextAreaElementConfig er t m) where
   {-# INLINABLE def #-}
   def = TextAreaElementConfig
@@ -301,6 +377,21 @@ data RawElementConfig er t m = RawElementConfig
   , _rawElementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
   }
 
+rawElementConfig_modifyAttributes :: Lens
+    (RawElementConfig er t1 m)
+    (RawElementConfig er t2 m)
+    (Event t1 (Map AttributeName (Maybe Text)))
+    (Event t2 (Map AttributeName (Maybe Text)))
+rawElementConfig_modifyAttributes f (RawElementConfig a b) = (\a' -> RawElementConfig a' b) <$> f a
+{-# INLINE rawElementConfig_modifyAttributes #-}
+rawElementConfig_eventSpec :: Lens
+    (RawElementConfig er1 t m1)
+    (RawElementConfig er2 t m2)
+    (EventSpec (DomBuilderSpace m1) er1)
+    (EventSpec (DomBuilderSpace m2) er2)
+rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a b') <$> f b
+{-# INLINE rawElementConfig_eventSpec #-}
+
 instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig EventResult t m) where
   def = RawElementConfig
     { _rawElementConfig_modifyAttributes = never
@@ -312,6 +403,20 @@ data SelectElementConfig er t m = SelectElementConfig
   , _selectElementConfig_setValue :: Event t Text
   , _selectElementConfig_elementConfig :: ElementConfig er t m
   }
+
+selectElementConfig_initialValue :: Lens' (SelectElementConfig er t m) Text
+selectElementConfig_initialValue f (SelectElementConfig a b c) = (\a' -> SelectElementConfig a' b c) <$> f a
+{-# INLINE selectElementConfig_initialValue #-}
+selectElementConfig_setValue :: Lens' (SelectElementConfig er t m) (Event t Text)
+selectElementConfig_setValue f (SelectElementConfig a b c) = (\b' -> SelectElementConfig a b' c) <$> f b
+{-# INLINE selectElementConfig_setValue #-}
+selectElementConfig_elementConfig :: Lens
+    (SelectElementConfig er1 t m1)
+    (SelectElementConfig er2 t m2)
+    (ElementConfig er1 t m1)
+    (ElementConfig er2 t m2)
+selectElementConfig_elementConfig f (SelectElementConfig a b c) = (\c' -> SelectElementConfig a b c') <$> f c
+{-# INLINE selectElementConfig_elementConfig #-}
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (SelectElementConfig er t m) where
   def = SelectElementConfig
@@ -327,16 +432,6 @@ data SelectElement er d t = SelectElement
   , _selectElement_hasFocus :: Dynamic t Bool
   , _selectElement_raw :: RawSelectElement d
   }
-
-concat <$> mapM makeLenses
-  [ ''TextNodeConfig
-  , ''ElementConfig
-  , ''PlaceholderConfig
-  , ''InputElementConfig
-  , ''TextAreaElementConfig
-  , ''SelectElementConfig
-  , ''RawElementConfig
-  ]
 
 class CanDeleteSelf t a | a -> t where
   deleteSelf :: Lens' a (Event t ())

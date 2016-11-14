@@ -81,9 +81,9 @@ instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
           }
     lift $ selectElement cfg' $ runInputDisabledT child
 
-instance HasWebView m => HasWebView (InputDisabledT m) where
-  type WebViewPhantom (InputDisabledT m) = WebViewPhantom m
-  askWebView = lift askWebView
+instance HasJSContext m => HasJSContext (InputDisabledT m) where
+  type JSContextPhantom (InputDisabledT m) = JSContextPhantom m
+  askJSContext = lift askJSContext
 
 instance HasJS js m => HasJS js (InputDisabledT m) where
   type JSX (InputDisabledT m) = JSX m
