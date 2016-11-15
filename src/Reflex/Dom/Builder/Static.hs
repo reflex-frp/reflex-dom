@@ -46,8 +46,9 @@ import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
+import Reflex.PostBuild.Base
 import Reflex.Spider
+import Reflex.TriggerEvent.Class
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
     { unStaticDomBuilderT :: StateT [Behavior t Builder] m a -- Accumulated Html will be in reversed order

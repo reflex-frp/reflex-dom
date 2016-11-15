@@ -62,6 +62,7 @@ where
 import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.PerformEvent.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Exception (handle)

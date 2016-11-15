@@ -13,6 +13,7 @@ import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Monad
 import Control.Monad.Fix

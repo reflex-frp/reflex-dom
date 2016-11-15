@@ -22,8 +22,9 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
-import Reflex.PostBuild.Class
+import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
+import Reflex.TriggerEvent.Base
 
 import Control.Concurrent
 import Control.Lens
@@ -89,21 +90,23 @@ instance MonadJSM m => MonadJSM (PostBuildT t m) where
 
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
-attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
+attachWidget rootElement wv w = liftIO $ fst <$> attachWidget' rootElement wv w
 
-mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> IO ()
-mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingleton webView $ \wv -> fmap fst $ attachWidget'' $ \events -> do
+mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> JSM ()
+mainWidgetWithHead' widgets = withJSContextSingleton $ \jsSing -> do
+ Just doc <- currentDocument
+ Just headElement <- getHead doc
+ Just bodyElement <- getBody doc
+--    runWebGUI $ \webView -> withWebViewSingleton webView $ \wv ->
+ liftIO $ fmap fst $ attachWidget'' $ \events -> do
   let (headWidget, bodyWidget) = widgets
-  Just doc <- liftIO $ fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
-  Just headElement <- getHead doc
-  Just bodyElement <- getBody doc
   (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  rec b <- unsafeReplaceElementContentsWithWidget events postBuild headElement wv $ headWidget a
-      a <- unsafeReplaceElementContentsWithWidget events postBuild bodyElement wv $ bodyWidget b
+  rec b <- unsafeReplaceElementContentsWithWidget events postBuild headElement jsSing $ headWidget a
+      a <- unsafeReplaceElementContentsWithWidget events postBuild bodyElement jsSing $ bodyWidget b
   return ((), postBuildTriggerRef)
 
-unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> WebViewSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
-unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w = do
+unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> JSContextSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
+unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w = (`runWithJSContextSingleton` jsSing) $ do
   Just doc <- getOwnerDocument rootElement
   Just df <- createDocumentFragment doc
   let builderEnv = ImmediateDomBuilderEnv
@@ -111,16 +114,16 @@ unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w = do
         , _immediateDomBuilderEnv_parent = toNode df
         , _immediateDomBuilderEnv_events = events
         }
-  result <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+  result <- runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv
   setInnerHTML rootElement $ Just ("" :: String)
   _ <- appendChild rootElement $ Just df
   return result
 
 {-# INLINABLE attachWidget' #-}
-attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
-attachWidget' rootElement wv w = attachWidget'' $ \events -> do
+attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
+attachWidget' rootElement jsSing w = attachWidget'' $ \events -> do
   (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  result <- unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w
+  result <- unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w
   return (result, postBuildTriggerRef)
 
 type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
@@ -141,7 +144,7 @@ attachWidget'' w = do
         me <- readIORef er
         return $ fmap (\e -> e :=> Identity a) me
       _ <- fire (catMaybes mes) $ return ()
-      liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> (`runJSM` ctx) cb
+      liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
     return ()
   return (result, fc)
 

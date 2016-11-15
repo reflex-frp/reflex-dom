@@ -24,6 +24,8 @@ import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
+import Reflex.TriggerEvent.Base hiding (askEvents)
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
@@ -58,8 +60,9 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
-import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, insertBefore,
+import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling,
                        removeChild, setNodeValue, toNode)
+import qualified GHCJS.DOM.Node as DOM (insertBefore)
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
@@ -71,8 +74,6 @@ import qualified GHCJS.DOM.Window as Window
 import Debug.Trace hiding (traceEvent)
 
 data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
-
-data TriggerInvocation a = TriggerInvocation a (JSM ())
 
 data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
@@ -143,7 +144,7 @@ deleteBetweenInclusive s e = do
       return ()
 
 -- | s and e must both be children of the same node and s must precede e
-deleteBetweenExclusive :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenExclusive s e = do
   mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   case mCurrentParent of
@@ -161,7 +162,7 @@ deleteBetweenExclusive s e = do
 
 -- | s and e must both be children of the same node and s must precede e; s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpTo #-}
-deleteUpTo :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteUpTo s e = do
   mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   case mCurrentParent of
@@ -169,14 +170,16 @@ deleteUpTo s e = do
     Just currentParent -> deleteUpToGivenParent currentParent s e
 
 {-# INLINABLE deleteUpToGivenParent #-}
-deleteUpToGivenParent :: (MonadIO m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
+deleteUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
 deleteUpToGivenParent currentParent s e = do
   fix $ \loop -> do
     Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
     _ <- removeChild currentParent $ Just x
-    when (toNode s /= toNode x) loop
+    liftJSM (strictEqual s x) >>= \case
+        True  -> return ()
+        False -> loop
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref JSM)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
@@ -417,7 +420,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   placeRawElement = append
   wrapRawElement = wrap
 
-instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)

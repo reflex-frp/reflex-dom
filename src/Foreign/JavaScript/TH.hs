@@ -25,7 +25,8 @@ import Reflex.DynamicWriter
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
+import Reflex.PostBuild.Base
+import Reflex.Requester.Base
 
 import Language.Haskell.TH
 
@@ -49,7 +50,6 @@ import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
 
 import Data.Hashable
 import Data.Word
-import Data.Coerce (coerce)
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
@@ -76,6 +76,7 @@ import qualified Control.Monad.State.Strict as Strict
 import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Coerce (coerce)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -222,8 +223,8 @@ instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
   liftJS = lift . liftJS
 
-instance HasJS x m => HasJS x (RequestT t request response m) where
-  type JSX (RequestT t request response m) = JSX m
+instance HasJS x m => HasJS x (RequesterT t request response m) where
+  type JSX (RequesterT t request response m) = JSX m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript

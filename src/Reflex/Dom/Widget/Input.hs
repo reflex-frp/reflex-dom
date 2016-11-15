@@ -42,8 +42,8 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Dynamic
-import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 import qualified Text.Read as T
 
 import qualified GHCJS.DOM.Event as Event

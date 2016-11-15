@@ -10,6 +10,7 @@ import Reflex.Class
 import Reflex.Dynamic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import qualified Control.Concurrent.Thread.Delay as Concurrent
@@ -33,7 +34,7 @@ data TickInfo
 
 -- | Special case of tickLossyFrom that uses the post-build event to start the
 --   tick thread.
-tickLossy :: (PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadJSM (Performable m), MonadFix m) => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
+tickLossy :: (PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m) => NominalDiffTime -> UTCTime -> m (Event t TickInfo)
 tickLossy dt t0 = tickLossyFrom dt t0 =<< getPostBuild
 
 -- | Send events over time with the given basis time and interval
