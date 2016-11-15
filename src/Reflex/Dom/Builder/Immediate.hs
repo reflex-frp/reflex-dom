@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -18,15 +19,16 @@ module Reflex.Dom.Builder.Immediate where
 
 import Foreign.JavaScript.TH
 import Reflex.Class as Reflex
-import Reflex.Dynamic
 import Reflex.Dom.Builder.Class
+import Reflex.Dynamic
+import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Host.Class
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
 import Control.Monad.Exception
+import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
@@ -38,8 +40,12 @@ import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
 import Data.Functor.Misc
 import Data.IORef
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
+import Data.Some (Some)
+import qualified Data.Some as Some
 import Data.Text (Text)
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
@@ -80,6 +86,10 @@ newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilde
 instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
     liftJSM' = ImmediateDomBuilderT . liftJSM'
 #endif
+
+instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
+  type PrimState (ImmediateDomBuilderT x m) = PrimState m
+  primitive = lift . primitive
 
 instance MonadTransControl (ImmediateDomBuilderT t) where
   type StT (ImmediateDomBuilderT t) a = StT (ReaderT (ImmediateDomBuilderEnv t)) a
@@ -128,6 +138,17 @@ deleteBetweenInclusive s e = do
   case mCurrentParent of
     Nothing -> return () --TODO: Is this the right behavior?
     Just currentParent -> do
+      deleteUpToGivenParent currentParent s e
+      _ <- removeChild currentParent $ Just e
+      return ()
+
+-- | s and e must both be children of the same node and s must precede e
+deleteBetweenExclusive :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteBetweenExclusive s e = do
+  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> do
       let go = do
             Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
             _ <- removeChild currentParent $ Just x
@@ -137,6 +158,23 @@ deleteBetweenInclusive s e = do
       go
       _ <- removeChild currentParent $ Just e
       return ()
+
+-- | s and e must both be children of the same node and s must precede e; s and all nodes between s and e will be removed, but e will not be removed
+{-# INLINABLE deleteUpTo #-}
+deleteUpTo :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m ()
+deleteUpTo s e = do
+  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  case mCurrentParent of
+    Nothing -> return () --TODO: Is this the right behavior?
+    Just currentParent -> deleteUpToGivenParent currentParent s e
+
+{-# INLINABLE deleteUpToGivenParent #-}
+deleteUpToGivenParent :: (MonadIO m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
+deleteUpToGivenParent currentParent s e = do
+  fix $ \loop -> do
+    Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
+    _ <- removeChild currentParent $ Just x
+    when (toNode s /= toNode x) loop
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, PerformEvent t m, Performable m ~ m, MonadReflexCreateTrigger t m, Deletable t m, MonadRef m, Ref m ~ Ref JSM)
 
@@ -271,6 +309,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
+  {-
   {-# INLINABLE placeholder #-}
   placeholder (PlaceholderConfig toInsertAbove delete) = liftThrough (deletable delete) $ do
     n <- textNodeInternal ("" :: Text)
@@ -280,6 +319,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       mp <- getParentNode n
       forM_ mp $ \p -> removeChild p $ Just n
     return $ Placeholder insertedAbove deleted
+-}
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -377,6 +417,57 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   placeRawElement = append
   wrapRawElement = wrap
 
+instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
+  runWithReplace a0 a' = do
+    initialEnv <- ImmediateDomBuilderT ask
+    before <- textNodeInternal ("" :: Text)
+    -- We draw 'after' in this roundabout way to avoid using MonadFix
+    Just after <- createTextNode (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
+    let drawInitialChild = do
+          result <- a0
+          append after
+          return result
+    (result0, result') <- lift $ runWithReplace (runImmediateDomBuilderT drawInitialChild initialEnv) $ ffor a' $ \child -> do
+      Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+      result <- runImmediateDomBuilderT child $ initialEnv
+        { _immediateDomBuilderEnv_parent = toNode df
+        }
+      deleteBetweenExclusive before after
+      insertBefore df after
+      return result
+    return (result0, result')
+  sequenceDMapWithAdjust (dm0 :: DMap k (ImmediateDomBuilderT t m)) dm' = do
+    initialEnv <- ImmediateDomBuilderT ask
+    let drawChildInitial :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)
+        drawChildInitial child = runImmediateDomBuilderT ((,,) <$> pure (error "sequenceDMapWithAdjust{ImmediateDomBuilderT}: drawChildInitial: DocumentFragment evaluated") <*> textNodeInternal ("" :: Text) <*> child) initialEnv --TODO: Don't return a DocumentFragment at all here; this will require that sequenceDMapWithAdjust accept differently-typed values for the constant and Event arguments.
+        drawChildUpdate :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)
+        drawChildUpdate child = do
+          Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+          runImmediateDomBuilderT ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child) $ initialEnv
+            { _immediateDomBuilderEnv_parent = toNode df
+            }
+        updateChildren = ffor dm' $ \(PatchDMap p) -> PatchDMap $
+          mapKeyValuePairsMonotonic (\(k :=> ComposeMaybe mv) -> WrapArg k :=> ComposeMaybe (fmap drawChildUpdate mv)) p
+    (children0, children') <- lift $ sequenceDMapWithAdjust (mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> drawChildInitial v) dm0) (updateChildren :: Event t (PatchDMap (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) m)) --TODO: Update stuff
+    let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, _, v)) -> k :=> Identity v) children0
+        placeholders0 = dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, ph, _)) -> Const2 (Some.This k) :=> Identity ph) children0
+        result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
+          mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> k :=> fmap (\(_, _, r) -> r) v) p
+        placeholders' = ffor children' $ \(PatchDMap p) -> PatchMap $
+          dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> Const2 (Some.This k) :=> Identity (fmap ((\(_, ph, _) -> ph) . runIdentity) (getComposeMaybe v))) p
+    placeholders :: Behavior t (Map (Some k) DOM.Text) <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
+    lastPlaceholder <- textNodeInternal ("" :: Text)
+    performEvent_ $ flip push children' $ \(PatchDMap p) -> do
+      phs <- sample placeholders
+      if DMap.null p then return Nothing else return $ Just $ do
+        let f :: DSum (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) (ComposeMaybe Identity) -> Performable m ()
+            f (WrapArg k :=> ComposeMaybe mv) = do
+              let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phs
+              forM_ (Map.lookup (Some.This k) phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
+              forM_ mv $ \(Identity (df, _, _)) -> df `insertBefore` nextPlaceholder
+        mapM_ f $ DMap.toList p
+    return (result0, result')
+
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
   let initialFocus = False --TODO: Actually get the initial focus of the element
@@ -386,7 +477,7 @@ mkHasFocus e = do
     ]
 
 {-# INLINABLE insertImmediateAbove #-}
-insertImmediateAbove :: (Reflex t, IsNode placeholder, PerformEvent t m, MonadJSM (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
+insertImmediateAbove :: (IsNode placeholder, PerformEvent t m, MonadJSM (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
 insertImmediateAbove n toInsertAbove = do
   events <- askEvents
   lift $ performEvent $ ffor toInsertAbove $ \new -> do
@@ -397,21 +488,15 @@ insertImmediateAbove n toInsertAbove = do
       , _immediateDomBuilderEnv_document = doc
       , _immediateDomBuilderEnv_events = events
       }
-    mp <- getParentNode n
-    case mp of
-      Nothing -> trace "ImmediateDomBuilderT: placeholder: Warning: (getParentNode n) returned Nothing" $ return ()
-      Just p -> void $ insertBefore p (Just df) (Just n) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
+    df `insertBefore` n
     return result
 
-instance SupportsImmediateDomBuilder t m => Deletable t (ImmediateDomBuilderT t m) where
-  {-# INLINABLE deletable #-}
-  deletable delete child = liftThrough (deletable delete) $ do
-    top <- textNodeInternal ("" :: Text)
-    result <- child
-    bottom <- textNodeInternal ("" :: Text)
-    lift $ performEvent_ $ ffor delete $ \_ -> do
-      deleteBetweenInclusive top bottom
-    return result
+insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
+insertBefore new existing = do
+  mp <- getParentNode existing
+  case mp of
+    Nothing -> trace "ImmediateDomBuilderT: placeholder: Warning: (getParentNode n) returned Nothing" $ return ()
+    Just p -> void $ DOM.insertBefore p (Just new) (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
 instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   type Performable (ImmediateDomBuilderT t m) = Performable m
@@ -520,7 +605,7 @@ type family EventType en where
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
-  Dblclick -> return ()
+  Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> getScrollTop e
   Keydown -> getKeyEvent
@@ -570,7 +655,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
 defaultDomWindowEventHandler :: DOM.Window -> EventName en -> EventM DOM.Window (EventType en) (Maybe (EventResult en))
 defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
-  Dblclick -> return ()
+  Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> Window.getScrollY w
   Keydown -> getKeyEvent
@@ -873,7 +958,7 @@ getKeyEvent = do
 getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
   e <- event
-  bisequence (getX e, getY e)
+  bisequence (getClientX e, getClientY e)
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}

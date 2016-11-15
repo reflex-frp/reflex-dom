@@ -21,12 +21,11 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 
 import Prelude hiding((!!))
 import Reflex.Class
-import Reflex.Deletable.Class
 import Reflex.DynamicWriter
+import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.Host.Class
 
 import Language.Haskell.TH
 
@@ -69,6 +68,7 @@ import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State
@@ -109,6 +109,14 @@ instance HasJSContext m => HasJSContext (DynamicWriterT t w m) where
   askJSContext = lift askJSContext
 
 newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+
+instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
+  type PrimState (WithJSContextSingleton x m) = PrimState m
+  primitive = lift . primitive
+
+instance MonadAdjust t m => MonadAdjust t (WithJSContextSingleton x m) where
+  runWithReplace a0 a' = WithJSContextSingleton $ runWithReplace (coerce a0) (coerceEvent a')
+  sequenceDMapWithAdjust dm0 dm' = WithJSContextSingleton $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithJSContextSingleton x m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -152,10 +160,6 @@ instance PerformEvent t m => PerformEvent t (WithJSContextSingleton x m) where
   performEvent_ e = liftWith $ \run -> performEvent_ $ fmap run e
   {-# INLINABLE performEvent #-}
   performEvent e = liftWith $ \run -> performEvent $ fmap run e
-
-instance Deletable t m => Deletable t (WithJSContextSingleton x m) where
-  {-# INLINABLE deletable #-}
-  deletable = liftThrough . deletable
 
 runWithJSContextSingleton :: WithJSContextSingleton x m a -> JSContextSingleton x -> m a
 runWithJSContextSingleton = runReaderT . unWithJSContextSingleton
@@ -216,6 +220,10 @@ instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) wh
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
+  liftJS = lift . liftJS
+
+instance HasJS x m => HasJS x (RequestT t request response m) where
+  type JSX (RequestT t request response m) = JSX m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript

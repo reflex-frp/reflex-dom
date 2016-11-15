@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -10,6 +9,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -21,6 +21,7 @@ import Control.Exception
 import Control.Monad.State
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
@@ -66,8 +67,21 @@ instance IsWebSocketMessage ByteString where
 instance IsWebSocketMessage Text where
   webSocketSend jws t = sendWSTextData jws (T.unpack t)
 
-newWebSocket :: WebView -> Text -> (ByteString -> IO ()) -> IO () -> IO () -> IO JSWebSocket
-newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
+importJS Unsafe "this[0]['close'](this[1], this[2])" "_closeWS" [t| forall x m. MonadJS x m => JSRef x -> Double -> String -> m () |]
+
+closeWebSocket :: JSWebSocket -> Double -> Text -> IO ()
+closeWebSocket (JSWebSocket ws c) code reason = do
+  runWithJSContext (_closeWS (JSRef_JavaScriptCore ws) code (T.unpack reason)) c
+
+newWebSocket
+  :: WebView
+  -> Text -- url
+  -> (Either ByteString a -> IO ()) -- onmessage
+  -> IO () -- onopen
+  -> IO () -- onerror
+  -> ((Bool, Word, Text) -> IO ()) -- onclose
+  -> IO JSWebSocket
+newWebSocket wv url onMessage onOpen onError onClose = withWebViewContext wv $ \c -> do
   url' <- jsvaluemakestring c =<< jsstringcreatewithutf8cstring (T.unpack url)
   newWSArgs <- toJSObject c [url']
   newWS <- jsstringcreatewithutf8cstring "(function(that) { var ws = new WebSocket(that[0]); ws['binaryType'] = 'arraybuffer'; return ws; })(this)"
@@ -79,18 +93,37 @@ newWebSocket wv url onMessage onOpen onClose = withWebViewContext wv $ \c -> do
     msg' <- fromJSStringMaybe c msg
     case msg' of
       Nothing -> return ()
-      Just m -> onMessage $ encodeUtf8 m
+      Just m -> onMessage $ Left $ encodeUtf8 m
     jsvaluemakeundefined c
   onMessageCb <- jsobjectmakefunctionwithcallback c nullPtr onMessage'
   onOpen' <- wrapper $ \_ _ _ _ _ _ -> do
     onOpen
     jsvaluemakeundefined c
   onOpenCb <- jsobjectmakefunctionwithcallback c nullPtr onOpen'
-  onClose' <- wrapper $ \_ _ _ _ _ _ -> do
-    onClose
+  onError' <- wrapper $ \_ _ _ _ _ _ -> do
+    onError
+    jsvaluemakeundefined c
+  onErrorCb <- jsobjectmakefunctionwithcallback c nullPtr onError'
+  onClose' <- wrapper $ \_ _ _ _ args _ -> do
+    e <- peekElemOff args 0
+    propWasClean <- jsstringcreatewithutf8cstring "wasClean"
+    propCode <- jsstringcreatewithutf8cstring "code"
+    propReason <- jsstringcreatewithutf8cstring "reason"
+    wasClean <- fmap (fromMaybe False) $ fromJSBoolMaybe c
+      =<< jsobjectgetproperty c e propWasClean nullPtr
+    code <- fmap (fromMaybe 1000) $ fromJSNumMaybe c
+      =<< jsobjectgetproperty c e propCode nullPtr
+    reason <- fmap (fromMaybe mempty) $ fromJSStringMaybe c
+      =<< jsobjectgetproperty c e propReason nullPtr
+    onClose (wasClean, truncate code, reason)
     jsvaluemakeundefined c
   onCloseCb <- jsobjectmakefunctionwithcallback c nullPtr onClose'
-  o <- toJSObject c [ws, onMessageCb, onOpenCb, onCloseCb]
-  addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onopen'] = this[2]; this[0]['onclose'] = this[3];"
+  o <- toJSObject c [ws, onMessageCb, onOpenCb, onErrorCb, onCloseCb]
+  addCbs <- jsstringcreatewithutf8cstring "this[0]['onmessage'] = this[1]; this[0]['onopen'] = this[2]; this[0]['onerror'] = this[3]; this[0]['onclose'] = this[4];"
   _ <- jsevaluatescript c addCbs o nullPtr 1 nullPtr
   return $ JSWebSocket ws c
+
+onBSMessage :: Either ByteString b -> ByteString
+onBSMessage = either id (error "onBSMessage: ghc env expects ByteString.")
+
+type JSVal = ()

@@ -109,7 +109,7 @@ newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
 type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ClickTag = ()
-  EventResultType 'DblclickTag = ()
+  EventResultType 'DblclickTag = (Int, Int)
   EventResultType 'KeypressTag = Int
   EventResultType 'KeydownTag = Int
   EventResultType 'KeyupTag = Int

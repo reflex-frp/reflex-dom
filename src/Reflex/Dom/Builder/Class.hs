@@ -17,13 +17,12 @@
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
-       , module Reflex.Deletable.Class
        ) where
 
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
-import Reflex.Deletable.Class
 import Reflex.DynamicWriter
+import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
@@ -33,16 +32,13 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
-import Data.Foldable
 import Data.Functor.Misc
-import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Proxy
 import Data.Semigroup
 import Data.String
 import Data.Text (Text)
-import Data.Traversable
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
 
@@ -64,7 +60,7 @@ liftElementConfig cfg = cfg
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
 -- dynamic DOM in the 'Reflex' timeline @t@
-class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBuilder t m | m -> t where
+class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f
@@ -85,9 +81,11 @@ class (Monad m, Reflex t, Deletable t m, DomSpace (DomBuilderSpace m)) => DomBui
                   => Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t (liftElementConfig cfg) $ run child
   {-# INLINABLE element #-}
+  {-
   -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
   -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
   placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
+-}
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
   default inputElement :: ( MonadTransControl f
                           , m ~ f m'
@@ -498,13 +496,6 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
 
 instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
   type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
-  {-# INLINABLE placeholder #-}
-  placeholder cfg = lift $ do
-    rec childPostBuild <- deletable (_placeholder_deletedSelf p) $ performEvent $ return () <$ _placeholder_insertedAbove p
-        p <- placeholder $ cfg
-          { _placeholderConfig_insertAbove = ffor (_placeholderConfig_insertAbove cfg) $ \a -> runPostBuildT a =<< headE childPostBuild
-          }
-    return p
   wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
@@ -516,32 +507,6 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
     (el, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
     put newS
     return (el, a)
-  placeholder cfg = do
-    let cfg' = cfg
-          { _placeholderConfig_insertAbove = runDynamicWriterTInternal <$> _placeholderConfig_insertAbove cfg
-          }
-    let manageChildren :: Event t (NonEmpty (Replaceable t (Dynamic t w))) -- ^ Add nodes on the right; these are in reverse order
-                       -> Event t () -- ^ No more nodes will be added after this event fires
-                       -> m (Replaceable t (Dynamic t w))
-        manageChildren newChildren additionsCeased = do
-          rec nextId <- hold (0 :: Int) newNextId -- We assume this will never wrap around
-              let numberedNewChildren :: Event t (Int, PatchMap (Map Int (Replaceable t (Dynamic t w))))
-                  numberedNewChildren = flip pushAlways newChildren $ \rcs -> do
-                    let cs = reverse $ toList rcs
-                    myFirstId <- sample nextId
-                    let (myNextId, numbered) = mapAccumL (\n v -> (succ n, (n, Just v))) myFirstId cs
-                    return (myNextId, PatchMap $ Map.fromList numbered)
-                  newNextId = fst <$> numberedNewChildren
-          mconcatIncrementalReplaceableDynMap Map.empty (snd <$> numberedNewChildren) additionsCeased
-    rec children <- lift $ manageChildren childOutputs $ cfg ^. deleteSelf
-        p <- DynamicWriterT $ do
-          modify (children:)
-          lift $ placeholder cfg'
-        let result = fst <$> _placeholder_insertedAbove p
-            childOutputs = fmapMaybe (nonEmpty . snd) $ _placeholder_insertedAbove p
-    return $ p
-      { _placeholder_insertedAbove = result
-      }
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
   selectElement cfg (DynamicWriterT child) = DynamicWriterT $ do
@@ -554,6 +519,31 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
   wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
+
+instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequestT t request response m) where
+  type DomBuilderSpace (RequestT t request response m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (RequestT child) = RequestT $ do
+    r <- ask
+    s <- get
+    let cfg' = liftElementConfig cfg
+    (el, (a, newS)) <- lift $ lift $ element elementTag cfg' $ runReaderT (runStateT child s) r
+    put newS
+    return (el, a)
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  selectElement cfg (RequestT child) = RequestT $ do
+    r <- ask
+    s <- get
+    let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
+    (el, (a, newS)) <- lift $ lift $ selectElement cfg' $ runReaderT (runStateT child s) r
+    put newS
+    return (el, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
+
 
 -- * Convenience functions
 
@@ -616,7 +606,6 @@ instance Reflex t => HasDomEvent t (TextAreaElement EventResult d t) en where
 
 instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   type DomBuilderSpace (ReaderT r m) = DomBuilderSpace m
-  placeholder = liftPlaceholder
 
 type LiftDomBuilder t f m =
   ( Reflex t
@@ -650,8 +639,10 @@ liftTextNode = lift . textNode
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (f m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag (fmap1 run cfg) $ run child
 
+{-
 liftPlaceholder :: LiftDomBuilder t f m => PlaceholderConfig above t (f m) -> f m (Placeholder above t)
 liftPlaceholder cfg = liftWithStateless $ \run -> placeholder $ fmap1 run cfg
+-}
 
 liftInputElement :: LiftDomBuilder t f m => InputElementConfig er t (f m) -> f m (InputElement er (DomBuilderSpace m) t)
 liftInputElement cfg = liftWithStateless $ \run -> inputElement $ fmap1 run cfg

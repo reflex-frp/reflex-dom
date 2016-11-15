@@ -79,7 +79,7 @@ module Reflex.Dom.Widget.Basic
   , HasAttributes (..)
   ) where
 
-import Reflex.Class as Reflex
+import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dynamic
@@ -96,7 +96,6 @@ import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -105,11 +104,8 @@ import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
 
-widgetHoldInternal :: DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
-widgetHoldInternal child0 child' = do
-  childResult0 <- deletable (void child') child0
-  childResult' <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (deletable (void child')) child'
-  return (childResult0, _placeholder_insertedAbove childResult')
+widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
+widgetHoldInternal = runWithReplace
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.
@@ -130,26 +126,12 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
 
 newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (Maybe (ChildResult t k a)))) }
 
-listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m, MonadFix m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
-listHoldWithKey initialChildren modifyChildren buildChild = do
-  let deleteChildSelector = fanMap $ fmap void modifyChildren
-  liveChildren :: Dynamic t (Set k) <- foldDyn applyMapKeysSet (Map.keysSet initialChildren) modifyChildren
-  let placeChildSelector = fanMap $ attachWith partitionMapBySetLT (current liveChildren) $ fmap (Map.mapMaybe id) modifyChildren
-      buildAugmentedChild :: k -> v -> m (ChildResult t k a)
-      buildAugmentedChild k v = do
-        let delete = select deleteChildSelector $ Const2 k
-            myCfg = def
-              & insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Left k)
-              & deleteSelf .~ delete
-        ph <- placeholder myCfg
-        result <- deletable delete $ buildChild k v
-        return $ ChildResult (result, (fmap Just <$> _placeholder_insertedAbove ph) <> (Map.singleton k Nothing <$ _placeholder_deletedSelf ph)) --Note: we could also use the "deleted" output on deletable, if it had one; we're using this so that everything changes all at once, instead of deletions being prompt and insertions being delayed
-  rec initialAugmentedResults <- iforM initialChildren buildAugmentedChild
-      augmentedResults <- foldDyn applyMap initialAugmentedResults $ newInsertedBelow <> newInsertedAbove
-      let newInsertedAbove = switch $ mconcat . reverse . fmap (snd . unChildResult) . Map.elems <$> current augmentedResults
-      belowAll <- placeholder $ def & placeholderConfig_insertAbove .~ fmap (imapM buildAugmentedChild) (select placeChildSelector $ Const2 $ Right ())
-      let newInsertedBelow = fmap Just <$> _placeholder_insertedAbove belowAll
-  return $ fmap (fmap (fst . unChildResult)) augmentedResults
+listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
+listHoldWithKey m0 m' f = do
+  let dm0 = mapWithFunctorToDMap $ Map.mapWithKey f m0
+      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> ComposeMaybe $ fmap (f k) v)) m'
+  (a0, a') <- sequenceDMapWithAdjust dm0 dm'
+  fmap dmapToMap . incrementalToDynamic <$> holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
@@ -227,14 +209,15 @@ applyMapKeysSet patch old = Map.keysSet insertions `Set.union` (old `Set.differe
 listWithKey :: forall t k v m a. (Ord k, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
 listWithKey vals mkChild = do
   postBuild <- getPostBuild
+  let childValChangedSelector = fanMap $ updated vals
   rec sentVals :: Dynamic t (Map k v) <- foldDyn applyMap Map.empty changeVals
       let changeVals :: Event t (Map k (Maybe v))
           changeVals = attachWith diffMapNoEq (current sentVals) $ leftmost
                          [ updated vals
                          , tag (current vals) postBuild --TODO: This should probably be added to the attachWith, not to the updated; if we were using diffMap instead of diffMapNoEq, I think it might not work
                          ]
-  listWithKeyShallowDiff Map.empty changeVals $ \k v0 dv -> do
-    mkChild k =<< holdDyn v0 dv
+  listHoldWithKey Map.empty changeVals $ \k v ->
+    mkChild k =<< holdDyn v (select childValChangedSelector $ Const2 k)
 
 {-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
 listWithKey' :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
@@ -249,7 +232,7 @@ listWithKeyShallowDiff initialVals valsChanged mkChild = do
         Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
         Just _ -> Nothing -- We don't want to let spurious re-creations of items through
   listHoldWithKey initialVals (attachWith (flip (Map.differenceWith relevantPatch)) (current sentVals) valsChanged) $ \k v ->
-    mkChild k v $ Reflex.select childValChangedSelector $ Const2 k
+    mkChild k v $ select childValChangedSelector $ Const2 k
 
 --TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
 -- | Create a dynamically-changing set of Event-valued widgets.

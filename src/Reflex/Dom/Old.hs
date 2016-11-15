@@ -13,6 +13,8 @@ module Reflex.Dom.Old
        ( MonadWidget
        , El
        , ElConfig (..)
+       , elConfig_namespace
+       , elConfig_attributes
        , _el_clicked
        , _el_element
        , _el_events
@@ -20,9 +22,9 @@ module Reflex.Dom.Old
        , AttributeMap
        , Attributes (..)
        , buildElement
+       , buildElementNS
        , buildEmptyElement
        , buildEmptyElementNS
-       , deleteBetweenExclusive
        , elDynHtml'
        , elDynHtmlAttr'
        , elStopPropagationNS
@@ -43,7 +45,6 @@ module Reflex.Dom.Old
 import Control.Arrow (first)
 import Control.Lens (Lens, Lens', (%~), (&), (.~), (^.))
 import Control.Monad
-import Control.Monad.Exception
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -68,15 +69,21 @@ import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
 
 data ElConfig attrs = ElConfig
   { _elConfig_namespace :: Maybe Text
   , _elConfig_attributes :: attrs
   }
+
+instance attrs ~ Map Text Text => Default (ElConfig attrs) where
+  def = ElConfig
+    { _elConfig_namespace = Nothing
+    , _elConfig_attributes = mempty
+    }
 
 elConfig_namespace :: Lens' (ElConfig attrs1) (Maybe Text)
 elConfig_namespace f (ElConfig a b) = (\a' -> ElConfig a' b) <$> f a
@@ -104,8 +111,6 @@ type MonadWidgetConstraints t m =
   , TriggerEvent t m
   , HasJSContext m
   , HasJSContext (Performable m)
-  , MonadAsyncException m
-  , MonadAsyncException (Performable m)
   , MonadRef m
   , Ref m ~ Ref IO
   , MonadRef (Performable m)
@@ -162,21 +167,6 @@ addDynamicAttributes attrs cfg = do
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
 
--- | s and e must both be children of the same node and s must precede e
-deleteBetweenExclusive :: (IsNode start, IsNode end) => start -> end -> JSM ()
-deleteBetweenExclusive s e = do
-  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  case mCurrentParent of
-    Nothing -> return () --TODO: Is this the right behavior?
-    Just currentParent -> do
-      let go = do
-            Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            liftJSM (strictEqual s x) >>= \case
-                True  -> return ()
-                False -> do
-                  _ <- removeChild currentParent $ Just x
-                  go
-      go
 
 onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
 onEventName = elementOnEventName

@@ -76,13 +76,13 @@ import Data.Aeson.Encode
 #endif
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
+import qualified Data.List as L
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.List as L
 import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B

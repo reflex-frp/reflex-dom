@@ -135,6 +135,18 @@ runWebGUI main = do
 --           peekCString ps
 --    return $ Just $ T.pack s
 --
+--fromJSBoolMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Bool)
+--fromJSBoolMaybe c t = do
+--  isBool <- jsvalueisboolean c t
+--  if not isBool then return Nothing else
+--    Just <$> jsvaluetoboolean c t
+--
+--fromJSNumMaybe :: JSContextRef -> JSValueRef -> IO (Maybe Double)
+--fromJSNumMaybe c t = do
+--  isNum <- jsvalueisnumber c t
+--  if not isNum then return Nothing else
+--    Just <$> jsvaluetonumber c t nullPtr
+--
 --getLocationHost :: WebView -> IO Text
 --getLocationHost wv = withWebViewContext wv $ \c -> do
 --  script <- jsstringcreatewithutf8cstring "location.host"
