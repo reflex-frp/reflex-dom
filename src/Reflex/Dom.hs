@@ -13,3 +13,4 @@ import Reflex.Dom.Time as X
 import Reflex.Dom.WebSocket as X
 import Reflex.Dom.Widget as X
 import Reflex.Dom.Xhr as X
+import Reflex.Dom.RenderSumtype as X

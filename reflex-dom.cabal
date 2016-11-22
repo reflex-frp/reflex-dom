@@ -41,6 +41,7 @@ library
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     directory == 1.2.*,
     exception-transformers == 0.4.*,
+    generics-sop >= 0.2.2 && < 0.3,
     ghcjs-dom >= 0.2.1 && < 0.3,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
