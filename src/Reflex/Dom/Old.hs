@@ -9,6 +9,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE LambdaCase #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 module Reflex.Dom.Old
        ( MonadWidget
        , El
@@ -43,7 +46,11 @@ module Reflex.Dom.Old
        ) where
 
 import Control.Arrow (first)
+#ifdef USE_TEMPLATE_HASKELL
+import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
+#else
 import Control.Lens (Lens, Lens', (%~), (&), (.~), (^.))
+#endif
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -86,12 +93,16 @@ instance attrs ~ Map Text Text => Default (ElConfig attrs) where
     , _elConfig_attributes = mempty
     }
 
+#ifdef USE_TEMPLATE_HASKELL
+makeLenses ''ElConfig
+#else
 elConfig_namespace :: Lens' (ElConfig attrs1) (Maybe Text)
 elConfig_namespace f (ElConfig a b) = (\a' -> ElConfig a' b) <$> f a
 {-# INLINE elConfig_namespace #-}
 elConfig_attributes :: Lens (ElConfig attrs1) (ElConfig attrs2) attrs1 attrs2
 elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
 {-# INLINE elConfig_attributes #-}
+#endif
 
 --TODO: HasDocument is still not accounted for
 type MonadWidgetConstraints t m =

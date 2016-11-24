@@ -1,13 +1,21 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PolyKinds #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Builder.Class.Events where
 
+#ifdef USE_TEMPLATE_HASKELL
+import Data.GADT.Compare.TH
+#else
 import Data.GADT.Compare
        (GOrdering(..), (:~:)(..), GEq(..), GCompare(..))
 import Control.Monad (ap)
+#endif
 
 data EventTag
    = AbortTag
@@ -155,6 +163,10 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'TouchcancelTag = ()
   EventResultType 'WheelTag = ()
 
+#ifdef USE_TEMPLATE_HASKELL
+deriveGEq ''EventName
+deriveGCompare ''EventName
+#else
 instance GEq EventName
     where geq Abort Abort             = return Refl
           geq Blur Blur               = return Refl
@@ -356,4 +368,4 @@ instance GCompare EventName
           gcompare Touchcancel Touchcancel = runGComparing $ return GEQ
           gcompare Touchcancel _           = GLT
           gcompare _ Touchcancel           = GGT
-
+#endif

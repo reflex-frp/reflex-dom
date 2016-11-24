@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -8,6 +9,9 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
@@ -443,20 +447,22 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   dValue <- fmap (zipDynWith readKey ixKeys) $ holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
   return $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange)
 
---concat <$> mapM makeLenses
---  [ ''TextAreaConfig
---  , ''TextArea
---  , ''TextInputConfig
---  , ''TextInput
---  , ''RangeInputConfig
---  , ''RangeInput
---  , ''FileInputConfig
---  , ''FileInput
---  , ''DropdownConfig
---  , ''Dropdown
---  , ''CheckboxConfig
---  , ''Checkbox
---  ]
+#ifdef USE_TEMPLATE_HASKELL
+concat <$> mapM makeLenses
+  [ ''TextAreaConfig
+  , ''TextArea
+  , ''TextInputConfig
+  , ''TextInput
+  , ''RangeInputConfig
+  , ''RangeInput
+  , ''FileInputConfig
+  , ''FileInput
+  , ''DropdownConfig
+  , ''Dropdown
+  , ''CheckboxConfig
+  , ''Checkbox
+  ]
+#else
 textAreaConfig_attributes :: Lens' (TextAreaConfig t) (Dynamic t (Map Text Text))
 textAreaConfig_attributes f (TextAreaConfig x1 x2 x3) = (\y -> TextAreaConfig x1 x2 y) <$> f x3
 {-# INLINE textAreaConfig_attributes #-}
@@ -587,6 +593,7 @@ checkbox_change f (Checkbox x1 x2) = (\y -> Checkbox x1 y) <$> f x2
 checkbox_value :: Lens' (Checkbox t) (Dynamic t Bool)
 checkbox_value f (Checkbox x1 x2) = (\y -> Checkbox y x2) <$> f x1
 {-# INLINE checkbox_value #-}
+#endif
 
 instance HasAttributes (TextAreaConfig t) where
   type Attrs (TextAreaConfig t) = Dynamic t (Map Text Text)

@@ -12,6 +12,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -34,7 +37,9 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
+#ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
+#endif
 import Data.Bitraversable
 import Data.Default
 import Data.Dependent.Map (DMap)
@@ -283,6 +288,7 @@ data GhcjsEventSpec er = GhcjsEventSpec
   , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
   }
 
+#ifndef USE_TEMPLATE_HASKELL
 phantom2 :: (Functor f, Contravariant f) => f a -> f b
 phantom2 = phantom
 {-# INLINE phantom2 #-}
@@ -293,6 +299,7 @@ ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (\a' -> GhcjsEventSpec a' b) <$>
 ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)))
 ghcjsEventSpec_handler f (GhcjsEventSpec _ b) = phantom2 (f b)
 {-# INLINE ghcjsEventSpec_handler #-}
+#endif
 
 instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
@@ -993,3 +1000,6 @@ wrapWindow wv _ = do
     , _window_raw = wv
     }
 
+#ifdef USE_TEMPLATE_HASKELL
+makeLenses ''GhcjsEventSpec
+#endif

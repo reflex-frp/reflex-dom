@@ -9,6 +9,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -53,6 +56,8 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
+
+import Reflex.Dom.Internal.Foreign (WebView)
 #else
 import Data.Word (Word8)
 import Control.Lens.Operators ((^.))
@@ -490,7 +495,7 @@ instance ToJS x Node where
   withJS = withJSNode
 
 
-#if 0
+#ifdef USE_TEMPLATE_HASKELL
 
 importJS :: Safety -> String -> String -> Q Type -> Q [Dec]
 importJS safety body name qt = do

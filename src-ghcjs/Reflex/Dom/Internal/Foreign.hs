@@ -18,7 +18,7 @@ import JavaScript.TypedArray.ArrayBuffer as JS
 data WebView = WebView
 
 runWebGUI :: ((WebView, JSContextRef) -> IO ()) -> IO ()
-runWebGUI main = run 0 (main (WebView, ()))
+runWebGUI main = main (WebView, ())
 
 quitWebView :: WebView -> IO ()
 quitWebView = error "quitWebView: unimplemented in GHCJS"

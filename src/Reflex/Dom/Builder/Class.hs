@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -12,6 +13,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Class
@@ -150,6 +154,7 @@ data TextNodeConfig t
                     , _textNodeConfig_setContents :: Event t Text
                     }
 
+#ifndef USE_TEMPLATE_HASKELL
 textNodeConfig_initialContents :: Lens' (TextNodeConfig t) Text
 textNodeConfig_initialContents f (TextNodeConfig a b) = (\a' -> TextNodeConfig a' b) <$> f a
 {-# INLINE textNodeConfig_initialContents #-}
@@ -160,6 +165,7 @@ textNodeConfig_setContents :: Lens
     (Event t2 Text)
 textNodeConfig_setContents f (TextNodeConfig a b) = (\b' -> TextNodeConfig a b') <$> f b
 {-# INLINE textNodeConfig_setContents #-}
+#endif
 
 instance (Reflex t) => Default (TextNodeConfig t) where
   {-# INLINABLE def #-}
@@ -225,6 +231,7 @@ data ElementConfig er t m
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
 
+#ifndef USE_TEMPLATE_HASKELL
 elementConfig_namespace :: Lens' (ElementConfig er t m) (Maybe Namespace)
 elementConfig_namespace f (ElementConfig a b c d) = (\a' -> ElementConfig a' b c d) <$> f a
 {-# INLINE elementConfig_namespace #-}
@@ -245,6 +252,7 @@ elementConfig_eventSpec :: Lens
     (EventSpec (DomBuilderSpace m2) er2)
 elementConfig_eventSpec f (ElementConfig a b c d) = (\d' -> ElementConfig a b c d') <$> f d
 {-# INLINE elementConfig_eventSpec #-}
+#endif
 
 data Element er d t
    = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
@@ -256,6 +264,7 @@ data PlaceholderConfig above t m
                        , _placeholderConfig_deleteSelf :: Event t ()
                        }
 
+#ifndef USE_TEMPLATE_HASKELL
 placeholderConfig_insertAbove :: Lens
     (PlaceholderConfig above1 t m1)
     (PlaceholderConfig above2 t m2)
@@ -266,6 +275,7 @@ placeholderConfig_insertAbove f (PlaceholderConfig a b) = (\a' -> PlaceholderCon
 placeholderConfig_deleteSelf :: Lens' (PlaceholderConfig above t m) (Event t ())
 placeholderConfig_deleteSelf f (PlaceholderConfig a b) = (\b' -> PlaceholderConfig a b') <$> f b
 {-# INLINE placeholderConfig_deleteSelf #-}
+#endif
 
 instance Reflex t => Default (PlaceholderConfig above t m) where
   {-# INLINABLE def #-}
@@ -287,6 +297,7 @@ data InputElementConfig er t m
                         , _inputElementConfig_elementConfig :: ElementConfig er t m
                         }
 
+#ifndef USE_TEMPLATE_HASKELL
 inputElementConfig_initialValue :: Lens' (InputElementConfig er t m) Text
 inputElementConfig_initialValue f (InputElementConfig a b c d e) = (\a' -> InputElementConfig a' b c d e) <$> f a
 {-# INLINE inputElementConfig_initialValue #-}
@@ -306,6 +317,7 @@ inputElementConfig_elementConfig :: Lens
     (ElementConfig er2 t m2)
 inputElementConfig_elementConfig f (InputElementConfig a b c d e) = (\e' -> InputElementConfig a b c d e') <$> f e
 {-# INLINE inputElementConfig_elementConfig #-}
+#endif
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (InputElementConfig er t m) where
   {-# INLINABLE def #-}
@@ -334,6 +346,7 @@ data TextAreaElementConfig er t m
                            , _textAreaElementConfig_elementConfig :: ElementConfig er t m
                            }
 
+#ifndef USE_TEMPLATE_HASKELL
 textAreaElementConfig_initialValue :: Lens' (TextAreaElementConfig er t m) Text
 textAreaElementConfig_initialValue f (TextAreaElementConfig a b c) = (\a' -> TextAreaElementConfig a' b c) <$> f a
 {-# INLINE textAreaElementConfig_initialValue #-}
@@ -347,6 +360,7 @@ textAreaElementConfig_elementConfig :: Lens
     (ElementConfig er2 t m2)
 textAreaElementConfig_elementConfig f (TextAreaElementConfig a b c) = (\c' -> TextAreaElementConfig a b c') <$> f c
 {-# INLINE textAreaElementConfig_elementConfig #-}
+#endif
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (TextAreaElementConfig er t m) where
   {-# INLINABLE def #-}
@@ -375,6 +389,7 @@ data RawElementConfig er t m = RawElementConfig
   , _rawElementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
   }
 
+#ifndef USE_TEMPLATE_HASKELL
 rawElementConfig_modifyAttributes :: Lens
     (RawElementConfig er t1 m)
     (RawElementConfig er t2 m)
@@ -389,6 +404,7 @@ rawElementConfig_eventSpec :: Lens
     (EventSpec (DomBuilderSpace m2) er2)
 rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a b') <$> f b
 {-# INLINE rawElementConfig_eventSpec #-}
+#endif
 
 instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig EventResult t m) where
   def = RawElementConfig
@@ -402,6 +418,7 @@ data SelectElementConfig er t m = SelectElementConfig
   , _selectElementConfig_elementConfig :: ElementConfig er t m
   }
 
+#ifndef USE_TEMPLATE_HASKELL
 selectElementConfig_initialValue :: Lens' (SelectElementConfig er t m) Text
 selectElementConfig_initialValue f (SelectElementConfig a b c) = (\a' -> SelectElementConfig a' b c) <$> f a
 {-# INLINE selectElementConfig_initialValue #-}
@@ -415,6 +432,7 @@ selectElementConfig_elementConfig :: Lens
     (ElementConfig er2 t m2)
 selectElementConfig_elementConfig f (SelectElementConfig a b c) = (\c' -> SelectElementConfig a b c') <$> f c
 {-# INLINE selectElementConfig_elementConfig #-}
+#endif
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (SelectElementConfig er t m) where
   def = SelectElementConfig
@@ -430,6 +448,18 @@ data SelectElement er d t = SelectElement
   , _selectElement_hasFocus :: Dynamic t Bool
   , _selectElement_raw :: RawSelectElement d
   }
+
+#ifdef USE_TEMPLATE_HASKELL
+concat <$> mapM makeLenses
+  [ ''TextNodeConfig
+  , ''ElementConfig
+  , ''PlaceholderConfig
+  , ''InputElementConfig
+  , ''TextAreaElementConfig
+  , ''SelectElementConfig
+  , ''RawElementConfig
+  ]
+#endif
 
 class CanDeleteSelf t a | a -> t where
   deleteSelf :: Lens' a (Event t ())

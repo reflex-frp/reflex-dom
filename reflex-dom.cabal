@@ -19,6 +19,11 @@ extra-source-files: src-ghc/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
 
+flag use-template-haskell
+  description: Use template haskell to generate lenses
+  default: True
+  manual: True
+
 flag use-reflex-optimizer
   description: Use the GHC plugin Reflex.Optimizer on some of the modules in the package.  This is still experimental.
   default: False
@@ -37,10 +42,10 @@ library
     contravariant >= 1.4 && < 1.5,
     data-default >= 0.5 && < 0.8,
     dependent-map == 0.2.*,
-    dependent-sum == 0.4.*,
+    dependent-sum == 0.3.*,
     directory == 1.2.*,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.6.0.0 && < 0.7,
+    ghcjs-dom >= 0.7.0.0 && < 0.8,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
     lens >= 4.7 && < 5,
@@ -68,7 +73,7 @@ library
   else
     hs-source-dirs: src-ghc
     build-depends:
-      jsaddle >=0.6.0.0 && <0.7
+      jsaddle >=0.7.0.0 && <0.8
     if !os(windows)
       build-depends: unix == 2.7.*
 
@@ -103,6 +108,12 @@ library
 
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
+
+  if flag(use-template-haskell)
+    build-depends:
+      dependent-sum-template >= 0.0.0.5 && < 0.1
+    other-extensions: TemplateHaskell
+    cpp-options: -DUSE_TEMPLATE_HASKELL
 
 --test-suite hlint
 --  build-depends: base, hlint == 1.9.*
