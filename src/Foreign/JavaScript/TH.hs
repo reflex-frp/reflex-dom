@@ -19,7 +19,9 @@
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
 module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
+#ifdef USE_TEMPLATE_HASKELL
                              , Safety (..)
+#endif
                              ) where
 
 import Prelude hiding((!!))
@@ -31,7 +33,9 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
 
+#ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
+#endif
 
 import GHCJS.DOM.Types
        (toJSString, liftJSM, askJSM, runJSM, JSContextRef,

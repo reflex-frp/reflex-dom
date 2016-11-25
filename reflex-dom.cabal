@@ -42,7 +42,6 @@ library
     contravariant >= 1.4 && < 1.5,
     data-default >= 0.5 && < 0.8,
     dependent-map == 0.2.*,
-    dependent-sum == 0.3.*,
     directory == 1.2.*,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.7.0.0 && < 0.8,
@@ -57,7 +56,6 @@ library
     reflex == 0.5.*,
     semigroups >= 0.16 && < 0.19,
     stm == 2.4.*,
-    template-haskell,
     text == 1.2.*,
     these >= 0.4 && < 0.8,
     time >= 1.4 && < 1.7,
@@ -111,9 +109,14 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum-template >= 0.0.0.5 && < 0.1
+      dependent-sum == 0.3.*,
+      dependent-sum-template >= 0.0.0.5 && < 0.1,
+      template-haskell
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
+  else
+    build-depends:
+      dependent-sum == 0.4.*
 
 --test-suite hlint
 --  build-depends: base, hlint == 1.9.*
