@@ -69,7 +69,7 @@ import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
-import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChild)
+import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChildUnchecked)
 import GHCJS.DOM.Types
        (MonadJSM, strictEqual, liftJSM, JSM, IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
@@ -250,7 +250,7 @@ namedNodeMapGetNames self = do
   l <- NNM.getLength self
   let locations = if l == 0 then [] else [0..l-1] -- Can't use 0..l-1 if l is 0 because l is unsigned and will wrap around
   fmap (Set.fromList . catMaybes) $ forM locations $ \i -> do
-    Just n <- NNM.item self i
+    n <- NNM.itemUnchecked self i
     getNodeName n
 
 nodeClear :: IsNode self => self -> JSM ()
@@ -259,7 +259,7 @@ nodeClear n = do
   case mfc of
     Nothing -> return ()
     Just fc -> do
-      _ <- removeChild n $ Just fc
+      removeChildUnchecked n $ Just fc
       nodeClear n
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a

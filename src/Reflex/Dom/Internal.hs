@@ -49,8 +49,8 @@ import GHCJS.DOM.Types (MonadJSM(..), JSM)
 {-# INLINABLE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
 mainWidget w = withJSContextSingleton $ \jsSing -> do
-  Just doc <- currentDocument
-  Just body <- getBody doc
+  doc <- currentDocumentUnchecked
+  body <- getBodyUnchecked doc
   attachWidget body jsSing w
   forever $ do
     liftIO $ threadDelay 100000
@@ -60,10 +60,10 @@ mainWidget w = withJSContextSingleton $ \jsSing -> do
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> JSM ()
 mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
-  Just doc <- currentDocument
-  Just headElement <- getHead doc
+  doc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked doc
   attachWidget headElement jsSing h
-  Just body <- getBody doc
+  body <- getBodyUnchecked doc
   attachWidget body jsSing b
   forever $ do
     liftIO $ threadDelay 100000
@@ -72,10 +72,10 @@ mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
 {-# INLINABLE mainWidgetWithCss #-}
 mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
 mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
-  Just doc <- currentDocument
-  Just headElement <- getHead doc
+  doc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked doc
   setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
-  Just body <- getBody doc
+  body <- getBodyUnchecked doc
   attachWidget body jsSing w
   forever $ do
     liftIO $ threadDelay 100000
@@ -94,9 +94,9 @@ attachWidget rootElement wv w = liftIO $ fst <$> attachWidget' rootElement wv w
 
 mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> JSM ()
 mainWidgetWithHead' widgets = withJSContextSingleton $ \jsSing -> do
- Just doc <- currentDocument
- Just headElement <- getHead doc
- Just bodyElement <- getBody doc
+ doc <- currentDocumentUnchecked
+ headElement <- getHeadUnchecked doc
+ bodyElement <- getBodyUnchecked doc
 --    runWebGUI $ \webView -> withWebViewSingleton webView $ \wv ->
  liftIO $ fmap fst $ attachWidget'' $ \events -> do
   let (headWidget, bodyWidget) = widgets
@@ -107,8 +107,8 @@ mainWidgetWithHead' widgets = withJSContextSingleton $ \jsSing -> do
 
 unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> JSContextSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
 unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w = (`runWithJSContextSingleton` jsSing) $ do
-  Just doc <- getOwnerDocument rootElement
-  Just df <- createDocumentFragment doc
+  doc <- getOwnerDocumentUnchecked rootElement
+  df <- createDocumentFragmentUnchecked doc
   let builderEnv = ImmediateDomBuilderEnv
         { _immediateDomBuilderEnv_document = doc
         , _immediateDomBuilderEnv_parent = toNode df
@@ -116,7 +116,7 @@ unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w = (
         }
   result <- runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv
   setInnerHTML rootElement $ Just ("" :: String)
-  _ <- appendChild rootElement $ Just df
+  _ <- appendChildUnchecked rootElement $ Just df
   return result
 
 {-# INLINABLE attachWidget' #-}
@@ -151,8 +151,8 @@ attachWidget'' w = do
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
 mainWidgetInElementById eid w = withJSContextSingleton $ \jsSing -> do
-  Just doc <- currentDocument
-  Just root <- getElementById doc eid
+  doc <- currentDocumentUnchecked
+  root <- getElementByIdUnchecked doc eid
   attachWidget root jsSing w
   forever $ do
     liftIO $ threadDelay 100000
@@ -168,9 +168,9 @@ data AppOutput t = AppOutput --TODO: Add quit event
 
 runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> JSM ()
 runApp' app = withJSContextSingleton $ \jsSing -> do
-  Just doc <- currentDocument
-  Just body <- getBody doc
-  Just win <- getDefaultView doc
+  doc <- currentDocumentUnchecked
+  body <- getBodyUnchecked doc
+  win <- getDefaultViewUnchecked doc
   rec o <- attachWidget body jsSing $ do
         w <- lift $ wrapWindow win $ _appOutput_windowConfig o
         app $ AppInput

@@ -54,7 +54,7 @@ import Data.Monoid
 import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
-import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
+import GHCJS.DOM.Document (Document, createDocumentFragmentUnchecked, createElementUnchecked, createElementNSUnchecked, createTextNodeUnchecked)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
@@ -65,9 +65,9 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
-import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling,
-                       removeChild, setNodeValue, toNode)
-import qualified GHCJS.DOM.Node as DOM (insertBefore)
+import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, getPreviousSiblingUnchecked,
+                       removeChild_, setNodeValue, toNode)
+import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
@@ -75,6 +75,7 @@ import GHCJS.DOM.Types
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
+import Language.Javascript.JSaddle (call, eval)
 
 import Debug.Trace hiding (traceEvent)
 
@@ -125,64 +126,109 @@ askEvents = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_events
 append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
 append n = do
   p <- askParent
-  _ <- liftJSM $ appendChild p $ Just n
+  liftJSM $ appendChild_ p $ Just n
   return ()
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
 textNodeInternal t = do
   doc <- askDocument
-  Just n <- liftJSM $ createTextNode doc t
+  n <- liftJSM $ createTextNodeUnchecked doc t
   append n
   return n
 
 -- | s and e must both be children of the same node and s must precede e
 {-# INLINABLE deleteBetweenInclusive #-}
 deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteBetweenInclusive s e = do
-  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  case mCurrentParent of
-    Nothing -> return () --TODO: Is this the right behavior?
-    Just currentParent -> do
-      deleteUpToGivenParent currentParent s e
-      _ <- removeChild currentParent $ Just e
-      return ()
+deleteBetweenInclusive s e = liftJSM $ do
+  f <- eval ("(function(s,e){ \
+    p = e.parentNode; \
+    if(p !== null) { \
+        for(;;){ \
+            x = e.previousSibling; \
+            p.removeChild(x); \
+            if(s===x) break; \
+        } \
+        p.removeChild(e); \
+    }})" :: Text)
+  void $ call f f (s, e)
+
+--  do
+--  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+--  case mCurrentParent of
+--    Nothing -> return () --TODO: Is this the right behavior?
+--    Just currentParent -> do
+--      deleteUpToGivenParent currentParent s e
+--      removeChild_ currentParent $ Just e
+--      return ()
 
 -- | s and e must both be children of the same node and s must precede e
 deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteBetweenExclusive s e = do
-  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  case mCurrentParent of
-    Nothing -> return () --TODO: Is this the right behavior?
-    Just currentParent -> do
-      let go = do
-            Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
-            _ <- removeChild currentParent $ Just x
-            liftJSM (strictEqual s x) >>= \case
-                True  -> return ()
-                False -> go
-      go
-      _ <- removeChild currentParent $ Just e
-      return ()
+deleteBetweenExclusive s e = liftJSM $ do
+  f <- eval ("(function(s,e){ \
+    p = e.parentNode; \
+    if(p !== null) { \
+        for(;;){ \
+            x = e.previousSibling; \
+            p.removeChild(x); \
+            if(s===x) break; \
+        } \
+        p.removeChild(e); \
+     }})" :: Text)
+  void $ call f f (s, e)
+
+--    do
+--  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+--  case mCurrentParent of
+--    Nothing -> return () --TODO: Is this the right behavior?
+--    Just currentParent -> do
+--      let go = do
+--            x <- getPreviousSiblingUnchecked e -- This can't be Nothing because we should hit 's' first
+--            removeChild_ currentParent $ Just x
+--            liftJSM (strictEqual s x) >>= \case
+--                True  -> return ()
+--                False -> go
+--      go
+--      removeChild_ currentParent $ Just e
+--      return ()
 
 -- | s and e must both be children of the same node and s must precede e; s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteUpTo s e = do
-  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  case mCurrentParent of
-    Nothing -> return () --TODO: Is this the right behavior?
-    Just currentParent -> deleteUpToGivenParent currentParent s e
+deleteUpTo s e = liftJSM $ do
+  f <- eval ("(function(s,e){ \
+    p = e.parentNode; \
+    if(p !== null) { \
+        for(;;) { \
+            x = e.previousSibling; \
+            p.removeChild(x); \
+            if(s===x) break; \
+        } \
+    }})" :: Text)
+  void $ call f f (s, e)
+--    do
+--  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+--  case mCurrentParent of
+--    Nothing -> return () --TODO: Is this the right behavior?
+--    Just currentParent -> deleteUpToGivenParent currentParent s e
 
 {-# INLINABLE deleteUpToGivenParent #-}
 deleteUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
-deleteUpToGivenParent currentParent s e = do
-  fix $ \loop -> do
-    Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
-    _ <- removeChild currentParent $ Just x
-    liftJSM (strictEqual s x) >>= \case
-        True  -> return ()
-        False -> loop
+deleteUpToGivenParent currentParent s e = liftJSM $ do
+  f <- eval ("(function(p,s,e){ \
+    for(;;){ \
+        x = e.previousSibling; \
+        p.removeChild(x); \
+        if(s===x) break; \
+    }})" :: Text)
+  void $ call f f (currentParent, s, e)
+--do
+--  fix $ \loop -> do
+--    x <- getPreviousSiblingUnchecked e -- This can't be Nothing because we should hit 's' first
+--    removeChild_ currentParent $ Just x
+--    liftJSM (strictEqual s x) >>= \case
+--        True  -> return ()
+--        False -> loop
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
 
@@ -232,9 +278,9 @@ makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> Eleme
 makeElement elementTag cfg child = do
   doc <- askDocument
   events <- askEvents
-  Just e <- liftJSM $ case cfg ^. namespace of
-    Nothing -> createElement doc (Just elementTag)
-    Just ens -> createElementNS doc (Just ens) (Just elementTag)
+  e <- liftJSM $ case cfg ^. namespace of
+    Nothing -> createElementUnchecked doc (Just elementTag)
+    Just ens -> createElementNSUnchecked doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> lift $ setAttribute e n v
     Just ans -> lift $ setAttributeNS e (Just ans) n v
@@ -305,7 +351,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> do
-        Just (t :: DOM.EventTarget) <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
         let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
@@ -335,7 +381,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
     Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
-    Just v0 <- Input.getValue domInputElement
+    v0 <- Input.getValueUnchecked domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- performEvent $ ffor (cfg ^. inputElementConfig_setValue) $ \v' -> do
@@ -349,11 +395,12 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     checkedChangedByUI <- wrapDomEvent domInputElement (`on` Element.click) $ do
       Input.getChecked domInputElement
     checkedChangedBySetChecked <- performEvent $ ffor (_inputElementConfig_setChecked cfg) $ \newChecked -> do
-      oldChecked <- Input.getChecked domInputElement
-      if newChecked /= oldChecked
-        then do Input.setChecked domInputElement newChecked
+--      oldChecked <- Input.getChecked domInputElement
+--      if newChecked /= oldChecked
+--        then do
+                Input.setChecked domInputElement newChecked
                 return $ Just newChecked
-        else return Nothing
+--        else return Nothing
     c <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
@@ -382,7 +429,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
-    Just v0 <- TextArea.getValue domTextAreaElement
+    v0 <- TextArea.getValueUnchecked domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- performEvent $ ffor (cfg ^. textAreaElementConfig_setValue) $ \v' -> do
@@ -432,13 +479,13 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
     -- We draw 'after' in this roundabout way to avoid using MonadFix
-    Just after <- createTextNode (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
+    after <- createTextNodeUnchecked (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
     let drawInitialChild = do
           result <- a0
           append after
           return result
     (result0, result') <- lift $ runWithReplace (runImmediateDomBuilderT drawInitialChild initialEnv) $ ffor a' $ \child -> do
-      Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+      df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
       result <- runImmediateDomBuilderT child $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
         }
@@ -452,7 +499,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
         drawChildInitial child = runImmediateDomBuilderT ((,,) <$> pure (error "sequenceDMapWithAdjust{ImmediateDomBuilderT}: drawChildInitial: DocumentFragment evaluated") <*> textNodeInternal ("" :: Text) <*> child) initialEnv --TODO: Don't return a DocumentFragment at all here; this will require that sequenceDMapWithAdjust accept differently-typed values for the constant and Event arguments.
         drawChildUpdate :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)
         drawChildUpdate child = do
-          Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+          df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
           runImmediateDomBuilderT ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child) $ initialEnv
             { _immediateDomBuilderEnv_parent = toNode df
             }
@@ -491,8 +538,8 @@ insertImmediateAbove :: (IsNode placeholder, PerformEvent t m, MonadJSM (Perform
 insertImmediateAbove n toInsertAbove = do
   events <- askEvents
   lift $ performEvent $ ffor toInsertAbove $ \new -> do
-    Just doc <- getOwnerDocument n
-    Just df <- createDocumentFragment doc
+    doc <- getOwnerDocumentUnchecked n
+    df <- createDocumentFragmentUnchecked doc
     result <- runImmediateDomBuilderT new $ ImmediateDomBuilderEnv
       { _immediateDomBuilderEnv_parent = toNode df
       , _immediateDomBuilderEnv_document = doc
@@ -503,10 +550,8 @@ insertImmediateAbove n toInsertAbove = do
 
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do
-  mp <- getParentNode existing
-  case mp of
-    Nothing -> trace "ImmediateDomBuilderT: placeholder: Warning: (getParentNode n) returned Nothing" $ return ()
-    Just p -> void $ DOM.insertBefore p (Just new) (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
+  p <- getParentNodeUnchecked existing
+  DOM.insertBefore_ p (Just new) (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
 instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   type Performable (ImmediateDomBuilderT t m) = Performable m

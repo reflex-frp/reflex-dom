@@ -281,9 +281,7 @@ instance MonadJS JSCtx_IO IO where
   fromJSString (JSRef_IO r) = return $ JS.fromJSString $ JS.pFromJSVal r
   fromJSArray (JSRef_IO r) = fmap coerce $ JS.toListIO $ coerce r
   fromJSUint8Array (JSRef_IO r) = fmap (JS.toByteString 0 Nothing . JS.createFromArrayBuffer) $ JSArrayBuffer.unsafeFreeze $ JS.pFromJSVal r --TODO: Assert that this is immutable
-  fromJSNumber (JSRef_IO r) = do
-    Just n <- JS.fromJSVal r
-    return n
+  fromJSNumber (JSRef_IO r) = JS.fromJSValUnchecked r
   withJSBool b f = f $ JSRef_IO $ JS.toJSBool b
   withJSString s f = f $ JSRef_IO $ JS.pToJSVal $ JS.toJSString s
   withJSNumber n f = do

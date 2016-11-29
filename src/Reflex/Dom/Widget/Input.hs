@@ -38,7 +38,7 @@ import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
-import GHCJS.DOM.Types (MonadJSM, File, unsafeCastTo)
+import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (Element(..), EventTarget(..))
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -287,8 +287,8 @@ checkboxView dAttrs dValue = do
   postBuild <- getPostBuild
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
-        Just t <- Event.getTarget evt
-        b <- Input.getChecked =<< unsafeCastTo Input.HTMLInputElement t
+        t <- Event.getTargetUnchecked evt
+        b <- Input.getChecked $ uncheckedCastTo Input.HTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
@@ -299,8 +299,8 @@ checkboxView dAttrs dValue = do
             , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
                 Click -> error "impossible"
                 _ -> do
-                  Just (e :: DOM.EventTarget) <- withIsEvent en $ Event.getTarget evt
-                  element <- unsafeCastTo DOM.Element e
+                  e :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt
+                  let element = uncheckedCastTo DOM.Element e
                   mr <- runReaderT (defaultDomEventHandler element en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
@@ -340,7 +340,7 @@ fileInput config = do
   eRaw <- inputElement cfg
   let e = _inputElement_raw eRaw
   eChange <- wrapDomEvent e (`on` Element.change) $ do
-      Just files <- Input.getFiles e
+      files <- Input.getFilesUnchecked e
       len <- FileList.getLength files
       mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) [0 .. len-1]
   dValue <- holdDyn [] eChange
