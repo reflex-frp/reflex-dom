@@ -137,7 +137,8 @@ textNodeInternal t = do
   append n
   return n
 
--- | s and e must both be children of the same node and s must precede e
+-- | s and e must both be children of the same node and s must precede e;
+--   s, e and all nodes between s and e will be removed
 {-# INLINABLE deleteBetweenInclusive #-}
 deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenInclusive s e = liftJSM $ do
@@ -153,16 +154,8 @@ deleteBetweenInclusive s e = liftJSM $ do
     }})" :: Text)
   void $ call f f (s, e)
 
---  do
---  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
---  case mCurrentParent of
---    Nothing -> return () --TODO: Is this the right behavior?
---    Just currentParent -> do
---      deleteUpToGivenParent currentParent s e
---      removeChild_ currentParent $ Just e
---      return ()
-
--- | s and e must both be children of the same node and s must precede e
+-- | s and e must both be children of the same node and s must precede e;
+--   all nodes between s and e will be removed, but s and e will not be removed
 deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenExclusive s e = liftJSM $ do
   f <- eval ("(function(s,e){ \
@@ -170,29 +163,14 @@ deleteBetweenExclusive s e = liftJSM $ do
     if(p !== null) { \
         for(;;){ \
             x = e.previousSibling; \
-            p.removeChild(x); \
             if(s===x) break; \
+            p.removeChild(x); \
         } \
-        p.removeChild(e); \
      }})" :: Text)
   void $ call f f (s, e)
 
---    do
---  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
---  case mCurrentParent of
---    Nothing -> return () --TODO: Is this the right behavior?
---    Just currentParent -> do
---      let go = do
---            x <- getPreviousSiblingUnchecked e -- This can't be Nothing because we should hit 's' first
---            removeChild_ currentParent $ Just x
---            liftJSM (strictEqual s x) >>= \case
---                True  -> return ()
---                False -> go
---      go
---      removeChild_ currentParent $ Just e
---      return ()
-
--- | s and e must both be children of the same node and s must precede e; s and all nodes between s and e will be removed, but e will not be removed
+-- | s and e must both be children of the same node and s must precede e;
+--   s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteUpTo s e = liftJSM $ do
@@ -206,12 +184,8 @@ deleteUpTo s e = liftJSM $ do
         } \
     }})" :: Text)
   void $ call f f (s, e)
---    do
---  mCurrentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
---  case mCurrentParent of
---    Nothing -> return () --TODO: Is this the right behavior?
---    Just currentParent -> deleteUpToGivenParent currentParent s e
 
+-- | s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpToGivenParent #-}
 deleteUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
 deleteUpToGivenParent currentParent s e = liftJSM $ do
@@ -222,13 +196,6 @@ deleteUpToGivenParent currentParent s e = liftJSM $ do
         if(s===x) break; \
     }})" :: Text)
   void $ call f f (currentParent, s, e)
---do
---  fix $ \loop -> do
---    x <- getPreviousSiblingUnchecked e -- This can't be Nothing because we should hit 's' first
---    removeChild_ currentParent $ Just x
---    liftJSM (strictEqual s x) >>= \case
---        True  -> return ()
---        False -> loop
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
 
@@ -395,12 +362,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     checkedChangedByUI <- wrapDomEvent domInputElement (`on` Element.click) $ do
       Input.getChecked domInputElement
     checkedChangedBySetChecked <- performEvent $ ffor (_inputElementConfig_setChecked cfg) $ \newChecked -> do
---      oldChecked <- Input.getChecked domInputElement
---      if newChecked /= oldChecked
---        then do
-                Input.setChecked domInputElement newChecked
+      oldChecked <- Input.getChecked domInputElement
+      if newChecked /= oldChecked
+        then do Input.setChecked domInputElement newChecked
                 return $ Just newChecked
---        else return Nothing
+        else return Nothing
     c <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
@@ -857,7 +823,7 @@ showEventName en = case en of
 
 {-# INLINABLE elementOnEventName #-}
 elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
-elementOnEventName en e = \x -> liftIO (putStrLn $ "element event handler added " <> showEventName en) >> (case en of
+elementOnEventName en e = case en of
   Abort -> on e Element.abort
   Blur -> on e Element.blurEvent
   Change -> on e Element.change
@@ -903,12 +869,11 @@ elementOnEventName en e = \x -> liftIO (putStrLn $ "element event handler added 
   Touchstart -> on e Element.touchStart
   Touchmove -> on e Element.touchMove
   Touchend -> on e Element.touchEnd
-  Touchcancel -> on e Element.touchCancel) (liftIO (putStrLn $ "element event fired " <> showEventName en) >> x)
-    >>= \y -> return (liftIO (putStrLn $ "element event removed " <> showEventName en) >> y)
+  Touchcancel -> on e Element.touchCancel
 
 {-# INLINABLE windowOnEventName #-}
 windowOnEventName :: EventName en -> DOM.Window -> EventM DOM.Window (EventType en) () -> JSM (JSM ())
-windowOnEventName en e = \x -> liftIO (putStrLn $ "window event handler added " <> showEventName en) >> (case en of
+windowOnEventName en e = case en of
   Abort -> on e Window.abort
   Blur -> on e Window.blurEvent
   Change -> on e Window.change
@@ -954,8 +919,7 @@ windowOnEventName en e = \x -> liftIO (putStrLn $ "window event handler added " 
   Touchstart -> on e Window.touchStart
   Touchmove -> on e Window.touchMove
   Touchend -> on e Window.touchEnd
-  Touchcancel -> on e Window.touchCancel) (liftIO (putStrLn $ "window event fired " <> showEventName en) >> x)
-    >>= \y -> return (liftIO (putStrLn $ "windo event removed " <> showEventName en) >> y)
+  Touchcancel -> on e Window.touchCancel
 
 {-# INLINABLE wrapDomEvent #-}
 wrapDomEvent :: (TriggerEvent t m, MonadJSM m) => e -> (e -> EventM e event () -> JSM (JSM ())) -> EventM e event a -> m (Event t a)
