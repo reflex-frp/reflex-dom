@@ -363,10 +363,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       Input.getChecked domInputElement
     checkedChangedBySetChecked <- performEvent $ ffor (_inputElementConfig_setChecked cfg) $ \newChecked -> do
       oldChecked <- Input.getChecked domInputElement
-      if newChecked /= oldChecked
-        then do Input.setChecked domInputElement newChecked
-                return $ Just newChecked
-        else return Nothing
+      Input.setChecked domInputElement newChecked
+      return $ if newChecked /= oldChecked
+                    then Just newChecked
+                    else Nothing
     c <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
