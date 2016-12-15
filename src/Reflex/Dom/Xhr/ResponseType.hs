@@ -17,5 +17,5 @@ data XhrResponseBody = XhrResponseBody_Default Text
                      | XhrResponseBody_Text Text
                      | XhrResponseBody_Blob Blob
                      | XhrResponseBody_ArrayBuffer ByteString
-    deriving (Eq)
+--    deriving (Eq)
 

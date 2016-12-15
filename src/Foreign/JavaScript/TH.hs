@@ -60,8 +60,6 @@ import Data.Word
 import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
-
-import Reflex.Dom.Internal.Foreign (WebView)
 #else
 import Data.Word (Word8)
 import Control.Lens.Operators ((^.))

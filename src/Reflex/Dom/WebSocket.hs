@@ -32,7 +32,7 @@ import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception (SomeException, catch)
+import Control.Exception (SomeException)
 import Control.Lens
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
@@ -42,6 +42,8 @@ import Data.Default
 import Data.IORef
 import Data.Maybe (isJust)
 import Data.Text
+import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
@@ -72,12 +74,12 @@ instance (IsWebSocketMessage a, IsWebSocketMessage b) => IsWebSocketMessage (Eit
   webSocketSend jws (Right a) = webSocketSend jws a
 
 
-webSocket :: (MonadIO m, MonadIO (Performable m), HasWebView m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
+webSocket :: (MonadJSM m, MonadJSM (Performable m), HasJSContext m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
 webSocket url config = webSocket' url config onBSMessage
 
-webSocket' :: (MonadIO m, MonadIO (Performable m), HasWebView m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> (Either ByteString JSVal -> b) -> m (RawWebSocket t b)
+webSocket' :: (MonadJSM m, MonadJSM (Performable m), HasJSContext m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> (Either ByteString JSVal -> JSM b) -> m (RawWebSocket t b)
 webSocket' url config onRawMessage = do
-  wv <- fmap unWebViewSingleton askWebView
+  wv <- fmap unJSContextSingleton askJSContext
   (eRecv, onMessage) <- newTriggerEvent
   currentSocketRef <- liftIO $ newIORef Nothing
   (eOpen, triggerEOpen) <- newTriggerEventWithOnComplete
@@ -88,27 +90,26 @@ webSocket' url config onRawMessage = do
   let onOpen = triggerEOpen () $ liftIO $ void $ atomically $ tryPutTMVar isOpen ()
       onError = triggerEError ()
       onClose args = do
-        triggerEClose args
-        --TODO: Is the fork necessary, or do event handlers run in their own threads automatically?
-        void $ forkIO $ do
-          _ <- liftIO $ atomically $ tryTakeTMVar isOpen
-          liftIO $ writeIORef currentSocketRef Nothing
-          when (_webSocketConfig_reconnect config) $ do
-            liftIO $ threadDelay 1000000
-            start
+        liftIO $ triggerEClose args
+        _ <- liftIO $ atomically $ tryTakeTMVar isOpen
+        liftIO $ writeIORef currentSocketRef Nothing
+        when (_webSocketConfig_reconnect config) $ do
+          liftIO $ threadDelay 1000000
+          start
       start = do
-        ws <- liftIO $ newWebSocket wv url (onMessage . onRawMessage) onOpen onError onClose
+        ws <- newWebSocket wv url (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
         return ()
-  performEvent_ . (liftIO start <$) =<< getPostBuild
+  performEvent_ . (liftJSM start <$) =<< getPostBuild
   performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> forM_ payloads $ \payload ->
     liftIO $ atomically $ writeTQueue payloadQueue payload
-  performEvent_ $ ffor (_webSocketConfig_close config) $ \(code,reason) -> liftIO $ do
-    mws <- readIORef currentSocketRef
+  performEvent_ $ ffor (_webSocketConfig_close config) $ \(code,reason) -> liftJSM $ do
+    mws <- liftIO $ readIORef currentSocketRef
     case mws of
       Nothing -> return ()
       Just ws -> closeWebSocket ws (fromIntegral code) reason
 
+  ctx <- askJSM
   _ <- liftIO $ forkIO $ forever $ do
     payload <- atomically $ do
       pl     <- readTQueue payloadQueue
@@ -118,9 +119,9 @@ webSocket' url config onRawMessage = do
     mws <- liftIO $ readIORef currentSocketRef
     success <- case mws of
       Nothing -> return False
-      Just ws -> liftIO ((webSocketSend ws payload >> return True)
-                         `catch`
-                         (\(_ :: SomeException) -> return False))
+      Just ws -> runJSM ((webSocketSend ws payload >> return True)
+                         `JS.catch`
+                         (\(_ :: SomeException) -> return False)) ctx
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 

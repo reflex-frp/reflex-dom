@@ -1,12 +1,13 @@
 module Reflex.Dom.Location (getLocationHost, getLocationProtocol) where
 
 import Data.Text (Text)
-import Reflex.Dom.Class
+import GHCJS.DOM.Types (MonadJSM)
+import GHCJS.DOM (currentWindowUnchecked)
+import GHCJS.DOM.Window (getLocationUnchecked)
+import GHCJS.DOM.Location (getProtocol, getHost)
 
-import Control.Monad.IO.Class
+getLocationHost :: (MonadJSM m) => m Text
+getLocationHost = currentWindowUnchecked >>= getLocationUnchecked >>= getHost
 
-getLocationHost :: (MonadIO m) => WebViewSingleton x -> m Text
-getLocationHost (WebViewSingleton wv) = liftIO $ F.getLocationHost wv
-
-getLocationProtocol :: (MonadIO m) => WebViewSingleton x -> m Text
-getLocationProtocol (WebViewSingleton wv) = liftIO $ F.getLocationProtocol wv
+getLocationProtocol :: (MonadJSM m) => m Text
+getLocationProtocol = currentWindowUnchecked >>= getLocationUnchecked >>= getProtocol

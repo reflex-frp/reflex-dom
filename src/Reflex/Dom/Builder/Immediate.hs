@@ -65,13 +65,13 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
-import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, getPreviousSiblingUnchecked,
-                       removeChild_, setNodeValue, toNode)
+import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked,
+                       setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
-        ToDOMString, TouchEvent, WheelEvent, strictEqual, uncheckedCastTo)
+        ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
