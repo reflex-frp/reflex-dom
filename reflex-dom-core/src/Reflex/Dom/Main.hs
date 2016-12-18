@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
-module Reflex.Dom.Internal where
+module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 

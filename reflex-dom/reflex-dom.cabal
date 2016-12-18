@@ -1,0 +1,67 @@
+Name: reflex-dom
+Version: 0.4
+Synopsis: Functional Reactive Web Apps with Reflex
+Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+License: BSD3
+License-file: LICENSE
+Author: Ryan Trinkle
+Maintainer: ryan.trinkle@gmail.com
+Stability: Experimental
+Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
+Build-type: Simple
+cabal-version: >=1.24
+-- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
+extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
+                    src/Reflex/Dom/WebSocket/Foreign.hs
+                    src/Reflex/Dom/Xhr/ResponseType.hs
+                    src/Reflex/Dom/Xhr/Exception.hs
+
+flag webkit2gtk
+  description: Use WebKit2 version of WebKitGTK.
+  default: True
+
+library
+  hs-source-dirs: src
+  build-depends:
+    base >= 4.7 && < 4.10,
+    bytestring == 0.10.*,
+    reflex == 0.5.*,
+    reflex-dom-core >=0.4 && <0.5,
+    text == 1.2.*
+  if flag(webkit2gtk)
+    build-depends:
+      jsaddle-webkit2gtk
+  else
+    build-depends:
+      jsaddle-webkitgtk
+
+  exposed-modules:
+    Reflex.Dom
+    Reflex.Dom.Internal
+  reexported-modules:
+      Foreign.JavaScript.TH
+    , Reflex.Dom.Builder.Class
+    , Reflex.Dom.Builder.Class.Events
+    , Reflex.Dom.Builder.Immediate
+    , Reflex.Dom.Builder.InputDisabled
+    , Reflex.Dom.Builder.Static
+    , Reflex.Dom.Class
+    , Reflex.Dom.Core
+    , Reflex.Dom.Location
+    , Reflex.Dom.Main
+    , Reflex.Dom.Old
+    , Reflex.Dom.Time
+    , Reflex.Dom.WebSocket
+    , Reflex.Dom.Widget
+    , Reflex.Dom.Widget.Basic
+    , Reflex.Dom.Widget.Input
+    , Reflex.Dom.Widget.Lazy
+    , Reflex.Dom.Widget.Resize
+    , Reflex.Dom.Xhr
+
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+
+source-repository head
+  type: git
+  location: https://github.com/reflex-frp/reflex-dom
+  subdir: reflex-dom

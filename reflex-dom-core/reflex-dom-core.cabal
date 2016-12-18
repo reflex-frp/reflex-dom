@@ -1,4 +1,4 @@
-Name: reflex-dom
+Name: reflex-dom-core
 Version: 0.4
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
@@ -71,15 +71,15 @@ library
 
   exposed-modules:
     Foreign.JavaScript.TH
-    Reflex.Dom
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
-    Reflex.Dom.Internal
+    Reflex.Dom.Core
     Reflex.Dom.Location
+    Reflex.Dom.Main
     Reflex.Dom.Old
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
@@ -120,3 +120,4 @@ library
 source-repository head
   type: git
   location: https://github.com/reflex-frp/reflex-dom
+  subdir: reflex-dom-core
