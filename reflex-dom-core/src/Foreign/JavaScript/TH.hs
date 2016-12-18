@@ -3,7 +3,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -15,7 +14,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 #ifdef __GHCJS__
+{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
 module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
@@ -91,6 +92,9 @@ import qualified Data.Text as T
 class Monad m => HasJSContext m where
   type JSContextPhantom m :: *
   askJSContext :: m (JSContextSingleton (JSContextPhantom m))
+
+type HasWebView = HasJSContext
+-- Not sure if we should deprecate this {-# DEPRECATED HasWebView "Use HasJSContext" #-}
 
 instance HasJSContext m => HasJSContext (ReaderT r m) where
   type JSContextPhantom (ReaderT r m) = JSContextPhantom m
