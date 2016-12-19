@@ -41,7 +41,7 @@ library
     dependent-map == 0.2.*,
     directory == 1.2.*,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.7.0.2 && < 0.8,
+    ghcjs-dom >= 0.7.0.4 && < 0.8,
     jsaddle >=0.8.0.1 && <0.9,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
