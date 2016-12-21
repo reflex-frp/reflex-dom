@@ -23,6 +23,7 @@ module Reflex.Dom.Builder.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 import Reflex.DynamicWriter
+import Reflex.EventWriter
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
@@ -430,19 +431,17 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
   textNode = liftTextNode
   element elementTag cfg (RequesterT child) = RequesterT $ do
     r <- ask
-    s <- get
     let cfg' = liftElementConfig cfg
-    (el, (a, newS)) <- lift $ lift $ element elementTag cfg' $ runReaderT (runStateT child s) r
-    put newS
+    (el, (a, e)) <- lift $ lift $ element elementTag cfg' $ runReaderT (runEventWriterT child) r
+    tellEvent e
     return (el, a)
   inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
   textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
   selectElement cfg (RequesterT child) = RequesterT $ do
     r <- ask
-    s <- get
     let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
-    (el, (a, newS)) <- lift $ lift $ selectElement cfg' $ runReaderT (runStateT child s) r
-    put newS
+    (el, (a, e)) <- lift $ lift $ selectElement cfg' $ runReaderT (runEventWriterT child) r
+    tellEvent e
     return (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
