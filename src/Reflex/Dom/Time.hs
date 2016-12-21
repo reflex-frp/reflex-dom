@@ -17,7 +17,11 @@ import qualified Control.Concurrent.Thread.Delay as Concurrent
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Align
 import Data.Fixed
+import Data.Sequence (Seq, (|>))
+import qualified Data.Sequence as Seq
+import Data.These
 import Data.Time.Clock
 import Data.Typeable
 import System.Random
@@ -194,3 +198,21 @@ debounce dt e = do
   let tagged = attachPromptlyDynWith (,) n e
   delayed <- delay dt tagged
   return $ attachWithMaybe (\n' (t, v) -> if n' == t then Just v else Nothing) (current n) delayed
+
+-- | When the given 'Event' occurs, wait the given amount of time and collect
+-- all occurrences during that time.  Then, fire the output 'Event' with the
+-- collected output.
+batchOccurrences :: (MonadFix m, MonadHold t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => NominalDiffTime -> Event t a -> m (Event t (Seq a))
+batchOccurrences t newValues = do
+  let f s x = (Just newState, out)
+        where newState = case x of
+                This a -> s |> a
+                That _ -> mempty
+                These a _ -> Seq.singleton a
+              out = case x of
+                This _ -> if Seq.null s then Just () else Nothing
+                That _ -> Nothing
+                These _ _ -> Just ()
+  rec (buffer, toDelay) <- mapAccumMaybe f mempty $ align newValues delayed
+      delayed <- delay t toDelay
+  return $ tag buffer delayed
