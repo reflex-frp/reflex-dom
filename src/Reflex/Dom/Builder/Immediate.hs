@@ -24,8 +24,8 @@ import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
+import Reflex.TriggerEvent.Class
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element)
