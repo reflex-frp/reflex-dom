@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
@@ -14,7 +15,11 @@ import Reflex.Dom.Main as Main hiding
 import qualified Reflex.Dom.Main as Main
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
         mainWidgetWithHead', mainWidgetInElementById, runApp')
+#ifdef darwin_HOST_OS
+import Language.Javascript.JSaddle.WKWebView (run)
+#else
 import Language.Javascript.JSaddle.WebKitGTK (run)
+#endif
 
 mainWidget :: (forall x. Widget x ()) -> IO ()
 mainWidget w = run $ Main.mainWidget w

@@ -28,12 +28,16 @@ library
     reflex == 0.5.*,
     reflex-dom-core >=0.4 && <0.5,
     text == 1.2.*
-  if flag(webkit2gtk)
+  if os(osx)
     build-depends:
-      jsaddle-webkit2gtk
+      jsaddle-wkwebview
   else
-    build-depends:
-      jsaddle-webkitgtk
+    if flag(webkit2gtk)
+      build-depends:
+        jsaddle-webkit2gtk
+    else
+      build-depends:
+        jsaddle-webkitgtk
 
   exposed-modules:
     Reflex.Dom
