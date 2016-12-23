@@ -5,7 +5,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+#ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
+#endif
 module Reflex.Dom.Xhr
   ( XMLHttpRequest
   , XhrRequest (..)
@@ -301,8 +303,72 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
 decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
 
+#ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM makeLenses
   [ ''XhrRequest
   , ''XhrRequestConfig
   , ''XhrResponse
   ]
+#else
+
+xhrRequest_method :: Lens' (XhrRequest a) Text
+xhrRequest_method f (XhrRequest x1 x2 x3) = (\y -> XhrRequest y x2 x3) <$> f x1
+{-# INLINE xhrRequest_method #-}
+
+xhrRequest_url :: Lens' (XhrRequest a) Text
+xhrRequest_url f (XhrRequest x1 x2 x3) = (\y -> XhrRequest x1 y x3) <$> f x2
+{-# INLINE xhrRequest_url #-}
+
+xhrRequest_config :: Lens' (XhrRequest a) (XhrRequestConfig a)
+xhrRequest_config f (XhrRequest x1 x2 x3) = (\y -> XhrRequest x1 x2 y) <$> f x3
+{-# INLINE xhrRequest_config #-}
+
+xhrRequestConfig_headers :: Lens' (XhrRequestConfig a) (Map Text Text)
+xhrRequestConfig_headers f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig y x2 x3 x4 x5 x6 x7) <$> f x1
+{-# INLINE xhrRequestConfig_headers #-}
+
+xhrRequestConfig_user :: Lens' (XhrRequestConfig a) (Maybe Text)
+xhrRequestConfig_user f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 y x3 x4 x5 x6 x7) <$> f x2
+{-# INLINE xhrRequestConfig_user #-}
+
+xhrRequestConfig_password :: Lens' (XhrRequestConfig a) (Maybe Text)
+xhrRequestConfig_password f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 y x4 x5 x6 x7) <$> f x3
+{-# INLINE xhrRequestConfig_password #-}
+
+xhrRequestConfig_responseType :: Lens' (XhrRequestConfig a) (Maybe XhrResponseType)
+xhrRequestConfig_responseType f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 y x5 x6 x7) <$> f x4
+{-# INLINE xhrRequestConfig_responseType #-}
+
+xhrRequestConfig_sendData :: Lens' (XhrRequestConfig a) a
+xhrRequestConfig_sendData f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 x4 y x6 x7) <$> f x5
+{-# INLINE xhrRequestConfig_sendData #-}
+
+xhrRequestConfig_withCredentials :: Lens' (XhrRequestConfig a) Bool
+xhrRequestConfig_withCredentials f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 x4 x5 y x7) <$> f x6
+{-# INLINE xhrRequestConfig_withCredentials #-}
+
+xhrRequestConfig_responseHeaders :: Lens' (XhrRequestConfig a) XhrResponseHeaders
+xhrRequestConfig_responseHeaders f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 x4 x5 x6 y) <$> f x7
+{-# INLINE xhrRequestConfig_responseHeaders #-}
+
+xhrResponse_status :: Lens' XhrResponse Word
+xhrResponse_status f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse y x2 x3 x4 x5) <$> f x1
+{-# INLINE xhrResponse_status #-}
+
+xhrResponse_statusText :: Lens' XhrResponse Text
+xhrResponse_statusText f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 y x3 x4 x5) <$> f x2
+{-# INLINE xhrResponse_statusText #-}
+
+xhrResponse_response :: Lens' XhrResponse (Maybe XhrResponseBody)
+xhrResponse_response f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 y x4 x5) <$> f x3
+{-# INLINE xhrResponse_response #-}
+
+xhrResponse_responseText :: Lens' XhrResponse (Maybe Text)
+xhrResponse_responseText f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 y x5) <$> f x4
+{-# INLINE xhrResponse_responseText #-}
+
+xhrResponse_headers :: Lens' XhrResponse (Map Text Text)
+xhrResponse_headers f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 x4 y) <$> f x5
+{-# INLINE xhrResponse_headers #-}
+
+#endif

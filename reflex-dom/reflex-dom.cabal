@@ -28,7 +28,7 @@ library
     reflex == 0.5.*,
     reflex-dom-core >=0.4 && <0.5,
     text == 1.2.*
-  if os(osx)
+  if os(osx) || os(ios)
     build-depends:
       jsaddle-wkwebview
   else

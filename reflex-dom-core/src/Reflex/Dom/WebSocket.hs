@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -15,7 +16,9 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
+#ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
+#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -125,4 +128,20 @@ webSocket' url config onRawMessage = do
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
+#ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
+#else
+
+webSocketConfig_send :: Lens' (WebSocketConfig t a) (Event t [a])
+webSocketConfig_send f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig y x2 x3) <$> f x1
+{-# INLINE webSocketConfig_send #-}
+
+webSocketConfig_close :: Lens' (WebSocketConfig t a) (Event t (Word, Text))
+webSocketConfig_close f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 y x3) <$> f x2
+{-# INLINE webSocketConfig_close #-}
+
+webSocketConfig_reconnect :: Lens' (WebSocketConfig t a) Bool
+webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 x2 y) <$> f x3
+{-# INLINE webSocketConfig_reconnect #-}
+
+#endif
