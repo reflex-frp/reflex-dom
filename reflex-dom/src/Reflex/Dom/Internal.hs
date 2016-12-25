@@ -15,7 +15,11 @@ import Reflex.Dom.Main as Main hiding
 import qualified Reflex.Dom.Main as Main
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
         mainWidgetWithHead', mainWidgetInElementById, runApp')
-#ifdef darwin_HOST_OS
+
+#if defined(ghcjs_HOST_OS)
+run :: a -> a
+run = id
+#elif defined(darwin_HOST_OS)
 import Language.Javascript.JSaddle.WKWebView (run)
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
