@@ -1,0 +1,123 @@
+Name: reflex-dom-core
+Version: 0.4
+Synopsis: Functional Reactive Web Apps with Reflex
+Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+License: BSD3
+License-file: LICENSE
+Author: Ryan Trinkle
+Maintainer: ryan.trinkle@gmail.com
+Stability: Experimental
+Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
+Build-type: Simple
+Cabal-version: >=1.9.2
+-- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
+extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
+                    src/Reflex/Dom/WebSocket/Foreign.hs
+                    src/Reflex/Dom/Xhr/ResponseType.hs
+                    src/Reflex/Dom/Xhr/Exception.hs
+
+flag use-template-haskell
+  description: Use template haskell to generate lenses
+  default: True
+  manual: True
+
+flag use-reflex-optimizer
+  description: Use the GHC plugin Reflex.Optimizer on some of the modules in the package.  This is still experimental.
+  default: False
+  manual: True
+
+library
+  hs-source-dirs: src
+  build-depends:
+    aeson >= 0.8 && < 1.1,
+    base >= 4.7 && < 4.10,
+    bifunctors >= 4.2 && < 6,
+    bimap >= 0.3 && < 0.4,
+    blaze-builder,
+    bytestring == 0.10.*,
+    containers == 0.5.*,
+    contravariant >= 1.4 && < 1.5,
+    data-default >= 0.5 && < 0.8,
+    dependent-map == 0.2.*,
+    directory == 1.2.*,
+    exception-transformers == 0.4.*,
+    ghcjs-dom >= 0.7.0.4 && < 0.8,
+    jsaddle >=0.8.0.1 && <0.9,
+    -- keycode-0.2 has a bug on firefox
+    keycode >= 0.2.1 && < 0.3,
+    lens >= 4.7 && < 5,
+    monad-control >= 1.0.1 && < 1.1,
+    mtl >= 2.1 && < 2.3,
+    primitive >= 0.5 && < 0.7,
+    random == 1.1.*,
+    ref-tf == 0.4.*,
+    reflex == 0.5.*,
+    semigroups >= 0.16 && < 0.19,
+    stm == 2.4.*,
+    text == 1.2.*,
+    these >= 0.4 && < 0.8,
+    time >= 1.4 && < 1.7,
+    transformers >= 0.3 && < 0.6,
+    unbounded-delays >= 0.1.0.9 && < 0.2,
+    zenc == 0.1.*
+
+  if impl(ghcjs)
+    build-depends:
+      ghcjs-base,
+      hashable == 1.2.*
+  else
+    if !os(windows)
+      build-depends: unix == 2.7.*
+
+  exposed-modules:
+    Foreign.JavaScript.TH
+    Reflex.Dom.Builder.Class
+    Reflex.Dom.Builder.Class.Events
+    Reflex.Dom.Builder.Immediate
+    Reflex.Dom.Builder.InputDisabled
+    Reflex.Dom.Builder.Static
+    Reflex.Dom.Class
+    Reflex.Dom.Core
+    Reflex.Dom.Location
+    Reflex.Dom.Main
+    Reflex.Dom.Old
+    Reflex.Dom.Time
+    Reflex.Dom.WebSocket
+    Reflex.Dom.Widget
+    Reflex.Dom.Widget.Basic
+    Reflex.Dom.Widget.Input
+    Reflex.Dom.Widget.Lazy
+    Reflex.Dom.Widget.Resize
+    Reflex.Dom.Xhr
+  other-modules:
+    Reflex.Dom.WebSocket.Foreign
+    Reflex.Dom.Xhr.Foreign
+    Reflex.Dom.Xhr.ResponseType
+    Reflex.Dom.Xhr.Exception
+
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+
+  if flag(use-reflex-optimizer)
+    ghc-options: -fplugin=Reflex.Optimizer
+
+  if flag(use-template-haskell)
+    build-depends:
+      dependent-sum == 0.3.*,
+      dependent-sum-template >= 0.0.0.5 && < 0.1,
+      template-haskell
+    other-extensions: TemplateHaskell
+    cpp-options: -DUSE_TEMPLATE_HASKELL
+  else
+    build-depends:
+      dependent-sum == 0.4.*
+
+--test-suite hlint
+--  build-depends: base, hlint == 1.9.*
+--  hs-source-dirs: test
+--  main-is: hlint.hs
+--  type: exitcode-stdio-1.0
+
+source-repository head
+  type: git
+  location: https://github.com/reflex-frp/reflex-dom
+  subdir: reflex-dom-core

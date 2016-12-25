@@ -38,3 +38,4 @@ cabal.sandbox.config
 codex.tags
 *.dump-*
 *.verbose-core2core
+*.lkshf
