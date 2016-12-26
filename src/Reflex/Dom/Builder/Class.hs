@@ -448,6 +448,25 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
 
+instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w, Monoid w) => DomBuilder t (EventWriterT t w m) where
+  type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg child = do
+    let cfg' = liftElementConfig cfg
+    (el, (a, e)) <- lift $ element elementTag cfg' $ runEventWriterT child
+    tellEvent e
+    return (el, a)
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  selectElement cfg child = do
+    let cfg' = cfg & selectElementConfig_elementConfig %~ liftElementConfig
+    (el, (a, e)) <- lift $ selectElement cfg' $ runEventWriterT child
+    tellEvent e
+    return (el, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
 
 -- * Convenience functions
 
