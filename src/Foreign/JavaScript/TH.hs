@@ -186,6 +186,9 @@ instance MonadAtomicRef m => MonadAtomicRef (WithWebView x m) where
 withWebViewSingleton :: WebView -> (forall x. WebViewSingleton x -> r) -> r
 withWebViewSingleton wv f = f $ WebViewSingleton wv
 
+withWebViewSingletonMono :: WebView -> (WebViewSingleton () -> r) -> r
+withWebViewSingletonMono wv f = f $ WebViewSingleton wv
+
 -- | A singleton type for a given WebView; we use this to statically guarantee that different WebViews (and thus different javscript contexts) don't get mixed up
 newtype WebViewSingleton x = WebViewSingleton { unWebViewSingleton :: WebView }
 

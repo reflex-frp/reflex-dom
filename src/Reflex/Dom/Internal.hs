@@ -76,8 +76,8 @@ type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithWebView x (P
 attachWidget :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
-mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> IO ()
-mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingleton webView $ \wv -> fmap fst $ attachWidget'' $ \events -> do
+mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> IO ()
+mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono webView $ \wv -> fmap fst $ attachWidget'' $ \events -> do
   let (headWidget, bodyWidget) = widgets
   Just doc <- liftIO $ fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
   Just headElement <- getHead doc
