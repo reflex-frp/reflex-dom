@@ -15,7 +15,6 @@ module Reflex.Dom.Internal where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
-import qualified Reflex as R
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign
@@ -78,36 +77,51 @@ attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
 -- | Warning: `mainWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
 mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> IO ()
-mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono webView $ \wv -> fmap fst $ attachWidget'' $ \events -> do
-  let (headWidget, bodyWidget) = widgets
+mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono webView $ \wv -> do
   Just doc <- liftIO $ fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
   Just headElement <- getHead doc
+  Just headFragment <- createDocumentFragment doc
   Just bodyElement <- getBody doc
-  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  rec b <- unsafeReplaceElementContentsWithWidget events postBuild headElement wv $ headWidget a
-      a <- unsafeReplaceElementContentsWithWidget events postBuild bodyElement wv $ bodyWidget b
-  return ((), postBuildTriggerRef)
+  Just bodyFragment <- createDocumentFragment doc
+  _ <- attachWidget'' $ \events -> do
+    let (headWidget, bodyWidget) = widgets
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
+        go w df = do
+          let builderEnv = ImmediateDomBuilderEnv
+                { _immediateDomBuilderEnv_document = toDocument doc
+                , _immediateDomBuilderEnv_parent = toNode df
+                , _immediateDomBuilderEnv_events = events
+                }
+          runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+    rec b <- go (headWidget a) headFragment
+        a <- go (bodyWidget b) bodyFragment
+    return ((), postBuildTriggerRef)
+  liftIO $ replaceElementContents headElement headFragment
+  liftIO $ replaceElementContents bodyElement bodyFragment
 
-unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> WebViewSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
-unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w = do
-  Just doc <- getOwnerDocument rootElement
-  Just df <- createDocumentFragment doc
-  let builderEnv = ImmediateDomBuilderEnv
-        { _immediateDomBuilderEnv_document = doc
-        , _immediateDomBuilderEnv_parent = toNode df
-        , _immediateDomBuilderEnv_events = events
-        }
-  result <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
-  setInnerHTML rootElement $ Just ("" :: String)
-  _ <- appendChild rootElement $ Just df
-  return result
+replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> IO ()
+replaceElementContents e df = do
+  setInnerHTML e $ Just ("" :: String)
+  _ <- appendChild e $ Just df
+  return ()
 
 {-# INLINABLE attachWidget' #-}
 attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
-attachWidget' rootElement wv w = attachWidget'' $ \events -> do
-  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  result <- unsafeReplaceElementContentsWithWidget events postBuild rootElement wv w
-  return (result, postBuildTriggerRef)
+attachWidget' rootElement wv w = do
+  Just doc <- getOwnerDocument rootElement
+  Just df <- createDocumentFragment doc
+  result <- attachWidget'' $ \events -> do
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let builderEnv = ImmediateDomBuilderEnv
+          { _immediateDomBuilderEnv_document = toDocument doc
+          , _immediateDomBuilderEnv_parent = toNode df
+          , _immediateDomBuilderEnv_events = events
+          }
+    a <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
+    return (a, postBuildTriggerRef)
+  replaceElementContents rootElement df
+  return result
 
 type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
 
