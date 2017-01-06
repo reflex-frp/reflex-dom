@@ -139,9 +139,9 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
-    o <- hold (snd result0) $ snd <$> result'
+    o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
-    return (fst result0, fst <$> result')
+    return (fst result0, fmapCheap fst result')
   sequenceDMapWithAdjust (dm0 :: DMap k (StaticDomBuilderT t m)) dm' = do
     e <- StaticDomBuilderT ask
     let loweredDm0 = mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> fmap swap (runStaticDomBuilderT v e)) dm0
@@ -170,7 +170,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
     shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
     let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
-    modify . (:) <=< hold (escape initialContents) $ fmap escape setContents
+    modify . (:) <=< hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
     return $ TextNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do

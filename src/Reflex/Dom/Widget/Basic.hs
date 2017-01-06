@@ -160,7 +160,7 @@ button t = do
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
-  let newChild = leftmost [updated child, tag (current child) postBuild]
+  let newChild = leftmost [updated child, tagCheap (current child) postBuild]
   snd <$> widgetHoldInternal (return ()) newChild
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
