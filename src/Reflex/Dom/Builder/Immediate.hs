@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -59,6 +60,11 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
+#ifdef __GHCJS__
+import qualified GHCJS.DOM.Touch as Touch
+import qualified GHCJS.DOM.TouchEvent as TouchEvent
+import qualified GHCJS.DOM.TouchList as TouchList
+#endif
 import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, removeChild,
                        setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM
@@ -622,7 +628,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Search -> return ()
   Selectstart -> return ()
   Touchstart -> return ()
-  Touchmove -> return ()
+  Touchmove -> getTouchEventCoords
   Touchend -> return ()
   Touchcancel -> return ()
   Mousewheel -> return ()
@@ -672,7 +678,7 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Search -> return ()
   Selectstart -> return ()
   Touchstart -> return ()
-  Touchmove -> return ()
+  Touchmove -> getTouchEventCoords
   Touchend -> return ()
   Touchcancel -> return ()
   Mousewheel -> return ()
@@ -882,6 +888,25 @@ getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
   e <- event
   bisequence (getClientX e, getClientY e)
+
+#ifdef __GHCJS__
+{-# INLINABLE getTouchEventCoords #-}
+getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
+getTouchEventCoords = do
+  e <- event
+  mTouchList <- TouchEvent.getTouches e
+  case mTouchList of
+    Just touchList -> do
+      touchListLength <- TouchList.getLength touchList
+      mTouchCoords <- forM [0..touchListLength - 1] $ \i -> do
+        mTouch <- TouchList.item touchList i
+        return $ fmap (\t -> bisequence (Touch.getClientX t, Touch.getClientY t)) mTouch
+      sequence $ catMaybes mTouchCoords
+    _ -> return []
+#else
+getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
+getTouchEventCoords = return []
+#endif
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}

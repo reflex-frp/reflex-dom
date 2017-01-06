@@ -149,7 +149,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'SearchTag = ()
   EventResultType 'SelectstartTag = ()
   EventResultType 'TouchstartTag = ()
-  EventResultType 'TouchmoveTag = ()
+  EventResultType 'TouchmoveTag = [(Int, Int)]
   EventResultType 'TouchendTag = ()
   EventResultType 'TouchcancelTag = ()
   EventResultType 'WheelTag = ()
