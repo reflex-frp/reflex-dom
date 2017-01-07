@@ -1,4 +1,4 @@
-{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, reflex
+{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, reflex
 , reflex-dom-core, stdenv, text, ghc
 }:
 mkDerivation {
@@ -7,7 +7,10 @@ mkDerivation {
   src = ./.;
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
-  ] ++ (if ghc.isGhcjs or false then [] else [
+  ] ++ (if ghc.isGhcjs or false then [
+  ] else if stdenv.isDarwin then [
+    jsaddle-wkwebview
+  ] else [
     jsaddle-webkit2gtk
   ]);
   description = "Functional Reactive Web Apps with Reflex";

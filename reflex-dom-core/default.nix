@@ -1,8 +1,8 @@
 { mkDerivation, pkgs, dependent-map, ghcjs-dom, lens
 , mtl, ref-tf, reflex, text, these
 , transformers, data-default, semigroups, blaze-builder, aeson
-, ghc, webkitgtk3-javascriptcore, exception-transformers
-, webkitgtk24x, dependent-sum-template, bifunctors, bimap
+, ghc, exception-transformers
+, dependent-sum-template, bifunctors, bimap
 , raw-strings-qq, zenc, random, monad-control, keycode, hlint
 , unbounded-delays, jsaddle
 }:
@@ -37,15 +37,12 @@ mkDerivation {
     zenc
   ] ++ (if ghc.isGhcjs or false then [] else [
     raw-strings-qq
-    webkitgtk3-javascriptcore
   ]);
   testDepends = if ghc.isGhcjs or false then [] else [
     hlint
   ];
   pkgconfigDepends = if ghc.isGhcjs or false then [] else [
     raw-strings-qq
-    webkitgtk24x
-    webkitgtk3-javascriptcore
   ];
   license = null;
 }
