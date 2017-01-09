@@ -627,10 +627,10 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> return ()
+  Touchstart -> getTouchEventCoords
   Touchmove -> getTouchEventCoords
-  Touchend -> return ()
-  Touchcancel -> return ()
+  Touchend -> getTouchEventCoords
+  Touchcancel -> getTouchEventCoords
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -677,10 +677,10 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> return ()
+  Touchstart -> getTouchEventCoords
   Touchmove -> getTouchEventCoords
-  Touchend -> return ()
-  Touchcancel -> return ()
+  Touchend -> getTouchEventCoords
+  Touchcancel -> getTouchEventCoords
   Mousewheel -> return ()
   Wheel -> return ()
 

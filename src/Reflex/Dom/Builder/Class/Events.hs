@@ -148,10 +148,10 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ResetTag = ()
   EventResultType 'SearchTag = ()
   EventResultType 'SelectstartTag = ()
-  EventResultType 'TouchstartTag = ()
+  EventResultType 'TouchstartTag = [(Int, Int)]
   EventResultType 'TouchmoveTag = [(Int, Int)]
-  EventResultType 'TouchendTag = ()
-  EventResultType 'TouchcancelTag = ()
+  EventResultType 'TouchendTag = [(Int, Int)]
+  EventResultType 'TouchcancelTag = [(Int, Int)]
   EventResultType 'WheelTag = ()
 
 deriveGEq ''EventName
