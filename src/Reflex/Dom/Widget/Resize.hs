@@ -9,6 +9,7 @@ import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
+import Reflex.Dom.Time
 import Reflex.Dom.Widget.Basic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
@@ -74,7 +75,7 @@ resizeDetectorWithAttrs attrs w = do
         if ds == (Just pow, Just poh)
           then return Nothing
           else fmap Just reset
-  pb <- getPostBuild
+  pb <- delay 0 =<< getPostBuild
   expandScroll <- wrapDomEvent (_element_raw expand) (`on` scroll) $ return ()
   shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` scroll) $ return ()
   size0 <- performEvent $ fmap (const $ liftIO reset) pb

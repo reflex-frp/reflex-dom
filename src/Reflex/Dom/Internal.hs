@@ -83,7 +83,7 @@ mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono w
   Just headFragment <- createDocumentFragment doc
   Just bodyElement <- getBody doc
   Just bodyFragment <- createDocumentFragment doc
-  _ <- attachWidget'' $ \events -> do
+  (events, fc) <- attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
@@ -96,9 +96,10 @@ mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono w
           runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
     rec b <- go (headWidget a) headFragment
         a <- go (bodyWidget b) bodyFragment
-    return ((), postBuildTriggerRef)
+    return (events, postBuildTriggerRef)
   liftIO $ replaceElementContents headElement headFragment
   liftIO $ replaceElementContents bodyElement bodyFragment
+  processAsyncEvents events fc
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> IO ()
 replaceElementContents e df = do
@@ -111,7 +112,7 @@ attachWidget' :: DOM.IsElement e => e -> WebViewSingleton x -> Widget x a -> IO 
 attachWidget' rootElement wv w = do
   Just doc <- getOwnerDocument rootElement
   Just df <- createDocumentFragment doc
-  result <- attachWidget'' $ \events -> do
+  ((a, events), fc) <- attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
@@ -119,9 +120,10 @@ attachWidget' rootElement wv w = do
           , _immediateDomBuilderEnv_events = events
           }
     a <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
-    return (a, postBuildTriggerRef)
+    return ((a, events), postBuildTriggerRef)
   replaceElementContents rootElement df
-  return result
+  processAsyncEvents events fc
+  return (a, fc)
 
 type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
 
@@ -129,21 +131,24 @@ type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
 attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
 attachWidget'' w = do
   events <- newChan
-  (result, fc@(FireCommand fire)) <- runSpiderHost $ do
+  (result, fc) <- runSpiderHost $ do
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w events
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return (result, fc)
-  void $ forkIO $ forever $ do
-    ers <- readChan events
-    _ <- postGUISync $ runSpiderHost $ do
-      mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
-        me <- readIORef er
-        return $ fmap (\e -> e :=> Identity a) me
-      _ <- fire (catMaybes mes) $ return ()
-      liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
-    return ()
   return (result, fc)
+
+processAsyncEvents :: EventChannel -> FireCommand Spider (SpiderHost Global) -> IO ()
+processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
+  ers <- readChan events
+  _ <- postGUISync $ runSpiderHost $ do
+    mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
+      me <- readIORef er
+      return $ fmap (\e -> e :=> Identity a) me
+    _ <- fire (catMaybes mes) $ return ()
+    liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
+  return ()
+
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> IO ()
