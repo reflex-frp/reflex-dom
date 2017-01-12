@@ -107,7 +107,7 @@ library
     Reflex.Dom.Xhr.Exception
 
   other-extensions: TemplateHaskell
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fexpose-all-unfoldings
 
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
