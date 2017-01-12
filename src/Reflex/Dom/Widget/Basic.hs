@@ -71,6 +71,7 @@ module Reflex.Dom.Widget.Basic
   , workflow
   , workflowView
   , mapWorkflow
+  , mapWorkflowCheap
 
   -- * Tables and Lists
   , tableDynAttr
@@ -422,6 +423,9 @@ workflowView w0 = do
 
 mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
 mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
+
+mapWorkflowCheap :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
+mapWorkflowCheap f (Workflow x) = Workflow (fmap (f *** fmapCheap (mapWorkflowCheap f)) x)
 
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
