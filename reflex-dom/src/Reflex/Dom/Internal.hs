@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
-       (module Main, mainWidget, mainWidgetWithHead, mainWidgetWithCss,
+       (module Main, run, mainWidget, mainWidgetWithHead, mainWidgetWithCss,
         mainWidgetWithHead', mainWidgetInElementById, runApp') where
 
 import Data.ByteString (ByteString)
