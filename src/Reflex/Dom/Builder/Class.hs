@@ -365,6 +365,10 @@ instance InitialAttributes (TextAreaElementConfig er t m) where
   {-# INLINABLE initialAttributes #-}
   initialAttributes = textAreaElementConfig_elementConfig . elementConfig_initialAttributes
 
+instance InitialAttributes (SelectElementConfig er t m) where
+  {-# INLINABLE initialAttributes #-}
+  initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
+
 class ModifyAttributes t a | a -> t where
   modifyAttributes :: Lens' a (Event t (Map AttributeName (Maybe Text)))
 
@@ -379,6 +383,10 @@ instance ModifyAttributes t (InputElementConfig er t m) where
 instance ModifyAttributes t (TextAreaElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
   modifyAttributes = textAreaElementConfig_elementConfig . elementConfig_modifyAttributes
+
+instance ModifyAttributes t (SelectElementConfig er t m) where
+  {-# INLINABLE modifyAttributes #-}
+  modifyAttributes = selectElementConfig_elementConfig . elementConfig_modifyAttributes
 
 instance ModifyAttributes t (RawElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
