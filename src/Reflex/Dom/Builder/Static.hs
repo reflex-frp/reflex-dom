@@ -36,6 +36,7 @@ import Data.Functor.Misc
 import qualified Data.Map as Map
 import Data.Monoid
 import qualified Data.Set as Set
+import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
@@ -50,10 +51,13 @@ import Reflex.PostBuild.Base
 import Reflex.Spider
 import Reflex.TriggerEvent.Class
 
-data StaticDomBuilderEnv = StaticDomBuilderEnv { _staticDomBuilderEnv_shouldEscape :: Bool }
+data StaticDomBuilderEnv t = StaticDomBuilderEnv
+  { _staticDomBuilderEnv_shouldEscape :: Bool
+  , _staticDomBuilderEnv_selectValue :: Maybe (Dynamic t Text)
+  }
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
-    { unStaticDomBuilderT :: ReaderT StaticDomBuilderEnv (StateT [Behavior t Builder] m) a -- Accumulated Html will be in reversed order
+    { unStaticDomBuilderT :: ReaderT (StaticDomBuilderEnv t) (StateT [Behavior t Builder] m) a -- Accumulated Html will be in reversed order
     }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
@@ -64,7 +68,7 @@ instance PrimMonad m => PrimMonad (StaticDomBuilderT x m) where
 instance MonadTrans (StaticDomBuilderT t) where
   lift = StaticDomBuilderT . lift . lift
 
-runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> StaticDomBuilderEnv -> m (a, Behavior t Builder)
+runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> StaticDomBuilderEnv t -> m (a, Behavior t Builder)
 runStaticDomBuilderT (StaticDomBuilderT a) e = do
   (result, a') <- runStateT (runReaderT a e) []
   return (result, mconcat $ reverse a')
@@ -181,14 +185,21 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
-      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape
+      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
-      let attrs1 = ffor (current attrs0) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
+      selectValue <- asks _staticDomBuilderEnv_selectValue
+      let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
+            Just v | v == sel -> attrs <> Map.singleton "selected" ""
+            _ -> Map.delete "selected" attrs
+      let attrs1 = case selectValue of
+            Nothing -> attrs0
+            Just sv -> zipDynWith addSelectedAttr attrs0 sv
+      let attrs2 = ffor (current attrs1) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
-        then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs1, constant (byteString " />")]
+        then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString " />")]
         else do
-          let open = mconcat [constant ("<" <> byteString tagBS), attrs1, constant (byteString ">")]
+          let open = mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString ">")]
           let close = constant $ byteString $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
       return (Element es (), result)
@@ -222,8 +233,11 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _textAreaElement_raw = ()
       }
   selectElement cfg child = do
-    (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) child
     v <- holdDyn (cfg ^. selectElementConfig_initialValue) (cfg ^. selectElementConfig_setValue)
+    (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) $ do
+      (a, innerHtml) <- StaticDomBuilderT $ lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False (Just v)
+      StaticDomBuilderT $ lift $ modify $ (:) innerHtml
+      return a
     let wrapped = SelectElement
           { _selectElement_value = v
           , _selectElement_change = never
@@ -243,7 +257,7 @@ renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do
   runSpiderHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let env0 = StaticDomBuilderEnv True
+    let env0 = StaticDomBuilderEnv True Nothing
     ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
