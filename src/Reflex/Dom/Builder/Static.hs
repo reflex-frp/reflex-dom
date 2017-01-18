@@ -54,6 +54,10 @@ import Reflex.TriggerEvent.Class
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
   , _staticDomBuilderEnv_selectValue :: Maybe (Behavior t Text)
+    -- ^ When the parent element is a "select" whose value has been set, this value tells us the current value.
+    -- We use this to add a "selected" attribute to the appropriate "option" child element.
+    -- This is not yet a perfect simulation of what the browser does, but it is much closer than doing nothing.
+    -- TODO: Handle edge cases, e.g. setting to a value for which there is no option, then adding that option dynamically afterwards.
   }
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
