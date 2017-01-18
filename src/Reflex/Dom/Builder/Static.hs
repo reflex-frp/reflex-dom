@@ -191,9 +191,9 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
             Just v | v == sel -> attrs <> Map.singleton "selected" ""
             _ -> Map.delete "selected" attrs
-      let attrs1 = case selectValue of
-            Nothing -> current attrs0
-            Just sv -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
+      let attrs1 = case (elementTag, selectValue) of
+            ("option", Just sv) -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
+            _ -> current attrs0
       let attrs2 = ffor attrs1 $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
