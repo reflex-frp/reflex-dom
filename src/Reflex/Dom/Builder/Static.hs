@@ -53,7 +53,7 @@ import Reflex.TriggerEvent.Class
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
-  , _staticDomBuilderEnv_selectValue :: Maybe (Dynamic t Text)
+  , _staticDomBuilderEnv_selectValue :: Maybe (Behavior t Text)
   }
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -192,9 +192,9 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
             Just v | v == sel -> attrs <> Map.singleton "selected" ""
             _ -> Map.delete "selected" attrs
       let attrs1 = case selectValue of
-            Nothing -> attrs0
-            Just sv -> zipDynWith addSelectedAttr attrs0 sv
-      let attrs2 = ffor (current attrs1) $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
+            Nothing -> current attrs0
+            Just sv -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
+      let attrs2 = ffor attrs1 $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
         then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString " />")]
@@ -235,7 +235,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   selectElement cfg child = do
     v <- holdDyn (cfg ^. selectElementConfig_initialValue) (cfg ^. selectElementConfig_setValue)
     (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) $ do
-      (a, innerHtml) <- StaticDomBuilderT $ lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False (Just v)
+      (a, innerHtml) <- StaticDomBuilderT $ lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False $ Just (current v)
       StaticDomBuilderT $ lift $ modify $ (:) innerHtml
       return a
     let wrapped = SelectElement
