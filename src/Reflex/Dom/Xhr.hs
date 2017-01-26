@@ -6,30 +6,51 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+
+-- | A module for performing asynchronous HTTP calls from JavaScript
+-- using the
+-- <https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest XMLHttpRequest>
+-- API (essentially AJAX). Despite the name, there is nothing whatsoever specific to XML.
+--
+-- The API has two components:
+--
+--  * convenient functions for common usecases like GET and POST
+--    requests to APIs using JSON.
+--
+--  * a flexible set of functions for creating and executing arbitrary
+--    requests and handling responses.
+--
 module Reflex.Dom.Xhr
-  ( XMLHttpRequest
+  ( -- * Common Patterns
+
+    -- | Functions that conveniently expose common uses like GET and
+    -- POST to JSON APIs.
+    getAndDecode
+  , getMay
+  , postJson
+
+  , decodeXhrResponse
+  , decodeText
+
+  -- * General Request API
+
+  -- | This is the most general flow for sending XHR requests:
+  --
+  --   1. Create an 'Event' stream of 'XhrRequest' records (ie
+  --   @Event t (XhrRequest a)@). The records configure the request,
+  --   and the 'Event' controls when the request or requests are
+  --   actually sent.
+  --
+  --   2. Plug the @Event t (XhrRequest a)@ into one of the functions
+  --   for performing requests like 'performRequestAsync'.
+  --
+  --   3. Consume the resulting stream of 'XhrResponse' events,
+  --   parsing the body of the response however appropriate.
+
+  -- ** XHR Requests
   , XhrRequest (..)
   , XhrRequestConfig (..)
-  , XhrResponse (..)
-  , XhrResponseBody (..)
-  , XhrResponseHeaders (..)
-  , XhrResponseType (..)
-  , XhrException (..)
-  , IsXhrPayload (..)
-  , _xhrResponse_body
-  , decodeText
-  , decodeXhrResponse
-  , getAndDecode
-  , getMay
-  , newXMLHttpRequest
-  , newXMLHttpRequestWithError
-  , performMkRequestAsync
-  , performMkRequestsAsync
-  , performRequestAsync
-  , performRequestAsyncWithError
-  , performRequestsAsync
-  , performRequestsAsyncWithError
-  , postJson
+
   , xhrRequest
   , xhrRequestConfig_headers
   , xhrRequestConfig_password
@@ -41,12 +62,46 @@ module Reflex.Dom.Xhr
   , xhrRequest_config
   , xhrRequest_method
   , xhrRequest_url
+
+  -- ** Performing Requests
+  , performMkRequestAsync
+  , performMkRequestsAsync
+  , performRequestAsync
+  , performRequestAsyncWithError
+  , performRequestsAsync
+  , performRequestsAsyncWithError
+
+  -- ** XHR Responses
+  , XhrResponse (..)
+  , XhrResponseBody (..)
+  , XhrResponseHeaders (..)
+  , XhrResponseType (..)
+
   , xhrResponse_body
   , xhrResponse_response
   , xhrResponse_responseText
   , xhrResponse_status
   , xhrResponse_statusText
   , xhrResponse_headers
+
+  -- ** Error Handling
+  , XhrException (..)
+  , IsXhrPayload (..)
+  , _xhrResponse_body
+
+  -- * JavaScript XMLHttpRequest Objects
+
+  -- | 'XMLHttpRequest' is the type of JavaScript's underlying runtime
+  -- objects that represent XHR requests.
+  --
+  -- Chances are you shouldn't need these in day-to-day code.
+  , XMLHttpRequest
+
+  -- ** Constructors
+  , newXMLHttpRequest
+  , newXMLHttpRequestWithError
+
+  -- ** Fields
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
   , xmlHttpRequestGetStatus
@@ -56,6 +111,7 @@ module Reflex.Dom.Xhr
   , xmlHttpRequestOpen
   , xmlHttpRequestSetRequestHeader
   , xmlHttpRequestSetResponseType
+
   )
 where
 
