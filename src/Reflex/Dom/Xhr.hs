@@ -46,6 +46,23 @@ module Reflex.Dom.Xhr
   --
   --   3. Consume the resulting stream of 'XhrResponse' events,
   --   parsing the body of the response however appropriate.
+  --
+  -- Here is an example of calling a search API whenever the user
+  -- types in a text input field and printing the result on the page:
+  --
+  -- @
+  -- url query = "http://example.com/search?query=" <> query
+  --
+  -- search queries = do
+  --   responses <- performRequestAsync $ toRequest <$> queries
+  --   return $ view xhrResponse_responseText <$> responses
+  --   where toRequest query = XhrRequest "GET" (url query) def
+  --
+  -- main = mainWidget $ do
+  --   queries <- textInput def
+  --   results <- search queries
+  --   dynText $ holdDyn "No results." results
+  -- @
 
   -- ** XHR Requests
   , XhrRequest (..)
