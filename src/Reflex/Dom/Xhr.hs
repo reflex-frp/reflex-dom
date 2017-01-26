@@ -77,17 +77,19 @@ module Reflex.Dom.Xhr
   , XhrResponseHeaders (..)
   , XhrResponseType (..)
 
-  , xhrResponse_body
   , xhrResponse_response
   , xhrResponse_responseText
   , xhrResponse_status
   , xhrResponse_statusText
   , xhrResponse_headers
 
+  -- *** Deprecated
+  , xhrResponse_body
+  , _xhrResponse_body
+
   -- ** Error Handling
   , XhrException (..)
   , IsXhrPayload (..)
-  , _xhrResponse_body
 
   -- * JavaScript XMLHttpRequest Objects
 
