@@ -25,6 +25,11 @@ flag use-reflex-optimizer
   default: False
   manual: True
 
+flag expose-all-unfoldings
+  description: Build the library with -fexpose-all-unfoldings which can help client code specialize better
+  default: False
+  manual: True
+
 library
   hs-source-dirs: src
   build-depends:
@@ -108,6 +113,9 @@ library
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+
+  if flag(expose-all-unfoldings)
+    ghc-options: -fexpose-all-unfoldings
 
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer

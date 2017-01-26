@@ -22,6 +22,7 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 
 import Reflex.Class
 import Reflex.DynamicWriter
+import Reflex.EventWriter
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -108,6 +109,10 @@ instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t
 
 instance HasWebView m => HasWebView (DynamicWriterT t w m) where
   type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
+  askWebView = lift askWebView
+
+instance HasWebView m => HasWebView (EventWriterT t w m) where
+  type WebViewPhantom (EventWriterT t w m) = WebViewPhantom m
   askWebView = lift askWebView
 
 instance HasWebView m => HasWebView (RequesterT t request response m) where
