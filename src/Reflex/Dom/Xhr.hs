@@ -53,18 +53,18 @@ module Reflex.Dom.Xhr
   -- types in a text input field and printing the result on the page:
   --
   -- @
-  -- url query = "http://example.com/search?query=" <> query
+  -- url query = "http:\/\/example.com\/search?query=" \<> query
   --
   -- search queries = do
-  --   responses <- performRequestAsync $ toRequest <$> queries
-  --   return $ view xhrResponse_responseText <$> responses
-  --   where toRequest query = XhrRequest "GET" (url query) def
+  --   responses \<- performRequestAsync $ toRequest \<$> queries
+  --   return $ view xhrResponse_responseText \<$> responses
+  --   where toRequest query = XhrRequest \"GET" (url query) def
   --
   -- main = mainWidget $ do
-  --   input <- textInput def
+  --   input \<- textInput def
   --   let queries = updated $ input ^. textInput_value
-  --   results <- search queries
-  --   asText <- holdDyn "No results." $ pack . show <$> results
+  --   results \<- search queries
+  --   asText \<- holdDyn "No results." $ pack . show \<$> results
   --   dynText asText
   -- @
 
@@ -134,7 +134,6 @@ module Reflex.Dom.Xhr
   , xmlHttpRequestOpen
   , xmlHttpRequestSetRequestHeader
   , xmlHttpRequestSetResponseType
-
   )
 where
 
