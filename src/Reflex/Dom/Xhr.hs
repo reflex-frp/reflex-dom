@@ -45,7 +45,9 @@ module Reflex.Dom.Xhr
   --   for performing requests like 'performRequestAsync'.
   --
   --   3. Consume the resulting stream of 'XhrResponse' events,
-  --   parsing the body of the response however appropriate.
+  --   parsing the body of the response however appropriate. A really
+  --   common pattern is turning the 'Event' into a 'Dynamic' with
+  --   'holdDyn' or a related function.
   --
   -- Here is an example of calling a search API whenever the user
   -- types in a text input field and printing the result on the page:
@@ -59,9 +61,11 @@ module Reflex.Dom.Xhr
   --   where toRequest query = XhrRequest "GET" (url query) def
   --
   -- main = mainWidget $ do
-  --   queries <- textInput def
+  --   input <- textInput def
+  --   let queries = updated $ input ^. textInput_value
   --   results <- search queries
-  --   dynText $ holdDyn "No results." results
+  --   asText <- holdDyn "No results." $ pack . show <$> results
+  --   dynText asText
   -- @
 
   -- ** XHR Requests
