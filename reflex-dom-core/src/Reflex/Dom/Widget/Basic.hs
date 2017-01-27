@@ -71,6 +71,7 @@ module Reflex.Dom.Widget.Basic
   , workflow
   , workflowView
   , mapWorkflow
+  , mapWorkflowCheap
 
   -- * Tables and Lists
   , tableDynAttr
@@ -159,7 +160,7 @@ button t = do
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
-  let newChild = leftmost [updated child, tag (current child) postBuild]
+  let newChild = leftmost [updated child, tagCheap (current child) postBuild]
   snd <$> widgetHoldInternal (return ()) newChild
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
@@ -421,6 +422,9 @@ workflowView w0 = do
 
 mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
 mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
+
+mapWorkflowCheap :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
+mapWorkflowCheap f (Workflow x) = Workflow (fmap (f *** fmapCheap (mapWorkflowCheap f)) x)
 
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)

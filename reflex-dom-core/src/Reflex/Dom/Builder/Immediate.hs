@@ -65,6 +65,9 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
 import GHCJS.DOM.MouseEvent
+import qualified GHCJS.DOM.Touch as Touch
+import qualified GHCJS.DOM.TouchEvent as TouchEvent
+import qualified GHCJS.DOM.TouchList as TouchList
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked,
                        setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
@@ -665,10 +668,10 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> return ()
-  Touchmove -> return ()
-  Touchend -> return ()
-  Touchcancel -> return ()
+  Touchstart -> getTouchEventCoords
+  Touchmove -> getTouchEventCoords
+  Touchend -> getTouchEventCoords
+  Touchcancel -> getTouchEventCoords
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -715,10 +718,10 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> return ()
-  Touchmove -> return ()
-  Touchend -> return ()
-  Touchcancel -> return ()
+  Touchstart -> getTouchEventCoords
+  Touchmove -> getTouchEventCoords
+  Touchend -> getTouchEventCoords
+  Touchcancel -> getTouchEventCoords
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -978,6 +981,20 @@ getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
   e <- event
   bisequence (getClientX e, getClientY e)
+
+{-# INLINABLE getTouchEventCoords #-}
+getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
+getTouchEventCoords = do
+  e <- event
+  mTouchList <- TouchEvent.getTouches e
+  case mTouchList of
+    Just touchList -> do
+      touchListLength <- TouchList.getLength touchList
+      mTouchCoords <- forM [0..touchListLength - 1] $ \i -> do
+        mTouch <- TouchList.item touchList i
+        return $ fmap (\t -> bisequence (Touch.getClientX t, Touch.getClientY t)) mTouch
+      sequence $ catMaybes mTouchCoords
+    _ -> return []
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}

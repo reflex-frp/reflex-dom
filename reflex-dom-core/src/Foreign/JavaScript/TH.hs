@@ -28,6 +28,7 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 import Prelude hiding((!!))
 import Reflex.Class
 import Reflex.DynamicWriter
+import Reflex.EventWriter
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -116,8 +117,12 @@ instance (ReflexHost t, HasJSContext (HostFrame t)) => HasJSContext (PerformEven
   type JSContextPhantom (PerformEventT t m) = JSContextPhantom (HostFrame t)
   askJSContext = PerformEventT $ lift askJSContext
 
-instance HasJSContext m => HasJSContext (DynamicWriterT t w m) where
-  type JSContextPhantom (DynamicWriterT t w m) = JSContextPhantom m
+instance HasJSContext m => HasJSContext (EventWriterT t w m) where
+  type JSContextPhantom (EventWriterT t w m) = JSContextPhantom m
+  askJSContext = lift askJSContext
+
+instance HasJSContext m => HasJSContext (RequesterT t request response m) where
+  type JSContextPhantom (RequesterT t request response m) = JSContextPhantom m
   askJSContext = lift askJSContext
 
 newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
@@ -192,7 +197,11 @@ instance MonadAtomicRef m => MonadAtomicRef (WithJSContextSingleton x m) where
 withJSContextSingleton :: MonadJSM m => (forall x. JSContextSingleton x -> m r) -> m r
 withJSContextSingleton f = askJSM >>= f . JSContextSingleton
 
--- | A singleton type for a given JS Context; we use this to statically guarantee that different JSContexts (and thus different javscript contexts) don't get mixed up
+-- | Warning: `withJSContextSingletonMono` does not provide the same guarantees that `withJSContextSingleton` does.
+withJSContextSingletonMono :: MonadJSM m => (JSContextSingleton () -> m r) -> m r
+withJSContextSingletonMono f = askJSM >>= f . JSContextSingleton
+
+-- | A singleton type for a given JSContext; we use this to statically guarantee that different JSContexts don't get mixed up
 newtype JSContextSingleton x = JSContextSingleton { unJSContextSingleton :: JSContextRef }
 
 #ifdef __GHCJS__

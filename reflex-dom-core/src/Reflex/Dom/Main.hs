@@ -17,7 +17,6 @@ module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
-import qualified Reflex as R
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Host.Class
@@ -90,41 +89,57 @@ instance MonadJSM m => MonadJSM (PostBuildT t m) where
 
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
-attachWidget rootElement wv w = liftIO $ fst <$> attachWidget' rootElement wv w
+attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
-mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> JSM ()
-mainWidgetWithHead' widgets = withJSContextSingleton $ \jsSing -> do
- doc <- currentDocumentUnchecked
- headElement <- getHeadUnchecked doc
- bodyElement <- getBodyUnchecked doc
---    runWebGUI $ \webView -> withWebViewSingleton webView $ \wv ->
- liftIO $ fmap fst $ attachWidget'' $ \events -> do
-  let (headWidget, bodyWidget) = widgets
-  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  rec b <- unsafeReplaceElementContentsWithWidget events postBuild headElement jsSing $ headWidget a
-      a <- unsafeReplaceElementContentsWithWidget events postBuild bodyElement jsSing $ bodyWidget b
-  return ((), postBuildTriggerRef)
+-- | Warning: `mainWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> JSM ()
+mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
+  doc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked doc
+  headFragment <- createDocumentFragmentUnchecked doc
+  bodyElement <- getBodyUnchecked doc
+  bodyFragment <- createDocumentFragmentUnchecked doc
+  (events, fc) <- liftIO . attachWidget'' $ \events -> do
+    let (headWidget, bodyWidget) = widgets
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
+        go w df = do
+          let builderEnv = ImmediateDomBuilderEnv
+                { _immediateDomBuilderEnv_document = toDocument doc
+                , _immediateDomBuilderEnv_parent = toNode df
+                , _immediateDomBuilderEnv_events = events
+                }
+          runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+    rec b <- go (headWidget a) headFragment
+        a <- go (bodyWidget b) bodyFragment
+    return (events, postBuildTriggerRef)
+  replaceElementContents headElement headFragment
+  replaceElementContents bodyElement bodyFragment
+  liftIO $ processAsyncEvents events fc
 
-unsafeReplaceElementContentsWithWidget :: DOM.IsElement e => EventChannel -> R.Event Spider () -> e -> JSContextSingleton x -> Widget x a -> PerformEventT Spider (SpiderHost Global) a
-unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w = (`runWithJSContextSingleton` jsSing) $ do
-  doc <- getOwnerDocumentUnchecked rootElement
-  df <- createDocumentFragmentUnchecked doc
-  let builderEnv = ImmediateDomBuilderEnv
-        { _immediateDomBuilderEnv_document = doc
-        , _immediateDomBuilderEnv_parent = toNode df
-        , _immediateDomBuilderEnv_events = events
-        }
-  result <- runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv
-  setInnerHTML rootElement $ Just ("" :: String)
-  _ <- appendChildUnchecked rootElement $ Just df
-  return result
+replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
+replaceElementContents e df = do
+  setInnerHTML e $ Just ("" :: String)
+  _ <- appendChildUnchecked e $ Just df
+  return ()
 
 {-# INLINABLE attachWidget' #-}
-attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> IO (a, FireCommand Spider (SpiderHost Global))
-attachWidget' rootElement jsSing w = attachWidget'' $ \events -> do
-  (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-  result <- unsafeReplaceElementContentsWithWidget events postBuild rootElement jsSing w
-  return (result, postBuildTriggerRef)
+attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand Spider (SpiderHost Global))
+attachWidget' rootElement jsSing w = do
+  doc <- getOwnerDocumentUnchecked rootElement
+  df <- createDocumentFragmentUnchecked doc
+  ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let builderEnv = ImmediateDomBuilderEnv
+          { _immediateDomBuilderEnv_document = toDocument doc
+          , _immediateDomBuilderEnv_parent = toNode df
+          , _immediateDomBuilderEnv_events = events
+          }
+    a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+    return ((a, events), postBuildTriggerRef)
+  replaceElementContents rootElement df
+  liftIO $ processAsyncEvents events fc
+  return (a, fc)
 
 type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
 
@@ -132,21 +147,23 @@ type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
 attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
 attachWidget'' w = do
   events <- newChan
-  (result, fc@(FireCommand fire)) <- runSpiderHost $ do
+  runSpiderHost $ do
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w events
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return (result, fc)
-  void $ forkIO $ forever $ do
-    ers <- readChan events
-    _ <- runSpiderHost $ do
-      mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
-        me <- readIORef er
-        return $ fmap (\e -> e :=> Identity a) me
-      _ <- fire (catMaybes mes) $ return ()
-      liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
-    return ()
-  return (result, fc)
+
+processAsyncEvents :: EventChannel -> FireCommand Spider (SpiderHost Global) -> IO ()
+processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
+  ers <- readChan events
+  _ <- runSpiderHost $ do
+    mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
+      me <- readIORef er
+      return $ fmap (\e -> e :=> Identity a) me
+    _ <- fire (catMaybes mes) $ return ()
+    liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
+  return ()
+
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
