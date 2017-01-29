@@ -292,17 +292,6 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
-  {-
-  {-# INLINABLE placeholder #-}
-  placeholder (PlaceholderConfig toInsertAbove delete) = liftThrough (deletable delete) $ do
-    n <- textNodeInternal ("" :: Text)
-    insertedAbove <- insertImmediateAbove n toInsertAbove
-    --Note: "deleteSelf" must come after "insertAbove", because we need to be able to insert above in the same frame that we delete
-    deleted <- lift $ performEvent $ ffor delete $ \_ -> do
-      mp <- getParentNode n
-      forM_ mp $ \p -> removeChild p $ Just n
-    return $ Placeholder insertedAbove deleted
--}
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()

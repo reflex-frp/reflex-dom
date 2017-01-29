@@ -84,11 +84,6 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomB
                   => Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t (liftElementConfig cfg) $ run child
   {-# INLINABLE element #-}
-  {-
-  -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
-  -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
-  placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
--}
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
   default inputElement :: ( MonadTransControl f
                           , m ~ f m'
@@ -221,23 +216,6 @@ data Element er d t
    = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
              , _element_raw :: RawElement d
              }
-
-data PlaceholderConfig above t m
-   = PlaceholderConfig { _placeholderConfig_insertAbove :: Event t (m above)
-                       , _placeholderConfig_deleteSelf :: Event t ()
-                       }
-
-instance Reflex t => Default (PlaceholderConfig above t m) where
-  {-# INLINABLE def #-}
-  def = PlaceholderConfig
-    { _placeholderConfig_insertAbove = never
-    , _placeholderConfig_deleteSelf = never
-    }
-
-data Placeholder above t
-   = Placeholder { _placeholder_insertedAbove :: Event t above
-                 , _placeholder_deletedSelf :: Event t ()
-                 }
 
 data InputElementConfig er t m
    = InputElementConfig { _inputElementConfig_initialValue :: Text
@@ -372,23 +350,9 @@ elementConfig_modifyAttributes =
   in lens getter setter
 
 concat <$> mapM makeLenses
-  [ ''PlaceholderConfig
-  , ''TextAreaElementConfig
+  [ ''TextAreaElementConfig
   , ''SelectElementConfig
   ]
-
-class CanDeleteSelf t a | a -> t where
-  deleteSelf :: Lens' a (Event t ())
-
-instance CanDeleteSelf t (PlaceholderConfig above t m) where
-  {-# INLINABLE deleteSelf #-}
-  deleteSelf = placeholderConfig_deleteSelf
-
-class InsertAbove t m above above' a a' | a -> t m above, a' -> t m above', a above' -> a', a' above -> a where
-  insertAbove :: Lens a a' (Event t (m above)) (Event t (m above'))
-
-instance InsertAbove t m above above' (PlaceholderConfig above t m) (PlaceholderConfig above' t m) where
-  insertAbove = placeholderConfig_insertAbove
 
 class InitialAttributes a where
   initialAttributes :: Lens' a (Map AttributeName Text)
@@ -531,12 +495,6 @@ instance Functor1 (ElementConfig er t) where
     { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
     }
 
-instance Reflex t => Functor1 (PlaceholderConfig above t) where
-  {-# INLINABLE fmap1 #-}
-  fmap1 f cfg = cfg
-    { _placeholderConfig_insertAbove = f <$> _placeholderConfig_insertAbove cfg
-    }
-
 instance Functor1 (InputElementConfig er t) where
   type Functor1Constraint (InputElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
   fmap1 f cfg = cfg & inputElementConfig_elementConfig %~ fmap1 f
@@ -609,11 +567,6 @@ liftTextNode = lift . textNode
 
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (f m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag (fmap1 run cfg) $ run child
-
-{-
-liftPlaceholder :: LiftDomBuilder t f m => PlaceholderConfig above t (f m) -> f m (Placeholder above t)
-liftPlaceholder cfg = liftWithStateless $ \run -> placeholder $ fmap1 run cfg
--}
 
 liftInputElement :: LiftDomBuilder t f m => InputElementConfig er t (f m) -> f m (InputElement er (DomBuilderSpace m) t)
 liftInputElement cfg = liftWithStateless $ \run -> inputElement $ fmap1 run cfg
