@@ -288,7 +288,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     n <- textNodeInternal initialContents
-    mapM_ (lift . performEvent_ . fmap (\t -> setNodeValue n (Just t))) mSetContents
+    mapM_ (lift . performEvent_ . fmap (setNodeValue n . Just)) mSetContents
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
@@ -312,7 +312,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
     checkedChangedByUI <- wrapDomEvent domInputElement (`on` Element.click) $ do
       Input.getChecked domInputElement
-    checkedChangedBySetChecked <- case (_inputElementConfig_setChecked cfg) of
+    checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
       Nothing -> return never
       Just eNewchecked -> performEvent $ ffor eNewchecked $ \newChecked -> do
         oldChecked <- Input.getChecked domInputElement
