@@ -287,14 +287,14 @@ instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig E
 
 data SelectElementConfig er t m = SelectElementConfig
   { _selectElementConfig_initialValue :: Text
-  , _selectElementConfig_setValue :: Event t Text
+  , _selectElementConfig_setValue :: Maybe (Event t Text)
   , _selectElementConfig_elementConfig :: ElementConfig er t m
   }
 
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (SelectElementConfig er t m) where
   def = SelectElementConfig
     { _selectElementConfig_initialValue = ""
-    , _selectElementConfig_setValue = never
+    , _selectElementConfig_setValue = Nothing
     , _selectElementConfig_elementConfig = def
     }
 
@@ -313,6 +313,7 @@ concat <$> mapM (uncurry makeLensesWithoutField)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
   , (["_elementConfig_modifyAttributes"], ''ElementConfig)
   , (["_textAreaElementConfig_setValue"], ''TextAreaElementConfig)
+  , (["_selectElementConfig_setValue"], ''SelectElementConfig)
   ]
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
@@ -369,9 +370,14 @@ textAreaElementConfig_setValue =
       setter t e = t { _textAreaElementConfig_setValue = Just e }
   in lens getter setter
 
-concat <$> mapM makeLenses
-  [ ''SelectElementConfig
-  ]
+-- | This lens is technically illegal. The implementation of 'SelectElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'SelectElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+selectElementConfig_setValue :: Reflex t => Lens (SelectElementConfig er t m) (SelectElementConfig er t m) (Event t Text) (Event t Text)
+selectElementConfig_setValue =
+  let getter t = case _selectElementConfig_setValue t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _selectElementConfig_setValue = Just e }
+  in lens getter setter
 
 class InitialAttributes a where
   initialAttributes :: Lens' a (Map AttributeName Text)

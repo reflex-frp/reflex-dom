@@ -351,7 +351,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Just v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- case (_textAreaElementConfig_setValue cfg) of
+    valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
         TextArea.setValue domTextAreaElement $ Just v'
@@ -376,9 +376,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
-    valueChangedBySetValue <- performEvent $ ffor (cfg ^. selectElementConfig_setValue) $ \v' -> do
-      Select.setValue domSelectElement $ Just v'
-      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
+      Nothing -> return never
+      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+        Select.setValue domSelectElement $ Just v'
+        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
