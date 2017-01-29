@@ -248,7 +248,7 @@ data InputElement er d t
 
 data TextAreaElementConfig er t m
    = TextAreaElementConfig { _textAreaElementConfig_initialValue :: Text
-                           , _textAreaElementConfig_setValue :: Event t Text
+                           , _textAreaElementConfig_setValue :: Maybe (Event t Text)
                            , _textAreaElementConfig_elementConfig :: ElementConfig er t m
                            }
 
@@ -256,7 +256,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (TextAreaElemen
   {-# INLINABLE def #-}
   def = TextAreaElementConfig
     { _textAreaElementConfig_initialValue = ""
-    , _textAreaElementConfig_setValue = never
+    , _textAreaElementConfig_setValue = Nothing
     , _textAreaElementConfig_elementConfig = def
     }
 
@@ -312,6 +312,7 @@ concat <$> mapM (uncurry makeLensesWithoutField)
      , "_inputElementConfig_setChecked" ], ''InputElementConfig)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
   , (["_elementConfig_modifyAttributes"], ''ElementConfig)
+  , (["_textAreaElementConfig_setValue"], ''TextAreaElementConfig)
   ]
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
@@ -359,9 +360,17 @@ elementConfig_modifyAttributes =
       setter t e = t { _elementConfig_modifyAttributes = Just e }
   in lens getter setter
 
+-- | This lens is technically illegal. The implementation of 'TextAreaElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextAreaElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+textAreaElementConfig_setValue :: Reflex t => Lens (TextAreaElementConfig er t m) (TextAreaElementConfig er t m) (Event t Text) (Event t Text)
+textAreaElementConfig_setValue =
+  let getter t = case _textAreaElementConfig_setValue t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _textAreaElementConfig_setValue = Just e }
+  in lens getter setter
+
 concat <$> mapM makeLenses
-  [ ''TextAreaElementConfig
-  , ''SelectElementConfig
+  [ ''SelectElementConfig
   ]
 
 class InitialAttributes a where
