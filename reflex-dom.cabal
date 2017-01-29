@@ -113,6 +113,7 @@ library
 
   other-extensions: TemplateHaskell
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto
 
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings
