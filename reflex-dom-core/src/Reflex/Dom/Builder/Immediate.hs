@@ -329,9 +329,11 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
   type DomBuilderSpace (ImmediateDomBuilderT t m) = GhcjsDomSpace
   {-# INLINABLE textNode #-}
-  textNode (TextNodeConfig initialContents eSetContents) = do
+  textNode (TextNodeConfig initialContents mSetContents) = do
     n <- textNodeInternal initialContents
-    lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
+    case mSetContents of
+      Nothing -> return ()
+      Just eSetContents -> lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child

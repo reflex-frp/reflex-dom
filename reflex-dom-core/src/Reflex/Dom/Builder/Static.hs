@@ -174,11 +174,13 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
-  textNode (TextNodeConfig initialContents setContents) = StaticDomBuilderT $ do
+  textNode (TextNodeConfig initialContents mSetContents) = StaticDomBuilderT $ do
     --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
     shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
     let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
-    modify . (:) <=< hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
+    modify . (:) =<< case mSetContents of
+      Nothing -> return (pure (escape initialContents))
+      Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
     return $ TextNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do

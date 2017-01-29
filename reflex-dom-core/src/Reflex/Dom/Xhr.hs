@@ -8,30 +8,72 @@
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
+
+-- | A module for performing asynchronous HTTP calls from JavaScript
+-- using the
+-- <https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest XMLHttpRequest>
+-- API (essentially AJAX). Despite the name, there is nothing whatsoever specific to XML.
+--
+-- The API has two components:
+--
+--  * convenient functions for common usecases like GET and POST
+--    requests to APIs using JSON.
+--
+--  * a flexible set of functions for creating and executing arbitrary
+--    requests and handling responses.
+--
 module Reflex.Dom.Xhr
-  ( XMLHttpRequest
+  ( -- * Common Patterns
+
+    -- | Functions that conveniently expose common uses like GET and
+    -- POST to JSON APIs.
+    getAndDecode
+  , getMay
+  , postJson
+
+  , decodeXhrResponse
+  , decodeText
+
+  -- * General Request API
+
+  -- | This is the most general flow for sending XHR requests:
+  --
+  --   1. Create an 'Event' stream of 'XhrRequest' records (ie
+  --   @Event t (XhrRequest a)@). The records configure the request,
+  --   and the 'Event' controls when the request or requests are
+  --   actually sent.
+  --
+  --   2. Plug the @Event t (XhrRequest a)@ into one of the functions
+  --   for performing requests like 'performRequestAsync'.
+  --
+  --   3. Consume the resulting stream of 'XhrResponse' events,
+  --   parsing the body of the response however appropriate. A really
+  --   common pattern is turning the 'Event' into a 'Dynamic' with
+  --   'holdDyn' or a related function.
+  --
+  -- Here is an example of calling a search API whenever the user
+  -- types in a text input field and printing the result on the page:
+  --
+  -- @
+  -- url query = "http:\/\/example.com\/search?query=" \<> query
+  --
+  -- search queries = do
+  --   responses \<- performRequestAsync $ toRequest \<$> queries
+  --   return $ view xhrResponse_responseText \<$> responses
+  --   where toRequest query = XhrRequest \"GET" (url query) def
+  --
+  -- main = mainWidget $ do
+  --   input \<- textInput def
+  --   let queries = updated $ input ^. textInput_value
+  --   results \<- search queries
+  --   asText \<- holdDyn "No results." $ pack . show \<$> results
+  --   dynText asText
+  -- @
+
+  -- ** XHR Requests
   , XhrRequest (..)
   , XhrRequestConfig (..)
-  , XhrResponse (..)
-  , XhrResponseBody (..)
-  , XhrResponseHeaders (..)
-  , XhrResponseType (..)
-  , XhrException (..)
-  , IsXhrPayload (..)
-  , _xhrResponse_body
-  , decodeText
-  , decodeXhrResponse
-  , getAndDecode
-  , getMay
-  , newXMLHttpRequest
-  , newXMLHttpRequestWithError
-  , performMkRequestAsync
-  , performMkRequestsAsync
-  , performRequestAsync
-  , performRequestAsyncWithError
-  , performRequestsAsync
-  , performRequestsAsyncWithError
-  , postJson
+
   , xhrRequest
   , xhrRequestConfig_headers
   , xhrRequestConfig_password
@@ -43,12 +85,48 @@ module Reflex.Dom.Xhr
   , xhrRequest_config
   , xhrRequest_method
   , xhrRequest_url
-  , xhrResponse_body
+
+  -- ** Performing Requests
+  , performMkRequestAsync
+  , performMkRequestsAsync
+  , performRequestAsync
+  , performRequestAsyncWithError
+  , performRequestsAsync
+  , performRequestsAsyncWithError
+
+  -- ** XHR Responses
+  , XhrResponse (..)
+  , XhrResponseBody (..)
+  , XhrResponseHeaders (..)
+  , XhrResponseType (..)
+
   , xhrResponse_response
   , xhrResponse_responseText
   , xhrResponse_status
   , xhrResponse_statusText
   , xhrResponse_headers
+
+  -- *** Deprecated
+  , xhrResponse_body
+  , _xhrResponse_body
+
+  -- ** Error Handling
+  , XhrException (..)
+  , IsXhrPayload (..)
+
+  -- * JavaScript XMLHttpRequest Objects
+
+  -- | 'XMLHttpRequest' is the type of JavaScript's underlying runtime
+  -- objects that represent XHR requests.
+  --
+  -- Chances are you shouldn't need these in day-to-day code.
+  , XMLHttpRequest
+
+  -- ** Constructors
+  , newXMLHttpRequest
+  , newXMLHttpRequestWithError
+
+  -- ** Fields
   , xmlHttpRequestGetReadyState
   , xmlHttpRequestGetResponseText
   , xmlHttpRequestGetStatus
