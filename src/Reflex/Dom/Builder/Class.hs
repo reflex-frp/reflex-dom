@@ -22,6 +22,7 @@ module Reflex.Dom.Builder.Class
 
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
+import Reflex.Dom.Builder.Class.TH
 import Reflex.DynamicWriter
 import Reflex.EventWriter
 import Reflex.PerformEvent.Class
@@ -240,7 +241,7 @@ data Placeholder above t
 
 data InputElementConfig er t m
    = InputElementConfig { _inputElementConfig_initialValue :: Text
-                        , _inputElementConfig_setValue :: Event t Text
+                        , _inputElementConfig_setValue :: Maybe (Event t Text)
                         , _inputElementConfig_initialChecked :: Bool
                         , _inputElementConfig_setChecked :: Event t Bool
                         , _inputElementConfig_elementConfig :: ElementConfig er t m
@@ -250,7 +251,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (InputElementCo
   {-# INLINABLE def #-}
   def = InputElementConfig
     { _inputElementConfig_initialValue = ""
-    , _inputElementConfig_setValue = never
+    , _inputElementConfig_setValue = Nothing
     , _inputElementConfig_initialChecked = False
     , _inputElementConfig_setChecked = never
     , _inputElementConfig_elementConfig = def
@@ -327,9 +328,8 @@ data SelectElement er d t = SelectElement
   , _selectElement_raw :: RawSelectElement d
   }
 
-makeLensesFor
-  [("_textNodeConfig_initialContents", "textNodeConfig_initialContents")]
-  ''TextNodeConfig
+makeLensesWithoutField "_textNodeConfig_setContents" ''TextNodeConfig
+makeLensesWithoutField "_inputElementConfig_setValue" ''InputElementConfig
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfig t) (Event t Text) (Event t Text)
@@ -340,10 +340,18 @@ textNodeConfig_setContents =
       setter t e = t { _textNodeConfig_setContents = Just e }
   in lens getter setter
 
+-- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+inputElementConfig_setValue :: Reflex t => Lens (InputElementConfig er t m) (InputElementConfig er t m) (Event t Text) (Event t Text)
+inputElementConfig_setValue =
+  let getter t = case _inputElementConfig_setValue t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _inputElementConfig_setValue = Just e }
+  in lens getter setter
+
 concat <$> mapM makeLenses
   [ ''ElementConfig
   , ''PlaceholderConfig
-  , ''InputElementConfig
   , ''TextAreaElementConfig
   , ''SelectElementConfig
   , ''RawElementConfig

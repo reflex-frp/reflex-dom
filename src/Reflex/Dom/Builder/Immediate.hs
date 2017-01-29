@@ -313,9 +313,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Just v0 <- Input.getValue domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- performEvent $ ffor (cfg ^. inputElementConfig_setValue) $ \v' -> do
-      Input.setValue domInputElement $ Just v'
-      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
+      Nothing -> return never
+      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+        Input.setValue domInputElement $ Just v'
+        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
