@@ -54,7 +54,7 @@ instance PrimMonad m => PrimMonad (InputDisabledT m) where
 disableElementConfig :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 disableElementConfig cfg = cfg
   { _elementConfig_initialAttributes = Map.insert "disabled" "disabled" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = Map.delete "disabled" <$> _elementConfig_modifyAttributes cfg
+  , _elementConfig_modifyAttributes = fmap (Map.delete "disabled") <$> _elementConfig_modifyAttributes cfg
   }
 
 instance PostBuild t m => PostBuild t (InputDisabledT m) where

@@ -180,9 +180,9 @@ newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IOR
 wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
-  lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  mapM_ (performEvent_ . fmap (imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
-    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
+    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv)) (_rawElementConfig_modifyAttributes cfg)
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- newIORef Nothing
     _ <- elementOnEventName en e $ do
@@ -288,9 +288,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     n <- textNodeInternal initialContents
-    case mSetContents of
-      Nothing -> return ()
-      Just eSetContents -> lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
+    mapM_ (lift . performEvent_ . fmap (\t -> setNodeValue n (Just t))) mSetContents
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child

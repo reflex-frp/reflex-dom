@@ -213,7 +213,7 @@ stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 data ElementConfig er t m
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
                    , _elementConfig_initialAttributes :: Map AttributeName Text
-                   , _elementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
+                   , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
 
@@ -297,13 +297,13 @@ extractRawElementConfig cfg = RawElementConfig
   }
 
 data RawElementConfig er t m = RawElementConfig
-  { _rawElementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
+  { _rawElementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
   , _rawElementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
   }
 
 instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig EventResult t m) where
   def = RawElementConfig
-    { _rawElementConfig_modifyAttributes = never
+    { _rawElementConfig_modifyAttributes = Nothing
     , _rawElementConfig_eventSpec = def
     }
 
@@ -328,8 +328,12 @@ data SelectElement er d t = SelectElement
   , _selectElement_raw :: RawSelectElement d
   }
 
-makeLensesWithoutField "_textNodeConfig_setContents" ''TextNodeConfig
-makeLensesWithoutField "_inputElementConfig_setValue" ''InputElementConfig
+concat <$> mapM (uncurry makeLensesWithoutField)
+  [ ("_textNodeConfig_setContents", ''TextNodeConfig)
+  , ("_inputElementConfig_setValue", ''InputElementConfig)
+  , ("_rawElementConfig_modifyAttributes", ''RawElementConfig)
+  , ("_elementConfig_modifyAttributes", ''ElementConfig)
+  ]
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfig t) (Event t Text) (Event t Text)
@@ -349,12 +353,28 @@ inputElementConfig_setValue =
       setter t e = t { _inputElementConfig_setValue = Just e }
   in lens getter setter
 
+-- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+rawElementConfig_modifyAttributes :: Reflex t => Lens (RawElementConfig er t m) (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+rawElementConfig_modifyAttributes =
+  let getter t = case _rawElementConfig_modifyAttributes t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _rawElementConfig_modifyAttributes = Just e }
+  in lens getter setter
+
+-- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+elementConfig_modifyAttributes :: Reflex t => Lens (ElementConfig er t m) (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+elementConfig_modifyAttributes =
+  let getter t = case _elementConfig_modifyAttributes t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _elementConfig_modifyAttributes = Just e }
+  in lens getter setter
+
 concat <$> mapM makeLenses
-  [ ''ElementConfig
-  , ''PlaceholderConfig
+  [ ''PlaceholderConfig
   , ''TextAreaElementConfig
   , ''SelectElementConfig
-  , ''RawElementConfig
   ]
 
 class CanDeleteSelf t a | a -> t where
@@ -390,7 +410,7 @@ instance InitialAttributes (SelectElementConfig er t m) where
   initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
 
 class ModifyAttributes t a | a -> t where
-  modifyAttributes :: Lens' a (Event t (Map AttributeName (Maybe Text)))
+  modifyAttributes :: Reflex t => Lens' a (Event t (Map AttributeName (Maybe Text)))
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
@@ -424,7 +444,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
   def = ElementConfig
     { _elementConfig_namespace = Nothing
     , _elementConfig_initialAttributes = mempty
-    , _elementConfig_modifyAttributes = never
+    , _elementConfig_modifyAttributes = Nothing
     , _elementConfig_eventSpec = def
     }
 
