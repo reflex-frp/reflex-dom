@@ -149,14 +149,14 @@ type Namespace = Text
 
 data TextNodeConfig t
    = TextNodeConfig { _textNodeConfig_initialContents :: Text
-                    , _textNodeConfig_setContents :: Event t Text
+                    , _textNodeConfig_setContents :: Maybe (Event t Text)
                     }
 
 instance (Reflex t) => Default (TextNodeConfig t) where
   {-# INLINABLE def #-}
   def = TextNodeConfig
     { _textNodeConfig_initialContents = mempty
-    , _textNodeConfig_setContents = never
+    , _textNodeConfig_setContents = Nothing
     }
 
 data TextNode d t = TextNode
@@ -327,9 +327,21 @@ data SelectElement er d t = SelectElement
   , _selectElement_raw :: RawSelectElement d
   }
 
+makeLensesFor
+  [("_textNodeConfig_initialContents", "textNodeConfig_initialContents")]
+  ''TextNodeConfig
+
+-- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfig t) (Event t Text) (Event t Text)
+textNodeConfig_setContents =
+  let getter t = case _textNodeConfig_setContents t of
+        Nothing -> never
+        Just e -> e
+      setter t e = t { _textNodeConfig_setContents = Just e }
+  in lens getter setter
+
 concat <$> mapM makeLenses
-  [ ''TextNodeConfig
-  , ''ElementConfig
+  [ ''ElementConfig
   , ''PlaceholderConfig
   , ''InputElementConfig
   , ''TextAreaElementConfig
