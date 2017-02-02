@@ -897,7 +897,6 @@ getTouchEvent = do
           fmap catMaybes . forM [0 .. n - 1] $ \ix -> do
             mt <- TouchList.item ts ix
             forM mt $ \t -> do
-              -- TODO: Applicative?
               identifier <- Touch.getIdentifier t
               screenX <- Touch.getScreenX t
               screenY <- Touch.getScreenY t
