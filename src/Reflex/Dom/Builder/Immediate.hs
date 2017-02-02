@@ -624,10 +624,10 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> getTouchEventCoords
-  Touchmove -> getTouchEventCoords
-  Touchend -> getTouchEventCoords
-  Touchcancel -> getTouchEventCoords
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -674,10 +674,10 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> getTouchEventCoords
-  Touchmove -> getTouchEventCoords
-  Touchend -> getTouchEventCoords
-  Touchcancel -> getTouchEventCoords
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -887,22 +887,53 @@ getMouseEventCoords = do
   bisequence (getClientX e, getClientY e)
 
 #ifdef __GHCJS__
-{-# INLINABLE getTouchEventCoords #-}
-getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
-getTouchEventCoords = do
+{-# INLINABLE getTouchEvent #-}
+getTouchEvent :: EventM e TouchEvent TouchEventResult
+getTouchEvent = do
+  let touchResults = \case
+        Nothing -> return []
+        Just ts -> do
+          n <- TouchList.getLength ts
+          fmap catMaybes . forM [0 .. n - 1] $ \ix -> do
+            mt <- TouchList.item ts ix
+            forM mt $ \t -> do
+              -- TODO: Applicative?
+              identifier <- Touch.getIdentifier t
+              screenX <- Touch.getScreenX t
+              screenY <- Touch.getScreenY t
+              clientX <- Touch.getClientX t
+              clientY <- Touch.getClientY t
+              pageX <- Touch.getPageX t
+              pageY <- Touch.getPageY t
+              return $ TouchResult
+                { _touchResult_identifier = identifier
+                , _touchResult_screenX = screenX
+                , _touchResult_screenY = screenY
+                , _touchResult_clientX = clientX
+                , _touchResult_clientY = clientY
+                , _touchResult_pageX = pageX
+                , _touchResult_pageY = pageY
+                }
   e <- event
-  mTouchList <- TouchEvent.getTouches e
-  case mTouchList of
-    Just touchList -> do
-      touchListLength <- TouchList.getLength touchList
-      mTouchCoords <- forM [0..touchListLength - 1] $ \i -> do
-        mTouch <- TouchList.item touchList i
-        return $ fmap (\t -> bisequence (Touch.getClientX t, Touch.getClientY t)) mTouch
-      sequence $ catMaybes mTouchCoords
-    _ -> return []
+  altKey <- TouchEvent.getAltKey e
+  ctrlKey <- TouchEvent.getCtrlKey e
+  shiftKey <- TouchEvent.getShiftKey e
+  metaKey <- TouchEvent.getMetaKey e
+  changedTouches <- touchResults =<< TouchEvent.getChangedTouches e
+  targetTouches <- touchResults =<< TouchEvent.getTargetTouches e
+  touches <- touchResults =<< TouchEvent.getTouches e
+  return $ TouchEventResult
+    { _touchEventResult_altKey = altKey
+    , _touchEventResult_changedTouches = changedTouches
+    , _touchEventResult_ctrlKey = ctrlKey
+    , _touchEventResult_metaKey = metaKey
+    , _touchEventResult_shiftKey = shiftKey
+    , _touchEventResult_targetTouches = targetTouches
+    , _touchEventResult_touches = touches
+    }
 #else
-getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
-getTouchEventCoords = return []
+getTouchEvent :: EventM e TouchEvent TouchEventResult
+getTouchEvent = return $ TouchEventResult False [] False False False [] []
 #endif
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
