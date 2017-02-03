@@ -106,6 +106,7 @@ library
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
   other-modules:
+    Reflex.Dom.Builder.Class.TH
     Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType
