@@ -157,11 +157,33 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ResetTag = ()
   EventResultType 'SearchTag = ()
   EventResultType 'SelectstartTag = ()
-  EventResultType 'TouchstartTag = [(Int, Int)]
-  EventResultType 'TouchmoveTag = [(Int, Int)]
-  EventResultType 'TouchendTag = [(Int, Int)]
-  EventResultType 'TouchcancelTag = [(Int, Int)]
+  EventResultType 'TouchstartTag = TouchEventResult
+  EventResultType 'TouchmoveTag = TouchEventResult
+  EventResultType 'TouchendTag = TouchEventResult
+  EventResultType 'TouchcancelTag = TouchEventResult
   EventResultType 'WheelTag = ()
+
+data TouchEventResult = TouchEventResult
+  { _touchEventResult_altKey :: Bool
+  , _touchEventResult_changedTouches :: [TouchResult]
+  , _touchEventResult_ctrlKey :: Bool
+  , _touchEventResult_metaKey :: Bool
+  , _touchEventResult_shiftKey :: Bool
+  , _touchEventResult_targetTouches :: [TouchResult]
+  , _touchEventResult_touches :: [TouchResult]
+  }
+  deriving (Show, Read, Eq, Ord)
+
+data TouchResult = TouchResult
+  { _touchResult_identifier :: Word
+  , _touchResult_screenX :: Int
+  , _touchResult_screenY :: Int
+  , _touchResult_clientX :: Int
+  , _touchResult_clientY :: Int
+  , _touchResult_pageX :: Int
+  , _touchResult_pageY :: Int
+  }
+  deriving (Show, Read, Eq, Ord)
 
 #ifdef USE_TEMPLATE_HASKELL
 deriveGEq ''EventName

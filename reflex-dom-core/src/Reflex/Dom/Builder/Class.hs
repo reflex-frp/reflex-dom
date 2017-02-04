@@ -25,6 +25,9 @@ module Reflex.Dom.Builder.Class
 
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
+#ifdef USE_TEMPLATE_HASKELL
+import Reflex.Dom.Builder.Class.TH
+#endif
 import Reflex.DynamicWriter
 import Reflex.EventWriter
 import Reflex.PerformEvent.Class
@@ -40,6 +43,7 @@ import Data.Default
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Proxy
 import Data.Semigroup
 import Data.String
@@ -86,11 +90,6 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomB
                   => Text -> ElementConfig er t m -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t (liftElementConfig cfg) $ run child
   {-# INLINABLE element #-}
-  {-
-  -- | Create a placeholder in the DOM, with the ability to insert new DOM before it
-  -- The provided DOM will be executed after the current frame, so it will not be affected by any occurrences that are concurrent with the occurrence that created it
-  placeholder :: PlaceholderConfig above t m -> m (Placeholder above t)
--}
   inputElement :: InputElementConfig er t m -> m (InputElement er (DomBuilderSpace m) t)
   default inputElement :: ( MonadTransControl f
                           , m ~ f m'
@@ -221,7 +220,7 @@ stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 data ElementConfig er t m
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
                    , _elementConfig_initialAttributes :: Map AttributeName Text
-                   , _elementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
+                   , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
                    , _elementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
                    }
 
@@ -232,13 +231,6 @@ elementConfig_namespace f (ElementConfig a b c d) = (\a' -> ElementConfig a' b c
 elementConfig_initialAttributes :: Lens' (ElementConfig er t m) (Map AttributeName Text)
 elementConfig_initialAttributes f (ElementConfig a b c d) = (\b' -> ElementConfig a b' c d) <$> f b
 {-# INLINE elementConfig_initialAttributes #-}
-elementConfig_modifyAttributes :: Lens
-    (ElementConfig er t1 m)
-    (ElementConfig er t2 m)
-    (Event t1 (Map AttributeName (Maybe Text)))
-    (Event t2 (Map AttributeName (Maybe Text)))
-elementConfig_modifyAttributes f (ElementConfig a b c d) = (\c' -> ElementConfig a b c' d) <$> f c
-{-# INLINE elementConfig_modifyAttributes #-}
 elementConfig_eventSpec :: Lens
     (ElementConfig er1 t m1)
     (ElementConfig er2 t m2)
@@ -253,41 +245,11 @@ data Element er d t
              , _element_raw :: RawElement d
              }
 
-data PlaceholderConfig above t m
-   = PlaceholderConfig { _placeholderConfig_insertAbove :: Event t (m above)
-                       , _placeholderConfig_deleteSelf :: Event t ()
-                       }
-
-#ifndef USE_TEMPLATE_HASKELL
-placeholderConfig_insertAbove :: Lens
-    (PlaceholderConfig above1 t m1)
-    (PlaceholderConfig above2 t m2)
-    (Event t (m1 above1))
-    (Event t (m2 above2))
-placeholderConfig_insertAbove f (PlaceholderConfig a b) = (\a' -> PlaceholderConfig a' b) <$> f a
-{-# INLINE placeholderConfig_insertAbove #-}
-placeholderConfig_deleteSelf :: Lens' (PlaceholderConfig above t m) (Event t ())
-placeholderConfig_deleteSelf f (PlaceholderConfig a b) = (\b' -> PlaceholderConfig a b') <$> f b
-{-# INLINE placeholderConfig_deleteSelf #-}
-#endif
-
-instance Reflex t => Default (PlaceholderConfig above t m) where
-  {-# INLINABLE def #-}
-  def = PlaceholderConfig
-    { _placeholderConfig_insertAbove = never
-    , _placeholderConfig_deleteSelf = never
-    }
-
-data Placeholder above t
-   = Placeholder { _placeholder_insertedAbove :: Event t above
-                 , _placeholder_deletedSelf :: Event t ()
-                 }
-
 data InputElementConfig er t m
    = InputElementConfig { _inputElementConfig_initialValue :: Text
-                        , _inputElementConfig_setValue :: Event t Text
+                        , _inputElementConfig_setValue :: Maybe (Event t Text)
                         , _inputElementConfig_initialChecked :: Bool
-                        , _inputElementConfig_setChecked :: Event t Bool
+                        , _inputElementConfig_setChecked :: Maybe (Event t Bool)
                         , _inputElementConfig_elementConfig :: ElementConfig er t m
                         }
 
@@ -295,15 +257,9 @@ data InputElementConfig er t m
 inputElementConfig_initialValue :: Lens' (InputElementConfig er t m) Text
 inputElementConfig_initialValue f (InputElementConfig a b c d e) = (\a' -> InputElementConfig a' b c d e) <$> f a
 {-# INLINE inputElementConfig_initialValue #-}
-inputElementConfig_setValue :: Lens' (InputElementConfig er t m) (Event t Text)
-inputElementConfig_setValue f (InputElementConfig a b c d e) = (\b' -> InputElementConfig a b' c d e) <$> f b
-{-# INLINE inputElementConfig_setValue #-}
 inputElementConfig_initialChecked :: Lens' (InputElementConfig er t m) Bool
 inputElementConfig_initialChecked f (InputElementConfig a b c d e) = (\c' -> InputElementConfig a b c' d e) <$> f c
 {-# INLINE inputElementConfig_initialChecked #-}
-inputElementConfig_setChecked :: Lens' (InputElementConfig er t m) (Event t Bool)
-inputElementConfig_setChecked f (InputElementConfig a b c d e) = (\d' -> InputElementConfig a b c d' e) <$> f d
-{-# INLINE inputElementConfig_setChecked #-}
 inputElementConfig_elementConfig :: Lens
     (InputElementConfig er1 t m1)
     (InputElementConfig er2 t m2)
@@ -317,9 +273,9 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (InputElementCo
   {-# INLINABLE def #-}
   def = InputElementConfig
     { _inputElementConfig_initialValue = ""
-    , _inputElementConfig_setValue = never
+    , _inputElementConfig_setValue = Nothing
     , _inputElementConfig_initialChecked = False
-    , _inputElementConfig_setChecked = never
+    , _inputElementConfig_setChecked = Nothing
     , _inputElementConfig_elementConfig = def
     }
 
@@ -336,7 +292,7 @@ data InputElement er d t
 
 data TextAreaElementConfig er t m
    = TextAreaElementConfig { _textAreaElementConfig_initialValue :: Text
-                           , _textAreaElementConfig_setValue :: Event t Text
+                           , _textAreaElementConfig_setValue :: Maybe (Event t Text)
                            , _textAreaElementConfig_elementConfig :: ElementConfig er t m
                            }
 
@@ -344,9 +300,6 @@ data TextAreaElementConfig er t m
 textAreaElementConfig_initialValue :: Lens' (TextAreaElementConfig er t m) Text
 textAreaElementConfig_initialValue f (TextAreaElementConfig a b c) = (\a' -> TextAreaElementConfig a' b c) <$> f a
 {-# INLINE textAreaElementConfig_initialValue #-}
-textAreaElementConfig_setValue :: Lens' (TextAreaElementConfig er t m) (Event t Text)
-textAreaElementConfig_setValue f (TextAreaElementConfig a b c) = (\b' -> TextAreaElementConfig a b' c) <$> f b
-{-# INLINE textAreaElementConfig_setValue #-}
 textAreaElementConfig_elementConfig :: Lens
     (TextAreaElementConfig er1 t m1)
     (TextAreaElementConfig er2 t m2)
@@ -360,7 +313,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (TextAreaElemen
   {-# INLINABLE def #-}
   def = TextAreaElementConfig
     { _textAreaElementConfig_initialValue = ""
-    , _textAreaElementConfig_setValue = never
+    , _textAreaElementConfig_setValue = Nothing
     , _textAreaElementConfig_elementConfig = def
     }
 
@@ -379,18 +332,11 @@ extractRawElementConfig cfg = RawElementConfig
   }
 
 data RawElementConfig er t m = RawElementConfig
-  { _rawElementConfig_modifyAttributes :: Event t (Map AttributeName (Maybe Text))
+  { _rawElementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
   , _rawElementConfig_eventSpec :: EventSpec (DomBuilderSpace m) er
   }
 
 #ifndef USE_TEMPLATE_HASKELL
-rawElementConfig_modifyAttributes :: Lens
-    (RawElementConfig er t1 m)
-    (RawElementConfig er t2 m)
-    (Event t1 (Map AttributeName (Maybe Text)))
-    (Event t2 (Map AttributeName (Maybe Text)))
-rawElementConfig_modifyAttributes f (RawElementConfig a b) = (\a' -> RawElementConfig a' b) <$> f a
-{-# INLINE rawElementConfig_modifyAttributes #-}
 rawElementConfig_eventSpec :: Lens
     (RawElementConfig er1 t m1)
     (RawElementConfig er2 t m2)
@@ -402,13 +348,13 @@ rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a
 
 instance (Reflex t, DomSpace (DomBuilderSpace m)) => Default (RawElementConfig EventResult t m) where
   def = RawElementConfig
-    { _rawElementConfig_modifyAttributes = never
+    { _rawElementConfig_modifyAttributes = Nothing
     , _rawElementConfig_eventSpec = def
     }
 
 data SelectElementConfig er t m = SelectElementConfig
   { _selectElementConfig_initialValue :: Text
-  , _selectElementConfig_setValue :: Event t Text
+  , _selectElementConfig_setValue :: Maybe (Event t Text)
   , _selectElementConfig_elementConfig :: ElementConfig er t m
   }
 
@@ -416,9 +362,6 @@ data SelectElementConfig er t m = SelectElementConfig
 selectElementConfig_initialValue :: Lens' (SelectElementConfig er t m) Text
 selectElementConfig_initialValue f (SelectElementConfig a b c) = (\a' -> SelectElementConfig a' b c) <$> f a
 {-# INLINE selectElementConfig_initialValue #-}
-selectElementConfig_setValue :: Lens' (SelectElementConfig er t m) (Event t Text)
-selectElementConfig_setValue f (SelectElementConfig a b c) = (\b' -> SelectElementConfig a b' c) <$> f b
-{-# INLINE selectElementConfig_setValue #-}
 selectElementConfig_elementConfig :: Lens
     (SelectElementConfig er1 t m1)
     (SelectElementConfig er2 t m2)
@@ -431,7 +374,7 @@ selectElementConfig_elementConfig f (SelectElementConfig a b c) = (\c' -> Select
 instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (SelectElementConfig er t m) where
   def = SelectElementConfig
     { _selectElementConfig_initialValue = ""
-    , _selectElementConfig_setValue = never
+    , _selectElementConfig_setValue = Nothing
     , _selectElementConfig_elementConfig = def
     }
 
@@ -444,43 +387,65 @@ data SelectElement er d t = SelectElement
   }
 
 #ifdef USE_TEMPLATE_HASKELL
-makeLensesFor
-  [("_textNodeConfig_initialContents", "textNodeConfig_initialContents")]
-  ''TextNodeConfig
+concat <$> mapM (uncurry makeLensesWithoutField)
+  [ (["_textNodeConfig_setContents"], ''TextNodeConfig)
+  , ([ "_inputElementConfig_setValue"
+     , "_inputElementConfig_setChecked" ], ''InputElementConfig)
+  , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
+  , (["_elementConfig_modifyAttributes"], ''ElementConfig)
+  , (["_textAreaElementConfig_setValue"], ''TextAreaElementConfig)
+  , (["_selectElementConfig_setValue"], ''SelectElementConfig)
+  ]
 #endif
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfig t) (Event t Text) (Event t Text)
 textNodeConfig_setContents =
-  let getter t = case _textNodeConfig_setContents t of
-        Nothing -> never
-        Just e -> e
+  let getter = fromMaybe never . _textNodeConfig_setContents
       setter t e = t { _textNodeConfig_setContents = Just e }
   in lens getter setter
 
-#ifdef USE_TEMPLATE_HASKELL
-concat <$> mapM makeLenses
-  [ ''ElementConfig
-  , ''PlaceholderConfig
-  , ''InputElementConfig
-  , ''TextAreaElementConfig
-  , ''SelectElementConfig
-  , ''RawElementConfig
-  ]
-#endif
+-- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+inputElementConfig_setValue :: Reflex t => Lens (InputElementConfig er t m) (InputElementConfig er t m) (Event t Text) (Event t Text)
+inputElementConfig_setValue =
+  let getter = fromMaybe never . _inputElementConfig_setValue
+      setter t e = t { _inputElementConfig_setValue = Just e }
+  in lens getter setter
 
-class CanDeleteSelf t a | a -> t where
-  deleteSelf :: Lens' a (Event t ())
+-- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+inputElementConfig_setChecked :: Reflex t => Lens (InputElementConfig er t m) (InputElementConfig er t m) (Event t Bool) (Event t Bool)
+inputElementConfig_setChecked =
+  let getter = fromMaybe never . _inputElementConfig_setChecked
+      setter t e = t { _inputElementConfig_setChecked = Just e }
+  in lens getter setter
 
-instance CanDeleteSelf t (PlaceholderConfig above t m) where
-  {-# INLINABLE deleteSelf #-}
-  deleteSelf = placeholderConfig_deleteSelf
+-- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+rawElementConfig_modifyAttributes :: Reflex t => Lens (RawElementConfig er t m) (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+rawElementConfig_modifyAttributes =
+  let getter = fromMaybe never . _rawElementConfig_modifyAttributes
+      setter t e = t { _rawElementConfig_modifyAttributes = Just e }
+  in lens getter setter
 
-class InsertAbove t m above above' a a' | a -> t m above, a' -> t m above', a above' -> a', a' above -> a where
-  insertAbove :: Lens a a' (Event t (m above)) (Event t (m above'))
+-- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+elementConfig_modifyAttributes :: Reflex t => Lens (ElementConfig er t m) (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+elementConfig_modifyAttributes =
+  let getter = fromMaybe never . _elementConfig_modifyAttributes
+      setter t e = t { _elementConfig_modifyAttributes = Just e }
+  in lens getter setter
 
-instance InsertAbove t m above above' (PlaceholderConfig above t m) (PlaceholderConfig above' t m) where
-  insertAbove = placeholderConfig_insertAbove
+-- | This lens is technically illegal. The implementation of 'TextAreaElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextAreaElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+textAreaElementConfig_setValue :: Reflex t => Lens (TextAreaElementConfig er t m) (TextAreaElementConfig er t m) (Event t Text) (Event t Text)
+textAreaElementConfig_setValue =
+  let getter = fromMaybe never . _textAreaElementConfig_setValue
+      setter t e = t { _textAreaElementConfig_setValue = Just e }
+  in lens getter setter
+
+-- | This lens is technically illegal. The implementation of 'SelectElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'SelectElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+selectElementConfig_setValue :: Reflex t => Lens (SelectElementConfig er t m) (SelectElementConfig er t m) (Event t Text) (Event t Text)
+selectElementConfig_setValue =
+  let getter = fromMaybe never . _selectElementConfig_setValue
+      setter t e = t { _selectElementConfig_setValue = Just e }
+  in lens getter setter
 
 class InitialAttributes a where
   initialAttributes :: Lens' a (Map AttributeName Text)
@@ -502,7 +467,7 @@ instance InitialAttributes (SelectElementConfig er t m) where
   initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
 
 class ModifyAttributes t a | a -> t where
-  modifyAttributes :: Lens' a (Event t (Map AttributeName (Maybe Text)))
+  modifyAttributes :: Reflex t => Lens' a (Event t (Map AttributeName (Maybe Text)))
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}
@@ -536,7 +501,7 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
   def = ElementConfig
     { _elementConfig_namespace = Nothing
     , _elementConfig_initialAttributes = mempty
-    , _elementConfig_modifyAttributes = never
+    , _elementConfig_modifyAttributes = Nothing
     , _elementConfig_eventSpec = def
     }
 
@@ -623,12 +588,6 @@ instance Functor1 (ElementConfig er t) where
     { _elementConfig_eventSpec = _elementConfig_eventSpec cfg
     }
 
-instance Reflex t => Functor1 (PlaceholderConfig above t) where
-  {-# INLINABLE fmap1 #-}
-  fmap1 f cfg = cfg
-    { _placeholderConfig_insertAbove = f <$> _placeholderConfig_insertAbove cfg
-    }
-
 instance Functor1 (InputElementConfig er t) where
   type Functor1Constraint (InputElementConfig er t) a b = Functor1Constraint (ElementConfig er t) a b
   fmap1 f cfg = cfg & inputElementConfig_elementConfig %~ fmap1 f
@@ -701,11 +660,6 @@ liftTextNode = lift . textNode
 
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (f m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag (fmap1 run cfg) $ run child
-
-{-
-liftPlaceholder :: LiftDomBuilder t f m => PlaceholderConfig above t (f m) -> f m (Placeholder above t)
-liftPlaceholder cfg = liftWithStateless $ \run -> placeholder $ fmap1 run cfg
--}
 
 liftInputElement :: LiftDomBuilder t f m => InputElementConfig er t (f m) -> f m (InputElement er (DomBuilderSpace m) t)
 liftInputElement cfg = liftWithStateless $ \run -> inputElement $ fmap1 run cfg

@@ -292,7 +292,7 @@ checkboxView dAttrs dValue = do
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
       elementConfig = (def :: ElementConfig EventResult t m)
-        { _elementConfig_modifyAttributes = fmap mapKeysToAttributeName modifyAttrs
+        { _elementConfig_modifyAttributes = Just $ fmap mapKeysToAttributeName modifyAttrs
         , _elementConfig_initialAttributes = Map.mapKeys (AttributeName Nothing) permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
             { _ghcjsEventSpec_filters = filters

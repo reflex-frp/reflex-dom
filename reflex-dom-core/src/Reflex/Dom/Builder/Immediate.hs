@@ -207,9 +207,9 @@ newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IOR
 wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
-  lift $ performEvent_ $ ffor (cfg ^. modifyAttributes) $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  mapM_ (performEvent_ . fmap (imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
-    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
+    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv)) (_rawElementConfig_modifyAttributes cfg)
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- liftIO $ newIORef Nothing
     _ <- elementOnEventName en e $ do
@@ -331,23 +331,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     n <- textNodeInternal initialContents
-    case mSetContents of
-      Nothing -> return ()
-      Just eSetContents -> lift $ performEvent_ $ ffor eSetContents $ \t -> setNodeValue n (Just t)
+    mapM_ (lift . performEvent_ . fmap (setNodeValue n . Just)) mSetContents
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
-  {-
-  {-# INLINABLE placeholder #-}
-  placeholder (PlaceholderConfig toInsertAbove delete) = liftThrough (deletable delete) $ do
-    n <- textNodeInternal ("" :: Text)
-    insertedAbove <- insertImmediateAbove n toInsertAbove
-    --Note: "deleteSelf" must come after "insertAbove", because we need to be able to insert above in the same frame that we delete
-    deleted <- lift $ performEvent $ ffor delete $ \_ -> do
-      mp <- getParentNode n
-      forM_ mp $ \p -> removeChild p $ Just n
-    return $ Placeholder insertedAbove deleted
--}
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -356,9 +343,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     v0 <- Input.getValueUnchecked domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- performEvent $ ffor (cfg ^. inputElementConfig_setValue) $ \v' -> do
-      Input.setValue domInputElement $ Just v'
-      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
+      Nothing -> return never
+      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+        Input.setValue domInputElement $ Just v'
+        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
@@ -366,10 +355,12 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
     checkedChangedByUI <- wrapDomEvent domInputElement (`on` Element.click) $ do
       Input.getChecked domInputElement
-    checkedChangedBySetChecked <- performEvent $ ffor (_inputElementConfig_setChecked cfg) $ \newChecked -> do
-      oldChecked <- Input.getChecked domInputElement
-      Input.setChecked domInputElement newChecked
-      return $ if newChecked /= oldChecked
+    checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
+      Nothing -> return never
+      Just eNewchecked -> performEvent $ ffor eNewchecked $ \newChecked -> do
+        oldChecked <- Input.getChecked domInputElement
+        Input.setChecked domInputElement newChecked
+        return $ if newChecked /= oldChecked
                     then Just newChecked
                     else Nothing
     c <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
@@ -403,9 +394,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     v0 <- TextArea.getValueUnchecked domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- performEvent $ ffor (cfg ^. textAreaElementConfig_setValue) $ \v' -> do
-      TextArea.setValue domTextAreaElement $ Just v'
-      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
+      Nothing -> return never
+      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+        TextArea.setValue domTextAreaElement $ Just v'
+        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
@@ -426,9 +419,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
     valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
-    valueChangedBySetValue <- performEvent $ ffor (cfg ^. selectElementConfig_setValue) $ \v' -> do
-      Select.setValue domSelectElement $ Just v'
-      getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
+      Nothing -> return never
+      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+        Select.setValue domSelectElement $ Just v'
+        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
@@ -670,10 +665,10 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> getTouchEventCoords
-  Touchmove -> getTouchEventCoords
-  Touchend -> getTouchEventCoords
-  Touchcancel -> getTouchEventCoords
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -720,10 +715,10 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
-  Touchstart -> getTouchEventCoords
-  Touchmove -> getTouchEventCoords
-  Touchend -> getTouchEventCoords
-  Touchcancel -> getTouchEventCoords
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
   Mousewheel -> return ()
   Wheel -> return ()
 
@@ -984,19 +979,49 @@ getMouseEventCoords = do
   e <- event
   bisequence (getClientX e, getClientY e)
 
-{-# INLINABLE getTouchEventCoords #-}
-getTouchEventCoords :: EventM e TouchEvent [(Int, Int)]
-getTouchEventCoords = do
+{-# INLINABLE getTouchEvent #-}
+getTouchEvent :: EventM e TouchEvent TouchEventResult
+getTouchEvent = do
+  let touchResults = \case
+        Nothing -> return []
+        Just ts -> do
+          n <- TouchList.getLength ts
+          fmap catMaybes . forM [0 .. n - 1] $ \ix -> do
+            mt <- TouchList.item ts ix
+            forM mt $ \t -> do
+              identifier <- Touch.getIdentifier t
+              screenX <- Touch.getScreenX t
+              screenY <- Touch.getScreenY t
+              clientX <- Touch.getClientX t
+              clientY <- Touch.getClientY t
+              pageX <- Touch.getPageX t
+              pageY <- Touch.getPageY t
+              return $ TouchResult
+                { _touchResult_identifier = identifier
+                , _touchResult_screenX = screenX
+                , _touchResult_screenY = screenY
+                , _touchResult_clientX = clientX
+                , _touchResult_clientY = clientY
+                , _touchResult_pageX = pageX
+                , _touchResult_pageY = pageY
+                }
   e <- event
-  mTouchList <- TouchEvent.getTouches e
-  case mTouchList of
-    Just touchList -> do
-      touchListLength <- TouchList.getLength touchList
-      mTouchCoords <- forM [0..touchListLength - 1] $ \i -> do
-        mTouch <- TouchList.item touchList i
-        return $ fmap (\t -> bisequence (Touch.getClientX t, Touch.getClientY t)) mTouch
-      sequence $ catMaybes mTouchCoords
-    _ -> return []
+  altKey <- TouchEvent.getAltKey e
+  ctrlKey <- TouchEvent.getCtrlKey e
+  shiftKey <- TouchEvent.getShiftKey e
+  metaKey <- TouchEvent.getMetaKey e
+  changedTouches <- touchResults =<< TouchEvent.getChangedTouches e
+  targetTouches <- touchResults =<< TouchEvent.getTargetTouches e
+  touches <- touchResults =<< TouchEvent.getTouches e
+  return $ TouchEventResult
+    { _touchEventResult_altKey = altKey
+    , _touchEventResult_changedTouches = changedTouches
+    , _touchEventResult_ctrlKey = ctrlKey
+    , _touchEventResult_metaKey = metaKey
+    , _touchEventResult_shiftKey = shiftKey
+    , _touchEventResult_targetTouches = targetTouches
+    , _touchEventResult_touches = touches
+    }
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}

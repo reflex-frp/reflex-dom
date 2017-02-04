@@ -101,6 +101,7 @@ library
     Reflex.Dom.Xhr.Exception
 
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto
 
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings
@@ -115,6 +116,8 @@ library
       template-haskell
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
+    other-modules:
+      Reflex.Dom.Builder.Class.TH
   else
     build-depends:
       dependent-sum == 0.4.*

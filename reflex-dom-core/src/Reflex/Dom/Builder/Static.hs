@@ -171,6 +171,7 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
         sample o
     return (result0, result')
 
+-- TODO: the uses of illegal lenses in this instance causes it to be somewhat less efficient than it can be. replacing them with explicit cases to get the underlying Maybe Event and working with those is ideal.
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
   {-# INLINABLE textNode #-}
