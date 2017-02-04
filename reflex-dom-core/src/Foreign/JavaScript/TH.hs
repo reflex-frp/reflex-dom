@@ -121,6 +121,10 @@ instance HasJSContext m => HasJSContext (EventWriterT t w m) where
   type JSContextPhantom (EventWriterT t w m) = JSContextPhantom m
   askJSContext = lift askJSContext
 
+instance HasJSContext m => HasJSContext (DynamicWriterT t w m) where
+  type JSContextPhantom (DynamicWriterT t w m) = JSContextPhantom m
+  askJSContext = lift askJSContext
+
 instance HasJSContext m => HasJSContext (RequesterT t request response m) where
   type JSContextPhantom (RequesterT t request response m) = JSContextPhantom m
   askJSContext = lift askJSContext
