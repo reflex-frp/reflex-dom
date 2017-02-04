@@ -29,7 +29,7 @@ import Reflex.TriggerEvent.Base hiding (askEvents)
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent.Chan
-import Control.Lens hiding (element)
+import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
@@ -894,7 +894,7 @@ getTouchEvent = do
         Nothing -> return []
         Just ts -> do
           n <- TouchList.getLength ts
-          fmap catMaybes . forM [0 .. n - 1] $ \ix -> do
+          fmap catMaybes . forM (takeWhile (< n) [0..]) $ \ix -> do
             mt <- TouchList.item ts ix
             forM mt $ \t -> do
               identifier <- Touch.getIdentifier t
