@@ -76,6 +76,7 @@ library
 
   exposed-modules:
     Foreign.JavaScript.TH
+    Foreign.JavaScript.Orphans
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate

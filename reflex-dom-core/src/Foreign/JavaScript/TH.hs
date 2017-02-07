@@ -20,6 +20,7 @@
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
 module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
+                             , module Foreign.JavaScript.Orphans
 #ifdef USE_TEMPLATE_HASKELL
                              , Safety (..)
 #endif
@@ -34,6 +35,7 @@ import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
+import Foreign.JavaScript.Orphans
 
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
@@ -227,7 +229,7 @@ instance ToJS x (JSFun x) where
 class IsJSContext x where
   data JSRef x
 
-class (Monad m, MonadIO (JSX m), MonadFix (JSX m), MonadJS x (JSX m)) => HasJS x m | m -> x where
+class (Monad m, MonadJSM (JSX m), MonadFix (JSX m), MonadJS x (JSX m)) => HasJS x m | m -> x where
   type JSX m :: * -> *
   liftJS :: JSX m a -> m a
 

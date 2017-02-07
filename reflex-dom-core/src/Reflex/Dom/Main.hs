@@ -82,11 +82,6 @@ mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
 
 type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better
 
-#ifndef __GHCJS__
-instance MonadJSM m => MonadJSM (PostBuildT t m) where
-    liftJSM' = PostBuildT . liftJSM'
-#endif
-
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
