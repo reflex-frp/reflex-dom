@@ -211,9 +211,16 @@ listWithKey :: forall t k v m a. (Ord k, DomBuilder t m, PostBuild t m, MonadFix
 listWithKey vals mkChild = do
   postBuild <- getPostBuild
   let childValChangedSelector = fanMap $ updated vals
+      -- We keep track of changes to children values in the mkChild function we pass to listHoldWithKey
+      -- The other changes we need to keep track of are child insertions and deletions. diffOnlyKeyChanges
+      -- keeps track of insertions and deletions but ignores value changes, since they're already accounted for.
+      diffOnlyKeyChanges olds news = flip Map.mapMaybe (align olds news) $ \case
+        This _ -> Just Nothing
+        These _ _ -> Nothing
+        That new -> Just $ Just new
   rec sentVals :: Dynamic t (Map k v) <- foldDyn applyMap Map.empty changeVals
       let changeVals :: Event t (Map k (Maybe v))
-          changeVals = attachWith diffMapNoEq (current sentVals) $ leftmost
+          changeVals = attachWith diffOnlyKeyChanges (current sentVals) $ leftmost
                          [ updated vals
                          , tag (current vals) postBuild --TODO: This should probably be added to the attachWith, not to the updated; if we were using diffMap instead of diffMapNoEq, I think it might not work
                          ]
