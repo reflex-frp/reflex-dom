@@ -20,7 +20,6 @@
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
 module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
-                             , module Foreign.JavaScript.Orphans
 #ifdef USE_TEMPLATE_HASKELL
                              , Safety (..)
 #endif
@@ -35,7 +34,7 @@ import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
-import Foreign.JavaScript.Orphans
+import Foreign.JavaScript.Orphans ()
 
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH

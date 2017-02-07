@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -fno-warn-orphan-instances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Foreign.JavaScript.Orphans where
 
 #ifndef __GHCJS__
