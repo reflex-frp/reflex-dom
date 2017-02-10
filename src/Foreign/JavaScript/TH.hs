@@ -127,7 +127,8 @@ instance PrimMonad m => PrimMonad (WithWebView x m) where
 
 instance MonadAdjust t m => MonadAdjust t (WithWebView x m) where
   runWithReplace a0 a' = WithWebView $ runWithReplace (coerce a0) (coerceEvent a')
-  sequenceDMapWithAdjust dm0 dm' = WithWebView $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjust f dm0 dm' = WithWebView $ traverseDMapWithKeyWithAdjust (\k v -> unWithWebView $ f k v) (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = WithWebView $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unWithWebView $ f k v) (coerce dm0) (coerceEvent dm')
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
   {-# INLINABLE newEventWithTrigger #-}

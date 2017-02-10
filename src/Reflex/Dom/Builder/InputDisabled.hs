@@ -68,7 +68,8 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabl
 
 instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
   runWithReplace a0 a' = InputDisabledT $ runWithReplace (coerce a0) (coerceEvent a')
-  sequenceDMapWithAdjust dm0 dm' = InputDisabledT $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjust f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjust (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjustWithMove (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
 
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m

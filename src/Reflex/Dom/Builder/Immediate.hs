@@ -40,13 +40,13 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
+import Data.Functor.Compose
+import Data.Functor.Constant
 import Data.Functor.Misc
 import Data.IORef
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
-import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
@@ -65,8 +65,8 @@ import qualified GHCJS.DOM.Touch as Touch
 import qualified GHCJS.DOM.TouchEvent as TouchEvent
 import qualified GHCJS.DOM.TouchList as TouchList
 #endif
-import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, removeChild,
-                       setNodeValue, toNode)
+import GHCJS.DOM.Node (appendChild, getOwnerDocument, getParentNode, getPreviousSibling, getNextSibling,
+                       removeChild, setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, ToDOMString, TouchEvent,
                         WheelEvent, castToHTMLInputElement, castToHTMLSelectElement,
@@ -165,6 +165,12 @@ deleteUpTo s e = do
     Nothing -> return () --TODO: Is this the right behavior?
     Just currentParent -> deleteUpToGivenParent currentParent s e
 
+{-# INLINABLE collectUpTo #-}
+collectUpTo :: (MonadIO m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
+collectUpTo s e = do
+  Just currentParent <- getParentNode e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
+  collectUpToGivenParent currentParent s e
+
 {-# INLINABLE deleteUpToGivenParent #-}
 deleteUpToGivenParent :: (MonadIO m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
 deleteUpToGivenParent currentParent s e = do
@@ -172,6 +178,18 @@ deleteUpToGivenParent currentParent s e = do
     Just x <- getPreviousSibling e -- This can't be Nothing because we should hit 's' first
     _ <- removeChild currentParent $ Just x
     when (toNode s /= toNode x) loop
+
+{-# INLINABLE collectUpToGivenParent #-}
+collectUpToGivenParent :: (MonadIO m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m DOM.DocumentFragment
+collectUpToGivenParent currentParent s e = do
+  Just doc <- getOwnerDocument currentParent
+  Just df <- createDocumentFragment doc
+  let loop this = when (toNode e /= this) $ do
+        Just next <- getNextSibling this -- This can't be Nothing because we should hit 'e' first
+        _ <- appendChild df $ Just this -- This will also remove 'this' from its current parent
+        loop next
+  loop $ toNode s
+  return df
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadIO m, MonadIO (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, MonadAdjust t m)
 
@@ -416,36 +434,78 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
       insertBefore df after
       return result
     return (result0, result')
-  sequenceDMapWithAdjust (dm0 :: DMap k (ImmediateDomBuilderT t m)) dm' = do
+  traverseDMapWithKeyWithAdjust (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
-    let drawChildInitial :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)
-        drawChildInitial child = runImmediateDomBuilderT ((,,) <$> pure (error "sequenceDMapWithAdjust{ImmediateDomBuilderT}: drawChildInitial: DocumentFragment evaluated") <*> textNodeInternal ("" :: Text) <*> child) initialEnv --TODO: Don't return a DocumentFragment at all here; this will require that sequenceDMapWithAdjust accept differently-typed values for the constant and Event arguments.
-        drawChildUpdate :: ImmediateDomBuilderT t m a -> m (DOM.DocumentFragment, DOM.Text, a)
+    let drawChildUpdate :: forall a. ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
         drawChildUpdate child = do
           Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
-          runImmediateDomBuilderT ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child) $ initialEnv
+          runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
             { _immediateDomBuilderEnv_parent = toNode df
             }
-        updateChildren = ffor dm' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(k :=> ComposeMaybe mv) -> WrapArg k :=> ComposeMaybe (fmap drawChildUpdate mv)) p
-    (children0, children') <- lift $ sequenceDMapWithAdjust (mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> drawChildInitial v) dm0) (updateChildren :: Event t (PatchDMap (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) m)) --TODO: Update stuff
-    let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, _, v)) -> k :=> Identity v) children0
-        placeholders0 = dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, ph, _)) -> Const2 (Some.This k) :=> Identity ph) children0
-        result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> k :=> fmap (\(_, _, r) -> r) v) p
-        placeholders' = ffor children' $ \(PatchDMap p) -> PatchMap $
-          dmapToMap $ mapKeyValuePairsMonotonic (\(WrapArg k :=> v) -> Const2 (Some.This k) :=> Identity (fmap ((\(_, ph, _) -> ph) . runIdentity) (getComposeMaybe v))) p
-    placeholders :: Behavior t (Map (Some k) DOM.Text) <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
+    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate $ f k v) dm0 dm'
+    let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
+        placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
+        result' = ffor children' $ mapPatchDMap $ \(Compose (_, _, r)) -> r
+        placeholders' = fforCheap children' $ weakenPatchDMapWith $ \(Compose (_, ph, _)) -> ph
+    placeholders <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
+    _ <- DMap.traverseWithKey (\_ (Compose (df, _, _)) -> Constant () <$ append df) children0
     lastPlaceholder <- textNodeInternal ("" :: Text)
     performEvent_ $ flip push children' $ \(PatchDMap p) -> do
       phs <- sample placeholders
       if DMap.null p then return Nothing else return $ Just $ do
-        let f :: DSum (WrapArg ((,,) DOM.DocumentFragment DOM.Text) k) (ComposeMaybe Identity) -> Performable m ()
-            f (WrapArg k :=> ComposeMaybe mv) = do
+        let g :: DSum k (ComposeMaybe (Compose ((,,) DOM.DocumentFragment DOM.Text) v')) -> Performable m ()
+            g (k :=> ComposeMaybe mv) = do
               let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phs
               forM_ (Map.lookup (Some.This k) phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
-              forM_ mv $ \(Identity (df, _, _)) -> df `insertBefore` nextPlaceholder
-        mapM_ f $ DMap.toList p
+              forM_ mv $ \(Compose (df, _, _)) -> df `insertBefore` nextPlaceholder
+        mapM_ g $ DMap.toList p
+    return (result0, result')
+  traverseDMapWithKeyWithAdjustWithMove (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
+    initialEnv <- ImmediateDomBuilderT ask
+    let drawChildUpdate :: forall a. ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
+        drawChildUpdate child = do
+          Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+          runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
+            { _immediateDomBuilderEnv_parent = toNode df
+            }
+    (children0, children') <- lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate $ f k v) dm0 dm'
+    let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
+        placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
+        result' = ffor children' $ mapPatchDMapWithMove $ \(Compose (_, _, r)) -> r
+        placeholders' = fforCheap children' $ weakenPatchDMapWithMoveWith $ \(Compose (_, ph, _)) -> ph
+    placeholders <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
+    _ <- DMap.traverseWithKey (\_ (Compose (df, _, _)) -> Constant () <$ append df) children0
+    lastPlaceholder <- textNodeInternal ("" :: Text)
+    performEvent_ $ flip push children' $ \p_ -> do
+      let p = unPatchDMapWithMove p_
+      phsBefore <- sample placeholders
+      if DMap.null p then return Nothing else return $ Just $ do
+        let collectIfMoved :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant (Maybe DOM.DocumentFragment) a)
+            collectIfMoved k e = do
+              Just thisPlaceholder <- return $ Map.lookup (Some.This k) phsBefore
+              let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
+              case dmapEditMoved e of
+                False -> do
+                  thisPlaceholder `deleteUpTo` nextPlaceholder
+                  return $ Constant Nothing
+                True -> do
+                  Constant . Just <$> thisPlaceholder `collectUpTo` nextPlaceholder
+        collected <- DMap.traverseWithKey collectIfMoved p
+        let phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (\(Compose (_, ph, _)) -> ph) p_) phsBefore --TODO: Don't recompute this
+        let placeFragment :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant () a)
+            placeFragment k e = do
+              let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsAfter
+              case e of
+                DMapEdit_Insert _ (Compose (df, _, _)) -> do
+                  df `insertBefore` nextPlaceholder
+                DMapEdit_Delete _ -> do
+                  return ()
+                DMapEdit_Move _ fromKey -> do
+                  Just (Constant (Just df)) <- return $ DMap.lookup fromKey collected
+                  df `insertBefore` nextPlaceholder
+              return $ Constant ()
+        mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
+        return ()
     return (result0, result')
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)

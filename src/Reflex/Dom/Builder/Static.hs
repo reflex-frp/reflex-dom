@@ -31,8 +31,8 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
+import Data.Functor.Compose
 import Data.Functor.Constant
-import Data.Functor.Misc
 import qualified Data.Map as Map
 import Data.Monoid
 import qualified Data.Set as Set
@@ -150,20 +150,15 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
     return (fst result0, fmapCheap fst result')
-  sequenceDMapWithAdjust (dm0 :: DMap k (StaticDomBuilderT t m)) dm' = do
+  traverseDMapWithKeyWithAdjust f (dm0 :: DMap k v) dm' = do
     e <- StaticDomBuilderT ask
-    let loweredDm0 = mapKeyValuePairsMonotonic (\(k :=> v) -> WrapArg k :=> fmap swap (runStaticDomBuilderT v e)) dm0
-        loweredDm' = ffor dm' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(k :=> ComposeMaybe mv) -> WrapArg k :=> ComposeMaybe (fmap (fmap swap . flip runStaticDomBuilderT e) mv)) p
-    (children0, children') <- lift $ sequenceDMapWithAdjust loweredDm0 loweredDm'
-    let result0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (_, v)) -> k :=> Identity v) children0
-        result' = ffor children' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(WrapArg k :=> mv) -> k :=> fmap snd mv) p
+    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> fmap (Compose . swap) (runStaticDomBuilderT (f k v) e)) dm0 dm'
+    let result0 = DMap.map (snd . getCompose) children0
+        result' = ffor children' $ mapPatchDMap $ snd . getCompose
         outputs0 :: DMap k (Constant (Behavior t Builder))
-        outputs0 = mapKeyValuePairsMonotonic (\(WrapArg k :=> Identity (o, _)) -> k :=> Constant o) children0
+        outputs0 = DMap.map (Constant . fst . getCompose) children0
         outputs' :: Event t (PatchDMap k (Constant (Behavior t Builder)))
-        outputs' = ffor children' $ \(PatchDMap p) -> PatchDMap $
-          mapKeyValuePairsMonotonic (\(WrapArg k :=> ComposeMaybe mv) -> k :=> ComposeMaybe (fmap (Constant . fst . runIdentity) mv)) p
+        outputs' = ffor children' $ mapPatchDMap $ Constant . fst . getCompose
     outputs <- holdIncremental outputs0 outputs'
     StaticDomBuilderT $ modify $ (:) $ pull $ do
       os <- sample $ currentIncremental outputs
