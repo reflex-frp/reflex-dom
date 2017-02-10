@@ -23,8 +23,8 @@ import System.Random
 
 main :: IO ()
 main = mainWidget $ do
-  let f k (a, b, c) = el "tr" $ do
-        mapM_ (el "td" . text . T.pack . show) [k, a, b, c]
+  let f _ (a, b, c) = el "tr" $ do
+        mapM_ (el "td" . text . T.pack . show) [a, b, c]
         _ <- el "td" $ inputElement def
         return ()
   let numKeys = 1000 :: Int
@@ -33,15 +33,15 @@ main = mainWidget $ do
       values = zip3 (randoms (mkStdGen 0)) (randoms (mkStdGen 1)) (randoms (mkStdGen 2))
       testMap = Map.fromList $ zip keys values
       resortButtons = el "div" $ leftmost <$> sequence
-        [ (comparing (view _1) <$) <$> button "1 ASC"
-        , (flip (comparing (view _1)) <$) <$> button "1 DESC"
-        , (comparing (view _2) <$) <$> button "2 ASC"
-        , (flip (comparing (view _2)) <$) <$> button "2 DESC"
-        , (comparing (view _3) <$) <$> button "3 ASC"
-        , (flip (comparing (view _3)) <$) <$> button "3 DESC"
+        [ (comparing (view _1) <$) <$> button "A ASC"
+        , (flip (comparing (view _1)) <$) <$> button "A DESC"
+        , (comparing (view _2) <$) <$> button "B ASC"
+        , (flip (comparing (view _2)) <$) <$> button "B DESC"
+        , (comparing (view _3) <$) <$> button "C ASC"
+        , (flip (comparing (view _3)) <$) <$> button "C DESC"
         ]
   el "h1" $ text "Improved list sorting"
-  el "p" $ text $ "This app shows a table of " <> T.pack (show numKeys) <> " items, and allows you to re-sort by columns a, b, and c, which are full of pseudorandom numbers."
+  el "p" $ text $ "This app shows a table of " <> T.pack (show numKeys) <> " rows, and allows you to re-sort by columns a, b, and c, which are full of pseudorandom numbers.  Each row also includes an element with internal state (a textbox) to demonstrate that the state is preserved, only when using the new way."
   el "h3" $ text "Re-sort the list the OLD way (by redrawing everything)"
   resortSlow <- resortButtons
   displayRedrawTime resortSlow
@@ -51,7 +51,6 @@ main = mainWidget $ do
   el "hr" blank
   el "table" $ do
     el "tr" $ do
-      el "th" $ text "Key"
       el "th" $ text "A"
       el "th" $ text "B"
       el "th" $ text "C"
@@ -76,13 +75,14 @@ mapMapWithAdjustWithMove f m0 m' = do
 
 simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, MonadAdjust t m, Ord k) => (k -> v -> m ()) -> Map k v -> Event t (v -> v -> Ordering) -> Event t (v -> v -> Ordering) -> m ()
 simpleSortableList f m0 resortFunc resortSlowFunc = do
-  rec let resortPatch = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
+  rec let resortPatchFast = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v
           redrawPatch d cmp = unsafePatchMapWithMove $ fmap (MapEdit_Insert False) $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
           resortPatchSlow = attachWith redrawPatch (currentIncremental m) resortSlowFunc
+          resortPatch = leftmost
+            [ resortPatchFast
+            , resortPatchSlow
+            ]
       m <- holdIncremental m0 resortPatch
-  _ <- mapMapWithAdjustWithMove f m0 $ leftmost
-    [ resortPatch
-    , resortPatchSlow
-    ]
+  _ <- mapMapWithAdjustWithMove f m0 resortPatch
   return ()
