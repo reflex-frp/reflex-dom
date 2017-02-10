@@ -27,12 +27,12 @@ main = mainWidget $ do
       values = zip3 (randoms (mkStdGen 0)) (randoms (mkStdGen 1)) (randoms (mkStdGen 2))
       testMap = Map.fromList $ zip keys values
   resort <- leftmost <$> sequence
-    [ fmap (comparing (view _1) <$) $ button "1 ASC"
-    , fmap (flip (comparing (view _1)) <$) $ button "1 DESC"
-    , fmap (comparing (view _2) <$) $ button "2 ASC"
-    , fmap (flip (comparing (view _2)) <$) $ button "2 DESC"
-    , fmap (comparing (view _3) <$) $ button "3 ASC"
-    , fmap (flip (comparing (view _3)) <$) $ button "3 DESC"
+    [ (comparing (view _1) <$) <$> button "1 ASC"
+    , (flip (comparing (view _1)) <$) <$> button "1 DESC"
+    , (comparing (view _2) <$) <$> button "2 ASC"
+    , (flip (comparing (view _2)) <$) <$> button "2 DESC"
+    , (comparing (view _3) <$) <$> button "3 ASC"
+    , (flip (comparing (view _3)) <$) <$> button "3 DESC"
     ]
   simpleSortableList f testMap resort
   return ()

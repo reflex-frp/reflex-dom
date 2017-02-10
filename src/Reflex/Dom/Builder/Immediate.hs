@@ -436,13 +436,7 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
     return (result0, result')
   traverseDMapWithKeyWithAdjust (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
-    let drawChildUpdate :: forall a. ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
-        drawChildUpdate child = do
-          Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
-          runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
-            { _immediateDomBuilderEnv_parent = toNode df
-            }
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate $ f k v) dm0 dm'
+    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
     let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
         placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
         result' = ffor children' $ mapPatchDMap $ \(Compose (_, _, r)) -> r
@@ -462,13 +456,7 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
     return (result0, result')
   traverseDMapWithKeyWithAdjustWithMove (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
-    let drawChildUpdate :: forall a. ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
-        drawChildUpdate child = do
-          Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
-          runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
-            { _immediateDomBuilderEnv_parent = toNode df
-            }
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate $ f k v) dm0 dm'
+    (children0, children') <- lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
     let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
         placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
         result' = ffor children' $ mapPatchDMapWithMove $ \(Compose (_, _, r)) -> r
@@ -507,6 +495,11 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
         mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
         return ()
     return (result0, result')
+
+drawChildUpdate :: MonadIO m => ImmediateDomBuilderEnv t -> ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
+drawChildUpdate initialEnv child = do
+  Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+  runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv { _immediateDomBuilderEnv_parent = toNode df }
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
