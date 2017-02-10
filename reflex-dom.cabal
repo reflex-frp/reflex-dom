@@ -143,6 +143,7 @@ executable sortableList
                , reflex
                , reflex-dom
                , text
+               , time
                , transformers
   hs-source-dirs: examples
   main-is: sortableList.hs
