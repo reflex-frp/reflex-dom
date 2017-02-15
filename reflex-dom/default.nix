@@ -4,7 +4,7 @@
 mkDerivation {
   pname = "reflex-dom";
   version = "0.4";
-  src = ./.;
+  src = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [ ".git" "dist" ])) ./.;
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
   ] ++ (if ghc.isGhcjs or false then [

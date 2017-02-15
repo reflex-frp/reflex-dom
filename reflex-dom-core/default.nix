@@ -10,7 +10,7 @@
 mkDerivation {
   pname = "reflex-dom-core";
   version = "0.3";
-  src = builtins.filterSource (path: type: baseNameOf path != ".git") ./.;
+  src = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [ ".git" "dist" ])) ./.;
   buildDepends = [
     aeson
     bifunctors
