@@ -35,7 +35,7 @@ library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 1.1,
-    base >= 4.7 && < 4.10,
+    base >= 4.7 && < 4.11,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     blaze-builder,
