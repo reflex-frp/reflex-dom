@@ -470,14 +470,14 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
       if DMap.null p then return Nothing else return $ Just $ do
         let collectIfMoved :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant (Maybe DOM.DocumentFragment) a)
             collectIfMoved k e = do
-              Just thisPlaceholder <- return $ Map.lookup (Some.This k) phsBefore
-              let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
+              let mThisPlaceholder = Map.lookup (Some.This k) phsBefore -- Will be Nothing if this element wasn't present before
+                  nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
               case dmapEditMoved e of
                 False -> do
-                  thisPlaceholder `deleteUpTo` nextPlaceholder
+                  mapM_ (`deleteUpTo` nextPlaceholder) mThisPlaceholder
                   return $ Constant Nothing
                 True -> do
-                  Constant . Just <$> thisPlaceholder `collectUpTo` nextPlaceholder
+                  Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
         collected <- DMap.traverseWithKey collectIfMoved p
         let phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (\(Compose (_, ph, _)) -> ph) p_) phsBefore --TODO: Don't recompute this
         let placeFragment :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant () a)
@@ -489,8 +489,8 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
                 DMapEdit_Delete _ -> do
                   return ()
                 DMapEdit_Move _ fromKey -> do
-                  Just (Constant (Just df)) <- return $ DMap.lookup fromKey collected
-                  df `insertBefore` nextPlaceholder
+                  Just (Constant mdf) <- return $ DMap.lookup fromKey collected
+                  mapM_ (`insertBefore` nextPlaceholder) mdf
               return $ Constant ()
         mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
         return ()
