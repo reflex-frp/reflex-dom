@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -67,11 +66,6 @@ displayRedrawTime e = do
     return $ t2 `diffUTCTime` t1
   text "Time: "
   dynText =<< holdDyn "not yet run" (T.pack . show <$> diff)
-
-mapMapWithAdjustWithMove :: forall t m k v v'. (MonadAdjust t m, Ord k) => (k -> v -> m v') -> Map k v -> Event t (PatchMapWithMove k v) -> m (Map k v', Event t (PatchMapWithMove k v'))
-mapMapWithAdjustWithMove f m0 m' = do
-  (out0 :: DMap (Const2 k v) (Constant v'), out') <- traverseDMapWithKeyWithAdjustWithMove (\(Const2 k) (Identity v) -> Constant <$> f k v) (mapToDMap m0) (const2PatchDMapWithMoveWith Identity <$> m')
-  return (dmapToMapWith (\(Constant v') -> v') out0, patchDMapWithMoveToPatchMapWithMoveWith (\(Constant v') -> v') <$> out')
 
 simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, MonadAdjust t m, Ord k) => (k -> v -> m ()) -> Map k v -> Event t (v -> v -> Ordering) -> Event t (v -> v -> Ordering) -> m ()
 simpleSortableList f m0 resortFunc resortSlowFunc = do
