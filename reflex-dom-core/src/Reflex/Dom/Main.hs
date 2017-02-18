@@ -51,9 +51,6 @@ mainWidget w = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
-  forever $ do
-    liftIO $ threadDelay 100000
-    syncPoint
 
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
@@ -64,9 +61,6 @@ mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
   attachWidget headElement jsSing h
   body <- getBodyUnchecked doc
   attachWidget body jsSing b
-  forever $ do
-    liftIO $ threadDelay 100000
-    syncPoint
 
 {-# INLINABLE mainWidgetWithCss #-}
 mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
@@ -76,9 +70,6 @@ mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
-  forever $ do
-    liftIO $ threadDelay 100000
-    syncPoint
 
 type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better
 
@@ -166,9 +157,6 @@ mainWidgetInElementById eid w = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   root <- getElementByIdUnchecked doc eid
   attachWidget root jsSing w
-  forever $ do
-    liftIO $ threadDelay 100000
-    syncPoint
 
 data AppInput t = AppInput
   { _appInput_window :: Window t
@@ -188,6 +176,4 @@ runApp' app = withJSContextSingleton $ \jsSing -> do
         app $ AppInput
           { _appInput_window = w
           }
-  forever $ do
-    liftIO $ threadDelay 100000
-    syncPoint
+  return ()
