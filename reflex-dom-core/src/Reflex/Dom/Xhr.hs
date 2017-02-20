@@ -417,7 +417,7 @@ xhrRequestConfig_responseType :: Lens' (XhrRequestConfig a) (Maybe XhrResponseTy
 xhrRequestConfig_responseType f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 y x5 x6 x7) <$> f x4
 {-# INLINE xhrRequestConfig_responseType #-}
 
-xhrRequestConfig_sendData :: Lens' (XhrRequestConfig a) a
+xhrRequestConfig_sendData :: Lens (XhrRequestConfig a) (XhrRequestConfig b) a b
 xhrRequestConfig_sendData f (XhrRequestConfig x1 x2 x3 x4 x5 x6 x7) = (\y -> XhrRequestConfig x1 x2 x3 x4 y x6 x7) <$> f x5
 {-# INLINE xhrRequestConfig_sendData #-}
 
