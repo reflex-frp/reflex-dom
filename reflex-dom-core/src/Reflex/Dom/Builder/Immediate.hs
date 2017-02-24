@@ -31,6 +31,7 @@ import Reflex.TriggerEvent.Base hiding (askEvents)
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent.Chan
+import Control.Exception (evaluate)
 import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
 import Control.Monad.Primitive
@@ -224,6 +225,9 @@ wrap e cfg = do
       liftIO $ forM_ mv $ \v -> writeChan events [TriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
   es <- do
+    let h :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
+        h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
+    _ <- liftIO $ evaluate h
     ctx <- askJSM
     newFanEventWithTrigger $ \(WrapArg en) t ->
       case DMap.lookup en eventTriggerRefs of
@@ -233,7 +237,6 @@ wrap e cfg = do
             writeIORef r Nothing
         Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
           evt <- DOM.event
-          let h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg
           mv <- lift $ h (en, GhcjsDomEvent evt)
           case mv of
             Nothing -> return ()
