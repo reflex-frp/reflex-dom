@@ -69,9 +69,9 @@ import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
-import GHCJS.DOM.Node (getFirstChild, getNodeName, getParentNode, getPreviousSibling, removeChildUnchecked)
+import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChildUnchecked)
 import GHCJS.DOM.Types
-       (MonadJSM, strictEqual, liftJSM, JSM, IsElement, IsNode)
+       (MonadJSM, liftJSM, JSM, IsElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -236,7 +236,7 @@ wrapElement eh e = do
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
   wrapRawElement e $ (def :: RawElementConfig EventResult t m)
     { _rawElementConfig_eventSpec = def
-        { _ghcjsEventSpec_handler = h
+        { _ghcjsEventSpec_handler = GhcjsEventHandler h
         }
     }
 
@@ -259,7 +259,7 @@ nodeClear n = do
   case mfc of
     Nothing -> return ()
     Just fc -> do
-      removeChildUnchecked n $ Just fc
+      _ <- removeChildUnchecked n $ Just fc
       nodeClear n
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a

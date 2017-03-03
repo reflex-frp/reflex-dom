@@ -9,14 +9,12 @@ module Reflex.Dom.Xhr.Foreign (
   , module Reflex.Dom.Xhr.Foreign
 ) where
 
-import Control.Exception (catch, throwIO)
+import Control.Exception (throwIO)
 import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.ByteString (ByteString)
-import GHCJS.Marshal (fromJSValUnchecked)
-import GHCJS.DOM
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on)
 import GHCJS.DOM.EventTarget (dispatchEvent)

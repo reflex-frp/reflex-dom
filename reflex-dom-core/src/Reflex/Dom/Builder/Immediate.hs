@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
@@ -31,7 +32,6 @@ import Reflex.TriggerEvent.Base hiding (askEvents)
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent.Chan
-import Control.Exception (evaluate)
 import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
 import Control.Monad.Primitive
@@ -55,6 +55,7 @@ import Data.Monoid
 import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
+import qualified Data.Text as T
 import GHCJS.DOM.Document (Document, createDocumentFragmentUnchecked, createElementUnchecked, createElementNSUnchecked, createTextNodeUnchecked)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
@@ -80,8 +81,6 @@ import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
 import Language.Javascript.JSaddle (call, eval)
-
-import Debug.Trace hiding (traceEvent)
 
 data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
 
@@ -146,31 +145,36 @@ textNodeInternal t = do
 {-# INLINABLE deleteBetweenInclusive #-}
 deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenInclusive s e = liftJSM $ do
-  f <- eval ("(function(s,e){ \
-    p = e.parentNode; \
-    if(p !== null) { \
-        for(;;){ \
-            x = e.previousSibling; \
-            p.removeChild(x); \
-            if(s===x) break; \
-        } \
-        p.removeChild(e); \
-    }})" :: Text)
+  f <- eval $ T.unlines
+    [ "(function(s,e){"
+    , "  p = e.parentNode;"
+    , "  if(p !== null) {"
+    , "    for(;;){"
+    , "        x = e.previousSibling;"
+    , "        p.removeChild(x);"
+    , "        if(s===x) break;"
+    , "    }"
+    , "    p.removeChild(e);"
+    , "  }"
+    , "})"
+    ]
   void $ call f f (s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
 deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenExclusive s e = liftJSM $ do
-  f <- eval ("(function(s,e){ \
-    p = e.parentNode; \
-    if(p !== null) { \
-        for(;;){ \
-            x = e.previousSibling; \
-            if(s===x) break; \
-            p.removeChild(x); \
-        } \
-     }})" :: Text)
+  f <- eval $ T.unlines
+    [ "(function(s,e){"
+    , "  p = e.parentNode;"
+    , "  if(p !== null) {"
+    , "      for(;;){"
+    , "          x = e.previousSibling;"
+    , "          if(s===x) break;"
+    , "          p.removeChild(x);"
+    , "      }"
+    , "   }})"
+    ]
   void $ call f f (s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -178,27 +182,31 @@ deleteBetweenExclusive s e = liftJSM $ do
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteUpTo s e = liftJSM $ do
-  f <- eval ("(function(s,e){ \
-    p = e.parentNode; \
-    if(p !== null) { \
-        for(;;) { \
-            x = e.previousSibling; \
-            p.removeChild(x); \
-            if(s===x) break; \
-        } \
-    }})" :: Text)
+  f <- eval $ T.unlines
+    [ "(function(s,e){"
+    , "  p = e.parentNode;"
+    , "  if(p !== null) {"
+    , "      for(;;) {"
+    , "          x = e.previousSibling;"
+    , "          p.removeChild(x);"
+    , "          if(s===x) break;"
+    , "      }"
+    , "  }})"
+    ]
   void $ call f f (s, e)
 
 -- | s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpToGivenParent #-}
 deleteUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
 deleteUpToGivenParent currentParent s e = liftJSM $ do
-  f <- eval ("(function(p,s,e){ \
-    for(;;){ \
-        x = e.previousSibling; \
-        p.removeChild(x); \
-        if(s===x) break; \
-    }})" :: Text)
+  f <- eval $ T.unlines
+    [ "(function(p,s,e){"
+    , "  for(;;){"
+    , "      x = e.previousSibling;"
+    , "      p.removeChild(x);"
+    , "      if(s===x) break;"
+    , "  }})"
+    ]
   void $ call f f (currentParent, s, e)
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
@@ -225,9 +233,8 @@ wrap e cfg = do
       liftIO $ forM_ mv $ \v -> writeChan events [TriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
   es <- do
-    let h :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
-        h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
-    _ <- liftIO $ evaluate h
+    let h :: GhcjsEventHandler er
+        !h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
     ctx <- askJSM
     newFanEventWithTrigger $ \(WrapArg en) t ->
       case DMap.lookup en eventTriggerRefs of
@@ -237,7 +244,7 @@ wrap e cfg = do
             writeIORef r Nothing
         Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
           evt <- DOM.event
-          mv <- lift $ h (en, GhcjsDomEvent evt)
+          mv <- lift $ unGhcjsEventHandler h (en, GhcjsDomEvent evt)
           case mv of
             Nothing -> return ()
             Just v -> liftIO $ do
@@ -286,7 +293,7 @@ instance DomSpace GhcjsDomSpace where
     { _ghcjsEventSpec_filters =
         let f' = Just . GhcjsEventFilter . \case
               Nothing -> \evt -> do
-                mEventResult <- _ghcjsEventSpec_handler es (en, evt)
+                mEventResult <- unGhcjsEventHandler (_ghcjsEventSpec_handler es) (en, evt)
                 return (f mEventResult, return mEventResult)
               Just (GhcjsEventFilter oldFilter) -> \evt -> do
                 (oldFlags, oldContinuation) <- oldFilter evt
@@ -304,8 +311,10 @@ data Maybe1 f a = Nothing1 | Just1 (f a)
 
 data GhcjsEventSpec er = GhcjsEventSpec
   { _ghcjsEventSpec_filters :: DMap EventName (GhcjsEventFilter er)
-  , _ghcjsEventSpec_handler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en))
+  , _ghcjsEventSpec_handler :: GhcjsEventHandler er
   }
+
+newtype GhcjsEventHandler er = GhcjsEventHandler { unGhcjsEventHandler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)) }
 
 #ifndef USE_TEMPLATE_HASKELL
 phantom2 :: (Functor f, Contravariant f) => f a -> f b
@@ -316,14 +325,14 @@ ghcjsEventSpec_filters :: forall er . Lens' (GhcjsEventSpec er) (DMap EventName 
 ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (\a' -> GhcjsEventSpec a' b) <$> f a
 {-# INLINE ghcjsEventSpec_filters #-}
 ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)))
-ghcjsEventSpec_handler f (GhcjsEventSpec _ b) = phantom2 (f b)
+ghcjsEventSpec_handler f (GhcjsEventSpec _ (GhcjsEventHandler b)) = phantom2 (f b)
 {-# INLINE ghcjsEventSpec_handler #-}
 #endif
 
 instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
-    , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> do
+    , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
         t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
         let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt

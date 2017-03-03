@@ -43,7 +43,7 @@ import GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.Node
 import qualified GHCJS.DOM.Types as DOM
-import GHCJS.DOM.Types (MonadJSM(..), JSM)
+import GHCJS.DOM.Types (JSM)
 
 {-# INLINABLE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()

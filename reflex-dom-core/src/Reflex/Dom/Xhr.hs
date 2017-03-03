@@ -246,7 +246,6 @@ newXMLHttpRequestWithError
     -> m XMLHttpRequest
     -- ^ The XHR request, which could for example be aborted.
 newXMLHttpRequestWithError req cb = do
-  wv <- askJSContext
   xhr <- xmlHttpRequestNew
   ctx <- askJSM
   void $ liftIO $ forkIO $ handle ((`runJSM` ctx) . cb . Left) $ void . (`runJSM` ctx) $ do

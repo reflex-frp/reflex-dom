@@ -8,5 +8,12 @@ main = do
     , "--ignore=Redundant do"
     , "--ignore=Use camelCase"
     , "--ignore=Redundant $"
+    , "--ignore=Use &&"
+    , "--ignore=Use &&&"
+    , "--ignore=Use const"
+    , "--ignore=Use >=>"
+    , "--ignore=Use ."
+    , "--ignore=Use unless"
+    , "--cpp-define=USE_TEMPLATE_HASKELL"
     ]
   if null ideas then exitSuccess else exitFailure

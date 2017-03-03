@@ -296,12 +296,12 @@ checkboxView dAttrs dValue = do
         , _elementConfig_initialAttributes = Map.mapKeys (AttributeName Nothing) permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
             { _ghcjsEventSpec_filters = filters
-            , _ghcjsEventSpec_handler = \(en, GhcjsDomEvent evt) -> case en of
+            , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> case en of
                 Click -> error "impossible"
                 _ -> do
                   e :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt
-                  let element = uncheckedCastTo DOM.Element e
-                  mr <- runReaderT (defaultDomEventHandler element en) evt
+                  let myElement = uncheckedCastTo DOM.Element e
+                  mr <- runReaderT (defaultDomEventHandler myElement en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
         }

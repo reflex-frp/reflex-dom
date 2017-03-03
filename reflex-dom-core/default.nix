@@ -1,48 +1,28 @@
-{ mkDerivation, pkgs, dependent-map, ghcjs-dom, lens
-, mtl, ref-tf, reflex, text, these
-, transformers, data-default, semigroups, blaze-builder, aeson
-, ghc, exception-transformers
-, dependent-sum-template, bifunctors, bimap
-, raw-strings-qq, zenc, random, monad-control, keycode, hlint
-, unbounded-delays, jsaddle
+{ mkDerivation, ghc, aeson, base, bifunctors, bimap, blaze-builder
+, bytestring, containers, contravariant, data-default
+, dependent-map, dependent-sum, dependent-sum-template, directory
+, exception-transformers, ghcjs-dom, hlint, jsaddle, keycode, lens
+, monad-control, mtl, primitive, random, ref-tf, reflex, semigroups
+, stdenv, stm, template-haskell, temporary, text, these, time
+, transformers, unbounded-delays, unix, zenc, hashable, xvfb_run
+, chromium, process, jsaddle-warp
 }:
-
 mkDerivation {
   pname = "reflex-dom-core";
-  version = "0.3";
-  src = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [ ".git" "dist" ])) ./.;
-  buildDepends = [
-    aeson
-    bifunctors
-    bimap
-    blaze-builder
-    data-default
-    dependent-map
-    dependent-sum-template
-    exception-transformers
-    ghcjs-dom
-    jsaddle
-    keycode
-    lens
-    monad-control
-    mtl
-    random
-    ref-tf
-    reflex
-    semigroups
-    text
-    these
-    transformers
-    unbounded-delays
-    zenc
-  ] ++ (if ghc.isGhcjs or false then [] else [
-    raw-strings-qq
-  ]);
-  testDepends = if ghc.isGhcjs or false then [] else [
-    hlint
-  ];
-  pkgconfigDepends = if ghc.isGhcjs or false then [] else [
-    raw-strings-qq
-  ];
-  license = null;
+  version = "0.4";
+  src = ./.;
+  libraryHaskellDepends = [
+    aeson base bifunctors bimap blaze-builder bytestring containers
+    contravariant data-default dependent-map dependent-sum
+    dependent-sum-template directory exception-transformers ghcjs-dom
+    jsaddle keycode lens monad-control mtl primitive random ref-tf
+    reflex semigroups stm template-haskell text these time transformers
+    unbounded-delays unix zenc
+  ] ++ (if ghc.isGhcjs or false then [
+    hashable
+  ] else []);
+  testHaskellDepends = [ base hlint temporary jsaddle-warp process ];
+  testSystemDepends = [ xvfb_run chromium ];
+  description = "Functional Reactive Web Apps with Reflex";
+  license = stdenv.lib.licenses.bsd3;
 }
