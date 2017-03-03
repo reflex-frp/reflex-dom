@@ -7,7 +7,11 @@
 , transformers, unbounded-delays, unix, zenc, hashable, xvfb_run
 , chromium, process, jsaddle-warp
 }:
-mkDerivation {
+let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
+      testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process ];
+      testSystemDepends = (drv.testSystemDepends or []) ++ [ xvfb_run chromium ];
+    };
+in mkDerivation (addGcTestDepends {
   pname = "reflex-dom-core";
   version = "0.4";
   src = ./.;
@@ -21,8 +25,7 @@ mkDerivation {
   ] ++ (if ghc.isGhcjs or false then [
     hashable
   ] else []);
-  testHaskellDepends = [ base hlint temporary jsaddle-warp process ];
-  testSystemDepends = [ xvfb_run chromium ];
+  testHaskellDepends = [ base hlint ];
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;
-}
+})
