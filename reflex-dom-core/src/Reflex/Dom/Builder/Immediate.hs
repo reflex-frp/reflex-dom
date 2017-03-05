@@ -141,73 +141,52 @@ textNodeInternal t = do
   return n
 
 -- | s and e must both be children of the same node and s must precede e;
---   s, e and all nodes between s and e will be removed
-{-# INLINABLE deleteBetweenInclusive #-}
-deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteBetweenInclusive s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(s,e){"
-    , "  p = e.parentNode;"
-    , "  if(p !== null) {"
-    , "    for(;;){"
-    , "        x = e.previousSibling;"
-    , "        p.removeChild(x);"
-    , "        if(s===x) break;"
-    , "    }"
-    , "    p.removeChild(e);"
-    , "  }"
-    , "})"
-    ]
-  void $ call f f (s, e)
-
--- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
 deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenExclusive s e = liftJSM $ do
+  df <- createDocumentFragmentUnchecked =<< getOwnerDocumentUnchecked s
+  extractBetweenExclusive df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
+
+-- | s and e must both be children of the same node and s must precede e; all
+--   nodes between s and e will be moved into the given DocumentFragment, but s
+--   and e will not be moved
+extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+extractBetweenExclusive df s e = liftJSM $ do
   f <- eval $ T.unlines
-    [ "(function(s,e){"
-    , "  p = e.parentNode;"
-    , "  if(p !== null) {"
-    , "      for(;;){"
-    , "          x = e.previousSibling;"
-    , "          if(s===x) break;"
-    , "          p.removeChild(x);"
-    , "      }"
-    , "   }})"
+    [ "(function(df,s,e){"
+    , "  var x;"
+    , "  for(;;){"
+    , "    x = s.nextSibling;"
+    , "    if(e===x) break;"
+    , "    df.appendChild(x);"
+    , "  }"
+    , "})"
     ]
-  void $ call f f (s, e)
+  void $ call f f (df, s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
 --   s and all nodes between s and e will be removed, but e will not be removed
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteUpTo s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(s,e){"
-    , "  p = e.parentNode;"
-    , "  if(p !== null) {"
-    , "      for(;;) {"
-    , "          x = e.previousSibling;"
-    , "          p.removeChild(x);"
-    , "          if(s===x) break;"
-    , "      }"
-    , "  }})"
-    ]
-  void $ call f f (s, e)
+deleteUpTo s e = do
+  df <- createDocumentFragmentUnchecked =<< getOwnerDocumentUnchecked s
+  extractUpTo df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
 
--- | s and all nodes between s and e will be removed, but e will not be removed
-{-# INLINABLE deleteUpToGivenParent #-}
-deleteUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m ()
-deleteUpToGivenParent currentParent s e = liftJSM $ do
+extractUpTo :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+extractUpTo df s e = liftJSM $ do
   f <- eval $ T.unlines
-    [ "(function(p,s,e){"
-    , "  for(;;){"
-    , "      x = e.previousSibling;"
-    , "      p.removeChild(x);"
-    , "      if(s===x) break;"
-    , "  }})"
+    [ "(function(df,s,e){"
+    , "  var x = s;"
+    , "  var y;"
+    , "  for(;;) {"
+    , "    y = x.nextSibling;"
+    , "    df.appendChild(x);"
+    , "    if(e===y) break;"
+    , "    x = y;"
+    , "  }"
+    , "})"
     ]
-  void $ call f f (currentParent, s, e)
+  void $ call f f (df, s, e)
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
 
