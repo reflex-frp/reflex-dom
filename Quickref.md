@@ -36,7 +36,7 @@ Widgets may return any type (this is 'a' in many of the functions below).  Often
 [W]   elDynAttr  :: Text ->   Dynamic (Map Text Text) ->     m a -> m a
 [W]   elDynAttr' :: Text ->   Dynamic (Map Text Text) ->     m a -> m (El, a)
 
--- As above, but now there is an attribute namespace (e.g. xmlns )
+-- As above, but with an optional XML namespace for the tag.  Note that this does *not* set the 'xmlns' attribute.  See https://www.w3.org/TR/DOM-Level-2-Core/core.html#ID-DocCrElNS
 [W]   elDynAttrNS' :: Maybe Text -> Text -> Dynamic (Map Text Text) -> m a -> m (El, a)
 
 -- Shortcut for elAttr when you only want to set the "class" attribute.
