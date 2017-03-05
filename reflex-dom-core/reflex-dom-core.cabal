@@ -141,7 +141,7 @@ test-suite gc
   main-is: gc.hs
   type: exitcode-stdio-1.0
   if !os(linux) || !arch(x86_64)
-    buildable: false
+    buildable: False
 
 source-repository head
   type: git
