@@ -1043,18 +1043,16 @@ mountDomFragment :: (PerformEvent t m, MonadIO m, MonadIO (Performable m), Monad
 mountDomFragment fragment setFragment = do
   parent <- askParent
   extractFragment fragment
-  mountInBetween <- do
-    before <- textNodeInternal ("" :: Text)
-    _ <- appendChild parent $ Just $ _domFragment_document fragment
-    after <- textNodeInternal ("" :: Text)
-    xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
-    performEvent_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
-      extractFragment previousFragment
-      extractFragment childFragment
-      insertBefore (_domFragment_document childFragment) after
-      liftIO $ writeIORef (_domFragment_state childFragment) $ FragmentState_Mounted (before, after)
-    return (before, after)
-  liftIO $ writeIORef (_domFragment_state fragment) $ FragmentState_Mounted mountInBetween
+  before <- textNodeInternal ("" :: Text)
+  _ <- appendChild parent $ Just $ _domFragment_document fragment
+  after <- textNodeInternal ("" :: Text)
+  xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
+  performEvent_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
+    extractFragment previousFragment
+    extractFragment childFragment
+    insertBefore (_domFragment_document childFragment) after
+    liftIO $ writeIORef (_domFragment_state childFragment) $ FragmentState_Mounted (before, after)
+  liftIO $ writeIORef (_domFragment_state fragment) $ FragmentState_Mounted (before, after)
 
 extractFragment :: MonadIO m => DomFragment -> m ()
 extractFragment fragment = do
