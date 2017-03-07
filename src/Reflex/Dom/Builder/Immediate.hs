@@ -415,6 +415,61 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   placeRawElement = append
   wrapRawElement = wrap
 
+data FragmentState
+  = FragmentState_Unmounted
+  | FragmentState_Mounted (DOM.Text, DOM.Text)
+
+data ImmediateDomFragment = ImmediateDomFragment
+  { _immediateDomFragment_document :: DOM.DocumentFragment
+  , _immediateDomFragment_state :: IORef FragmentState
+  }
+
+extractFragment :: MonadIO m => ImmediateDomFragment -> m ()
+extractFragment fragment = do
+  state <- liftIO $ readIORef $ _immediateDomFragment_state fragment
+  case state of
+    FragmentState_Unmounted -> return ()
+    FragmentState_Mounted (before, after) -> do
+      extractBetweenExclusive (_immediateDomFragment_document fragment) before after
+      liftIO $ writeIORef (_immediateDomFragment_state fragment) FragmentState_Unmounted
+
+-- | s and e must both be children of the same node and s must precede e; all
+--   nodes between s and e will be moved into the given DocumentFragment, but s
+--   and e will not be moved
+extractBetweenExclusive :: (MonadIO m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+extractBetweenExclusive df s e = go
+  where
+    go = do
+      Just x <- getNextSibling s -- This can't be Nothing because we should hit 'e' first
+      when (toNode e /= toNode x) $ do
+        _ <- appendChild df $ Just x
+        go
+
+instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomBuilderT t m) where
+  type DomFragment (ImmediateDomBuilderT t m) = ImmediateDomFragment
+  buildDomFragment w = do
+    initialEnv <- ImmediateDomBuilderT ask
+    Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+    result <- lift $ runImmediateDomBuilderT w $ initialEnv
+      { _immediateDomBuilderEnv_parent = toNode df
+      }
+    state <- liftIO $ newIORef FragmentState_Unmounted
+    return (ImmediateDomFragment df state, result)
+  mountDomFragment fragment setFragment = do
+    parent <- askParent
+    extractFragment fragment
+    before <- textNodeInternal ("" :: Text)
+    _ <- appendChild parent $ Just $ _immediateDomFragment_document fragment
+    after <- textNodeInternal ("" :: Text)
+    xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
+    performEvent_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
+      extractFragment previousFragment
+      extractFragment childFragment
+      insertBefore (_immediateDomFragment_document childFragment) after
+      liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
+    liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
+
+
 instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
@@ -537,6 +592,9 @@ instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   performEvent_ e = lift $ performEvent_ e
   {-# INLINABLE performEvent #-}
   performEvent e = lift $ performEvent e
+
+instance ExhaustiblePerformEvent t m => ExhaustiblePerformEvent t (ImmediateDomBuilderT t m) where
+  withPerformEventExhausted a = liftWith $ \run -> withPerformEventExhausted $ run a
 
 instance PostBuild t m => PostBuild t (ImmediateDomBuilderT t m) where
   {-# INLINABLE getPostBuild #-}
@@ -1019,58 +1077,3 @@ wrapWindow wv _ = do
     }
 
 makeLenses ''GhcjsEventSpec
-
-data FragmentState
-  = FragmentState_Created
-  | FragmentState_Mounted (DOM.Text, DOM.Text)
-
-data DomFragment = DomFragment
-  { _domFragment_document :: DOM.DocumentFragment
-  , _domFragment_state :: IORef FragmentState
-  }
-
-domFragment :: MonadIO m => ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m (DomFragment, a)
-domFragment w = do
-  initialEnv <- ImmediateDomBuilderT ask
-  Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
-  result <- lift $ runImmediateDomBuilderT w $ initialEnv
-    { _immediateDomBuilderEnv_parent = toNode df
-    }
-  state <- liftIO $ newIORef FragmentState_Created
-  return (DomFragment df state, result)
-
-mountDomFragment :: (PerformEvent t m, MonadIO m, MonadIO (Performable m), MonadFix m, MonadHold t m) => DomFragment -> Event t DomFragment -> ImmediateDomBuilderT t m ()
-mountDomFragment fragment setFragment = do
-  parent <- askParent
-  extractFragment fragment
-  before <- textNodeInternal ("" :: Text)
-  _ <- appendChild parent $ Just $ _domFragment_document fragment
-  after <- textNodeInternal ("" :: Text)
-  xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
-  performEvent_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
-    extractFragment previousFragment
-    extractFragment childFragment
-    insertBefore (_domFragment_document childFragment) after
-    liftIO $ writeIORef (_domFragment_state childFragment) $ FragmentState_Mounted (before, after)
-  liftIO $ writeIORef (_domFragment_state fragment) $ FragmentState_Mounted (before, after)
-
-extractFragment :: MonadIO m => DomFragment -> m ()
-extractFragment fragment = do
-  state <- liftIO $ readIORef $ _domFragment_state fragment
-  case state of
-    FragmentState_Created -> return ()
-    FragmentState_Mounted (before, after) -> do
-      extractBetweenExclusive (_domFragment_document fragment) before after
-      liftIO $ writeIORef (_domFragment_state fragment) FragmentState_Created
-
--- | s and e must both be children of the same node and s must precede e; all
---   nodes between s and e will be moved into the given DocumentFragment, but s
---   and e will not be moved
-extractBetweenExclusive :: (MonadIO m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
-extractBetweenExclusive df s e = go
-  where
-    go = do
-      Just x <- getNextSibling s -- This can't be Nothing because we should hit 'e' first
-      when (toNode e /= toNode x) $ do
-        _ <- appendChild df $ Just x
-        go
