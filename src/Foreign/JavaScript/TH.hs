@@ -173,9 +173,6 @@ instance PerformEvent t m => PerformEvent t (WithWebView x m) where
   {-# INLINABLE performEvent #-}
   performEvent e = liftWith $ \run -> performEvent $ fmap run e
 
-instance ExhaustiblePerformEvent t m => ExhaustiblePerformEvent t (WithWebView x m) where
-  withPerformEventExhausted a = liftWith $ \run -> withPerformEventExhausted $ run a
-
 runWithWebView :: WithWebView x m a -> WebViewSingleton x -> m a
 runWithWebView = runReaderT . unWithWebView
 

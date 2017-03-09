@@ -593,9 +593,6 @@ instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   {-# INLINABLE performEvent #-}
   performEvent e = lift $ performEvent e
 
-instance ExhaustiblePerformEvent t m => ExhaustiblePerformEvent t (ImmediateDomBuilderT t m) where
-  withPerformEventExhausted a = liftWith $ \run -> withPerformEventExhausted $ run a
-
 instance PostBuild t m => PostBuild t (ImmediateDomBuilderT t m) where
   {-# INLINABLE getPostBuild #-}
   getPostBuild = lift getPostBuild
