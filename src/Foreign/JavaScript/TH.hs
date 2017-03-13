@@ -27,6 +27,7 @@ import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.Postpone.Class
 import Reflex.Requester.Base
 
 import Language.Haskell.TH
@@ -105,7 +106,7 @@ instance HasWebView m => HasWebView (PostBuildT t m) where
 
 instance (ReflexHost t, HasWebView (HostFrame t)) => HasWebView (PerformEventT t m) where
   type WebViewPhantom (PerformEventT t m) = WebViewPhantom (HostFrame t)
-  askWebView = PerformEventT $ lift askWebView
+  askWebView = PerformEventT $ lift $ lift askWebView
 
 instance HasWebView m => HasWebView (DynamicWriterT t w m) where
   type WebViewPhantom (DynamicWriterT t w m) = WebViewPhantom m
@@ -129,6 +130,11 @@ instance MonadAdjust t m => MonadAdjust t (WithWebView x m) where
   runWithReplace a0 a' = WithWebView $ runWithReplace (coerce a0) (coerceEvent a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = WithWebView $ traverseDMapWithKeyWithAdjust (\k v -> unWithWebView $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = WithWebView $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unWithWebView $ f k v) (coerce dm0) (coerceEvent dm')
+
+instance MonadPostpone m => MonadPostpone (WithWebView x m) where
+  postpone a = do
+    r <- askWebView
+    lift $ runWithWebView a r
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithWebView x m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -231,7 +237,7 @@ instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
 
 instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
   type JSM (PerformEventT t m) = JSM (HostFrame t)
-  liftJS = PerformEventT . lift . liftJS
+  liftJS = PerformEventT . lift . lift . liftJS
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSM (DynamicWriterT t w m) = JSM m

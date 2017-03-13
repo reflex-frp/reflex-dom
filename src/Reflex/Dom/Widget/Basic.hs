@@ -21,6 +21,7 @@ module Reflex.Dom.Widget.Basic
   , display
   , button
   , dyn
+  , oldDyn
   , widgetHold
 
   -- * Working with Maps
@@ -86,6 +87,7 @@ import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
+import Reflex.Postpone.Class
 
 import Control.Arrow
 import Control.Lens hiding (children, element)
@@ -158,8 +160,12 @@ button t = do
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
-dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+dyn :: forall m t a. (DomBuilder t m, MonadPostpone m, MonadSample t m) => Dynamic t (m a) -> m (Event t a)
 dyn child = do
+  snd <$> runWithReplace (postpone $ join $ sample $ current child) (updated child)
+
+oldDyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+oldDyn child = do
   postBuild <- getPostBuild
   let newChild = leftmost [updated child, tagCheap (current child) postBuild]
   snd <$> widgetHoldInternal (return ()) newChild
@@ -423,11 +429,13 @@ workflow w0 = do
   return $ fmap fst eResult
 
 workflowView :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m) => Workflow t m a -> m (Event t a)
+workflowView = undefined
+{-
 workflowView w0 = do
   rec eResult <- dyn . fmap unWorkflow =<< holdDyn w0 eReplace
       eReplace <- fmap switch $ hold never $ fmap snd eResult
   return $ fmap fst eResult
-
+-}
 mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
 mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
 

@@ -27,6 +27,7 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import Reflex.TriggerEvent.Class
+import Reflex.Postpone.Class
 
 import Control.Concurrent.Chan
 import Control.Lens hiding (element, ix)
@@ -1074,3 +1075,17 @@ wrapWindow wv _ = do
     }
 
 makeLenses ''GhcjsEventSpec
+
+instance (SupportsImmediateDomBuilder t m, MonadPostpone m) => MonadPostpone (ImmediateDomBuilderT t m) where
+  postpone a = do
+    env <- ImmediateDomBuilderT ask
+    placeholder <- textNodeInternal ("" :: Text)
+    lift $ postpone $ do
+      Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document env
+      result <- runImmediateDomBuilderT a $ env
+        { _immediateDomBuilderEnv_parent = toNode df
+        }
+      insertBefore df placeholder
+      mp <- getParentNode placeholder
+      forM_ mp $ \p -> removeChild p $ Just placeholder
+      return result
