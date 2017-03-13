@@ -107,6 +107,7 @@ type MonadWidgetConstraints t m =
   , Ref m ~ Ref IO
   , MonadRef (Performable m)
   , Ref (Performable m) ~ Ref IO
+  , MountableDomBuilder t m
   )
 
 class MonadWidgetConstraints t m => MonadWidget t m
