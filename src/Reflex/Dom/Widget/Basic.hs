@@ -21,7 +21,7 @@ module Reflex.Dom.Widget.Basic
   , display
   , button
   , dyn
-  , oldDyn
+  , newDyn
   , widgetHold
 
   -- * Working with Maps
@@ -160,12 +160,12 @@ button t = do
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
-dyn :: forall m t a. (DomBuilder t m, MonadPostpone m, MonadSample t m) => Dynamic t (m a) -> m (Event t a)
-dyn child = do
+newDyn :: forall m t a. (DomBuilder t m, MonadPostpone m, MonadSample t m) => Dynamic t (m a) -> m (Event t a)
+newDyn child = do
   snd <$> runWithReplace (postpone $ join $ sample $ current child) (updated child)
 
-oldDyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
-oldDyn child = do
+dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+dyn child = do
   postBuild <- getPostBuild
   let newChild = leftmost [updated child, tagCheap (current child) postBuild]
   snd <$> widgetHoldInternal (return ()) newChild
