@@ -433,6 +433,18 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
   wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
 
+instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m, Monoid w) => MountableDomBuilder t (DynamicWriterT t w m) where
+  type DomFragment (DynamicWriterT t w m) = DomFragment m
+  buildDomFragment (DynamicWriterT ma) = DynamicWriterT $ StateT $ \s -> do
+    (df,(a,s2)) <- buildDomFragment $ runStateT ma s
+    return ((df,a), s2)
+  mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
+
+instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => MountableDomBuilder t (ReaderT r m) where
+  type DomFragment (ReaderT r m) = DomFragment m
+  buildDomFragment = liftThrough buildDomFragment
+  mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
+
 instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => MountableDomBuilder t (PostBuildT t m) where
   type DomFragment (PostBuildT t m) = DomFragment m
   buildDomFragment = liftThrough buildDomFragment
