@@ -1089,3 +1089,6 @@ instance (SupportsImmediateDomBuilder t m, MonadPostpone m) => MonadPostpone (Im
       mp <- getParentNode placeholder
       forM_ mp $ \p -> removeChild p $ Just placeholder
       return result
+
+instance ExhaustiblePerformEvent t m => ExhaustiblePerformEvent t (ImmediateDomBuilderT t m) where
+  withPerformEventExhausted a = ImmediateDomBuilderT $ withPerformEventExhausted $ unImmediateDomBuilderT a

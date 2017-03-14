@@ -48,7 +48,7 @@ main = mainWidget $ do
       dynTree = elAttr "div" ("style" =: "position:relative;width:256px;height:256px") $ go maxDepth
         where maxDepth = 6 :: Int
               go 0 = blank
-              go n = void $ dyn' $ pure $ do
+              go n = void $ oldDyn $ pure $ do
                 let bgcolor = "rgba(0,0,0," <> T.pack (show (1 - (fromIntegral n / fromIntegral maxDepth) :: Double)) <> ")"
                     s pos = pos <> ";position:absolute;border:1px solid white;background-color:" <> bgcolor
                 elAttr "div" ("style" =: s "left:0;right:50%;top:0;bottom:50%") $ go $ pred n
@@ -58,13 +58,13 @@ main = mainWidget $ do
   el "h1" $ text "Bad"
   el "div" $ do
     draw <- button "Draw"
-    widgetHold blank $ ffor draw $ \_ -> void $ runPaused slow
+    widgetHold blank $ ffor draw $ \_ -> void slow
   el "h1" $ text "Good"
   el "div" $ do
     draw <- button "Draw"
     widgetHold blank $ ffor draw $ \_ -> do
       (df0, _) <- buildDomFragment $ text "Loading..."
-      (df', (doneBuilding, _)) <- buildDomFragment $ runPaused slow
+      (df', (doneBuilding, _)) <- buildDomFragment $ withPerformEventExhausted slow
       mountDomFragment df0 $ df' <$ doneBuilding
       postBuild <- getPostBuild
       performEvent_ $ liftIO (threadDelay 0) <$ postBuild -- This is necessary so that ghcjs will release the thread back to the DOM so that we see the loading indicator immediately; we could instead adjust the parameters to GHCJS so that the thread quantum is smaller.
