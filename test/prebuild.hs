@@ -64,6 +64,9 @@ main = mainWidget $ do
     draw <- button "Draw"
     _ <- widgetHold blank $ ffor draw $ \_ -> do
       postBuild <- getPostBuild
-      _ <- widgetHold (text "Loading...") $ slow <$ postBuild
-      liftIO $ threadDelay 0 -- This is necessary so that ghcjs will release the thread back to the DOM so that we see the loading indicator immediately; we could instead adjust the parameters to GHCJS so that the thread quantum is smaller.
+      let drawSlow = do
+            liftIO $ threadDelay 0 -- This is necessary so that ghcjs will release the thread back to the DOM so that we see the loading indicator immediately; we could instead adjust the parameters to GHCJS so that the thread quantum is smaller.
+            slow
+      _ <- widgetHold (text "Loading...") $ drawSlow <$ postBuild
+      return ()
     return ()
