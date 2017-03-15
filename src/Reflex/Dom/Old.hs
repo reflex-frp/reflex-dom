@@ -73,6 +73,7 @@ import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
+import Reflex.Postpone.Class
 import Reflex.TriggerEvent.Class
 
 data ElConfig attrs = ElConfig
