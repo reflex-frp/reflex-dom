@@ -140,15 +140,14 @@ listHoldWithKey m0 m' f = do
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
-dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
-dynText t = do
-  postBuild <- getPostBuild
-  void $ textNode $ (def :: TextNodeConfig t) & textNodeConfig_setContents .~ leftmost
-    [ updated t
-    , tag (current t) postBuild
-    ]
+dynText :: forall t m. (DomBuilder t m, MonadSample t m, MonadPostpone m) => Dynamic t Text -> m ()
+dynText t = postpone $ do
+  v0 <- sample $ current t
+  void $ textNode $ (def :: TextNodeConfig t)
+    & textNodeConfig_initialContents .~ v0
+    & textNodeConfig_setContents .~ updated t
 
-display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
+display :: (DomBuilder t m, Show a, MonadSample t m, MonadPostpone m) => Dynamic t a -> m ()
 display = dynText . fmap (T.pack . show)
 
 button :: DomBuilder t m => Text -> m (Event t ())
