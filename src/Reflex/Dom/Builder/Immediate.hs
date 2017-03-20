@@ -83,6 +83,8 @@ data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
                             , _immediateDomBuilderEnv_parent :: Node
                             , _immediateDomBuilderEnv_events :: Chan [DSum (TriggerRef t) TriggerInvocation]
+                            , _immediateDomBuilderEnv_unreadyChildren :: IORef Word -- Number of children who still aren't fully rendered
+                            , _immediateDomBuilderEnv_commitAction :: IO () -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
@@ -198,9 +200,9 @@ newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IOR
 wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
-  mapM_ (performEvent_ . fmap (imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> performEvent $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
-    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv)) (_rawElementConfig_modifyAttributes cfg)
+    Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftIO $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- newIORef Nothing
     _ <- elementOnEventName en e $ do
@@ -230,23 +232,24 @@ wrap e cfg = do
             --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
             ref <- newIORef $ Just t
             writeChan events [TriggerRef ref :=> TriggerInvocation v (return ())]
-  return $ Element es e
+  return $ Element
+    { _element_events = es
+    , _element_raw = e
+    }
 
 {-# INLINABLE makeElement #-}
 makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
-  doc <- askDocument
-  events <- askEvents
+  env <- ImmediateDomBuilderT ask
+  let doc = _immediateDomBuilderEnv_document env
   Just e <- ImmediateDomBuilderT $ fmap DOM.castToElement <$> case cfg ^. namespace of
     Nothing -> createElement doc (Just elementTag)
     Just ens -> createElementNS doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> setAttribute e n v
     Just ans -> setAttributeNS e (Just ans) n v
-  result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
+  result <- lift $ runImmediateDomBuilderT child $ env
     { _immediateDomBuilderEnv_parent = toNode e
-    , _immediateDomBuilderEnv_document = doc
-    , _immediateDomBuilderEnv_events = events
     }
   append e
   wrapped <- wrap e $ extractRawElementConfig cfg
@@ -414,6 +417,21 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return (wrapped, result)
   placeRawElement = append
   wrapRawElement = wrap
+  notReadyUntil e = do
+    eOnce <- headE e
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
+    let ready = liftIO $ do
+          old <- readIORef unreadyChildren
+          let new = pred old
+          writeIORef unreadyChildren $! new
+          when (new == 0) $ _immediateDomBuilderEnv_commitAction env
+    performEvent_ $ ready <$ eOnce
+  notReady = do
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
 
 data FragmentState
   = FragmentState_Unmounted
@@ -474,19 +492,48 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
+    let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
+    haveEverBeenReady <- liftIO $ newIORef False
+    let myCommitAction = liftIO $ do --TODO: When we change out a child, we need to cancel it's ability to declare us ready
+          readIORef haveEverBeenReady >>= \case
+            True -> return ()
+            False -> do
+              writeIORef haveEverBeenReady True
+              old <- readIORef parentUnreadyChildren
+              let new = pred old
+              writeIORef parentUnreadyChildren $! new
+              when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
     -- We draw 'after' in this roundabout way to avoid using MonadFix
     Just after <- createTextNode (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
     let drawInitialChild = do
-          result <- a0
-          append after
+          unreadyChildren <- liftIO $ newIORef 0
+          let f = do
+                result <- a0
+                append after
+                return result
+          result <- runImmediateDomBuilderT f $ initialEnv
+            { _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+            , _immediateDomBuilderEnv_commitAction = myCommitAction
+            }
+          liftIO $ readIORef unreadyChildren >>= \case
+            0 -> writeIORef haveEverBeenReady True
+            _ -> modifyIORef' parentUnreadyChildren succ
           return result
-    (result0, result') <- lift $ runWithReplace (runImmediateDomBuilderT drawInitialChild initialEnv) $ ffor a' $ \child -> do
+    (result0, result') <- lift $ runWithReplace drawInitialChild $ ffor a' $ \child -> do
       Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+      unreadyChildren <- liftIO $ newIORef 0
+      let commitAction = do
+            deleteBetweenExclusive before after
+            insertBefore df after
+            myCommitAction
       result <- runImmediateDomBuilderT child $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
+        , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+        , _immediateDomBuilderEnv_commitAction = commitAction
         }
-      deleteBetweenExclusive before after
-      insertBefore df after
+      liftIO $ readIORef unreadyChildren >>= \case
+        0 -> commitAction
+        _ -> return () -- Whoever decrements it to 0 will handle it
       return result
     return (result0, result')
   traverseDMapWithKeyWithAdjust (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
@@ -567,14 +614,13 @@ mkHasFocus e = do
 {-# INLINABLE insertImmediateAbove #-}
 insertImmediateAbove :: (IsNode placeholder, PerformEvent t m, MonadIO (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
 insertImmediateAbove n toInsertAbove = do
-  events <- askEvents
+  env <- ImmediateDomBuilderT ask
   lift $ performEvent $ ffor toInsertAbove $ \new -> do
     Just doc <- getOwnerDocument n
     Just df <- createDocumentFragment doc
-    result <- runImmediateDomBuilderT new $ ImmediateDomBuilderEnv
+    result <- runImmediateDomBuilderT new $ env
       { _immediateDomBuilderEnv_parent = toNode df
       , _immediateDomBuilderEnv_document = doc
-      , _immediateDomBuilderEnv_events = events
       }
     df `insertBefore` n
     return result

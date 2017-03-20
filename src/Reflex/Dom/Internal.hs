@@ -88,10 +88,13 @@ mainWidgetWithHead' widgets = runWebGUI $ \webView -> withWebViewSingletonMono w
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
         go w df = do
+          unreadyChildren <- liftIO $ newIORef 0
           let builderEnv = ImmediateDomBuilderEnv
                 { _immediateDomBuilderEnv_document = toDocument doc
                 , _immediateDomBuilderEnv_parent = toNode df
                 , _immediateDomBuilderEnv_events = events
+                , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+                , _immediateDomBuilderEnv_commitAction = return () --TODO
                 }
           runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
     rec b <- go (headWidget a) headFragment
@@ -114,10 +117,13 @@ attachWidget' rootElement wv w = do
   Just df <- createDocumentFragment doc
   ((a, events), fc) <- attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    unreadyChildren <- liftIO $ newIORef 0
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_events = events
+          , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+          , _immediateDomBuilderEnv_commitAction = return () --TODO
           }
     a <- runWithWebView (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) wv
     return ((a, events), postBuildTriggerRef)

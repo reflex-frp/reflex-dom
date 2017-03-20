@@ -11,30 +11,12 @@ import Control.Monad.State.Strict
 import Data.Monoid
 import Data.Word
 
-type Paused t = DynamicWriterT t All
-
-runPaused :: (Reflex t, MonadFix m, MonadHold t m) => Paused t m a -> m (Event t (), a)
-runPaused a = do
-  (result, runnable) <- runDynamicWriterT a
-  let done = void $ ffilter getAll $ updated $ uniqDyn runnable
-  return (done, result)
-
---TODO: Perhaps we could use guaranteed-single-shot events here
-pausedUntil :: (Reflex t, MonadFix m, MonadHold t m) => Event t a -> Paused t m ()
-pausedUntil e = do
-  tellDyn =<< holdDyn (All False) (All True <$ e) --TODO: Disconnect after one firing
-
-dyn' :: (DomBuilder t m, PostBuild t m, m ~ Paused t m', MonadFix m', MonadHold t m') => Dynamic t (m a) -> m (Event t a)
-dyn' child = do
-  postBuild <- getPostBuild
-  let newChild = leftmost [updated child, tagCheap (current child) postBuild]
-  newChildDone <- snd <$> runWithReplace (return ()) newChild
-  pausedUntil newChildDone
-  return newChildDone
-
 main :: IO ()
-main = mainWidget $ do
-  let slow = dynTree
+main = mainWidget w
+
+w :: forall t m. (MonadWidget t m, MountableDomBuilder t m) => m ()
+w = do
+  let slow :: forall m'. MonadWidget t m' => m' ()
   {-
       performEventChain = do
         postBuild <- delay 0 =<< getPostBuild
@@ -45,26 +27,59 @@ main = mainWidget $ do
         _ <- widgetHold (text "Starting") $ text . T.pack . show <$> n
         return ()
   -}
-      dynTree = elAttr "div" ("style" =: "position:relative;width:256px;height:256px") $ go maxDepth
+  {-
+      slow = elAttr "div" ("style" =: "position:relative;width:256px;height:256px") $ go maxDepth
         where maxDepth = 6 :: Int
               go 0 = blank
-              go n = void $ dyn' $ pure $ do
+              go n = void $ dyn $ pure $ do
                 let bgcolor = "rgba(0,0,0," <> T.pack (show (1 - (fromIntegral n / fromIntegral maxDepth) :: Double)) <> ")"
                     s pos = pos <> ";position:absolute;border:1px solid white;background-color:" <> bgcolor
                 elAttr "div" ("style" =: s "left:0;right:50%;top:0;bottom:50%") $ go $ pred n
                 elAttr "div" ("style" =: s "left:50%;right:0;top:0;bottom:50%") $ go $ pred n
                 elAttr "div" ("style" =: s "left:50%;right:0;top:50%;bottom:0") $ go $ pred n
                 elAttr "div" ("style" =: s "left:0;right:50%;top:50%;bottom:0") $ go $ pred n
+  -}
+      {-
+      slow = do
+        let size = 64
+        replicateM_ size $ elAttr "div" ("style" =: ("height:4px;width:" <> T.pack (show (size*4)) <> "px;line-height:0;background-color:gray")) $ do
+          replicateM_ size $ elDynAttr "div" (pure $ "style" =: "display:inline-block;width:4px;height:4px;background-color:black") blank
+      -}
+      slow = el "table" $ do
+        let size = 64
+        replicateM_ size $ el "tr" $ do
+          replicateM_ size $ el "td" $ do
+            dynText $ pure "."
+      {-
+      slow = do
+        postBuild <- getPostBuild
+        replicateM_ ((2 :: Int) ^ (14 :: Int)) $ performEvent_ $ return () <$ postBuild
+        done <- performEvent $ return () <$ postBuild
+        _ <- widgetHold (text "Doing performEvent") $ text "Done" <$ done
+        return ()
+      -}
   el "h1" $ text "Bad"
   el "div" $ do
     draw <- button "Draw"
-    widgetHold blank $ ffor draw $ \_ -> void $ runPaused slow
+    widgetHold blank $ ffor draw $ \_ -> do
+      postBuild <- getPostBuild
+      widgetHold (text "Loading...") $ slow <$ postBuild
+      return ()
+  el "h1" $ text "Bad - with EventWriterT"
+  el "div" $ do
+    draw <- button "Draw"
+    widgetHold blank $ ffor draw $ \_ -> do
+      (_, w :: Dynamic t ()) <- runDynamicWriterT slow
+      return ()
   el "h1" $ text "Good"
   el "div" $ do
     draw <- button "Draw"
     widgetHold blank $ ffor draw $ \_ -> do
       (df0, _) <- buildDomFragment $ text "Loading..."
-      (df', (doneBuilding, _)) <- buildDomFragment $ runPaused slow
+      (df', (doneBuilding, _)) <- buildDomFragment $ do
+        slow
+        postBuild <- getPostBuild
+        return (postBuild, ())
       mountDomFragment df0 $ df' <$ doneBuilding
       postBuild <- getPostBuild
       performEvent_ $ liftIO (threadDelay 0) <$ postBuild -- This is necessary so that ghcjs will release the thread back to the DOM so that we see the loading indicator immediately; we could instead adjust the parameters to GHCJS so that the thread quantum is smaller.

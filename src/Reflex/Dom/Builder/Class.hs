@@ -141,6 +141,20 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomB
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
   {-# INLINABLE wrapRawElement #-}
+  notReadyUntil :: Event t a -> m ()
+  default notReadyUntil :: ( MonadTrans f
+                           , m ~ f m'
+                           , DomBuilder t m'
+                           )
+                        => Event t a -> m ()
+  notReadyUntil = lift . notReadyUntil
+  notReady :: m ()
+  default notReady :: ( MonadTrans f
+                      , m ~ f m'
+                      , DomBuilder t m'
+                      )
+                   => m ()
+  notReady = lift notReady
 
 class DomBuilder t m => MountableDomBuilder t m where
   type DomFragment m :: *

@@ -204,7 +204,11 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
           let open = mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString ">")]
           let close = constant $ byteString $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
-      return (Element es (), result)
+      let e = Element
+            { _element_events = es
+            , _element_raw = ()
+            }
+      return (e, result)
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -250,6 +254,8 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     return (wrapped, result)
   placeRawElement () = return ()
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
+  notReadyUntil _ = return () --TODO: Do we need to support this somehow?
+  notReady = return () --TODO: Do we need to support this somehow?
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
