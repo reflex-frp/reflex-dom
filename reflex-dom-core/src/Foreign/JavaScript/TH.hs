@@ -138,7 +138,8 @@ instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
 
 instance MonadAdjust t m => MonadAdjust t (WithJSContextSingleton x m) where
   runWithReplace a0 a' = WithJSContextSingleton $ runWithReplace (coerce a0) (coerceEvent a')
-  sequenceDMapWithAdjust dm0 dm' = WithJSContextSingleton $ sequenceDMapWithAdjust (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (WithJSContextSingleton x m) where
   {-# INLINABLE newEventWithTrigger #-}
