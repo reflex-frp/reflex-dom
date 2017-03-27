@@ -494,7 +494,7 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
     before <- textNodeInternal ("" :: Text)
     let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
-    let myCommitAction = liftIO $ do --TODO: When we change out a child, we need to cancel it's ability to declare us ready
+    let myCommitAction = liftIO $ do
           readIORef haveEverBeenReady >>= \case
             True -> return ()
             False -> do
@@ -519,13 +519,18 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m,
             0 -> writeIORef haveEverBeenReady True
             _ -> modifyIORef' parentUnreadyChildren succ
           return result
-    (result0, result') <- lift $ runWithReplace drawInitialChild $ ffor a' $ \child -> do
+    currentCohort <- liftIO $ newIORef 0
+    a'' <- zipListWithEvent (,) [1..] a'
+    (result0, result') <- lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
-            deleteBetweenExclusive before after
-            insertBefore df after
-            myCommitAction
+            c <- readIORef currentCohort
+            when (c < cohortId) $ do -- If a newer cohort has already been committed, just ignore this
+              deleteBetweenExclusive before after
+              insertBefore df after
+              writeIORef currentCohort cohortId
+              myCommitAction
       result <- runImmediateDomBuilderT child $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
         , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
