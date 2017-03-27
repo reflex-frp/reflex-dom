@@ -488,7 +488,7 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
 
-instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
