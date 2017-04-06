@@ -13,13 +13,70 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Reflex.Dom.Builder.Immediate where
+module Reflex.Dom.Builder.Immediate
+       ( TriggerRef (..)
+       , ImmediateDomBuilderEnv (..)
+       , ImmediateDomBuilderT (..)
+       , runImmediateDomBuilderT
+       , askDocument
+       , askParent
+       , askEvents
+       , append
+       , textNodeInternal
+       , deleteBetweenExclusive
+       , extractBetweenExclusive
+       , deleteUpTo
+       , extractUpTo
+       , SupportsImmediateDomBuilder
+       , collectUpTo
+       , collectUpToGivenParent
+       , EventFilterTriggerRef (..)
+       , wrap
+       , makeElement
+       , GhcjsDomHandler (..)
+       , GhcjsDomHandler1 (..)
+       , GhcjsDomEvent (..)
+       , GhcjsDomSpace
+       , GhcjsEventFilter (..)
+       , Pair1 (..)
+       , Maybe1 (..)
+       , GhcjsEventSpec (..)
+       , GhcjsEventHandler (..)
+#ifndef USE_TEMPLATE_HASKELL
+       , phantom2
+       , ghcjsEventSpec_filters
+       , ghcjsEventSpec_handler
+#endif
+       , drawChildUpdate
+       , mkHasFocus
+       , insertBefore
+       , EventType
+       , defaultDomEventHandler
+       , defaultDomWindowEventHandler
+       , withIsEvent
+       , showEventName
+       , elementOnEventName
+       , windowOnEventName
+       , wrapDomEvent
+       , subscribeDomEvent
+       , wrapDomEventMaybe
+       , wrapDomEventsMaybe
+       , getKeyEvent
+       , getMouseEventCoords
+       , getTouchEvent
+       , WindowConfig (..)
+       , Window (..)
+       , wrapWindow
+       , ghcjsEventSpec_filters
+       , ghcjsEventSpec_handler
+       ) where
 
 import Foreign.JavaScript.TH
 import Reflex.Class as Reflex
@@ -37,7 +94,6 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.Trans.Control
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -81,15 +137,18 @@ import GHCJS.DOM.UIEvent
 import qualified GHCJS.DOM.Window as Window
 import Language.Javascript.JSaddle (call, eval)
 
+import Reflex.Requester.Base
+import Reflex.Requester.Class
+
 data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
 
-data ImmediateDomBuilderEnv t
+data ImmediateDomBuilderEnv t m
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
                             , _immediateDomBuilderEnv_parent :: Node
                             , _immediateDomBuilderEnv_events :: Chan [DSum (TriggerRef t) TriggerInvocation]
                             }
 
-newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) m a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t m) (RequesterT t JSM Identity m) a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
 #ifndef __GHCJS__
 instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
@@ -100,17 +159,28 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
   type PrimState (ImmediateDomBuilderT x m) = PrimState m
   primitive = lift . primitive
 
-instance MonadTransControl (ImmediateDomBuilderT t) where
-  type StT (ImmediateDomBuilderT t) a = StT (ReaderT (ImmediateDomBuilderEnv t)) a
-  liftWith = defaultLiftWith ImmediateDomBuilderT unImmediateDomBuilderT
-  restoreT = defaultRestoreT ImmediateDomBuilderT
-
 instance MonadTrans (ImmediateDomBuilderT t) where
-  lift = ImmediateDomBuilderT . lift
+  lift = ImmediateDomBuilderT . lift . lift
+
+instance (PerformEvent t m, PrimMonad m) => DomRenderHook (ImmediateDomBuilderT t m) where
+  withRenderHook hook (ImmediateDomBuilderT a) = do
+    e <- ImmediateDomBuilderT ask
+    ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
+      (x, req) <- lift $ runRequesterT (runReaderT a e) $ runIdentity <$> rsp
+      return (ffor req $ \rm -> hook $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm, x)
+
+requestDomAction :: (Reflex t, Monad m, PrimMonad m) => Event t (JSM a) -> ImmediateDomBuilderT t m (Event t a)
+requestDomAction = ImmediateDomBuilderT . lift . requestingIdentity
+
+requestDomAction_ :: (Reflex t, Monad m, PrimMonad m) => Event t (JSM a) -> ImmediateDomBuilderT t m ()
+requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
 
 {-# INLINABLE runImmediateDomBuilderT #-}
-runImmediateDomBuilderT :: ImmediateDomBuilderT t m a -> ImmediateDomBuilderEnv t -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) = runReaderT a
+runImmediateDomBuilderT :: (Reflex t, MonadFix m, PerformEvent t m, MonadJSM (Performable m)) => ImmediateDomBuilderT t m a -> ImmediateDomBuilderEnv t m -> m a
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env = do
+  rec (x, req) <- runRequesterT (runReaderT a env) rsp
+      rsp <- performEvent $ ffor req $ \rm -> liftJSM $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm
+  return x
 
 {-# INLINABLE askDocument #-}
 askDocument :: Monad m => ImmediateDomBuilderT t m Document
@@ -187,7 +257,7 @@ extractUpTo df s e = liftJSM $ do
     ]
   void $ call f f (df, s, e)
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -208,7 +278,7 @@ newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IOR
 wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
-  mapM_ (performEvent_ . fmap (imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  mapM_ (requestDomAction_ . fmap (imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv)) (_rawElementConfig_modifyAttributes cfg)
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
@@ -249,17 +319,15 @@ wrap e cfg = do
 makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  events <- askEvents
+  env <- ImmediateDomBuilderT ask
   e <- liftJSM $ case cfg ^. namespace of
     Nothing -> createElementUnchecked doc (Just elementTag)
     Just ens -> createElementNSUnchecked doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> lift $ setAttribute e n v
     Just ans -> lift $ setAttributeNS e (Just ans) n v
-  result <- lift $ runImmediateDomBuilderT child $ ImmediateDomBuilderEnv
+  result <- ImmediateDomBuilderT $ lift $ runReaderT (unImmediateDomBuilderT child) $ env
     { _immediateDomBuilderEnv_parent = toNode e
-    , _immediateDomBuilderEnv_document = doc
-    , _immediateDomBuilderEnv_events = events
     }
   append e
   wrapped <- wrap e $ extractRawElementConfig cfg
@@ -335,7 +403,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     n <- textNodeInternal initialContents
-    mapM_ (lift . performEvent_ . fmap (setNodeValue n . Just)) mSetContents
+    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     return $ TextNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
@@ -346,10 +414,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
     v0 <- Input.getValueUnchecked domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
-    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
+    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
       Nothing -> return never
-      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
         Input.setValue domInputElement $ Just v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
@@ -361,7 +429,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       Input.getChecked domInputElement
     checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
       Nothing -> return never
-      Just eNewchecked -> performEvent $ ffor eNewchecked $ \newChecked -> do
+      Just eNewchecked -> requestDomAction $ ffor eNewchecked $ \newChecked -> do
         oldChecked <- Input.getChecked domInputElement
         Input.setChecked domInputElement newChecked
         return $ if newChecked /= oldChecked
@@ -397,10 +465,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
     v0 <- TextArea.getValueUnchecked domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
-    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
+    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
       Nothing -> return never
-      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
         TextArea.setValue domTextAreaElement $ Just v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
@@ -422,10 +490,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
-    valueChangedByUI <- performEvent $ getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
+    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
     valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
       Nothing -> return never
-      Just eSetValue -> performEvent $ ffor eSetValue $ \v' -> do
+      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
         Select.setValue domSelectElement $ Just v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
@@ -444,7 +512,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   placeRawElement = append
   wrapRawElement = wrap
 
-instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m)) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
@@ -454,9 +522,9 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
           result <- a0
           append after
           return result
-    (result0, result') <- lift $ runWithReplace (runImmediateDomBuilderT drawInitialChild initialEnv) $ ffor a' $ \child -> do
+    (result0, result') <- ImmediateDomBuilderT $ lift $ runWithReplace (runReaderT (unImmediateDomBuilderT drawInitialChild) initialEnv) $ ffor a' $ \child -> do
       df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
-      result <- runImmediateDomBuilderT child $ initialEnv
+      result <- runReaderT (unImmediateDomBuilderT child) $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
         }
       deleteBetweenExclusive before after
@@ -465,7 +533,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     return (result0, result')
   traverseDMapWithKeyWithAdjust (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
+    (children0, children') <- ImmediateDomBuilderT $ lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
     let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
         placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
         result' = ffor children' $ mapPatchDMap $ \(Compose (_, _, r)) -> r
@@ -473,10 +541,10 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     placeholders <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
     _ <- DMap.traverseWithKey (\_ (Compose (df, _, _)) -> Constant () <$ append df) children0
     lastPlaceholder <- textNodeInternal ("" :: Text)
-    performEvent_ $ flip push children' $ \(PatchDMap p) -> do
+    requestDomAction_ $ flip push children' $ \(PatchDMap p) -> do
       phs <- sample placeholders
       if DMap.null p then return Nothing else return $ Just $ do
-        let g :: DSum k (ComposeMaybe (Compose ((,,) DOM.DocumentFragment DOM.Text) v')) -> Performable m ()
+        let g :: DSum k (ComposeMaybe (Compose ((,,) DOM.DocumentFragment DOM.Text) v')) -> JSM ()
             g (k :=> ComposeMaybe mv) = do
               let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phs
               forM_ (Map.lookup (Some.This k) phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
@@ -485,7 +553,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     return (result0, result')
   traverseDMapWithKeyWithAdjustWithMove (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
+    (children0, children') <- ImmediateDomBuilderT $ lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
     let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
         placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
         result' = ffor children' $ mapPatchDMapWithMove $ \(Compose (_, _, r)) -> r
@@ -493,11 +561,11 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     placeholders <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
     _ <- DMap.traverseWithKey (\_ (Compose (df, _, _)) -> Constant () <$ append df) children0
     lastPlaceholder <- textNodeInternal ("" :: Text)
-    performEvent_ $ flip push children' $ \p_ -> do
+    requestDomAction_ $ flip push children' $ \p_ -> do
       let p = unPatchDMapWithMove p_
       phsBefore <- sample placeholders
       if DMap.null p then return Nothing else return $ Just $ do
-        let collectIfMoved :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant (Maybe DOM.DocumentFragment) a)
+        let collectIfMoved :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> JSM (Constant (Maybe DOM.DocumentFragment) a)
             collectIfMoved k e = do
               let mThisPlaceholder = Map.lookup (Some.This k) phsBefore -- Will be Nothing if this element wasn't present before
                   nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
@@ -509,7 +577,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
                   Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
         collected <- DMap.traverseWithKey collectIfMoved p
         let phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (\(Compose (_, ph, _)) -> ph) p_) phsBefore --TODO: Don't recompute this
-        let placeFragment :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant () a)
+        let placeFragment :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> JSM (Constant () a)
             placeFragment k e = do
               let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsAfter
               case e of
@@ -525,10 +593,12 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
         return ()
     return (result0, result')
 
-drawChildUpdate :: MonadJSM m => ImmediateDomBuilderEnv t -> ImmediateDomBuilderT t m (v' a) -> m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
+drawChildUpdate :: (MonadJSM m, PerformEvent t m, MonadFix m, MonadJSM (Performable m)) => ImmediateDomBuilderEnv t m -> ImmediateDomBuilderT t m (v' a) -> RequesterT t JSM Identity m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
 drawChildUpdate initialEnv child = do
   df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
-  runImmediateDomBuilderT (Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv { _immediateDomBuilderEnv_parent = toNode df }
+  runReaderT (unImmediateDomBuilderT $ Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
+    { _immediateDomBuilderEnv_parent = toNode df
+    }
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
@@ -537,21 +607,6 @@ mkHasFocus e = do
     [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
     , True <$ Reflex.select (_element_events e) (WrapArg Focus)
     ]
-
-{-# INLINABLE insertImmediateAbove #-}
-insertImmediateAbove :: (IsNode placeholder, PerformEvent t m, MonadJSM (Performable m)) => placeholder -> Event t (ImmediateDomBuilderT t (Performable m) a) -> ImmediateDomBuilderT t m (Event t a)
-insertImmediateAbove n toInsertAbove = do
-  events <- askEvents
-  lift $ performEvent $ ffor toInsertAbove $ \new -> do
-    doc <- getOwnerDocumentUnchecked n
-    df <- createDocumentFragmentUnchecked doc
-    result <- runImmediateDomBuilderT new $ ImmediateDomBuilderEnv
-      { _immediateDomBuilderEnv_parent = toNode df
-      , _immediateDomBuilderEnv_document = doc
-      , _immediateDomBuilderEnv_events = events
-      }
-    df `insertBefore` n
-    return result
 
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do

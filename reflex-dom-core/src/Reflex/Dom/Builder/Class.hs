@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -13,6 +14,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
@@ -50,6 +52,7 @@ import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHC.Exts (Constraint)
+import GHCJS.DOM.Types (JSM)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
@@ -669,3 +672,16 @@ liftTextAreaElement cfg = liftWithStateless $ \run -> textAreaElement $ fmap1 ru
 
 liftWrapRawElement :: LiftDomBuilder t f m => RawElement (DomBuilderSpace m) -> RawElementConfig er t (f m) -> f m (Element er (DomBuilderSpace m) t)
 liftWrapRawElement e es = liftWithStateless $ \run -> wrapRawElement e $ fmap1 run es
+
+class Monad m => DomRenderHook m where
+  withRenderHook :: (forall x. JSM x -> JSM x) -> m a -> m a
+
+instance DomRenderHook m => DomRenderHook (ReaderT e m) where
+  withRenderHook hook (ReaderT a) = ReaderT $ \e -> withRenderHook hook $ a e
+
+instance DomRenderHook m => DomRenderHook (StateT e m) where
+  withRenderHook hook (StateT a) = StateT $ \s -> withRenderHook hook $ a s
+
+deriving instance DomRenderHook m => DomRenderHook (EventWriterT t w m)
+deriving instance DomRenderHook m => DomRenderHook (RequesterT t req rsp m)
+deriving instance DomRenderHook m => DomRenderHook (PostBuildT t m)
