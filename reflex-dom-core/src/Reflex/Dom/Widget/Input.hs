@@ -663,6 +663,10 @@ instance HasValue (TextInput t) where
   type Value (TextInput t) = Dynamic t Text
   value = _textInput_value
 
+instance HasValue (RangeInput t) where
+  type Value (RangeInput t) = Dynamic t Float
+  value = _rangeInput_value
+
 instance HasValue (FileInput d t) where
   type Value (FileInput d t) = Dynamic t [File]
   value = _fileInput_value
