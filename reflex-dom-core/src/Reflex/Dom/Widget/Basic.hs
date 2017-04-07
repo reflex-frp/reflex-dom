@@ -395,7 +395,7 @@ elDynHtmlAttr' elementTag attrs html = do
   wrapElement defaultDomEventHandler e
 -}
 
-data Link t
+newtype Link t
   = Link { _link_clicked :: Event t ()
          }
 
@@ -444,11 +444,11 @@ tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBui
   -> Dynamic t (Map k r)                      -- ^ Map from row key to row value
   -> (k -> m (Dynamic t (Map Text Text))) -- ^ Function to compute <tr> element attributes from row key
   -> m (Dynamic t (Map k (Element EventResult (DomBuilderSpace m) t, [v])))        -- ^ Map from row key to (El, list of widget return values)
-tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zoom: 1; overflow: auto; background: white;") $ do
+tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zoom: 1; overflow: auto; background: white;") $
     elAttr "table" (Map.singleton "class" klass) $ do
-      el "thead" $ el "tr" $ do
+      el "thead" $ el "tr" $
         mapM_ (\(h, _) -> el "th" $ text h) cols
-      el "tbody" $ do
+      el "tbody" $
         listWithKey dRows (\k r -> do
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)

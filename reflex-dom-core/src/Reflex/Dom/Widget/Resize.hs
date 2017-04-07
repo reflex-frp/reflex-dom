@@ -24,7 +24,8 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
-import GHCJS.DOM.Element hiding (reset)
+import GHCJS.DOM.Element
+import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types (liftJSM, MonadJSM)
 
@@ -78,8 +79,8 @@ resizeDetectorWithAttrs attrs w = do
           then return Nothing
           else fmap Just reset
   pb <- delay 0 =<< getPostBuild
-  expandScroll <- wrapDomEvent (_element_raw expand) (`on` scroll) $ return ()
-  shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` scroll) $ return ()
+  expandScroll <- wrapDomEvent (_element_raw expand) (`on` Events.scroll) $ return ()
+  shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` Events.scroll) $ return ()
   size0 <- performEvent $ fmap (const $ liftJSM reset) pb
   rec resize <- performEventAsync $ fmap (\d cb -> (liftIO . cb) =<< liftJSM (resetIfChanged d)) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]

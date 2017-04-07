@@ -10,7 +10,6 @@ module Reflex.Dom.Xhr.Foreign (
 ) where
 
 import Control.Exception (throwIO)
-import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -19,7 +18,7 @@ import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on)
 import GHCJS.DOM.EventTarget (dispatchEvent)
-import GHCJS.DOM.Types hiding (Text)
+import GHCJS.DOM.Types hiding (Text, ByteString)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
@@ -33,7 +32,7 @@ xmlHttpRequestNew = newXMLHttpRequest
 xmlHttpRequestOpen ::
                    (ToJSString method, ToJSString url, ToJSString user, ToJSString password, MonadJSM m) =>
                      XMLHttpRequest -> method -> url -> Bool -> user -> password -> m ()
-xmlHttpRequestOpen = open
+xmlHttpRequestOpen request method url async user password = open request method url async (Just user) (Just password)
 
 convertException :: XHRError -> XhrException
 convertException e = case e of
@@ -82,7 +81,7 @@ xmlHttpRequestAbort :: MonadJSM m => XMLHttpRequest -> m ()
 xmlHttpRequestAbort = abort
 
 xmlHttpRequestGetAllResponseHeaders :: MonadJSM m => XMLHttpRequest -> m Text
-xmlHttpRequestGetAllResponseHeaders self = fromMaybe "" <$> getAllResponseHeaders self
+xmlHttpRequestGetAllResponseHeaders = getAllResponseHeaders
 
 xmlHttpRequestGetResponseHeader :: (ToJSString header, MonadJSM m)
                                 => XMLHttpRequest -> header -> m Text
@@ -91,7 +90,7 @@ xmlHttpRequestGetResponseHeader self header = fromMaybe "" <$> getResponseHeader
 xmlHttpRequestOverrideMimeType :: (ToJSString override, MonadJSM m) => XMLHttpRequest -> override -> m ()
 xmlHttpRequestOverrideMimeType = overrideMimeType
 
-xmlHttpRequestDispatchEvent :: (IsEvent evt, MonadJSM m) => XMLHttpRequest -> Maybe evt -> m Bool
+xmlHttpRequestDispatchEvent :: (IsEvent evt, MonadJSM m) => XMLHttpRequest -> evt -> m Bool
 xmlHttpRequestDispatchEvent = dispatchEvent
 
 xmlHttpRequestOnabort :: XMLHttpRequest -> EventM XMLHttpRequest XMLHttpRequestProgressEvent () -> JSM (JSM ())
@@ -134,7 +133,7 @@ xmlHttpRequestGetWithCredentials :: MonadJSM m => XMLHttpRequest -> m Bool
 xmlHttpRequestGetWithCredentials = getWithCredentials
 
 xmlHttpRequestGetUpload :: MonadJSM m => XMLHttpRequest -> m (Maybe XMLHttpRequestUpload)
-xmlHttpRequestGetUpload = getUpload
+xmlHttpRequestGetUpload = fmap Just . getUpload
 
 xmlHttpRequestGetResponseText :: (FromJSString result, MonadJSM m) => XMLHttpRequest -> m (Maybe result)
 xmlHttpRequestGetResponseText = getResponseText
@@ -175,12 +174,10 @@ xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
   rt <- xmlHttpRequestGetResponseType xhr
   case rt of
-       Just XhrResponseType_Blob -> fmap XhrResponseBody_Blob . join <$> mapM (castTo Blob) mr
+       Just XhrResponseType_Blob -> fmap XhrResponseBody_Blob <$> castTo Blob mr
        Just XhrResponseType_Text -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
        Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_ArrayBuffer -> case fmap unGObject mr of
-         Nothing -> return Nothing
-         Just ptr -> do
-           ab <- liftJSM $ mutableArrayBufferFromJSVal ptr
+       Just XhrResponseType_ArrayBuffer -> do
+           ab <- liftJSM $ mutableArrayBufferFromJSVal mr
            Just . XhrResponseBody_ArrayBuffer <$> bsFromMutableArrayBuffer ab
        _ -> return Nothing
