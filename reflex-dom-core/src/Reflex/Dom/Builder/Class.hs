@@ -673,15 +673,21 @@ liftTextAreaElement cfg = liftWithStateless $ \run -> textAreaElement $ fmap1 ru
 liftWrapRawElement :: LiftDomBuilder t f m => RawElement (DomBuilderSpace m) -> RawElementConfig er t (f m) -> f m (Element er (DomBuilderSpace m) t)
 liftWrapRawElement e es = liftWithStateless $ \run -> wrapRawElement e $ fmap1 run es
 
-class Monad m => DomRenderHook m where
+class (Reflex t, Monad m) => DomRenderHook t m | m -> t where
   withRenderHook :: (forall x. JSM x -> JSM x) -> m a -> m a
+  requestDomAction :: Event t (JSM a) -> m (Event t a)
+  requestDomAction_ :: Event t (JSM a) -> m ()
 
-instance DomRenderHook m => DomRenderHook (ReaderT e m) where
+instance DomRenderHook t m => DomRenderHook t (ReaderT e m) where
   withRenderHook hook (ReaderT a) = ReaderT $ \e -> withRenderHook hook $ a e
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
 
-instance DomRenderHook m => DomRenderHook (StateT e m) where
+instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   withRenderHook hook (StateT a) = StateT $ \s -> withRenderHook hook $ a s
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
 
-deriving instance DomRenderHook m => DomRenderHook (EventWriterT t w m)
-deriving instance DomRenderHook m => DomRenderHook (RequesterT t req rsp m)
-deriving instance DomRenderHook m => DomRenderHook (PostBuildT t m)
+deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
+deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
+deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)

@@ -162,18 +162,14 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift
 
-instance (PerformEvent t m, PrimMonad m) => DomRenderHook (ImmediateDomBuilderT t m) where
+instance (PerformEvent t m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT (runReaderT a e) $ runIdentity <$> rsp
       return (ffor req $ \rm -> hook $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm, x)
-
-requestDomAction :: (Reflex t, Monad m, PrimMonad m) => Event t (JSM a) -> ImmediateDomBuilderT t m (Event t a)
-requestDomAction = ImmediateDomBuilderT . lift . requestingIdentity
-
-requestDomAction_ :: (Reflex t, Monad m, PrimMonad m) => Event t (JSM a) -> ImmediateDomBuilderT t m ()
-requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
+  requestDomAction = ImmediateDomBuilderT . lift . requestingIdentity
+  requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
 
 {-# INLINABLE runImmediateDomBuilderT #-}
 runImmediateDomBuilderT :: (Reflex t, MonadFix m, PerformEvent t m, MonadJSM (Performable m)) => ImmediateDomBuilderT t m a -> ImmediateDomBuilderEnv t m -> m a
