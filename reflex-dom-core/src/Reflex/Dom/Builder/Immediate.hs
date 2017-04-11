@@ -523,10 +523,12 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
       result <- runReaderT (unImmediateDomBuilderT child) $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
         }
-      deleteBetweenExclusive before after
-      insertBefore df after
-      return result
-    return (result0, result')
+      let update = do
+            deleteBetweenExclusive before after
+            insertBefore df after
+      return (result, update)
+    requestDomAction_ $ snd <$> result'
+    return (result0, fst <$> result')
   traverseDMapWithKeyWithAdjust (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
     initialEnv <- ImmediateDomBuilderT ask
     (children0, children') <- ImmediateDomBuilderT $ lift $ traverseDMapWithKeyWithAdjust (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
