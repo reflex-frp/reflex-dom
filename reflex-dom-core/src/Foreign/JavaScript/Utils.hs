@@ -1,9 +1,3 @@
-{-# LANGUAGE CPP #-}
-#ifdef __GHCJS__
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE JavaScriptFFI #-}
-#endif
-
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
   , bsToArrayBuffer
@@ -14,10 +8,8 @@ import qualified Data.ByteString as BS
 import qualified GHCJS.Buffer as JS
 import           GHCJS.DOM.Types (ArrayBuffer (..))
 import qualified JavaScript.TypedArray.ArrayBuffer as JS
-import           Language.Javascript.JSaddle.Types (JSVal, JSM, MonadJSM, liftJSM, ghcjsPure, jsval)
-#ifndef __GHCJS__
-import           Language.Javascript.JSaddle.Object (new, jsg)
-#endif
+import           Language.Javascript.JSaddle.Types (MonadJSM, liftJSM, ghcjsPure, jsval)
+import           Foreign.JavaScript.Internal.Utils (js_dataView)
 
 {-# INLINABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
@@ -33,10 +25,3 @@ bsToArrayBuffer bs = liftJSM $ do
                   else do
                     ref <- ghcjsPure (JS.getArrayBuffer b) >>= ghcjsPure . jsval
                     js_dataView off len ref
-
-#ifdef __GHCJS__
-foreign import javascript safe "new DataView($3,$1,$2)" js_dataView :: Int -> Int -> JSVal -> IO JSVal
-#else
-js_dataView :: Int -> Int -> JSVal -> JSM JSVal
-js_dataView off len ref = new (jsg "DataView") (ref, off, len)
-#endif
