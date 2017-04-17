@@ -5,6 +5,7 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -24,6 +25,7 @@ import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
 import Reflex.Host.Class
+import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
@@ -45,10 +47,12 @@ import Data.Dependent.Sum
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
+import Data.Functor.Product
 import Data.IORef
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid hiding (Product)
+import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
@@ -543,14 +547,23 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, MonadFix m, Perfo
       return result
     return (result0, result')
   traverseDMapWithKeyWithAdjust = do
-    let updatedChildToUnreadiness :: forall x v'. Int -> ComposeMaybe (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') x -> ComposeMaybe (Constant Int) x
-        updatedChildToUnreadiness cohortId = \case
-          ComposeMaybe Nothing -> ComposeMaybe Nothing -- The child is being deleted, so it's ready
-          ComposeMaybe (Just (Compose (_, _, alreadyReady, _)))
-            | alreadyReady -> ComposeMaybe Nothing -- The child is being added and is already ready
-            | otherwise -> ComposeMaybe $ Just $ Constant cohortId -- The child is being added and is not ready
-        childrenPatchToUnreadyPatch cohortId (PatchDMap m) = PatchDMap $ DMap.map (updatedChildToUnreadiness cohortId) m
-    hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap childrenPatchToUnreadyPatch $ \placeholders lastPlaceholderRef (PatchDMap p) -> do
+    let updateChildUnreadiness (p :: PatchDMap k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) old = do
+          let new :: forall a. k a -> ComposeMaybe (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
+              new k (ComposeMaybe m) = ComposeMaybe <$> case m of
+                Nothing -> return Nothing
+                Just (Compose (_, _, sRef, _)) -> do
+                  readIORef sRef >>= \case
+                    ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
+                    ChildReadyState_Unready _ -> do
+                      writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
+                      return $ Just $ Constant sRef
+              delete _ (Constant sRef) = do
+                writeIORef sRef $ ChildReadyState_Unready Nothing
+                return $ Constant ()
+          p' <- fmap PatchDMap $ DMap.traverseWithKey new $ unPatchDMap p
+          _ <- DMap.traverseWithKey delete $ PatchDMap.getDeletions p old
+          return $ applyAlways p' old
+    hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness $ \placeholders lastPlaceholderRef (PatchDMap p) -> do
       phs <- readIORef placeholders
       forM_ (DMap.toList p) $ \(k :=> ComposeMaybe mv) -> do
         lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
@@ -559,19 +572,29 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, MonadFix m, Perfo
         forM_ mv $ \(Compose (df, _, _, _)) -> df `insertBefore` nextPlaceholder
       writeIORef placeholders $! fromMaybe phs $ apply (weakenPatchDMapWith (\(Compose (_, ph, _, _)) -> ph) $ PatchDMap p) phs
   traverseDMapWithKeyWithAdjustWithMove = do
-    let updatedChildToUnreadiness :: forall x k v'. Int -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') x -> PatchDMapWithMove.NodeInfo k (Constant Int) x
-        updatedChildToUnreadiness cohortId = PatchDMapWithMove.nodeInfoMapFrom $ \case
-          PatchDMapWithMove.From_Insert (Compose (_, _, alreadyReady, _))
-            | alreadyReady -> PatchDMapWithMove.From_Delete -- The child is being added and is already ready
-            | otherwise -> PatchDMapWithMove.From_Insert $ Constant cohortId -- The child is being added and is not ready
-          PatchDMapWithMove.From_Delete -> PatchDMapWithMove.From_Delete -- The child is being deleted, so it's ready
-          PatchDMapWithMove.From_Move k -> PatchDMapWithMove.From_Move k -- The child is being moved, so its ready status should be moved
-        childrenPatchToUnreadyPatch cohortId = unsafePatchDMapWithMove . DMap.map (updatedChildToUnreadiness cohortId) . unPatchDMapWithMove
-    hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove childrenPatchToUnreadyPatch $ \placeholders lastPlaceholderRef (p_ :: PatchDMapWithMove k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v')) -> do
+    let updateChildUnreadiness (p :: PatchDMapWithMove k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) old = do
+          let new :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (PatchDMapWithMove.NodeInfo k (Constant (IORef (ChildReadyState k))) a)
+              new k = PatchDMapWithMove.nodeInfoMapFromM $ \case
+                PatchDMapWithMove.From_Insert (Compose (_, _, sRef, _)) -> do
+                  readIORef sRef >>= \case
+                    ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
+                    ChildReadyState_Unready _ -> do
+                      writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
+                      return $ PatchDMapWithMove.From_Insert $ Constant sRef
+                PatchDMapWithMove.From_Delete -> return PatchDMapWithMove.From_Delete
+                PatchDMapWithMove.From_Move fromKey -> return $ PatchDMapWithMove.From_Move fromKey
+              deleteOrMove :: forall a. k a -> Product (Constant (IORef (ChildReadyState k))) (ComposeMaybe k) a -> IO (Constant () a)
+              deleteOrMove _ (Pair (Constant sRef) (ComposeMaybe mToKey)) = do
+                writeIORef sRef $ ChildReadyState_Unready $ Some.This <$> mToKey -- This will be Nothing if deleting, and Just if moving, so it works out in both cases
+                return $ Constant ()
+          p' <- fmap unsafePatchDMapWithMove $ DMap.traverseWithKey new $ unPatchDMapWithMove p
+          _ <- DMap.traverseWithKey deleteOrMove $ PatchDMapWithMove.getDeletionsAndMoves p old
+          return $ applyAlways p' old
+    hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove updateChildUnreadiness $ \placeholders lastPlaceholderRef (p_ :: PatchDMapWithMove k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) -> do
       let p = unPatchDMapWithMove p_
       phsBefore <- readIORef placeholders
       lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
-      let collectIfMoved :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') a -> IO (Constant (Maybe DOM.DocumentFragment) a)
+      let collectIfMoved :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (Constant (Maybe DOM.DocumentFragment) a)
           collectIfMoved k e = do
             let mThisPlaceholder = Map.lookup (Some.This k) phsBefore -- Will be Nothing if this element wasn't present before
                 nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
@@ -583,7 +606,7 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, MonadFix m, Perfo
                 Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
       collected <- DMap.traverseWithKey collectIfMoved p
       let !phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (\(Compose (_, ph, _, _)) -> ph) p_) phsBefore --TODO: Don't recompute this
-      let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') a -> IO (Constant () a)
+      let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (Constant () a)
           placeFragment k e = do
             let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsAfter
             case PatchDMapWithMove._nodeInfo_from e of
@@ -598,6 +621,11 @@ instance (Reflex t, MonadAdjust t m, MonadIO m, MonadHold t m, MonadFix m, Perfo
       mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
       writeIORef placeholders $! phsAfter
 
+data ChildReadyState k
+   = ChildReadyState_Ready
+   | ChildReadyState_Unready !(Maybe (Some k))
+   deriving (Show, Read, Eq, Ord)
+
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( PerformEvent t m
   , MonadAdjust t m
@@ -608,7 +636,7 @@ hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   , MonadFix m
   , Patch (p k v)
   , PatchTarget (p k (Constant Int)) ~ DMap k (Constant Int)
-  , Monoid (p k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v'))
+  , Monoid (p k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v'))
   , Patch (p k (Constant Int))
   )
   => (forall vv vv'.
@@ -618,16 +646,16 @@ hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
       -> m (DMap k vv', Event t (p k vv'))
      ) -- ^ The base monad's traversal
   -> (forall vv vv'. (forall a. vv a -> vv' a) -> p k vv -> p k vv') -- ^ A way of mapping over the patch type
-  -> (Int -> p k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') -> p k (Constant Int)) -- ^ Given a patch for the children DOM elements, produce a patch for the childrens' unreadiness state
-  -> (IORef (Map.Map (Some.Some k) DOM.Text) -> IORef DOM.Text -> p k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v') -> IO ()) -- ^ Apply a patch to the DOM
+  -> (p k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') -> DMap k (Constant (IORef (ChildReadyState k))) -> IO (DMap k (Constant (IORef (ChildReadyState k))))) -- ^ Given a patch for the children DOM elements, produce a patch for the childrens' unreadiness state
+  -> (IORef (Map.Map (Some.Some k) DOM.Text) -> IORef DOM.Text -> p k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') -> IO ()) -- ^ Apply a patch to the DOM
   -> (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a))
   -> DMap k v
   -> Event t (p k v)
   -> ImmediateDomBuilderT t m (DMap k v', Event t (p k v'))
-hoistTraverseWithKeyWithAdjust base mapPatch childrenPatchToUnreadyPatch applyDomUpdate_ (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
+hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpdate_ (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
   initialEnv <- ImmediateDomBuilderT ask
   let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
-  pendingChange :: IORef (DMap k (Constant Int), p k (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v')) <- liftIO $ newIORef mempty
+  pendingChange :: IORef (DMap k (Constant (IORef (ChildReadyState k))), p k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) <- liftIO $ newIORef mempty
   haveEverBeenReady <- liftIO $ newIORef False
   placeholders <- liftIO $ newIORef $ error "placeholders not yet initialized"
   lastPlaceholderRef <- liftIO $ newIORef $ error "lastPlaceholderRef not yet initialized"
@@ -641,24 +669,30 @@ hoistTraverseWithKeyWithAdjust base mapPatch childrenPatchToUnreadyPatch applyDo
             let new = pred old
             writeIORef parentUnreadyChildren $! new
             when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
-      markChildReady :: forall a. Int -> k a -> IO ()
-      markChildReady markingCohortId k = do
-        (oldUnready, p) <- readIORef pendingChange
-        when (not (DMap.null oldUnready)) $ do
-          let clearUnreadiness = \case
-                Nothing -> Nothing
-                old@(Just (Constant pendingCohortId)) -> case pendingCohortId `compare` markingCohortId of
-                  LT -> trace "Warning: marking a child as ready before it is in pendingChange" Nothing -- Should never happen; we're trying to mark something as done before it's been added to pendingChange
-                  EQ -> Nothing -- We're marking the currently pending child as done
-                  GT -> old -- We're marking a child as done that has already been superceded
-              newUnready = DMap.alter clearUnreadiness k oldUnready
-          writeIORef pendingChange $! (newUnready, p)
-          when (DMap.null newUnready) $ do
-            applyDomUpdate p
-            markSelfReady
-  dm'' <- zipListWithEvent (\cohortId -> mapPatch (\v -> Compose (cohortId, v))) [1 :: Int ..] dm'
-  (children0, children') <- lift $ base (\k (Compose (cohortId, v)) -> drawChildUpdate initialEnv (markChildReady cohortId k) $ f k v) (DMap.map (\v -> Compose (0, v)) dm0) dm''
-  let !initialUnready = DMap.mapMaybeWithKey (\_ (Compose (_, _, alreadyReady, _)) -> if alreadyReady then Nothing else Just $ Constant 0) children0
+      markChildReady :: IORef (ChildReadyState k) -> IO ()
+      markChildReady childReadyState = do
+        readIORef childReadyState >>= \case
+          ChildReadyState_Ready -> return ()
+          ChildReadyState_Unready countedAt -> do
+            writeIORef childReadyState ChildReadyState_Ready
+            case countedAt of
+              Nothing -> return ()
+              Just (Some.This k) -> do -- This child has been counted as unready, so we need to remove it from the unready set
+                (oldUnready, p) <- readIORef pendingChange
+                when (not $ DMap.null oldUnready) $ do -- This shouldn't actually ever be null
+                  let newUnready = DMap.delete k oldUnready
+                  writeIORef pendingChange $! (newUnready, p)
+                  when (DMap.null newUnready) $ do
+                    applyDomUpdate p
+                    markSelfReady
+  (children0, children') <- lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
+  let processChild k (Compose (_, _, sRef, _)) = ComposeMaybe <$> do
+        readIORef sRef >>= \case
+          ChildReadyState_Ready -> return Nothing
+          ChildReadyState_Unready _ -> do
+            writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
+            return $ Just $ Constant sRef
+  initialUnready <- liftIO $ DMap.mapMaybeWithKey (\_ -> getComposeMaybe) <$> DMap.traverseWithKey processChild children0
   liftIO $ if DMap.null initialUnready
     then writeIORef haveEverBeenReady True
     else do
@@ -671,76 +705,34 @@ hoistTraverseWithKeyWithAdjust base mapPatch childrenPatchToUnreadyPatch applyDo
   _ <- DMap.traverseWithKey (\_ (Compose (df, _, _, _)) -> Constant () <$ append df) children0
   liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
   -- Note: the numbering here must match the numbering of dm''
-  children'' <- zipListWithEvent (,) [1 :: Int ..] children'
-  performEvent_ $ ffor children'' $ \(cohortId, p) -> liftIO $ do
+  performEvent_ $ ffor children' $ \p -> liftIO $ do
     (oldUnready, oldP) <- readIORef pendingChange
-    let !newUnready = fromMaybe oldUnready $ apply (childrenPatchToUnreadyPatch cohortId p) oldUnready
-        !newP = p <> oldP
+    newUnready <- updateChildUnreadiness p oldUnready
+    let !newP = p <> oldP
     writeIORef pendingChange $! (newUnready, newP)
     when (DMap.null newUnready) $ do
       applyDomUpdate newP
       markSelfReady
       writeIORef pendingChange $! mempty
   return (result0, result')
-{-
-  traverseDMapWithKeyWithAdjustWithMove (f :: forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
-    initialEnv <- ImmediateDomBuilderT ask
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjustWithMove (\k v -> drawChildUpdate initialEnv $ f k v) dm0 dm'
-    let result0 = DMap.map (\(Compose (_, _, v)) -> v) children0
-        placeholders0 = weakenDMapWith (\(Compose (_, ph, _)) -> ph) children0
-        result' = ffor children' $ mapPatchDMapWithMove $ \(Compose (_, _, r)) -> r
-        placeholders' = fforCheap children' $ weakenPatchDMapWithMoveWith $ \(Compose (_, ph, _)) -> ph
-    placeholders <- current . incrementalToDynamic <$> holdIncremental placeholders0 placeholders'
-    _ <- DMap.traverseWithKey (\_ (Compose (df, _, _)) -> Constant () <$ append df) children0
-    lastPlaceholder <- textNodeInternal ("" :: Text)
-    performEvent_ $ flip push children' $ \p_ -> do
-      let p = unPatchDMapWithMove p_
-      phsBefore <- sample placeholders
-      if DMap.null p then return Nothing else return $ Just $ do
-        let collectIfMoved :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant (Maybe DOM.DocumentFragment) a)
-            collectIfMoved k e = do
-              let mThisPlaceholder = Map.lookup (Some.This k) phsBefore -- Will be Nothing if this element wasn't present before
-                  nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsBefore
-              case dmapEditMoved e of
-                False -> do
-                  mapM_ (`deleteUpTo` nextPlaceholder) mThisPlaceholder
-                  return $ Constant Nothing
-                True -> do
-                  Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
-        collected <- DMap.traverseWithKey collectIfMoved p
-        let phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (\(Compose (_, ph, _)) -> ph) p_) phsBefore --TODO: Don't recompute this
-        let placeFragment :: forall a. k a -> DMapEdit k (Compose ((,,) DOM.DocumentFragment DOM.Text) v') a -> Performable m (Constant () a)
-            placeFragment k e = do
-              let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some.This k) phsAfter
-              case e of
-                PatchDMapWithMove.From_Insert _ (Compose (df, _, _)) -> do
-                  df `insertBefore` nextPlaceholder
-                PatchDMapWithMove.From_Delete _ -> do
-                  return ()
-                PatchDMapWithMove.From_Move _ fromKey -> do
-                  Just (Constant mdf) <- return $ DMap.lookup fromKey collected
-                  mapM_ (`insertBefore` nextPlaceholder) mdf
-              return $ Constant ()
-        mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
-        return ()
-    return (result0, result')
--}
 
 drawChildUpdate :: MonadIO m
   => ImmediateDomBuilderEnv t
-  -> IO () -- This will NOT be called if the child is ready at initialization time; instead, a True will be returned for that item
+  -> (IORef (ChildReadyState k) -> IO ()) -- This will NOT be called if the child is ready at initialization time; instead, the ChildReadyState return value will be ChildReadyState_Ready
   -> ImmediateDomBuilderT t m (v' a)
-  -> m (Compose ((,,,) DOM.DocumentFragment DOM.Text Bool) v' a)
+  -> m (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v' a)
 drawChildUpdate initialEnv markReady child = do
+  childReadyState <- liftIO $ newIORef $ ChildReadyState_Unready Nothing
   unreadyChildren <- liftIO $ newIORef 0
   Just df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
   (placeholder, result) <- runImmediateDomBuilderT ((,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
     { _immediateDomBuilderEnv_parent = toNode df
     , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
-    , _immediateDomBuilderEnv_commitAction = markReady
+    , _immediateDomBuilderEnv_commitAction = markReady childReadyState
     }
   u <- liftIO $ readIORef unreadyChildren
-  return $ Compose (df, placeholder, u == 0, result)
+  when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyState_Ready
+  return $ Compose (df, placeholder, childReadyState, result)
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
