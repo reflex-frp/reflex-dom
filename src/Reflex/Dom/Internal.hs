@@ -50,6 +50,14 @@ mainWidget w = runWebGUI $ \webView -> withWebViewSingleton webView $ \webViewSi
   Just body <- getBody doc
   attachWidget body webViewSing w
 
+{-# INLINABLE mainWidget' #-}
+-- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainWidget' :: Widget () () -> IO ()
+mainWidget' w = runWebGUI $ \webView -> withWebViewSingletonMono webView $ \webViewSing -> do
+  Just doc <- fmap DOM.castToHTMLDocument <$> webViewGetDomDocument webView
+  Just body <- getBody doc
+  attachWidget body webViewSing w
+
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> IO ()
