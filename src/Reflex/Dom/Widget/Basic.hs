@@ -85,7 +85,6 @@ import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dom.Internal.Foreign ()
 import Reflex.Dynamic
-import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
 import Control.Arrow
