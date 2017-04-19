@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -98,7 +99,9 @@ w = do
       return ()
     return ()
 
+#ifdef EXPERIMENTAL_DEPENDENT_SUM_INSTANCES
 instance {-# INCOHERENT #-} (Show (f a), Show (f b)) => ShowTag (EitherTag a b) f where
   showTagToShow e _ = case e of
     LeftTag -> id
     RightTag -> id
+#endif
