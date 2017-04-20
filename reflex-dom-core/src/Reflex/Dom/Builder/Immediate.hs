@@ -49,11 +49,11 @@ module Reflex.Dom.Builder.Immediate
        , Pair1 (..)
        , Maybe1 (..)
        , GhcjsEventSpec (..)
+       , ghcjsEventSpec_filters
+       , ghcjsEventSpec_handler
        , GhcjsEventHandler (..)
 #ifndef USE_TEMPLATE_HASKELL
        , phantom2
-       , ghcjsEventSpec_filters
-       , ghcjsEventSpec_handler
 #endif
        , drawChildUpdate
        , mkHasFocus
