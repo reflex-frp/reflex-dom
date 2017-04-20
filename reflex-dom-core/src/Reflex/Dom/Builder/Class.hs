@@ -149,6 +149,25 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomB
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
   {-# INLINABLE wrapRawElement #-}
+  notReadyUntil :: Event t a -> m ()
+  default notReadyUntil :: ( MonadTrans f
+                           , m ~ f m'
+                           , DomBuilder t m'
+                           )
+                        => Event t a -> m ()
+  notReadyUntil = lift . notReadyUntil
+  notReady :: m ()
+  default notReady :: ( MonadTrans f
+                      , m ~ f m'
+                      , DomBuilder t m'
+                      )
+                   => m ()
+  notReady = lift notReady
+
+class DomBuilder t m => MountableDomBuilder t m where
+  type DomFragment m :: *
+  buildDomFragment :: m a -> m (DomFragment m, a)
+  mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
 
 type Namespace = Text
 
@@ -511,6 +530,11 @@ instance (Reflex t, er ~ EventResult, DomBuilder t m) => Default (ElementConfig 
 instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
   type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
   wrapRawElement e cfg = liftWith $ \run -> wrapRawElement e $ fmap1 run cfg
+
+instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => MountableDomBuilder t (PostBuildT t m) where
+  type DomFragment (PostBuildT t m) = DomFragment m
+  buildDomFragment = liftThrough buildDomFragment
+  mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m

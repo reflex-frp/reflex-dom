@@ -178,7 +178,7 @@ instance MonadTransControl (WithJSContextSingleton x) where
   restoreT = defaultRestoreT WithJSContextSingleton
 
 instance PerformEvent t m => PerformEvent t (WithJSContextSingleton x m) where
-  type Performable (WithJSContextSingleton x m) = WithJSContextSingleton x (Performable m)
+  type Performable (WithJSContextSingleton x m) = WithJSContextSingleton x (Performable m) --TODO: Can we eliminate this wrapper?
   {-# INLINABLE performEvent_ #-}
   performEvent_ e = liftWith $ \run -> performEvent_ $ fmap run e
   {-# INLINABLE performEvent #-}

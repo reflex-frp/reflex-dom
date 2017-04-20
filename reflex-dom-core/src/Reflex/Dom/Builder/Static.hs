@@ -150,21 +150,43 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
     return (fst result0, fmapCheap fst result')
-  traverseDMapWithKeyWithAdjust f (dm0 :: DMap k v) dm' = do
-    e <- StaticDomBuilderT ask
-    (children0, children') <- lift $ traverseDMapWithKeyWithAdjust (\k v -> fmap (Compose . swap) (runStaticDomBuilderT (f k v) e)) dm0 dm'
-    let result0 = DMap.map (snd . getCompose) children0
-        result' = ffor children' $ mapPatchDMap $ snd . getCompose
-        outputs0 :: DMap k (Constant (Behavior t Builder))
-        outputs0 = DMap.map (Constant . fst . getCompose) children0
-        outputs' :: Event t (PatchDMap k (Constant (Behavior t Builder)))
-        outputs' = ffor children' $ mapPatchDMap $ Constant . fst . getCompose
-    outputs <- holdIncremental outputs0 outputs'
-    StaticDomBuilderT $ modify $ (:) $ pull $ do
-      os <- sample $ currentIncremental outputs
-      fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
-        sample o
-    return (result0, result')
+  traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
+  traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
+
+hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
+  ( MonadAdjust t m
+  , MonadHold t m
+  , DMap.GCompare k
+  , Patch (p k v)
+  , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
+  , Patch (p k (Constant (Behavior t Builder)))
+  )
+  => (forall vv vv'.
+         (forall a. k a -> vv a -> m (vv' a))
+      -> DMap k vv
+      -> Event t (p k vv)
+      -> m (DMap k vv', Event t (p k vv'))
+     ) -- ^ The base monad's traversal
+  -> (forall vv vv'. (forall a. vv a -> vv' a) -> p k vv -> p k vv') -- ^ A way of mapping over the patch type
+  -> (forall a. k a -> v a -> StaticDomBuilderT t m (v' a))
+  -> DMap k v
+  -> Event t (p k v)
+  -> StaticDomBuilderT t m (DMap k v', Event t (p k v'))
+hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
+  e <- StaticDomBuilderT ask
+  (children0, children') <- lift $ base (\k v -> fmap (Compose . swap) (runStaticDomBuilderT (f k v) e)) dm0 dm'
+  let result0 = DMap.map (snd . getCompose) children0
+      result' = ffor children' $ mapPatch $ snd . getCompose
+      outputs0 :: DMap k (Constant (Behavior t Builder))
+      outputs0 = DMap.map (Constant . fst . getCompose) children0
+      outputs' :: Event t (p k (Constant (Behavior t Builder)))
+      outputs' = ffor children' $ mapPatch $ Constant . fst . getCompose
+  outputs <- holdIncremental outputs0 outputs'
+  StaticDomBuilderT $ modify $ (:) $ pull $ do
+    os <- sample $ currentIncremental outputs
+    fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
+      sample o
+  return (result0, result')
 
 -- TODO: the uses of illegal lenses in this instance causes it to be somewhat less efficient than it can be. replacing them with explicit cases to get the underlying Maybe Event and working with those is ideal.
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
@@ -204,7 +226,11 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
           let open = mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString ">")]
           let close = constant $ byteString $ "</" <> tagBS <> ">"
           modify $ (:) $ mconcat [open, innerHtml, close]
-      return (Element es (), result)
+      let e = Element
+            { _element_events = es
+            , _element_raw = ()
+            }
+      return (e, result)
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -250,6 +276,8 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     return (wrapped, result)
   placeRawElement () = return ()
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
+  notReadyUntil _ = return () --TODO: Do we need to support this somehow?
+  notReady = return () --TODO: Do we need to support this somehow?
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
