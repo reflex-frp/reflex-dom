@@ -75,8 +75,6 @@ module Reflex.Dom.Builder.Immediate
        , WindowConfig (..)
        , Window (..)
        , wrapWindow
-       , ghcjsEventSpec_filters
-       , ghcjsEventSpec_handler
        ) where
 
 import Foreign.JavaScript.TH
