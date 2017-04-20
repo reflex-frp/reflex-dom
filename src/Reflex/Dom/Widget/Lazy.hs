@@ -92,7 +92,7 @@ virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, 
   -> (k -> v -> Event t v -> m a) -- ^ The row child element builder.
   -> m (Dynamic t (Int, Int), Dynamic t (Map k a)) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and the 'Dynamic' list result
 virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBuilder = do
-  let virtualH = fmap (mkVirtualHeight . (*) rowPx) maxIndex
+  let virtualH = mkVirtualHeight <$> maxIndex
       containerStyle = fmap mkContainer heightPx
       viewportStyle = fmap mkViewport heightPx
   pb <- getPostBuild
