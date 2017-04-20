@@ -742,8 +742,11 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
   haveEverBeenReady <- liftIO $ newIORef False
   placeholders <- liftIO $ newIORef $ error "placeholders not yet initialized"
   lastPlaceholderRef <- liftIO $ newIORef $ error "lastPlaceholderRef not yet initialized"
-  let applyDomUpdate = applyDomUpdate_ placeholders lastPlaceholderRef
-  let markSelfReady = do
+  let applyDomUpdate p = do
+        applyDomUpdate_ placeholders lastPlaceholderRef p
+        markSelfReady
+        liftIO $ writeIORef pendingChange $! mempty
+      markSelfReady = do
         liftIO (readIORef haveEverBeenReady) >>= \case
           True -> return ()
           False -> do
@@ -767,7 +770,6 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
                   liftIO $ writeIORef pendingChange (newUnready, p)
                   when (DMap.null newUnready) $ do
                     applyDomUpdate p
-                    markSelfReady
   (children0, children') <- ImmediateDomBuilderT $ lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
   let processChild k (Compose (_, _, sRef, _)) = ComposeMaybe <$> do
         readIORef sRef >>= \case
@@ -787,7 +789,6 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
   liftIO $ writeIORef placeholders $! placeholders0
   _ <- DMap.traverseWithKey (\_ (Compose (df, _, _, _)) -> Constant () <$ append df) children0
   liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
-  -- Note: the numbering here must match the numbering of dm''
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
     newUnready <- liftIO $ updateChildUnreadiness p oldUnready
@@ -795,8 +796,6 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
     liftIO $ writeIORef pendingChange (newUnready, newP)
     when (DMap.null newUnready) $ do
       applyDomUpdate newP
-      markSelfReady
-      liftIO $ writeIORef pendingChange $! mempty
   return (result0, result')
 
 drawChildUpdate :: (MonadIO m, MonadJSM m)
