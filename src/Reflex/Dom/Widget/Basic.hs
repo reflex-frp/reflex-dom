@@ -351,14 +351,16 @@ dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithIni
 dynamicAttributesToModifyAttributesWithInitial :: (Ord k, PostBuild t m) => Map k Text -> Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
   postBuild <- getPostBuild
-  let modificationsNeeded = flip pushAlways (align postBuild $ updated d) $ \case
-        This () -> do
-          new <- sample $ current d
-          return $ diffMap attrs0 new
-        These () new -> return $ diffMap attrs0 new
-        That new -> do
-          old <- sample $ current d
-          return $ diffMap old new
+  let modificationsNeeded = flip push (align postBuild $ updated d) $ \x -> do
+        p <- case x of
+          This () -> do
+            new <- sample $ current d
+            return $ diffMap attrs0 new
+          These () new -> return $ diffMap attrs0 new
+          That new -> do
+            old <- sample $ current d
+            return $ diffMap old new
+        return $ if Map.null p then Nothing else Just p
   return modificationsNeeded
 
 --------------------------------------------------------------------------------
