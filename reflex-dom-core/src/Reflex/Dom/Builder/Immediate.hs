@@ -579,6 +579,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
     before <- textNodeInternal ("" :: Text)
     let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
+    currentCohort <- liftIO $ newIORef (-1 :: Int) -- Equal to the cohort currently in the DOM
     let myCommitAction = do
           liftIO (readIORef haveEverBeenReady) >>= \case
             True -> return ()
@@ -604,14 +605,13 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
             0 -> writeIORef haveEverBeenReady True
             _ -> modifyIORef' parentUnreadyChildren succ
           return result
-    currentCohort <- liftIO $ newIORef (0 :: Int)
     a'' <- numberOccurrences a'
     (result0, result') <- lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
             c <- liftIO $ readIORef currentCohort
-            when (c < cohortId) $ do -- If a newer cohort has already been committed, just ignore this
+            when (c <= cohortId) $ do -- If a newer cohort has already been committed, just ignore this
               deleteBetweenExclusive before after
               insertBefore df after
               liftIO $ writeIORef currentCohort cohortId
@@ -621,7 +621,6 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
         , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
         , _immediateDomBuilderEnv_commitAction = commitAction
         }
-
       liftIO (readIORef unreadyChildren) >>= \case
         0 -> liftJSM commitAction
         _ -> return () -- Whoever decrements it to 0 will handle it
