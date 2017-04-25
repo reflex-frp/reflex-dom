@@ -93,9 +93,8 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
           let builderEnv = ImmediateDomBuilderEnv
                 { _immediateDomBuilderEnv_document = toDocument doc
                 , _immediateDomBuilderEnv_parent = toNode df
-                , _immediateDomBuilderEnv_events = events
                 }
-          runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+          runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
         a <- go (bodyWidget b) bodyFragment
     return (events, postBuildTriggerRef)
@@ -119,9 +118,8 @@ attachWidget' rootElement jsSing w = do
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
-          , _immediateDomBuilderEnv_events = events
           }
-    a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+    a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events), postBuildTriggerRef)
   replaceElementContents rootElement df
   liftIO $ processAsyncEvents events fc

@@ -86,6 +86,7 @@ import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
+import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
@@ -146,7 +147,6 @@ import Foreign.JavaScript.Internal.Utils
 data ImmediateDomBuilderEnv t m
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
                             , _immediateDomBuilderEnv_parent :: Node
-                            , _immediateDomBuilderEnv_events :: Chan [DSum (EventTriggerRef t) TriggerInvocation] -- TODO: The same chan needs to be passed to 'TriggerEventT'; this should be factored out.
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t m) (RequesterT t JSM Identity (TriggerEventT t m)) a }
@@ -186,8 +186,9 @@ runImmediateDomBuilderT
      )
   => ImmediateDomBuilderT t m a
   -> ImmediateDomBuilderEnv t m
+  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env = flip runTriggerEventT (_immediateDomBuilderEnv_events env) $ do
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTriggerEventT eventChan $ do
   win <- DOM.currentWindowUnchecked
   rec (x, req) <- runRequesterT (runReaderT a env) rsp
       rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame win f $
@@ -212,7 +213,7 @@ askParent = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_parent
 
 {-# INLINABLE askEvents #-}
 askEvents :: Monad m => ImmediateDomBuilderT t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
-askEvents = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_events
+askEvents = ImmediateDomBuilderT . lift . lift $ TriggerEventT.askEvents
 
 {-# INLINABLE append #-}
 append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
