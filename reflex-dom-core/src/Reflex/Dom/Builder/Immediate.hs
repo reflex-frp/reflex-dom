@@ -167,7 +167,7 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift
 
-instance (PerformEvent t m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
+instance (Reflex t, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
@@ -194,6 +194,9 @@ askParent = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_parent
 {-# INLINABLE askEvents #-}
 askEvents :: Monad m => ImmediateDomBuilderT t m (Chan [DSum (TriggerRef t) TriggerInvocation])
 askEvents = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_events
+
+localEnv :: Monad m => (ImmediateDomBuilderEnv t -> ImmediateDomBuilderEnv t) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m a
+localEnv f = ImmediateDomBuilderT . local f . unImmediateDomBuilderT
 
 {-# INLINABLE append #-}
 append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
@@ -258,7 +261,7 @@ extractUpTo df s e = liftJSM $ do
     ]
   void $ call f f (df, s, e)
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -322,15 +325,14 @@ wrap e cfg = do
 {-# INLINABLE makeElement #-}
 makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
-  env <- ImmediateDomBuilderT ask
-  let doc = _immediateDomBuilderEnv_document env
+  doc <- askDocument
   e <- liftJSM $ case cfg ^. namespace of
     Nothing -> createElementUnchecked doc (Just elementTag)
     Just ens -> createElementNSUnchecked doc (Just ens) (Just elementTag)
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> lift $ setAttribute e n v
     Just ans -> lift $ setAttributeNS e (Just ans) n v
-  result <- ImmediateDomBuilderT $ lift $ runReaderT (unImmediateDomBuilderT child) $ env
+  result <- flip localEnv child $ \env -> env
     { _immediateDomBuilderEnv_parent = toNode e
     }
   append e
@@ -418,7 +420,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
     v0 <- Input.getValueUnchecked domInputElement
     let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
-    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
+    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
@@ -469,7 +471,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
     v0 <- TextArea.getValueUnchecked domTextAreaElement
     let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
-    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
+    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
@@ -494,7 +496,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
     Just v0 <- Select.getValue domSelectElement
     let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
-    valueChangedByUI <- performEvent $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
+    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
     valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
@@ -552,9 +554,8 @@ extractFragment fragment = do
 instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomBuilderT t m) where
   type DomFragment (ImmediateDomBuilderT t m) = ImmediateDomFragment
   buildDomFragment w = do
-    initialEnv <- ImmediateDomBuilderT ask
-    df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
-    result <- lift $ runImmediateDomBuilderT w $ initialEnv
+    df <- createDocumentFragmentUnchecked =<< askDocument
+    result <- flip localEnv w $ \env -> env
       { _immediateDomBuilderEnv_parent = toNode df
       }
     state <- liftIO $ newIORef FragmentState_Unmounted
@@ -566,14 +567,14 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
     appendChild_ parent $ Just $ _immediateDomFragment_document fragment
     after <- textNodeInternal ("" :: Text)
     xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
-    performEvent_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
+    requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
       extractFragment previousFragment
       extractFragment childFragment
       insertBefore (_immediateDomFragment_document childFragment) after
       liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
-instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadJSM (Performable m), MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
@@ -590,14 +591,15 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
               liftIO $ writeIORef parentUnreadyChildren $! new
               when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
     -- We draw 'after' in this roundabout way to avoid using MonadFix
-    after <- createTextNodeUnchecked (_immediateDomBuilderEnv_document initialEnv) ("" :: Text)
+    doc <- askDocument
+    after <- createTextNodeUnchecked doc ("" :: Text)
     let drawInitialChild = do
           unreadyChildren <- liftIO $ newIORef 0
           let f = do
                 result <- a0
                 append after
                 return result
-          result <- runImmediateDomBuilderT f $ initialEnv
+          result <- runReaderT (unImmediateDomBuilderT f) $ initialEnv
             { _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
             , _immediateDomBuilderEnv_commitAction = myCommitAction
             }
@@ -606,8 +608,8 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
             _ -> modifyIORef' parentUnreadyChildren succ
           return result
     a'' <- numberOccurrences a'
-    (result0, result') <- lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
-      df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
+    (result0, result') <- ImmediateDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
+      df <- createDocumentFragmentUnchecked doc
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
             c <- liftIO $ readIORef currentCohort
@@ -616,7 +618,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
               insertBefore df after
               liftIO $ writeIORef currentCohort cohortId
               myCommitAction
-      result <- runImmediateDomBuilderT child $ initialEnv
+      result <- runReaderT (unImmediateDomBuilderT child) $ initialEnv
         { _immediateDomBuilderEnv_parent = toNode df
         , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
         , _immediateDomBuilderEnv_commitAction = commitAction
@@ -707,8 +709,7 @@ data ChildReadyState k
    deriving (Show, Read, Eq, Ord)
 
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
-  ( PerformEvent t m
-  , MonadAdjust t m
+  ( MonadAdjust t m
   , MonadHold t m
   , DMap.GCompare k
   , MonadIO (Performable m)
