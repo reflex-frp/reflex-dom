@@ -74,10 +74,12 @@ library
     zenc == 0.1.*
 
   if impl(ghcjs)
+    hs-source-dirs: src-ghcjs
     build-depends:
       ghcjs-base,
       hashable == 1.2.*
   else
+    hs-source-dirs: src-ghc
     if !os(windows)
       build-depends: unix == 2.7.*
 
@@ -103,6 +105,7 @@ library
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
   other-modules:
+    Foreign.JavaScript.Internal.Utils
     Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType

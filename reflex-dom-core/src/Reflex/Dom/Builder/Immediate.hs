@@ -88,7 +88,7 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import Reflex.TriggerEvent.Class
 
-import Control.Concurrent.Chan
+import Control.Concurrent
 import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
 import Control.Monad.Primitive
@@ -112,6 +112,8 @@ import Data.Monoid
 import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified GHCJS.DOM as DOM
+import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.Document (Document, createDocumentFragmentUnchecked, createElementUnchecked, createElementNSUnchecked, createTextNodeUnchecked)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
@@ -139,6 +141,7 @@ import Language.Javascript.JSaddle (call, eval)
 
 import Reflex.Requester.Base
 import Reflex.Requester.Class
+import Foreign.JavaScript.Internal.Utils
 
 data ImmediateDomBuilderEnv t m
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
@@ -172,14 +175,32 @@ instance (PerformEvent t m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilder
 
 {-# INLINABLE runImmediateDomBuilderT #-}
 runImmediateDomBuilderT
-  :: (Reflex t, MonadFix m, PerformEvent t m, MonadJSM m, MonadJSM (Performable m))
+  :: ( Reflex t
+     , MonadFix m
+     , PerformEvent t m
+     , MonadReflexCreateTrigger t m
+     , MonadJSM m
+     , MonadJSM (Performable m)
+     , MonadRef m
+     , Ref m ~ IORef
+     )
   => ImmediateDomBuilderT t m a
   -> ImmediateDomBuilderEnv t m
   -> m a
 runImmediateDomBuilderT (ImmediateDomBuilderT a) env = flip runTriggerEventT (_immediateDomBuilderEnv_events env) $ do
+  win <- DOM.currentWindowUnchecked
   rec (x, req) <- runRequesterT (runReaderT a env) rsp
-      rsp <- performEvent $ ffor req $ \rm -> liftJSM $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm
+      rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame win f $
+        DMap.traverseWithKey (\_ r -> Identity <$> r) rm
   return x
+  where
+    runInAnimationFrame win f x = do
+      rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
+            v <- synchronously x
+            _ <- liftIO $ f v
+            freeRequestAnimationFrameCallback cb
+      _ <- Window.requestAnimationFrame win $ Just cb
+      return ()
 
 {-# INLINABLE askDocument #-}
 askDocument :: Monad m => ImmediateDomBuilderT t m Document
