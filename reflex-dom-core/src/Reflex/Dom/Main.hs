@@ -127,7 +127,7 @@ attachWidget' rootElement jsSing w = do
   liftIO $ processAsyncEvents events fc
   return (a, fc)
 
-type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
+type EventChannel = Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
 
 {-# INLINABLE attachWidget'' #-}
 attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
@@ -143,7 +143,7 @@ processAsyncEvents :: EventChannel -> FireCommand Spider (SpiderHost Global) -> 
 processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
   ers <- readChan events
   _ <- runSpiderHost $ do
-    mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
+    mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
       me <- readIORef er
       return $ fmap (\e -> e :=> Identity a) me
     _ <- fire (catMaybes mes) $ return ()

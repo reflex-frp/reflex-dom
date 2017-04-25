@@ -21,7 +21,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Immediate
-       ( TriggerRef (..)
+       ( EventTriggerRef (..)
        , ImmediateDomBuilderEnv (..)
        , ImmediateDomBuilderT (..)
        , runImmediateDomBuilderT
@@ -140,15 +140,14 @@ import Language.Javascript.JSaddle (call, eval)
 import Reflex.Requester.Base
 import Reflex.Requester.Class
 
-data TriggerRef t a = TriggerRef { unTriggerRef :: IORef (Maybe (EventTrigger t a)) }
-
 data ImmediateDomBuilderEnv t m
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
                             , _immediateDomBuilderEnv_parent :: Node
-                            , _immediateDomBuilderEnv_events :: Chan [DSum (TriggerRef t) TriggerInvocation]
+                            , _immediateDomBuilderEnv_events :: Chan [DSum (EventTriggerRef t) TriggerInvocation] -- TODO: The same chan needs to be passed to 'TriggerEventT'; this should be factored out.
                             }
 
-newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t m) (RequesterT t JSM Identity m) a } deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t m) (RequesterT t JSM Identity (TriggerEventT t m)) a }
+  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
 #ifndef __GHCJS__
 instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
@@ -160,7 +159,7 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
   primitive = lift . primitive
 
 instance MonadTrans (ImmediateDomBuilderT t) where
-  lift = ImmediateDomBuilderT . lift . lift
+  lift = ImmediateDomBuilderT . lift . lift . lift
 
 instance (PerformEvent t m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
@@ -172,8 +171,12 @@ instance (PerformEvent t m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilder
   requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
 
 {-# INLINABLE runImmediateDomBuilderT #-}
-runImmediateDomBuilderT :: (Reflex t, MonadFix m, PerformEvent t m, MonadJSM (Performable m)) => ImmediateDomBuilderT t m a -> ImmediateDomBuilderEnv t m -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env = do
+runImmediateDomBuilderT
+  :: (Reflex t, MonadFix m, PerformEvent t m, MonadJSM m, MonadJSM (Performable m))
+  => ImmediateDomBuilderT t m a
+  -> ImmediateDomBuilderEnv t m
+  -> m a
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env = flip runTriggerEventT (_immediateDomBuilderEnv_events env) $ do
   rec (x, req) <- runRequesterT (runReaderT a env) rsp
       rsp <- performEvent $ ffor req $ \rm -> liftJSM $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm
   return x
@@ -187,7 +190,7 @@ askParent :: Monad m => ImmediateDomBuilderT t m Node
 askParent = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_parent
 
 {-# INLINABLE askEvents #-}
-askEvents :: Monad m => ImmediateDomBuilderT t m (Chan [DSum (TriggerRef t) TriggerInvocation])
+askEvents :: Monad m => ImmediateDomBuilderT t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
 askEvents = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_events
 
 {-# INLINABLE append #-}
@@ -288,7 +291,7 @@ wrap e cfg = do
         Propagation_Stop -> withIsEvent en DOM.stopPropagation
         Propagation_StopImmediate -> withIsEvent en DOM.stopImmediatePropagation
       mv <- liftJSM k --TODO: Only do this when the event is subscribed
-      liftIO $ forM_ mv $ \v -> writeChan events [TriggerRef triggerRef :=> TriggerInvocation v (return ())]
+      liftIO $ forM_ mv $ \v -> writeChan events [EventTriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
   es <- do
     let h :: GhcjsEventHandler er
@@ -308,7 +311,7 @@ wrap e cfg = do
             Just v -> liftIO $ do
               --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
               ref <- newIORef $ Just t
-              writeChan events [TriggerRef ref :=> TriggerInvocation v (return ())])
+              writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
   return $ Element es e
 
 {-# INLINABLE makeElement #-}
@@ -591,7 +594,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, PerformEvent t m
         return ()
     return (result0, result')
 
-drawChildUpdate :: (MonadJSM m, PerformEvent t m, MonadFix m, MonadJSM (Performable m)) => ImmediateDomBuilderEnv t m -> ImmediateDomBuilderT t m (v' a) -> RequesterT t JSM Identity m (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
+drawChildUpdate :: (MonadJSM m, PerformEvent t m, MonadFix m, MonadJSM (Performable m)) => ImmediateDomBuilderEnv t m -> ImmediateDomBuilderT t m (v' a) -> RequesterT t JSM Identity (TriggerEventT t m) (Compose ((,,) DOM.DocumentFragment DOM.Text) v' a)
 drawChildUpdate initialEnv child = do
   df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
   runReaderT (unImmediateDomBuilderT $ Compose <$> ((,,) <$> pure df <*> textNodeInternal ("" :: Text) <*> child)) $ initialEnv
@@ -630,20 +633,11 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (ImmediateDo
 
 instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => TriggerEvent t (ImmediateDomBuilderT t m) where
   {-# INLINABLE newTriggerEvent #-}
-  newTriggerEvent = do
-    (e, t) <- newTriggerEventWithOnComplete
-    return (e, \a -> t a $ return ())
+  newTriggerEvent = ImmediateDomBuilderT . lift . lift $ newTriggerEvent
   {-# INLINABLE newTriggerEventWithOnComplete #-}
-  newTriggerEventWithOnComplete = do
-    events <- askEvents
-    (eResult, reResultTrigger) <- lift newEventWithTriggerRef
-    return $ (,) eResult $ \a cb -> writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a (liftIO cb)]
+  newTriggerEventWithOnComplete = ImmediateDomBuilderT . lift . lift $ newTriggerEventWithOnComplete
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
-  newEventWithLazyTriggerWithOnComplete f = do
-    events <- askEvents
-    lift $ newEventWithTrigger $ \t -> f $ \a cb -> do
-      reResultTrigger <- newIORef $ Just t
-      writeChan events [TriggerRef reResultTrigger :=> TriggerInvocation a (liftIO cb)]
+  newEventWithLazyTriggerWithOnComplete f = ImmediateDomBuilderT . lift . lift $ newEventWithLazyTriggerWithOnComplete f
 
 instance HasJSContext m => HasJSContext (ImmediateDomBuilderT t m) where
   type JSContextPhantom (ImmediateDomBuilderT t m) = JSContextPhantom m
@@ -1020,7 +1014,7 @@ wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ 
 {-# INLINABLE subscribeDomEvent #-}
 subscribeDomEvent :: (EventM e event () -> JSM (JSM ()))
                   -> EventM e event (Maybe a)
-                  -> Chan [DSum (TriggerRef t) TriggerInvocation]
+                  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
                   -> EventTrigger t a
                   -> JSM (JSM ())
 subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
@@ -1028,7 +1022,7 @@ subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
   forM_ mv $ \v -> liftIO $ do
     --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
     etr <- newIORef $ Just et
-    writeChan eventChan [TriggerRef etr :=> TriggerInvocation v (return ())]
+    writeChan eventChan [EventTriggerRef etr :=> TriggerInvocation v (return ())]
 
 {-# INLINABLE wrapDomEventMaybe #-}
 wrapDomEventMaybe :: (TriggerEvent t m, MonadJSM m)
