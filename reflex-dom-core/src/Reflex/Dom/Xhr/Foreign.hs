@@ -15,21 +15,17 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on)
 import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.Types hiding (Text)
 import GHCJS.DOM.XMLHttpRequest
--- import GHCJS.Types
+import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
+import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 import Prelude hiding (error)
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
-import Language.Javascript.JSaddle.Types (ghcjsPure)
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
-import qualified GHCJS.Buffer as JS
-       (createFromArrayBuffer, toByteString)
-import qualified JavaScript.TypedArray.ArrayBuffer as JS
-       (unsafeFreeze, MutableArrayBuffer)
 
 xmlHttpRequestNew :: MonadJSM m => m XMLHttpRequest
 xmlHttpRequestNew = newXMLHttpRequest
@@ -64,6 +60,12 @@ instance IsXhrPayload Document where
 
 instance IsXhrPayload Blob where
   sendXhrPayload = sendBlob
+
+instance IsXhrPayload ArrayBuffer where
+  sendXhrPayload xhr ab = sendArrayBuffer xhr (ArrayBufferView $ unArrayBuffer ab)
+
+instance IsXhrPayload ByteString where
+  sendXhrPayload xhr bs = sendXhrPayload xhr =<< liftJSM (bsToArrayBuffer bs)
 
 newtype XhrPayload = XhrPayload { unXhrPayload :: JSVal }
 
@@ -178,9 +180,7 @@ xmlHttpRequestGetResponse xhr = do
        Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
        Just XhrResponseType_ArrayBuffer -> case fmap unGObject mr of
          Nothing -> return Nothing
-         Just ptr -> Just . XhrResponseBody_ArrayBuffer <$> bsFromArrayBuffer (pFromJSVal ptr)
+         Just ptr -> do
+           ab <- liftJSM $ mutableArrayBufferFromJSVal ptr
+           Just . XhrResponseBody_ArrayBuffer <$> bsFromMutableArrayBuffer ab
        _ -> return Nothing
-
-bsFromArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
-bsFromArrayBuffer ab = liftJSM $ JS.unsafeFreeze ab >>=
-    ghcjsPure . JS.createFromArrayBuffer >>= ghcjsPure . JS.toByteString 0 Nothing

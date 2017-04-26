@@ -144,6 +144,7 @@ dynText t = do
     [ updated t
     , tag (current t) postBuild
     ]
+  notReadyUntil postBuild
 
 display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
 display = dynText . fmap (T.pack . show)
@@ -161,7 +162,7 @@ dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn child = do
   postBuild <- getPostBuild
   let newChild = leftmost [updated child, tagCheap (current child) postBuild]
-  snd <$> widgetHoldInternal (return ()) newChild
+  snd <$> widgetHoldInternal notReady newChild
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
@@ -341,8 +342,11 @@ elDynAttrNS' mns elementTag attrs child = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = def
         & elementConfig_namespace .~ mns
-        & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-  element elementTag cfg child
+        & modifyAttributes .~ fmapCheap mapKeysToAttributeName modifyAttrs
+  result <- element elementTag cfg child
+  postBuild <- getPostBuild
+  notReadyUntil postBuild
+  return result
 
 dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty

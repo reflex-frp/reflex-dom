@@ -90,9 +90,12 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
         go w df = do
+          unreadyChildren <- liftIO $ newIORef 0
           let builderEnv = ImmediateDomBuilderEnv
                 { _immediateDomBuilderEnv_document = toDocument doc
                 , _immediateDomBuilderEnv_parent = toNode df
+                , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+                , _immediateDomBuilderEnv_commitAction = return () --TODO
                 }
           runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
@@ -115,9 +118,12 @@ attachWidget' rootElement jsSing w = do
   df <- createDocumentFragmentUnchecked doc
   ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    unreadyChildren <- liftIO $ newIORef 0
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
+          , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+          , _immediateDomBuilderEnv_commitAction = return () --TODO
           }
     a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events), postBuildTriggerRef)

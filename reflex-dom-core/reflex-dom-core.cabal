@@ -11,7 +11,9 @@ Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces
 Build-type: Simple
 Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
-extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
+extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
+                    src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
+                    src/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
@@ -86,6 +88,7 @@ library
   exposed-modules:
     Foreign.JavaScript.TH
     Foreign.JavaScript.Orphans
+    Foreign.JavaScript.Utils
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
