@@ -94,11 +94,10 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
           let builderEnv = ImmediateDomBuilderEnv
                 { _immediateDomBuilderEnv_document = toDocument doc
                 , _immediateDomBuilderEnv_parent = toNode df
-                , _immediateDomBuilderEnv_events = events
                 , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
                 , _immediateDomBuilderEnv_commitAction = return () --TODO
                 }
-          runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+          runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
         a <- go (bodyWidget b) bodyFragment
     return (events, postBuildTriggerRef)
@@ -123,17 +122,16 @@ attachWidget' rootElement jsSing w = do
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
-          , _immediateDomBuilderEnv_events = events
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = return () --TODO
           }
-    a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv) jsSing
+    a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events), postBuildTriggerRef)
   replaceElementContents rootElement df
   liftIO $ processAsyncEvents events fc
   return (a, fc)
 
-type EventChannel = Chan [DSum (TriggerRef Spider) TriggerInvocation]
+type EventChannel = Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
 
 {-# INLINABLE attachWidget'' #-}
 attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
@@ -149,7 +147,7 @@ processAsyncEvents :: EventChannel -> FireCommand Spider (SpiderHost Global) -> 
 processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
   ers <- readChan events
   _ <- runSpiderHost $ do
-    mes <- liftIO $ forM ers $ \(TriggerRef er :=> TriggerInvocation a _) -> do
+    mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
       me <- readIORef er
       return $ fmap (\e -> e :=> Identity a) me
     _ <- fire (catMaybes mes) $ return ()
