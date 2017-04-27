@@ -286,7 +286,7 @@ extractUpTo df s e = liftJSM $ do
     ]
   void $ call f f (df, s, e)
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadJSM (Performable m), MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -599,7 +599,7 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
       liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
-instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadJSM (Performable m), MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
@@ -737,7 +737,6 @@ hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( MonadAdjust t m
   , MonadHold t m
   , DMap.GCompare k
-  , MonadIO (Performable m)
   , MonadIO m
   , MonadJSM m
   , PrimMonad m
