@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 import Control.Monad
+import Control.Monad.Identity
 import Control.Monad.Trans
 import Reflex.Dom
 import qualified Data.Text as T
@@ -23,9 +24,9 @@ import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 main :: IO ()
 main = mainWidget w
 
-w :: forall t m. (MonadWidget t m, MountableDomBuilder t m) => m ()
+w :: forall t m. (MonadWidget t m, DomRenderHook t m, MountableDomBuilder t m) => m ()
 w = do
-  let slow :: forall m'. MonadWidget t m' => m' ()
+  let slow :: forall m'. (MonadWidget t m', DomRenderHook t m') => m' ()
       {-
       performEventChain = do
         postBuild <- delay 0 =<< getPostBuild
@@ -82,6 +83,7 @@ w = do
             text ". "
         return ()
       -}
+      {-
       slow = do
         let f :: forall a. EitherTag () () a -> Const2 () () a -> m' (Const2 () () a)
             f _ (Const2 ()) = do
@@ -91,6 +93,23 @@ w = do
         postBuild <- getPostBuild
         traverseDMapWithKeyWithAdjustWithMove f (DMap.singleton LeftTag $ Const2 ()) $ (PatchDMapWithMove.moveDMapKey LeftTag RightTag) <$ postBuild
         return ()
+      -}
+      slow = do
+        let h x = do
+              liftIO $ putStrLn "render hook"
+              result <- x
+              liftIO $ putStrLn "render hook done"
+              return result
+            f :: forall a. Const2 () () a -> Identity a -> m' (Identity a)
+            f (Const2 ()) (Identity ()) = do
+              liftIO $ putStrLn "f"
+              widgetHold notReady . (blank <$) =<< delay 0.1 =<< getPostBuild
+              liftIO $ putStrLn "f done"
+              return $ Identity ()
+        withRenderHook h $ do
+          postBuild <- getPostBuild
+          _ <- traverseDMapWithKeyWithAdjust f mempty $ PatchDMap (DMap.singleton (Const2 () :: Const2 () () ()) (ComposeMaybe $ Just $ Identity ())) <$ postBuild
+          return ()
   el "div" $ do
     draw <- button "Draw"
     widgetHold blank $ ffor draw $ \_ -> do
