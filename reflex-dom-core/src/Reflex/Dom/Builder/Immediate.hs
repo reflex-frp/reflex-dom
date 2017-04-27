@@ -633,7 +633,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
             _ -> modifyIORef' parentUnreadyChildren succ
           return result
     a'' <- numberOccurrences a'
-    (result0, result') <- ImmediateDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
+    (result0, child') <- ImmediateDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       df <- createDocumentFragmentUnchecked doc
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
@@ -648,11 +648,13 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
         , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
         , _immediateDomBuilderEnv_commitAction = commitAction
         }
-      liftIO (readIORef unreadyChildren) >>= \case
-        0 -> liftJSM commitAction
-        _ -> return () -- Whoever decrements it to 0 will handle it
-      return result
-    return (result0, result')
+      uc <- liftIO $ readIORef unreadyChildren
+      let commitActionToRunNow = if uc == 0
+            then Just commitAction
+            else Nothing -- A child will run it when unreadyChildren is decremented to 0
+      return (commitActionToRunNow, result)
+    requestDomAction_ $ fmapMaybe fst child'
+    return (result0, snd <$> child')
   traverseDMapWithKeyWithAdjust = do
     let updateChildUnreadiness (p :: PatchDMap k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) old = do
           let new :: forall a. k a -> ComposeMaybe (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
