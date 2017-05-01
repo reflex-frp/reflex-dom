@@ -41,7 +41,7 @@ flag build-examples
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 1.1,
+    aeson >= 0.8 && < 1.2,
     base >= 4.7 && < 4.11,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
@@ -55,7 +55,7 @@ library
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.7.0.4 && < 0.8,
+    ghcjs-dom >= 0.8.0.0 && < 0.9,
     jsaddle >=0.8.0.1 && <0.9,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,

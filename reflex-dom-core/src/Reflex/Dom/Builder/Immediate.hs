@@ -118,10 +118,11 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.RequestAnimationFrameCallback
-import GHCJS.DOM.Document (Document, createDocumentFragmentUnchecked, createElementUnchecked, createElementNSUnchecked, createTextNodeUnchecked)
+import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.FileList as FileList
@@ -136,10 +137,11 @@ import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnc
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
-        FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
-        ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo)
+        FocusEvent, IsHTMLElement, IsEvent, IsNode, KeyboardEvent, Node,
+        ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
+import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import qualified GHCJS.DOM.Window as Window
 import Language.Javascript.JSaddle (call, eval)
 
@@ -205,7 +207,7 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTrigger
             v <- synchronously x
             _ <- liftIO $ f v
             freeRequestAnimationFrameCallback cb
-      _ <- Window.requestAnimationFrame win $ Just cb
+      _ <- Window.requestAnimationFrame win cb
       return ()
 
 {-# INLINABLE askDocument #-}
@@ -227,14 +229,14 @@ localEnv f = ImmediateDomBuilderT . local f . unImmediateDomBuilderT
 append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
 append n = do
   p <- askParent
-  liftJSM $ appendChild_ p $ Just n
+  liftJSM $ appendChild_ p n
   return ()
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
 textNodeInternal t = do
   doc <- askDocument
-  n <- liftJSM $ createTextNodeUnchecked doc t
+  n <- liftJSM $ createTextNode doc t
   append n
   return n
 
@@ -242,7 +244,7 @@ textNodeInternal t = do
 --   all nodes between s and e will be removed, but s and e will not be removed
 deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteBetweenExclusive s e = liftJSM $ do
-  df <- createDocumentFragmentUnchecked =<< getOwnerDocumentUnchecked s
+  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
   extractBetweenExclusive df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
 
 -- | s and e must both be children of the same node and s must precede e; all
@@ -267,7 +269,7 @@ extractBetweenExclusive df s e = liftJSM $ do
 {-# INLINABLE deleteUpTo #-}
 deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
 deleteUpTo s e = do
-  df <- createDocumentFragmentUnchecked =<< getOwnerDocumentUnchecked s
+  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
   extractUpTo df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
 
 extractUpTo :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
@@ -298,7 +300,7 @@ collectUpTo s e = do
 collectUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m DOM.DocumentFragment
 collectUpToGivenParent currentParent s e = do
   doc <- getOwnerDocumentUnchecked currentParent
-  df <- createDocumentFragmentUnchecked doc
+  df <- createDocumentFragment doc
   extractUpTo df s e
   return df
 
@@ -348,12 +350,12 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  e <- liftJSM $ case cfg ^. namespace of
-    Nothing -> createElementUnchecked doc (Just elementTag)
-    Just ens -> createElementNSUnchecked doc (Just ens) (Just elementTag)
+  e <- liftJSM $ uncheckedCastTo DOM.HTMLElement <$> case cfg ^. namespace of
+    Nothing -> createElement doc elementTag
+    Just ens -> createElementNS doc (Just ens) elementTag
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> lift $ setAttribute e n v
     Just ans -> lift $ setAttributeNS e (Just ans) n v
@@ -375,7 +377,7 @@ data GhcjsDomSpace
 instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
-  type RawElement GhcjsDomSpace = DOM.Element
+  type RawElement GhcjsDomSpace = DOM.HTMLElement
   type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
@@ -424,8 +426,8 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
-        t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
-        let e = uncheckedCastTo DOM.Element t
+        t :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        let e = uncheckedCastTo DOM.HTMLElement t
         runReaderT (defaultDomEventHandler e en) evt
     }
 
@@ -456,7 +458,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       , valueChangedByUI
       ]
     Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
-    checkedChangedByUI <- wrapDomEvent domInputElement (`on` Element.click) $ do
+    checkedChangedByUI <- wrapDomEvent domInputElement (`on` Events.click) $ do
       Input.getChecked domInputElement
     checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
       Nothing -> return never
@@ -475,7 +477,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
       , True <$ Reflex.select (_element_events e) (WrapArg Focus)
       ]
-    files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Element.change) $ do
+    files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Events.change) $ do
       mfiles <- Input.getFiles domInputElement
       let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
       maybe (return []) getMyFiles mfiles
@@ -518,14 +520,14 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   selectElement cfg child = do
     ((e, result), domElement) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
     let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
-    Select.setValue domSelectElement $ Just (cfg ^. selectElementConfig_initialValue)
-    Just v0 <- Select.getValue domSelectElement
-    let getMyValue = fromMaybe "" <$> Select.getValue domSelectElement
+    Select.setValue domSelectElement $ cfg ^. selectElementConfig_initialValue
+    v0 <- Select.getValue domSelectElement
+    let getMyValue = Select.getValue domSelectElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
     valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        Select.setValue domSelectElement $ Just v'
+        Select.setValue domSelectElement v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
@@ -579,7 +581,7 @@ extractFragment fragment = do
 instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomBuilderT t m) where
   type DomFragment (ImmediateDomBuilderT t m) = ImmediateDomFragment
   buildDomFragment w = do
-    df <- createDocumentFragmentUnchecked =<< askDocument
+    df <- createDocumentFragment =<< askDocument
     result <- flip localEnv w $ \env -> env
       { _immediateDomBuilderEnv_parent = toNode df
       }
@@ -589,7 +591,7 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
     parent <- askParent
     extractFragment fragment
     before <- textNodeInternal ("" :: Text)
-    appendChild_ parent $ Just $ _immediateDomFragment_document fragment
+    appendChild_ parent $ _immediateDomFragment_document fragment
     after <- textNodeInternal ("" :: Text)
     xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
     requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
@@ -617,7 +619,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
               when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
     -- We draw 'after' in this roundabout way to avoid using MonadFix
     doc <- askDocument
-    after <- createTextNodeUnchecked doc ("" :: Text)
+    after <- createTextNode doc ("" :: Text)
     let drawInitialChild = do
           unreadyChildren <- liftIO $ newIORef 0
           let f = do
@@ -634,7 +636,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
           return result
     a'' <- numberOccurrences a'
     (result0, child') <- ImmediateDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
-      df <- createDocumentFragmentUnchecked doc
+      df <- createDocumentFragment doc
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
             c <- liftIO $ readIORef currentCohort
@@ -832,7 +834,7 @@ drawChildUpdate :: (MonadIO m, MonadJSM m)
 drawChildUpdate initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyState_Unready Nothing
   unreadyChildren <- liftIO $ newIORef 0
-  df <- createDocumentFragmentUnchecked $ _immediateDomBuilderEnv_document initialEnv
+  df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
   (placeholder, result) <- runReaderT (unImmediateDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
     { _immediateDomBuilderEnv_parent = toNode df
     , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
@@ -853,7 +855,7 @@ mkHasFocus e = do
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do
   p <- getParentNodeUnchecked existing
-  DOM.insertBefore_ p (Just new) (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
+  DOM.insertBefore_ p new (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
 instance PerformEvent t m => PerformEvent t (ImmediateDomBuilderT t m) where
   type Performable (ImmediateDomBuilderT t m) = Performable m
@@ -935,12 +937,12 @@ type family EventType en where
   EventType 'SelectTag = UIEvent
   EventType 'SubmitTag = DOM.Event
   EventType 'WheelTag = WheelEvent
-  EventType 'BeforecutTag = DOM.Event
-  EventType 'CutTag = DOM.Event
-  EventType 'BeforecopyTag = DOM.Event
-  EventType 'CopyTag = DOM.Event
-  EventType 'BeforepasteTag = DOM.Event
-  EventType 'PasteTag = DOM.Event
+  EventType 'BeforecutTag = ClipboardEvent
+  EventType 'CutTag = ClipboardEvent
+  EventType 'BeforecopyTag = ClipboardEvent
+  EventType 'CopyTag = ClipboardEvent
+  EventType 'BeforepasteTag = ClipboardEvent
+  EventType 'PasteTag = ClipboardEvent
   EventType 'ResetTag = DOM.Event
   EventType 'SearchTag = DOM.Event
   EventType 'SelectstartTag = DOM.Event
@@ -950,12 +952,12 @@ type family EventType en where
   EventType 'TouchcancelTag = TouchEvent
 
 {-# INLINABLE defaultDomEventHandler #-}
-defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
+defaultDomEventHandler :: IsHTMLElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
-  Scroll -> getScrollTop e
+  Scroll -> fromIntegral <$> getScrollTop e
   Keydown -> getKeyEvent
   Keyup -> getKeyEvent
   Mousemove -> getMouseEventCoords
@@ -1149,104 +1151,104 @@ showEventName en = case en of
   Touchcancel -> "Touchcancel"
 
 {-# INLINABLE elementOnEventName #-}
-elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
+elementOnEventName :: IsHTMLElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
 elementOnEventName en e = case en of
-  Abort -> on e Element.abort
-  Blur -> on e Element.blurEvent
-  Change -> on e Element.change
-  Click -> on e Element.click
-  Contextmenu -> on e Element.contextMenu
-  Dblclick -> on e Element.dblClick
-  Drag -> on e Element.drag
-  Dragend -> on e Element.dragEnd
-  Dragenter -> on e Element.dragEnter
-  Dragleave -> on e Element.dragLeave
-  Dragover -> on e Element.dragOver
-  Dragstart -> on e Element.dragStart
-  Drop -> on e Element.drop
-  Error -> on e Element.error
-  Focus -> on e Element.focusEvent
-  Input -> on e Element.input
-  Invalid -> on e Element.invalid
-  Keydown -> on e Element.keyDown
-  Keypress -> on e Element.keyPress
-  Keyup -> on e Element.keyUp
-  Load -> on e Element.load
-  Mousedown -> on e Element.mouseDown
-  Mouseenter -> on e Element.mouseEnter
-  Mouseleave -> on e Element.mouseLeave
-  Mousemove -> on e Element.mouseMove
-  Mouseout -> on e Element.mouseOut
-  Mouseover -> on e Element.mouseOver
-  Mouseup -> on e Element.mouseUp
-  Mousewheel -> on e Element.mouseWheel
-  Scroll -> on e Element.scroll
-  Select -> on e Element.select
-  Submit -> on e Element.submit
-  Wheel -> on e Element.wheel
+  Abort -> on e Events.abort
+  Blur -> on e Events.blur
+  Change -> on e Events.change
+  Click -> on e Events.click
+  Contextmenu -> on e Events.contextMenu
+  Dblclick -> on e Events.dblClick
+  Drag -> on e Events.drag
+  Dragend -> on e Events.dragEnd
+  Dragenter -> on e Events.dragEnter
+  Dragleave -> on e Events.dragLeave
+  Dragover -> on e Events.dragOver
+  Dragstart -> on e Events.dragStart
+  Drop -> on e Events.drop
+  Error -> on e Events.error
+  Focus -> on e Events.focus
+  Input -> on e Events.input
+  Invalid -> on e Events.invalid
+  Keydown -> on e Events.keyDown
+  Keypress -> on e Events.keyPress
+  Keyup -> on e Events.keyUp
+  Load -> on e Events.load
+  Mousedown -> on e Events.mouseDown
+  Mouseenter -> on e Events.mouseEnter
+  Mouseleave -> on e Events.mouseLeave
+  Mousemove -> on e Events.mouseMove
+  Mouseout -> on e Events.mouseOut
+  Mouseover -> on e Events.mouseOver
+  Mouseup -> on e Events.mouseUp
+  Mousewheel -> on e Events.mouseWheel
+  Scroll -> on e Events.scroll
+  Select -> on e Events.select
+  Submit -> on e Events.submit
+  Wheel -> on e Events.wheel
   Beforecut -> on e Element.beforeCut
   Cut -> on e Element.cut
   Beforecopy -> on e Element.beforeCopy
   Copy -> on e Element.copy
   Beforepaste -> on e Element.beforePaste
   Paste -> on e Element.paste
-  Reset -> on e Element.reset
-  Search -> on e Element.search
+  Reset -> on e Events.reset
+  Search -> on e Events.search
   Selectstart -> on e Element.selectStart
-  Touchstart -> on e Element.touchStart
-  Touchmove -> on e Element.touchMove
-  Touchend -> on e Element.touchEnd
-  Touchcancel -> on e Element.touchCancel
+  Touchstart -> on e Events.touchStart
+  Touchmove -> on e Events.touchMove
+  Touchend -> on e Events.touchEnd
+  Touchcancel -> on e Events.touchCancel
 
 {-# INLINABLE windowOnEventName #-}
 windowOnEventName :: EventName en -> DOM.Window -> EventM DOM.Window (EventType en) () -> JSM (JSM ())
 windowOnEventName en e = case en of
-  Abort -> on e Window.abort
-  Blur -> on e Window.blurEvent
-  Change -> on e Window.change
-  Click -> on e Window.click
-  Contextmenu -> on e Window.contextMenu
-  Dblclick -> on e Window.dblClick
-  Drag -> on e Window.drag
-  Dragend -> on e Window.dragEnd
-  Dragenter -> on e Window.dragEnter
-  Dragleave -> on e Window.dragLeave
-  Dragover -> on e Window.dragOver
-  Dragstart -> on e Window.dragStart
-  Drop -> on e Window.drop
-  Error -> on e Window.error
-  Focus -> on e Window.focusEvent
-  Input -> on e Window.input
-  Invalid -> on e Window.invalid
-  Keydown -> on e Window.keyDown
-  Keypress -> on e Window.keyPress
-  Keyup -> on e Window.keyUp
-  Load -> on e Window.load
-  Mousedown -> on e Window.mouseDown
-  Mouseenter -> on e Window.mouseEnter
-  Mouseleave -> on e Window.mouseLeave
-  Mousemove -> on e Window.mouseMove
-  Mouseout -> on e Window.mouseOut
-  Mouseover -> on e Window.mouseOver
-  Mouseup -> on e Window.mouseUp
-  Mousewheel -> on e Window.mouseWheel
-  Scroll -> on e Window.scrollEvent
-  Select -> on e Window.select
-  Submit -> on e Window.submit
-  Wheel -> on e Window.wheel
+  Abort -> on e Events.abort
+  Blur -> on e Events.blur
+  Change -> on e Events.change
+  Click -> on e Events.click
+  Contextmenu -> on e Events.contextMenu
+  Dblclick -> on e Events.dblClick
+  Drag -> on e Events.drag
+  Dragend -> on e Events.dragEnd
+  Dragenter -> on e Events.dragEnter
+  Dragleave -> on e Events.dragLeave
+  Dragover -> on e Events.dragOver
+  Dragstart -> on e Events.dragStart
+  Drop -> on e Events.drop
+  Error -> on e Events.error
+  Focus -> on e Events.focus
+  Input -> on e Events.input
+  Invalid -> on e Events.invalid
+  Keydown -> on e Events.keyDown
+  Keypress -> on e Events.keyPress
+  Keyup -> on e Events.keyUp
+  Load -> on e Events.load
+  Mousedown -> on e Events.mouseDown
+  Mouseenter -> on e Events.mouseEnter
+  Mouseleave -> on e Events.mouseLeave
+  Mousemove -> on e Events.mouseMove
+  Mouseout -> on e Events.mouseOut
+  Mouseover -> on e Events.mouseOver
+  Mouseup -> on e Events.mouseUp
+  Mousewheel -> on e Events.mouseWheel
+  Scroll -> on e Events.scroll
+  Select -> on e Events.select
+  Submit -> on e Events.submit
+  Wheel -> on e Events.wheel
   Beforecut -> const $ return $ return () --TODO
   Cut -> const $ return $ return () --TODO
   Beforecopy -> const $ return $ return () --TODO
   Copy -> const $ return $ return () --TODO
   Beforepaste -> const $ return $ return () --TODO
   Paste -> const $ return $ return () --TODO
-  Reset -> on e Window.reset
-  Search -> on e Window.search
+  Reset -> on e Events.reset
+  Search -> on e Events.search
   Selectstart -> const $ return $ return () --TODO
-  Touchstart -> on e Window.touchStart
-  Touchmove -> on e Window.touchMove
-  Touchend -> on e Window.touchEnd
-  Touchcancel -> on e Window.touchCancel
+  Touchstart -> on e Events.touchStart
+  Touchmove -> on e Events.touchMove
+  Touchend -> on e Events.touchEnd
+  Touchcancel -> on e Events.touchCancel
 
 {-# INLINABLE wrapDomEvent #-}
 wrapDomEvent :: (TriggerEvent t m, MonadJSM m) => e -> (e -> EventM e event () -> JSM (JSM ())) -> EventM e event a -> m (Event t a)
@@ -1291,10 +1293,10 @@ wrapDomEventsMaybe target handlers onEventName = do
   return $! e
 
 {-# INLINABLE getKeyEvent #-}
-getKeyEvent :: EventM e KeyboardEvent Int
+getKeyEvent :: EventM e KeyboardEvent Word
 getKeyEvent = do
   e <- event
-  which <- getWhich e
+  which <- KeyboardEvent.getWhich e
   if which /= 0 then return which else do
     charCode <- getCharCode e
     if charCode /= 0 then return charCode else
@@ -1309,29 +1311,26 @@ getMouseEventCoords = do
 {-# INLINABLE getTouchEvent #-}
 getTouchEvent :: EventM e TouchEvent TouchEventResult
 getTouchEvent = do
-  let touchResults = \case
-        Nothing -> return []
-        Just ts -> do
+  let touchResults ts = do
           n <- TouchList.getLength ts
-          fmap catMaybes . forM (takeWhile (< n) [0..]) $ \ix -> do
-            mt <- TouchList.item ts ix
-            forM mt $ \t -> do
-              identifier <- Touch.getIdentifier t
-              screenX <- Touch.getScreenX t
-              screenY <- Touch.getScreenY t
-              clientX <- Touch.getClientX t
-              clientY <- Touch.getClientY t
-              pageX <- Touch.getPageX t
-              pageY <- Touch.getPageY t
-              return $ TouchResult
-                { _touchResult_identifier = identifier
-                , _touchResult_screenX = screenX
-                , _touchResult_screenY = screenY
-                , _touchResult_clientX = clientX
-                , _touchResult_clientY = clientY
-                , _touchResult_pageX = pageX
-                , _touchResult_pageY = pageY
-                }
+          forM (takeWhile (< n) [0..]) $ \ix -> do
+            t <- TouchList.item ts ix
+            identifier <- Touch.getIdentifier t
+            screenX <- Touch.getScreenX t
+            screenY <- Touch.getScreenY t
+            clientX <- Touch.getClientX t
+            clientY <- Touch.getClientY t
+            pageX <- Touch.getPageX t
+            pageY <- Touch.getPageY t
+            return TouchResult
+              { _touchResult_identifier = identifier
+              , _touchResult_screenX = screenX
+              , _touchResult_screenY = screenY
+              , _touchResult_clientX = clientX
+              , _touchResult_clientY = clientY
+              , _touchResult_pageX = pageX
+              , _touchResult_pageY = pageY
+              }
   e <- event
   altKey <- TouchEvent.getAltKey e
   ctrlKey <- TouchEvent.getCtrlKey e

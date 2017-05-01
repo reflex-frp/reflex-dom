@@ -1,9 +1,7 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RankNTypes #-}
@@ -41,6 +39,7 @@ import Data.Text.Encoding
 import GHCJS.DOM
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
+import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Node
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.Types (JSM)
@@ -90,9 +89,9 @@ mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> JSM ()
 mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   doc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked doc
-  headFragment <- createDocumentFragmentUnchecked doc
+  headFragment <- createDocumentFragment doc
   bodyElement <- getBodyUnchecked doc
-  bodyFragment <- createDocumentFragmentUnchecked doc
+  bodyFragment <- createDocumentFragment doc
   (events, fc) <- liftIO . attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
@@ -116,14 +115,14 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
 replaceElementContents e df = do
   setInnerHTML e $ Just ("" :: String)
-  _ <- appendChildUnchecked e $ Just df
+  _ <- appendChild e df
   return ()
 
 {-# INLINABLE attachWidget' #-}
 attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand Spider (SpiderHost Global))
 attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
-  df <- createDocumentFragmentUnchecked doc
+  df <- createDocumentFragment doc
   ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     unreadyChildren <- liftIO $ newIORef 0
@@ -170,11 +169,11 @@ mainWidgetInElementById eid w = withJSContextSingleton $ \jsSing -> do
   root <- getElementByIdUnchecked doc eid
   attachWidget root jsSing w
 
-data AppInput t = AppInput
+newtype AppInput t = AppInput
   { _appInput_window :: Window t
   }
 
-data AppOutput t = AppOutput --TODO: Add quit event
+newtype AppOutput t = AppOutput --TODO: Add quit event
   { _appOutput_windowConfig :: WindowConfig t
   }
 
@@ -182,7 +181,7 @@ runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> J
 runApp' app = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   body <- getBodyUnchecked doc
-  win <- getDefaultViewUnchecked doc
+  win <- getDefaultView doc
   rec o <- attachWidget body jsSing $ do
         w <- lift $ wrapWindow win $ _appOutput_windowConfig o
         app $ AppInput

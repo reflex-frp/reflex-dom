@@ -33,13 +33,13 @@ import Data.Maybe
 import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified GHCJS.DOM.Element as Element
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
-import qualified GHCJS.DOM.Types as DOM (Element(..), EventTarget(..))
+import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
 import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
@@ -56,9 +56,9 @@ import qualified GHCJS.DOM.HTMLInputElement as Input
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text
                , _textInput_input :: Event t Text
-               , _textInput_keypress :: Event t Int
-               , _textInput_keydown :: Event t Int
-               , _textInput_keyup :: Event t Int
+               , _textInput_keypress :: Event t Word
+               , _textInput_keydown :: Event t Word
+               , _textInput_keyup :: Event t Word
                , _textInput_hasFocus :: Dynamic t Bool
                , _textInput_builderElement :: InputElement EventResult GhcjsDomSpace t
                }
@@ -110,8 +110,8 @@ textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter = keypress Enter
 
 {-# INLINABLE keypress #-}
-keypress :: (Reflex t, HasDomEvent t e 'KeypressTag, DomEventType e 'KeypressTag ~ Int) => Key -> e -> Event t ()
-keypress key i = fmapMaybe (\n -> if keyCodeLookup n == key then Just () else Nothing) $ domEvent Keypress i
+keypress :: (Reflex t, HasDomEvent t e 'KeypressTag, DomEventType e 'KeypressTag ~ Word) => Key -> e -> Event t ()
+keypress key i = fmapMaybe (\n -> if keyCodeLookup (fromIntegral n) == key then Just () else Nothing) $ domEvent Keypress i
 
 data RangeInputConfig t
    = RangeInputConfig { _rangeInputConfig_initialValue :: Float
@@ -169,7 +169,7 @@ data TextArea t
    = TextArea { _textArea_value :: Dynamic t Text
               , _textArea_input :: Event t Text
               , _textArea_hasFocus :: Dynamic t Bool
-              , _textArea_keypress :: Event t Int
+              , _textArea_keypress :: Event t Word
               , _textArea_element :: HTMLTextAreaElement
               }
 
@@ -287,7 +287,7 @@ checkboxView dAttrs dValue = do
   postBuild <- getPostBuild
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
-        t <- Event.getTargetUnchecked evt
+        t <- Event.getTarget evt
         b <- Input.getChecked $ uncheckedCastTo Input.HTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t m
@@ -299,8 +299,8 @@ checkboxView dAttrs dValue = do
             , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> case en of
                 Click -> error "impossible"
                 _ -> do
-                  e :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt
-                  let myElement = uncheckedCastTo DOM.Element e
+                  e :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt
+                  let myElement = uncheckedCastTo DOM.HTMLElement e
                   mr <- runReaderT (defaultDomEventHandler myElement en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
@@ -317,7 +317,7 @@ data FileInput d t
                , _fileInput_element :: RawInputElement d
                }
 
-data FileInputConfig t
+newtype FileInputConfig t
    = FileInputConfig { _fileInputConfig_attributes :: Dynamic t (Map Text Text)
                      }
 
@@ -339,7 +339,7 @@ fileInput config = do
       cfg = (def :: InputElementConfig EventResult t m) & inputElementConfig_elementConfig .~ elCfg
   eRaw <- inputElement cfg
   let e = _inputElement_raw eRaw
-  eChange <- wrapDomEvent e (`on` Element.change) $ do
+  eChange <- wrapDomEvent e (`on` Events.change) $ do
       files <- Input.getFilesUnchecked e
       len <- FileList.getLength files
       mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) [0 .. len-1]
@@ -481,7 +481,7 @@ textArea_hasFocus f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 x2 y x4 x5) <
 textArea_input :: Lens' (TextArea t) (Event t Text)
 textArea_input f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 y x3 x4 x5) <$> f x2
 {-# INLINE textArea_input #-}
-textArea_keypress :: Lens' (TextArea t) (Event t Int)
+textArea_keypress :: Lens' (TextArea t) (Event t Word)
 textArea_keypress f (TextArea x1 x2 x3 x4 x5) = (\y -> TextArea x1 x2 x3 y x5) <$> f x4
 {-# INLINE textArea_keypress #-}
 textArea_value :: Lens' (TextArea t) (Dynamic t Text)
@@ -508,13 +508,13 @@ textInput_hasFocus f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x
 textInput_input :: Lens' (TextInput t) (Event t Text)
 textInput_input f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 y x3 x4 x5 x6 x7) <$> f x2
 {-# INLINE textInput_input #-}
-textInput_keydown :: Lens' (TextInput t) (Event t Int)
+textInput_keydown :: Lens' (TextInput t) (Event t Word)
 textInput_keydown f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 y x5 x6 x7) <$> f x4
 {-# INLINE textInput_keydown #-}
-textInput_keypress :: Lens' (TextInput t) (Event t Int)
+textInput_keypress :: Lens' (TextInput t) (Event t Word)
 textInput_keypress f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 y x4 x5 x6 x7) <$> f x3
 {-# INLINE textInput_keypress #-}
-textInput_keyup :: Lens' (TextInput t) (Event t Int)
+textInput_keyup :: Lens' (TextInput t) (Event t Word)
 textInput_keyup f (TextInput x1 x2 x3 x4 x5 x6 x7) = (\y -> TextInput x1 x2 x3 x4 y x6 x7) <$> f x5
 {-# INLINE textInput_keyup #-}
 textInput_value :: Lens' (TextInput t) (Dynamic t Text)

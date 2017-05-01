@@ -61,17 +61,16 @@ import Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text
+import Data.Text (Text)
 import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
-import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChildUnchecked)
+import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChild)
 import GHCJS.DOM.Types
-       (MonadJSM, liftJSM, JSM, IsElement, IsNode)
+       (MonadJSM, liftJSM, JSM, IsHTMLElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -180,7 +179,7 @@ buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> 
 buildElementCommon elementTag child cfg = element elementTag cfg child
 
 
-onEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
+onEventName :: IsHTMLElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
 onEventName = elementOnEventName
 
 schedulePostBuild :: (PostBuild t m, PerformEvent t m) => WidgetHost m () -> m ()
@@ -223,14 +222,14 @@ _el_events :: Element er d t -> EventSelector t (WrapArg er EventName)
 _el_events = _element_events
 
 {-# DEPRECATED _el_keypress "Use 'domEvent Keypress' instead" #-}
-_el_keypress :: Reflex t => El t -> Event t Int
+_el_keypress :: Reflex t => El t -> Event t Word
 _el_keypress = domEvent Keypress
 
 {-# DEPRECATED _el_scrolled "Use 'domEvent Scroll' instead" #-}
-_el_scrolled :: Reflex t => El t -> Event t Int
+_el_scrolled :: Reflex t => El t -> Event t Double
 _el_scrolled = domEvent Scroll
 
-wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.Element -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.Element -> m (El t)
+wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> EventName en -> EventM DOM.Element (EventType en) (Maybe (EventResult en))) -> DOM.HTMLElement -> m (El t)
 wrapElement eh e = do
   let h :: (EventName en, GhcjsDomEvent en) -> JSM (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
@@ -240,7 +239,7 @@ wrapElement eh e = do
         }
     }
 
-unsafePlaceElement :: MonadWidget t m => DOM.Element -> m (Element EventResult (DomBuilderSpace m) t)
+unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResult (DomBuilderSpace m) t)
 unsafePlaceElement e = do
   placeRawElement e
   wrapRawElement e def
@@ -248,10 +247,8 @@ unsafePlaceElement e = do
 namedNodeMapGetNames :: DOM.NamedNodeMap -> JSM (Set Text)
 namedNodeMapGetNames self = do
   l <- NNM.getLength self
-  let locations = if l == 0 then [] else [0..l-1] -- Can't use 0..l-1 if l is 0 because l is unsigned and will wrap around
-  fmap (Set.fromList . catMaybes) $ forM locations $ \i -> do
-    n <- NNM.itemUnchecked self i
-    getNodeName n
+  Set.fromList <$> forM (take (fromIntegral l) [0..]) (
+    NNM.itemUnchecked self >=> getNodeName)
 
 nodeClear :: IsNode self => self -> JSM ()
 nodeClear n = do
@@ -259,7 +256,7 @@ nodeClear n = do
   case mfc of
     Nothing -> return ()
     Just fc -> do
-      _ <- removeChildUnchecked n $ Just fc
+      _ <- removeChild n fc
       nodeClear n
 
 elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a
