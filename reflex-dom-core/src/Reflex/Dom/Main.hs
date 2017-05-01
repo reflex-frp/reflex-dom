@@ -54,8 +54,8 @@ mainWidget w = withJSContextSingleton $ \jsSing -> do
 
 {-# INLINABLE mainWidget' #-}
 -- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
-mainWidget' :: Widget () () -> IO ()
-mainWidget' w = withJSContextSingleton $ \jsSing -> do
+mainWidget' :: Widget () () -> JSM ()
+mainWidget' w = withJSContextSingletonMono $ \jsSing -> do
   doc <- currentDocumentUnchecked
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
