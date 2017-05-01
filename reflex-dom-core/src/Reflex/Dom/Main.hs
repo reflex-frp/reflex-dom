@@ -52,6 +52,14 @@ mainWidget w = withJSContextSingleton $ \jsSing -> do
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
 
+{-# INLINABLE mainWidget' #-}
+-- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainWidget' :: Widget () () -> IO ()
+mainWidget' w = withJSContextSingleton $ \jsSing -> do
+  doc <- currentDocumentUnchecked
+  body <- getBodyUnchecked doc
+  attachWidget body jsSing w
+
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> JSM ()
