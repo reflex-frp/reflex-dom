@@ -38,6 +38,7 @@ main = do
         postBuild <- getPostBuild
         let f n = liftIO $ if n < 3000
               then do performMajorGC
+                      threadDelay 1000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
                       gcStats <- getGCStats
                       print $ currentBytesUsed gcStats
                       when (currentBytesUsed gcStats < minBytesAllowed) $ do
