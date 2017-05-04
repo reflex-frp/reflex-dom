@@ -28,6 +28,7 @@ import GHCJS.DOM.Element
 import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.Types (liftJSM, MonadJSM)
+import qualified GHCJS.DOM.Types as DOM
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from github.com/marcj/css-element-queries
@@ -79,8 +80,8 @@ resizeDetectorWithAttrs attrs w = do
           then return Nothing
           else fmap Just reset
   pb <- delay 0 =<< getPostBuild
-  expandScroll <- wrapDomEvent (_element_raw expand) (`on` Events.scroll) $ return ()
-  shrinkScroll <- wrapDomEvent (_element_raw shrink) (`on` Events.scroll) $ return ()
+  expandScroll <- wrapDomEvent (DOM.uncheckedCastTo DOM.HTMLElement $ _element_raw expand) (`on` Events.scroll) $ return ()
+  shrinkScroll <- wrapDomEvent (DOM.uncheckedCastTo DOM.HTMLElement $ _element_raw shrink) (`on` Events.scroll) $ return ()
   size0 <- performEvent $ fmap (const $ liftJSM reset) pb
   rec resize <- performEventAsync $ fmap (\d cb -> (liftIO . cb) =<< liftJSM (resetIfChanged d)) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]

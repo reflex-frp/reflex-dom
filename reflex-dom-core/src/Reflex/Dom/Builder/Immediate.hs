@@ -137,7 +137,7 @@ import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnc
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
-        FocusEvent, IsHTMLElement, IsEvent, IsNode, KeyboardEvent, Node,
+        FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
         ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
@@ -314,7 +314,7 @@ wrap e cfg = do
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- liftIO $ newIORef Nothing
-    _ <- elementOnEventName en e $ do
+    _ <- elementOnEventName en e $ do --TODO: Something safer than this cast
       evt <- DOM.event
       (flags, k) <- liftJSM $ f $ GhcjsDomEvent evt
       when (_eventFlags_preventDefault flags) $ withIsEvent en DOM.preventDefault
@@ -350,10 +350,10 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.HTMLElement)
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  e <- liftJSM $ uncheckedCastTo DOM.HTMLElement <$> case cfg ^. namespace of
+  e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
     Nothing -> createElement doc elementTag
     Just ens -> createElementNS doc (Just ens) elementTag
   ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
@@ -377,7 +377,7 @@ data GhcjsDomSpace
 instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawTextNode GhcjsDomSpace = DOM.Text
-  type RawElement GhcjsDomSpace = DOM.HTMLElement
+  type RawElement GhcjsDomSpace = DOM.Element
   type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
@@ -427,7 +427,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
         t :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
-        let e = uncheckedCastTo DOM.HTMLElement t
+        let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
 
@@ -952,7 +952,7 @@ type family EventType en where
   EventType 'TouchcancelTag = TouchEvent
 
 {-# INLINABLE defaultDomEventHandler #-}
-defaultDomEventHandler :: IsHTMLElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
+defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> getMouseEventCoords
@@ -1150,9 +1150,17 @@ showEventName en = case en of
   Touchend -> "Touchend"
   Touchcancel -> "Touchcancel"
 
+--TODO: Get rid of this hack
+-- ElementEventTarget is here to allow us to treat SVG and HTML elements as the same thing; without it, we'll break any existing SVG code.
+newtype ElementEventTarget = ElementEventTarget DOM.Element deriving (DOM.IsGObject, DOM.ToJSVal, DOM.IsSlotable, DOM.IsParentNode, DOM.IsNonDocumentTypeChildNode, DOM.IsChildNode, DOM.IsAnimatable, IsNode, IsElement)
+instance DOM.FromJSVal ElementEventTarget where
+  fromJSVal = fmap (fmap ElementEventTarget) . DOM.fromJSVal
+instance DOM.IsEventTarget ElementEventTarget
+instance DOM.IsGlobalEventHandlers ElementEventTarget
+
 {-# INLINABLE elementOnEventName #-}
-elementOnEventName :: IsHTMLElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
-elementOnEventName en e = case en of
+elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
+elementOnEventName en e_ = let e = ElementEventTarget (DOM.toElement e_) in case en of
   Abort -> on e Events.abort
   Blur -> on e Events.blur
   Change -> on e Events.change

@@ -70,7 +70,7 @@ import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChild)
 import GHCJS.DOM.Types
-       (MonadJSM, liftJSM, JSM, IsHTMLElement, IsNode)
+       (liftJSM, JSM, IsHTMLElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
 import Reflex.Dom.Builder.Class
@@ -116,8 +116,8 @@ type MonadWidgetConstraints t m =
   , MonadIO m
   , MonadIO (Performable m)
 #ifndef ghcjs_HOST_OS
-  , MonadJSM m
-  , MonadJSM (Performable m)
+  , DOM.MonadJSM m
+  , DOM.MonadJSM (Performable m)
 #endif
   , TriggerEvent t m
   , HasJSContext m
@@ -233,7 +233,7 @@ wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> Eve
 wrapElement eh e = do
   let h :: (EventName en, GhcjsDomEvent en) -> JSM (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
-  wrapRawElement e $ (def :: RawElementConfig EventResult t m)
+  wrapRawElement (DOM.toElement e) $ (def :: RawElementConfig EventResult t m)
     { _rawElementConfig_eventSpec = def
         { _ghcjsEventSpec_handler = GhcjsEventHandler h
         }
@@ -241,8 +241,8 @@ wrapElement eh e = do
 
 unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResult (DomBuilderSpace m) t)
 unsafePlaceElement e = do
-  placeRawElement e
-  wrapRawElement e def
+  placeRawElement $ DOM.toElement e
+  wrapRawElement (DOM.toElement e) def
 
 namedNodeMapGetNames :: DOM.NamedNodeMap -> JSM (Set Text)
 namedNodeMapGetNames self = do
