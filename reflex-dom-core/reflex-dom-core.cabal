@@ -33,15 +33,10 @@ flag expose-all-unfoldings
   default: False
   manual: True
 
-flag build-examples
-  description: Build the executables in ./examples
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 1.2,
+    aeson >= 0.8 && < 1.3,
     base >= 4.7 && < 4.11,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
@@ -155,29 +150,6 @@ test-suite gc
   type: exitcode-stdio-1.0
   if !os(linux) || !arch(x86_64)
     buildable: False
-
-executable sortableList
-  build-depends: base
-               , containers
-               , dependent-map
-               , lens
-               , mtl
-               , random
-               , reflex
-               , reflex-dom
-               , text
-               , time
-               , transformers
-  hs-source-dirs: examples
-  main-is: sortableList.hs
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto
-  if !flag(build-examples)
-    buildable: False
-  if flag(expose-all-unfoldings)
-    ghc-options: -fexpose-all-unfoldings
-  if flag(use-reflex-optimizer)
-    ghc-options: -fplugin=Reflex.Optimizer
 
 source-repository head
   type: git
