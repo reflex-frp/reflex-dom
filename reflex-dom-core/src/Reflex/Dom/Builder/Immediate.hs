@@ -186,8 +186,7 @@ instance (Reflex t, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) w
 
 {-# INLINABLE runImmediateDomBuilderT #-}
 runImmediateDomBuilderT
-  :: ( Reflex t
-     , MonadFix m
+  :: ( MonadFix m
      , PerformEvent t m
      , MonadReflexCreateTrigger t m
      , MonadJSM m

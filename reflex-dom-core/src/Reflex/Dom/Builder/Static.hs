@@ -155,8 +155,6 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( MonadAdjust t m
   , MonadHold t m
-  , DMap.GCompare k
-  , Patch (p k v)
   , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
   , Patch (p k (Constant (Behavior t Builder)))
   )
