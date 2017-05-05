@@ -157,7 +157,11 @@ data ImmediateDomBuilderEnv t
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) (RequesterT t JSM Identity (TriggerEventT t m)) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
+#if MIN_VERSION_base(4,9,1)
+           , MonadAsyncException
+#endif
+           )
 
 #ifndef __GHCJS__
 instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
