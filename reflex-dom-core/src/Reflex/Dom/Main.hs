@@ -4,13 +4,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE PatternSynonyms #-}
 module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
@@ -39,10 +39,10 @@ import Data.Text.Encoding
 import GHCJS.DOM
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
-import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Node
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Types (JSM)
+import qualified GHCJS.DOM.Types as DOM
 
 {-# INLINABLE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()

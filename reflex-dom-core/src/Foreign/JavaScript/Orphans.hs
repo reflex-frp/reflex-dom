@@ -6,10 +6,10 @@ module Foreign.JavaScript.Orphans where
 #ifndef ghcjs_HOST_OS
 
 import Control.Monad.Trans.Class (lift)
-import GHCJS.DOM.Types (MonadJSM(..))
+import GHCJS.DOM.Types (MonadJSM (..))
 import Reflex.DynamicWriter (DynamicWriterT)
-import Reflex.Host.Class (ReflexHost, HostFrame)
-import Reflex.PerformEvent.Base (PerformEventT(..))
+import Reflex.Host.Class (HostFrame, ReflexHost)
+import Reflex.PerformEvent.Base (PerformEventT (..))
 import Reflex.PostBuild.Base (PostBuildT)
 import Reflex.Requester.Base (RequesterT)
 import Reflex.TriggerEvent.Base

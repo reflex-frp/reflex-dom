@@ -1,8 +1,8 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Resize where
 
@@ -25,9 +25,9 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.Element
-import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
 import GHCJS.DOM.EventM (on)
-import GHCJS.DOM.Types (liftJSM, MonadJSM)
+import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
+import GHCJS.DOM.Types (MonadJSM, liftJSM)
 import qualified GHCJS.DOM.Types as DOM
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.

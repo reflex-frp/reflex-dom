@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -8,13 +9,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
+#ifdef USE_TEMPLATE_HASKELL
+{-# LANGUAGE TemplateHaskell #-}
+#endif
 #ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
@@ -25,7 +25,8 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 #endif
                              ) where
 
-import Prelude hiding((!!))
+import Foreign.JavaScript.Orphans ()
+import Prelude hiding ((!!))
 import Reflex.Class
 import Reflex.DynamicWriter
 import Reflex.EventWriter
@@ -34,17 +35,15 @@ import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
-import Foreign.JavaScript.Orphans ()
 
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH
 #endif
 
-import GHCJS.DOM.Types
-       (askJSM, JSContextRef, Node(..))
+import GHCJS.DOM.Types (JSContextRef, Node (..), askJSM)
 #ifdef ghcjs_HOST_OS
-import GHCJS.DOM.Types (MonadJSM)
 import qualified GHCJS.Buffer as JS
+import GHCJS.DOM.Types (MonadJSM)
 import qualified GHCJS.DOM.Types as JS
 import qualified GHCJS.Foreign as JS
 import qualified GHCJS.Foreign.Callback as JS
@@ -61,14 +60,12 @@ import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
 #else
-import GHCJS.DOM.Types (MonadJSM(..), runJSM, liftJSM, toJSString, toJSVal, JSVal)
-import Data.Word (Word8)
 import Control.Lens.Operators ((^.))
-import Language.Javascript.JSaddle
-       (eval, valMakeString, valToNumber, function,
-        valMakeNumber, valBool, valToText, valToBool, valIsUndefined,
-        valUndefined, valIsNull, Function(..), (!!),
-        js, js1, jss, array, freeFunction)
+import Data.Word (Word8)
+import GHCJS.DOM.Types (JSVal, MonadJSM (..), liftJSM, runJSM, toJSString, toJSVal)
+import Language.Javascript.JSaddle (Function (..), array, eval, freeFunction, function, js, js1, jss, valBool,
+                                    valIsNull, valIsUndefined, valMakeNumber, valMakeString, valToBool,
+                                    valToNumber, valToText, valUndefined, (!!))
 #endif
 
 import Control.Concurrent

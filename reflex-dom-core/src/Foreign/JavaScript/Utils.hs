@@ -3,13 +3,13 @@ module Foreign.JavaScript.Utils
   , bsToArrayBuffer
   ) where
 
-import           Data.ByteString (ByteString)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Foreign.JavaScript.Internal.Utils (js_dataView)
 import qualified GHCJS.Buffer as JS
-import           GHCJS.DOM.Types (ArrayBuffer (..))
+import GHCJS.DOM.Types (ArrayBuffer (..))
 import qualified JavaScript.TypedArray.ArrayBuffer as JS
-import           Language.Javascript.JSaddle.Types (MonadJSM, liftJSM, ghcjsPure, jsval)
-import           Foreign.JavaScript.Internal.Utils (js_dataView)
+import Language.Javascript.JSaddle.Types (MonadJSM, ghcjsPure, jsval, liftJSM)
 
 {-# INLINABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
