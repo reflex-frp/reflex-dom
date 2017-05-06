@@ -15,6 +15,7 @@ main = do
     , "--ignore=Use ."
     , "--ignore=Use unless"
     , "--ignore=Use if"
+    , "--ignore=Use fewer imports"
     , "--ignore=Reduce duplication" --TODO: Re-enable this test
     , "--cpp-define=USE_TEMPLATE_HASKELL"
     ]
