@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Foreign.JavaScript.Orphans where
 
-#ifndef __GHCJS__
+#ifndef ghcjs_HOST_OS
 
 import Control.Monad.Trans.Class (lift)
 import GHCJS.DOM.Types (MonadJSM(..))

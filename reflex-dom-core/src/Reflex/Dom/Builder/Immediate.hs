@@ -136,7 +136,7 @@ import qualified GHCJS.DOM.TouchList as TouchList
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import GHCJS.DOM.Types
-       (liftJSM, askJSM, runJSM, JSM, MonadJSM(..),
+       (liftJSM, askJSM, runJSM, JSM, MonadJSM,
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
         ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import qualified GHCJS.DOM.Types as DOM
@@ -148,6 +148,13 @@ import Language.Javascript.JSaddle (call, eval)
 import Reflex.Requester.Base
 import Reflex.Requester.Class
 import Foreign.JavaScript.Internal.Utils
+
+#ifndef ghcjs_HOST_OS
+import GHCJS.DOM.Types (MonadJSM (..))
+
+instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
+    liftJSM' = ImmediateDomBuilderT . liftJSM'
+#endif
 
 data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: Document
@@ -162,11 +169,6 @@ newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilde
            , MonadAsyncException
 #endif
            )
-
-#ifndef __GHCJS__
-instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
-    liftJSM' = ImmediateDomBuilderT . liftJSM'
-#endif
 
 instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
   type PrimState (ImmediateDomBuilderT x m) = PrimState m

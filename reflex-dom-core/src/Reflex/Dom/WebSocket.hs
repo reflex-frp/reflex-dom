@@ -71,12 +71,6 @@ data RawWebSocket t a
                                                 )
                   }
 
--- This can be used to send either binary or text messages for the same websocket connection
-instance (IsWebSocketMessage a, IsWebSocketMessage b) => IsWebSocketMessage (Either a b) where
-  webSocketSend jws (Left a) = webSocketSend jws a
-  webSocketSend jws (Right a) = webSocketSend jws a
-
-
 webSocket :: (MonadJSM m, MonadJSM (Performable m), HasJSContext m, PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
 webSocket url config = webSocket' url config onBSMessage
 

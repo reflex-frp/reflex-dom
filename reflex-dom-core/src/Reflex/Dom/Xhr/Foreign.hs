@@ -18,7 +18,7 @@ import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on)
 import GHCJS.DOM.EventTarget (dispatchEvent)
-import GHCJS.DOM.Types hiding (Text, ByteString)
+import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, XMLHttpRequestProgressEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)

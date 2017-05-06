@@ -15,7 +15,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
-#ifdef __GHCJS__
+#ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
@@ -41,17 +41,14 @@ import Language.Haskell.TH
 #endif
 
 import GHCJS.DOM.Types
-       (toJSString, liftJSM, askJSM, runJSM, JSContextRef,
-        Node(..), MonadJSM(..), toJSVal, JSVal)
-#ifdef __GHCJS__
+       (askJSM, JSContextRef, Node(..))
+#ifdef ghcjs_HOST_OS
+import GHCJS.DOM.Types (MonadJSM)
 import qualified GHCJS.Buffer as JS
 import qualified GHCJS.DOM.Types as JS
 import qualified GHCJS.Foreign as JS
 import qualified GHCJS.Foreign.Callback as JS
 import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
-import qualified GHCJS.Marshal as JS
-import qualified GHCJS.Marshal.Pure as JS
-import qualified GHCJS.Types as JS
 import qualified JavaScript.Array as JS
 import qualified JavaScript.Array.Internal (SomeJSArray (..))
 import qualified JavaScript.Object as JS
@@ -64,6 +61,7 @@ import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
 #else
+import GHCJS.DOM.Types (MonadJSM(..), runJSM, liftJSM, toJSString, toJSVal, JSVal)
 import Data.Word (Word8)
 import Control.Lens.Operators ((^.))
 import Language.Javascript.JSaddle
@@ -210,7 +208,7 @@ withJSContextSingletonMono f = askJSM >>= f . JSContextSingleton
 -- | A singleton type for a given JSContext; we use this to statically guarantee that different JSContexts don't get mixed up
 newtype JSContextSingleton x = JSContextSingleton { unJSContextSingleton :: JSContextRef }
 
-#ifdef __GHCJS__
+#ifdef ghcjs_HOST_OS
 type JSFFI_Internal = JS.MutableJSArray -> IO JS.JSVal
 newtype JSFFI = JSFFI JSFFI_Internal
 #else
@@ -218,7 +216,7 @@ newtype JSFFI = JSFFI String
 #endif
 
 data JSFun x = JSFun { unJSFun :: JSRef x
-#ifndef __GHCJS__
+#ifndef ghcjs_HOST_OS
     , unJSFunction :: Function
 #endif
     }
@@ -277,7 +275,7 @@ class Monad m => MonadJS x m | m -> x where
   getJSProp :: String -> JSRef x -> m (JSRef x)
   withJSNode :: Node -> (JSRef x -> m r) -> m r
 
-#ifdef __GHCJS__
+#ifdef ghcjs_HOST_OS
 
 data JSCtx_IO
 
@@ -536,7 +534,7 @@ importJS safety body name qt = do
     ]
 
 mkJSFFI :: Safety -> String -> Q ([Dec], Exp)
-#ifdef __GHCJS__
+#ifdef ghcjs_HOST_OS
 mkJSFFI safety body = do
   -- n <- newName "jsffi" --TODO: Should use newName, but that doesn't seem to work with ghcjs
   l <- location
