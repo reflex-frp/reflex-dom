@@ -290,8 +290,8 @@ checkboxView dAttrs dValue = do
         t <- Event.getTarget evt
         b <- Input.getChecked $ uncheckedCastTo Input.HTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
-      elementConfig :: ElementConfig CheckboxViewEventResult t m
-      elementConfig = (def :: ElementConfig EventResult t m)
+      elementConfig :: ElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
+      elementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         { _elementConfig_modifyAttributes = Just $ fmap mapKeysToAttributeName modifyAttrs
         , _elementConfig_initialAttributes = Map.mapKeys (AttributeName Nothing) permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
@@ -305,8 +305,8 @@ checkboxView dAttrs dValue = do
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
             }
         }
-      inputElementConfig :: InputElementConfig CheckboxViewEventResult t m
-      inputElementConfig = (def :: InputElementConfig EventResult t m)
+      inputElementConfig :: InputElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
+      inputElementConfig = (def :: InputElementConfig EventResult t (DomBuilderSpace m))
         & inputElementConfig_setChecked .~ leftmost [updated dValue, tag (current dValue) postBuild]
         & inputElementConfig_elementConfig .~ elementConfig
   i <- inputElement inputElementConfig
@@ -333,10 +333,10 @@ fileInput config = do
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   let filters = DMap.singleton Change . GhcjsEventFilter $ \_ -> do
         return . (,) mempty $ return . Just $ EventResult ()
-      elCfg = (def :: ElementConfig EventResult t m)
+      elCfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
         & elementConfig_eventSpec . ghcjsEventSpec_filters .~ filters
-      cfg = (def :: InputElementConfig EventResult t m) & inputElementConfig_elementConfig .~ elCfg
+      cfg = (def :: InputElementConfig EventResult t (DomBuilderSpace m)) & inputElementConfig_elementConfig .~ elCfg
   eRaw <- inputElement cfg
   let e = _inputElement_raw eRaw
   eChange <- wrapDomEvent e (`on` Events.change) $ do

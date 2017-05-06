@@ -160,7 +160,7 @@ instance Attributes m (Map Text Text) t where
     let cfg = def & elementConfig_namespace .~ ns
     buildElementCommon elementTag child =<< addStaticAttributes attrs cfg
 
-addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t m -> m (ElementConfig er t m)
+addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addStaticAttributes attrs cfg = do
   let initialAttrs = Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
@@ -170,12 +170,12 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
     let cfg = def & elementConfig_namespace .~ ns
     buildElementCommon elementTag child =<< addDynamicAttributes attrs cfg
 
-addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t m -> m (ElementConfig er t m)
+addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   return $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
 
-buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t m -> m (Element er (DomBuilderSpace m) t, a)
+buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
 
 
@@ -233,7 +233,7 @@ wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> Eve
 wrapElement eh e = do
   let h :: (EventName en, GhcjsDomEvent en) -> JSM (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
-  wrapRawElement (DOM.toElement e) $ (def :: RawElementConfig EventResult t m)
+  wrapRawElement (DOM.toElement e) $ (def :: RawElementConfig EventResult t (DomBuilderSpace m))
     { _rawElementConfig_eventSpec = def
         { _ghcjsEventSpec_handler = GhcjsEventHandler h
         }
@@ -263,7 +263,7 @@ elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text 
 elStopPropagationNS ns elementTag en child = do
   let f = GhcjsEventFilter $ \_ -> do
         return (stopPropagation, return Nothing)
-      cfg = (def :: ElementConfig EventResult t m)
+      cfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & namespace .~ ns
         & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
   snd <$> element elementTag cfg child

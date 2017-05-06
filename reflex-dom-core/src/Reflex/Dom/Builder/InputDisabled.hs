@@ -74,14 +74,14 @@ instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m
   inputElement cfg = lift $ inputElement $ cfg
-    { _inputElementConfig_elementConfig = liftElementConfig $ disableElementConfig $ _inputElementConfig_elementConfig cfg
+    { _inputElementConfig_elementConfig = disableElementConfig $ _inputElementConfig_elementConfig cfg
     }
   textAreaElement cfg = lift $ textAreaElement $ cfg
-    { _textAreaElementConfig_elementConfig = liftElementConfig $ disableElementConfig $ _textAreaElementConfig_elementConfig cfg
+    { _textAreaElementConfig_elementConfig = disableElementConfig $ _textAreaElementConfig_elementConfig cfg
     }
   selectElement cfg child = do
     let cfg' = cfg
-          { _selectElementConfig_elementConfig = liftElementConfig $ disableElementConfig $ _selectElementConfig_elementConfig cfg
+          { _selectElementConfig_elementConfig = disableElementConfig $ _selectElementConfig_elementConfig cfg
           }
     lift $ selectElement cfg' $ runInputDisabledT child
 

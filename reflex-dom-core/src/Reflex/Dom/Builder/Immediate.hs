@@ -309,7 +309,7 @@ collectUpToGivenParent currentParent s e = do
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
-wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
+wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
@@ -353,7 +353,7 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t (ImmediateDomBuilderT t m) -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
