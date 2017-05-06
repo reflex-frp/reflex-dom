@@ -124,6 +124,7 @@ webSocket' url config onRawMessage = do
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
+makeLensesWith (lensRules & simpleLenses .~ True) ''RawWebSocket
 #else
 
 webSocketConfig_send :: Lens' (WebSocketConfig t a) (Event t [a])
@@ -137,5 +138,21 @@ webSocketConfig_close f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 y
 webSocketConfig_reconnect :: Lens' (WebSocketConfig t a) Bool
 webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 x2 y) <$> f x3
 {-# INLINE webSocketConfig_reconnect #-}
+
+webSocket_recv :: Lens' (RawWebSocket t a) (Event t a)
+webSocket_recv f (WebSocket x1 x2 x3 x4) = (\y -> WebSocket y x2 x3 x4) <$> f x1
+{-# INLINE webSocket_recv #-}
+
+webSocket_open :: Lens' (RawWebSocket t a) (Event t ())
+webSocket_open f (WebSocket x1 x2 x3 x4) = (\y -> WebSocket x1 y x3 x4) <$> f x2
+{-# INLINE webSocket_open #-}
+
+webSocket_error :: Lens' (RawWebSocket t a) (Event t ())
+webSocket_error f (WebSocket x1 x2 x3 x4) = (\y -> WebSocket x1 x2 y x4) <$> f x3
+{-# INLINE webSocket_error #-}
+
+webSocket_close :: Lens' (RawWebSocket t a) (Event t (Bool, Word, Text))
+webSocket_close f (WebSocket x1 x2 x3 x4) = (\y -> WebSocket x1 x2 x3 y) <$> f x4
+{-# INLINE webSocket_close #-}
 
 #endif
