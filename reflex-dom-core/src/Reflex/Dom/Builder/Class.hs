@@ -354,7 +354,7 @@ rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a
 {-# INLINE rawElementConfig_eventSpec #-}
 #endif
 
-instance (Reflex t, DomSpace s) => Default (RawElementConfig EventResult t s) where
+instance (Reflex t, er ~ EventResult, DomSpace s) => Default (RawElementConfig er t s) where
   def = RawElementConfig
     { _rawElementConfig_modifyAttributes = Nothing
     , _rawElementConfig_eventSpec = def
