@@ -122,6 +122,7 @@ type MonadWidgetConstraints t m =
   , TriggerEvent t m
   , HasJSContext m
   , HasJSContext (Performable m)
+  , HasDocument m
   , MonadRef m
   , Ref m ~ Ref IO
   , MonadRef (Performable m)

@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -26,7 +27,6 @@ module Reflex.Dom.Builder.Immediate
        , ImmediateDomBuilderEnv (..)
        , ImmediateDomBuilderT (..)
        , runImmediateDomBuilderT
-       , askDocument
        , askParent
        , askEvents
        , append
@@ -49,6 +49,7 @@ module Reflex.Dom.Builder.Immediate
        , Pair1 (..)
        , Maybe1 (..)
        , GhcjsEventSpec (..)
+       , HasDocument (..)
        , ghcjsEventSpec_filters
        , ghcjsEventSpec_handler
        , GhcjsEventHandler (..)
@@ -81,10 +82,13 @@ import Foreign.JavaScript.TH
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
+import Reflex.DynamicWriter (DynamicWriterT)
+import Reflex.EventWriter (EventWriterT)
 import Reflex.Host.Class
 import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Base
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
@@ -96,6 +100,8 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
+import Control.Monad.State.Strict (StateT)
+import qualified Control.Monad.State as Lazy (StateT)
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -215,9 +221,21 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTrigger
       _ <- Window.requestAnimationFrame win cb
       return ()
 
-{-# INLINABLE askDocument #-}
-askDocument :: Monad m => ImmediateDomBuilderT t m Document
-askDocument = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_document
+class Monad m => HasDocument m where
+  askDocument :: m Document
+  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => f m' Document
+  askDocument = lift askDocument
+
+instance HasDocument m => HasDocument (ReaderT r m)
+instance HasDocument m => HasDocument (StateT s m)
+instance HasDocument m => HasDocument (Lazy.StateT s m)
+instance HasDocument m => HasDocument (EventWriterT t w m)
+instance HasDocument m => HasDocument (DynamicWriterT t w m)
+instance HasDocument m => HasDocument (PostBuildT t m)
+
+instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
+  {-# INLINABLE askDocument #-}
+  askDocument = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_document
 
 {-# INLINABLE askParent #-}
 askParent :: Monad m => ImmediateDomBuilderT t m Node

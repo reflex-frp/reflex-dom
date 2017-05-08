@@ -17,6 +17,7 @@ import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 import Reflex
 import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Immediate (HasDocument (..))
 import Reflex.Host.Class
 
 -- | A DomBuilder transformer that disables all 'inputElement's,
@@ -84,6 +85,8 @@ instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
           { _selectElementConfig_elementConfig = disableElementConfig $ _selectElementConfig_elementConfig cfg
           }
     lift $ selectElement cfg' $ runInputDisabledT child
+
+instance HasDocument m => HasDocument (InputDisabledT m)
 
 instance HasJSContext m => HasJSContext (InputDisabledT m) where
   type JSContextPhantom (InputDisabledT m) = JSContextPhantom m
