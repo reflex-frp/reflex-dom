@@ -650,3 +650,7 @@ deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 #endif
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
+
+{-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
+liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
+liftElementConfig = id
