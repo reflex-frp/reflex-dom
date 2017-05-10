@@ -346,10 +346,10 @@ data RawElementConfig er t s = RawElementConfig
 
 #ifndef USE_TEMPLATE_HASKELL
 rawElementConfig_eventSpec :: Lens
-    (RawElementConfig er1 t m1)
-    (RawElementConfig er2 t m2)
-    (EventSpec (DomBuilderSpace m1) er1)
-    (EventSpec (DomBuilderSpace m2) er2)
+    (RawElementConfig er1 t s1)
+    (RawElementConfig er2 t s2)
+    (EventSpec s1 er1)
+    (EventSpec s2 er2)
 rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a b') <$> f b
 {-# INLINE rawElementConfig_eventSpec #-}
 #endif
