@@ -37,7 +37,7 @@ w = do
         _ <- widgetHold (text "Starting") $ text . T.pack . show <$> n
         return ()
       -}
-      {- Many dyns
+--      {- Many dyns
       slow = elAttr "div" ("style" =: "position:relative;width:256px;height:256px") $ go maxDepth
         where maxDepth = 6 :: Int
               go 0 = blank
@@ -48,7 +48,7 @@ w = do
                 elAttr "div" ("style" =: s "left:50%;right:0;top:0;bottom:50%") $ go $ pred n
                 elAttr "div" ("style" =: s "left:50%;right:0;top:50%;bottom:0") $ go $ pred n
                 elAttr "div" ("style" =: s "left:0;right:50%;top:50%;bottom:0") $ go $ pred n
-      -}
+--      -}
       {- Many elDynAttrs
       slow = do
         let size = 64
@@ -94,6 +94,7 @@ w = do
         traverseDMapWithKeyWithAdjustWithMove f (DMap.singleton LeftTag $ Const2 ()) $ (PatchDMapWithMove.moveDMapKey LeftTag RightTag) <$ postBuild
         return ()
       -}
+      {-
       slow = do
         let h x = do
               liftIO $ putStrLn "render hook"
@@ -110,11 +111,11 @@ w = do
           postBuild <- getPostBuild
           _ <- traverseDMapWithKeyWithAdjust f mempty $ PatchDMap (DMap.singleton (Const2 () :: Const2 () () ()) (ComposeMaybe $ Just $ Identity ())) <$ postBuild
           return ()
+      -}
   el "div" $ do
     draw <- button "Draw"
     widgetHold blank $ ffor draw $ \_ -> do
-      postBuild <- getPostBuild
-      widgetHold (text "Loading...") $ slow <$ postBuild
+      _ <- untilReady (text "Loading...") slow
       return ()
     return ()
 

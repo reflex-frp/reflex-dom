@@ -22,6 +22,7 @@ module Reflex.Dom.Widget.Basic
   , button
   , dyn
   , widgetHold
+  , untilReady
 
   -- * Working with Maps
   , diffMapNoEq
@@ -171,6 +172,13 @@ widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dyna
 widgetHold child0 newChild = do
   (result0, newResult) <- widgetHoldInternal child0 newChild
   holdDyn result0 newResult
+
+-- | Render a placeholder widget to be shown while another widget is not yet
+-- done rendering
+untilReady :: (DomBuilder t m, PostBuild t m) => m a -> m b -> m (a, Event t b)
+untilReady a b = do
+  postBuild <- getPostBuild
+  runWithReplace a $ b <$ postBuild
 
 diffMapNoEq :: (Ord k) => Map k v -> Map k v -> Map k (Maybe v)
 diffMapNoEq olds news = flip Map.mapMaybe (align olds news) $ \case
