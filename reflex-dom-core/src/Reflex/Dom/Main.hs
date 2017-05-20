@@ -15,6 +15,8 @@ module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
+import Reflex.Class (holdDyn)
+import Reflex.Dom.Builder.Class (MountState(Mounted, Mounting))
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Host.Class
@@ -92,9 +94,11 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   headFragment <- createDocumentFragment doc
   bodyElement <- getBodyUnchecked doc
   bodyFragment <- createDocumentFragment doc
-  (events, fc) <- liftIO . attachWidget'' $ \events -> do
+  ((events, postMountTriggerRef), fc) <- liftIO . attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    (postMount, postMountTriggerRef) <- newEventWithTriggerRef
+    mountState <- holdDyn Mounting (Mounted <$ postMount)
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
         go w df = do
           unreadyChildren <- liftIO $ newIORef 0
@@ -103,13 +107,17 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
                 , _immediateDomBuilderEnv_parent = toNode df
                 , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
                 , _immediateDomBuilderEnv_commitAction = return () --TODO
+                , _immediateDomBuilderEnv_mountState = mountState
                 }
           runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
         a <- go (bodyWidget b) bodyFragment
-    return (events, postBuildTriggerRef)
+    return ((events, postMountTriggerRef), postBuildTriggerRef)
   replaceElementContents headElement headFragment
   replaceElementContents bodyElement bodyFragment
+  liftIO . runSpiderHost $ do
+    mPostMountTrigger <- readRef postMountTriggerRef
+    forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
   liftIO $ processAsyncEvents events fc
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
@@ -123,18 +131,24 @@ attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> J
 attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
-  ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
+  ((a, events, postMountTriggerRef), fc) <- liftIO . attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    (postMount, postMountTriggerRef) <- newEventWithTriggerRef
+    mountState <- holdDyn Mounting (Mounted <$ postMount)
     unreadyChildren <- liftIO $ newIORef 0
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = return () --TODO
+          , _immediateDomBuilderEnv_mountState = mountState
           }
     a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
-    return ((a, events), postBuildTriggerRef)
+    return ((a, events, postMountTriggerRef), postBuildTriggerRef)
   replaceElementContents rootElement df
+  liftIO . runSpiderHost $ do
+    mPostMountTrigger <- liftIO $ readRef postMountTriggerRef
+    forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
   liftIO $ processAsyncEvents events fc
   return (a, fc)
 
