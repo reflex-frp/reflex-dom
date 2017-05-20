@@ -161,7 +161,7 @@ class DomBuilder t m => MountableDomBuilder t m where
 
 -- |'MonadMountStatus' represents an action that can be aware of whether the corresponding DOM built by the action is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
-class (Reflex t, Monad m) => MonadMountStatus t m | m -> t where
+class MonadMountStatus t m | m -> t where
   -- |Get a 'Dynamic' representing the current 'MountState' of DOM elements created in the current scope.
   getMountStatus :: m (Dynamic t MountState)
 

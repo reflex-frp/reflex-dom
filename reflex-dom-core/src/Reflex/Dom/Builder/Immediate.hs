@@ -641,7 +641,7 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
 
 -}
 
-instance MonadMountStatus t (ImmediateDomBuilderT t m) where
+instance Monad m => MonadMountStatus t (ImmediateDomBuilderT t m) where
   getMountStatus = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_mountState
 
 -- |Structure which keeps track of which generation of a 'runWithReplace' action is currently installed in the DOM.
