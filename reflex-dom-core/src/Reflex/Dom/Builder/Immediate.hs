@@ -834,7 +834,7 @@ data ChildReadyState k
   deriving (Show, Read, Eq, Ord)
 
 -- |Hoist a 'traverseWithKeyWithAdjust' or 'traverseWithKeyWithAdjustWithMove' in the base monad that underlies a
--- @'ImmediateDomBuilderT' m ~ 'RequesterT' t 'JSM' 'Identity' ('TriggerEventT' m). This is used to implement both 'traverseWithKeyWithAdjust' and
+-- @'ImmediateDomBuilderT' m ~ 'RequesterT' t 'JSM' 'Identity' ('TriggerEventT' m)@. This is used to implement both 'traverseWithKeyWithAdjust' and
 -- 'traverseWithKeyWithAdjustWithMove' for 'ImmediateDomBuilderT'.
 --
 -- This is the core work which manages setting up the DOM structure and updating it over time on incoming patch events (@p k v@), deferring the specifics of
