@@ -34,6 +34,8 @@ import Reflex.DynamicWriter
 import Reflex.EventWriter
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.Query.Base
+import Reflex.Query.Class
 import Reflex.Requester.Base
 
 import qualified Control.Category
@@ -574,6 +576,31 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w, Monoid w) => D
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
+  type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (QueryT child) = QueryT $ do
+    s <- get
+    let cfg' = cfg
+          { _elementConfig_eventSpec = _elementConfig_eventSpec cfg }
+    (e, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
+    put newS
+    return (e, a)
+
+  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
+  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  selectElement cfg (QueryT child) = QueryT $ do
+    s <- get
+    let cfg' = cfg & selectElementConfig_elementConfig %~ \c ->
+          c { _elementConfig_eventSpec = _elementConfig_eventSpec c }
+    (e, (a, newS)) <- lift $ selectElement cfg' $ runStateT child s
+    put newS
+    return (e, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
+    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+    }
+
 -- * Convenience functions
 
 class HasDomEvent t target eventName where
@@ -650,6 +677,7 @@ deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 #endif
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
+deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s

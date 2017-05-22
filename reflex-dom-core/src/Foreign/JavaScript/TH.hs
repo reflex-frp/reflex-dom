@@ -34,6 +34,7 @@ import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.Query.Base
 import Reflex.Requester.Base
 
 #ifdef USE_TEMPLATE_HASKELL
@@ -124,6 +125,10 @@ instance HasJSContext m => HasJSContext (DynamicWriterT t w m) where
 instance HasJSContext m => HasJSContext (RequesterT t request response m) where
   type JSContextPhantom (RequesterT t request response m) = JSContextPhantom m
   askJSContext = lift askJSContext
+
+instance HasJSContext m => HasJSContext (QueryT t q m) where
+  type JSContextPhantom (QueryT t q m) = JSContextPhantom m
+  askJSContext = QueryT askJSContext
 
 newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
 
@@ -246,6 +251,10 @@ instance HasJS x m => HasJS x (DynamicWriterT t w m) where
 
 instance HasJS x m => HasJS x (RequesterT t request response m) where
   type JSX (RequesterT t request response m) = JSX m
+  liftJS = lift . liftJS
+
+instance HasJS x m => HasJS x (QueryT t q m) where
+  type JSX (QueryT t q m) = JSX m
   liftJS = lift . liftJS
 
 -- | A Monad that is capable of executing JavaScript
