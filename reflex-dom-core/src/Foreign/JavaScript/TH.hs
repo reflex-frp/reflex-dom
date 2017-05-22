@@ -34,6 +34,7 @@ import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.Query.Base
 import Reflex.Requester.Base
 
 #ifdef USE_TEMPLATE_HASKELL
