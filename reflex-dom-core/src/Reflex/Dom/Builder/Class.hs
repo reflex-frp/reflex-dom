@@ -161,6 +161,9 @@ class DomBuilder t m => MountableDomBuilder t m where
 
 -- |'MonadMountStatus' represents an action that can be aware of whether the corresponding DOM built by the action is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
+--
+-- ___Note:___ once the current scope is replaced, any 'performEvent's in the scope will be cancelled and so if you want to observe the 'Unmounted' status
+-- you have to plumb the mount state dynamic back out of the current scope so the parent scope can react to it.
 class Monad m => MonadMountStatus t m | m -> t where
   -- |Get a 'Dynamic' representing the current 'MountState' of DOM elements created in the current scope.
   getMountStatus :: m (Dynamic t MountState)
