@@ -165,8 +165,8 @@ instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
 
 -- |Structure forming the environment in which a DOM builder runs, tracking what document, where in that document is being built, and so on.
 data ImmediateDomBuilderEnv t = ImmediateDomBuilderEnv
-  { _immediateDomBuilderEnv_document :: Document
-  -- ^The document in which building is being performed, kept separately nodes can be created without having to obtain the owner document from the parent node.
+  { _immediateDomBuilderEnv_document :: Document -- TODO: is this really necessary? it's denormalized with respect to getOwnerDocument.
+  -- ^The document in which building is being performed.
   , _immediateDomBuilderEnv_parent :: Node
   -- ^The DOM node where building is occurring within, often a document fragment.
   , _immediateDomBuilderEnv_unreadyChildren :: IORef Word
