@@ -22,7 +22,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ViewPatterns #-}
 module Reflex.Dom.Builder.Immediate
        ( EventTriggerRef (..)
        , ImmediateDomBuilderEnv (..)
@@ -726,7 +725,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
         let new :: forall a. k a -> ComposeMaybe (Compose (Child k) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
             new k (ComposeMaybe m) = ComposeMaybe <$> case m of
               Nothing -> return Nothing
-              Just (_child_readyState . getCompose -> sRef) -> do
+              Just (Compose (Child { _child_readyState = sRef })) -> do
                 readIORef sRef >>= \case
                   ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
                   ChildReadyState_Unready _ -> do
@@ -756,7 +755,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
       updateChildUnreadiness (p :: PatchDMapWithMove k (Compose (Child k) v')) old = do
         let new :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (Child k) v') a -> IO (PatchDMapWithMove.NodeInfo k (Constant (IORef (ChildReadyState k))) a)
             new k = PatchDMapWithMove.nodeInfoMapFromM $ \case
-              PatchDMapWithMove.From_Insert (_child_readyState . getCompose -> sRef) -> do
+              PatchDMapWithMove.From_Insert (Compose (Child { _child_readyState = sRef })) -> do
                 readIORef sRef >>= \case
                   ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
                   ChildReadyState_Unready _ -> do
@@ -913,7 +912,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
                   when (DMap.null newUnready) $ do
                     applyDomUpdate p
   (children0, children') <- ImmediateDomBuilderT $ lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
-  let processChild k (_child_readyState . getCompose -> sRef) = ComposeMaybe <$> do
+  let processChild k (Compose (Child { _child_readyState = sRef })) = ComposeMaybe <$> do
         readIORef sRef >>= \case
           ChildReadyState_Ready -> return Nothing
           ChildReadyState_Unready _ -> do
