@@ -159,7 +159,7 @@ class DomBuilder t m => MountableDomBuilder t m where
 
 -}
 
--- |'MonadMountStatus' represents an action that can be aware of whether the corresponding DOM built by the action is present within the document yet or not.
+-- |'MonadMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
 --
 -- ___Note:___ once the current scope is replaced, any 'performEvent's in the scope will be cancelled and so if you want to observe the 'Unmounted' status
