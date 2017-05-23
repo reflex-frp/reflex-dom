@@ -159,18 +159,18 @@ class DomBuilder t m => MountableDomBuilder t m where
 
 -}
 
--- |'MonadMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
+-- |'HasMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
 --
 -- ___Note:___ once the current scope is replaced, any 'performEvent's in the scope will be cancelled and so if you want to observe the 'Unmounted' status
 -- you have to plumb the mount state dynamic back out of the current scope so the parent scope can react to it.
-class Monad m => MonadMountStatus t m | m -> t where
+class Monad m => HasMountStatus t m | m -> t where
   -- |Get a 'Dynamic' representing the current 'MountState' of DOM elements created in the current scope.
   getMountStatus :: m (Dynamic t MountState)
 
-instance MonadMountStatus t m => MonadMountStatus t (ReaderT r m) where
+instance HasMountStatus t m => HasMountStatus t (ReaderT r m) where
   getMountStatus = lift getMountStatus
-instance MonadMountStatus t m => MonadMountStatus t (PostBuildT t m) where
+instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
   getMountStatus = lift getMountStatus
 
 -- |Type representing the current mount status of a DOM structure. Mount status refers to whether the DOM structure is currently within the document tree, not
