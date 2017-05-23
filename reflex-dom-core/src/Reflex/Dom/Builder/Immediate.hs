@@ -657,7 +657,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
     let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
-        parentMountState      = _immediateDomBuilderEnv_mountState      initialEnv
+        parentMountState = _immediateDomBuilderEnv_mountState initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
     (updateFirstLocalMountState, triggerUpdateFirstLocalMountState) <- newTriggerEvent
     firstLocalMountState <- holdDyn Mounting updateFirstLocalMountState
