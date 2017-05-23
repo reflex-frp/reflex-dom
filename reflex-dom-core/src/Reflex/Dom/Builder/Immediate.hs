@@ -172,7 +172,7 @@ data ImmediateDomBuilderEnv t = ImmediateDomBuilderEnv
   , _immediateDomBuilderEnv_unreadyChildren :: IORef Word
   -- ^Number of children who still aren't fully rendered. While a DOM builder action has unready children, the parent being built into will typically be an
   -- unmounted document fragment. As each child becomes ready, this count is decremented until finally it reaches zero and the commit action is triggered.
-  , _immediateDomBuilderEnv_commitAction :: JSM () -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
+  , _immediateDomBuilderEnv_commitAction :: JSM ()
   -- ^Action to take when the unready children all become ready, usually to install the document fragment.
   , _immediateDomBuilderEnv_mountState :: Dynamic t MountState
   -- ^'Dynamic' representing the current state of DOM nodes within the parent node with respect to the document as a whole. See 'MountState' for more.
