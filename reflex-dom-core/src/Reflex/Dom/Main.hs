@@ -16,7 +16,7 @@ module Reflex.Dom.Main where
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
 import Reflex.Class (holdDyn)
-import Reflex.Dom.Builder.Class (MountState(Mounted, Mounting))
+import Reflex.Dom.Builder.Class (MountState (Mounted, Mounting))
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Host.Class
