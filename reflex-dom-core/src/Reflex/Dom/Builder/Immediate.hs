@@ -925,7 +925,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       modifyIORef' parentUnreadyChildren succ
       writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
   let result0 = DMap.map (_child_result . getCompose) children0
-      childInstallations0 = weakenDMapWith (_child_installation . getCompose) children0
+      childInstallations0 = weakenDMapWith (\ (Compose (Child { _child_installation = ci })) -> ci) children0
       result' = ffor children' $ mapPatch $ _child_result . getCompose
   liftIO $ writeIORef currentChildInstallations $! childInstallations0
   let placeInitialChild _ (Compose child) = do
