@@ -93,6 +93,7 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
+import Reflex.Query.Base (QueryT)
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
@@ -233,6 +234,8 @@ instance HasDocument m => HasDocument (Lazy.StateT s m)
 instance HasDocument m => HasDocument (EventWriterT t w m)
 instance HasDocument m => HasDocument (DynamicWriterT t w m)
 instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)
 
 instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
   {-# INLINABLE askDocument #-}

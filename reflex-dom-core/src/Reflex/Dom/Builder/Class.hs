@@ -35,6 +35,8 @@ import Reflex.EventWriter
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
+import Reflex.Query.Base
+import Reflex.Query.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -598,6 +600,27 @@ instance Reflex t => HasDomEvent t (TextAreaElement EventResult d t) en where
 instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   type DomBuilderSpace (ReaderT r m) = DomBuilderSpace m
 
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
+  type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (QueryT child) = QueryT $ do
+    s <- get
+    let cfg' = cfg
+          { _elementConfig_eventSpec = _elementConfig_eventSpec cfg }
+    (e, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
+    put newS
+    return (e, a)
+
+  inputElement = lift . inputElement
+  textAreaElement = lift . textAreaElement
+  selectElement cfg (QueryT child) = QueryT $ do
+    s <- get
+    (e, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
+    put newS
+    return (e, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e = lift . wrapRawElement e
+
 type LiftDomBuilder t f m =
   ( Reflex t
   , MonadTransControlStateless f
@@ -650,6 +673,7 @@ deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 #endif
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
+deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
