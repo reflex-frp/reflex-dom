@@ -504,9 +504,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       mfiles <- Input.getFiles domInputElement
       let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
       maybe (return []) getMyFiles mfiles
+    checked <- holdUniqDyn c
     return $ InputElement
       { _inputElement_value = v
-      , _inputElement_checked = uniqDyn c
+      , _inputElement_checked = checked
       , _inputElement_checkedChange =  checkedChangedByUI
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
