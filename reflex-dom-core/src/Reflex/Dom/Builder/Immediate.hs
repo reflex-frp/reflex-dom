@@ -93,6 +93,7 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
+import Reflex.Query.Base (QueryT)
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
@@ -129,6 +130,7 @@ import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setA
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
+import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.FileList as FileList
@@ -232,6 +234,8 @@ instance HasDocument m => HasDocument (Lazy.StateT s m)
 instance HasDocument m => HasDocument (EventWriterT t w m)
 instance HasDocument m => HasDocument (DynamicWriterT t w m)
 instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)
 
 instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
   {-# INLINABLE askDocument #-}
@@ -449,7 +453,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
-        t :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
         let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
@@ -1181,6 +1185,7 @@ instance DOM.FromJSVal ElementEventTarget where
   fromJSVal = fmap (fmap ElementEventTarget) . DOM.fromJSVal
 instance DOM.IsEventTarget ElementEventTarget
 instance DOM.IsGlobalEventHandlers ElementEventTarget
+instance DOM.IsDocumentAndElementEventHandlers ElementEventTarget
 
 {-# INLINABLE elementOnEventName #-}
 elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
@@ -1218,12 +1223,12 @@ elementOnEventName en e_ = let e = ElementEventTarget (DOM.toElement e_) in case
   Select -> on e Events.select
   Submit -> on e Events.submit
   Wheel -> on e Events.wheel
-  Beforecut -> on e Element.beforeCut
-  Cut -> on e Element.cut
-  Beforecopy -> on e Element.beforeCopy
-  Copy -> on e Element.copy
-  Beforepaste -> on e Element.beforePaste
-  Paste -> on e Element.paste
+  Beforecut -> on e Events.beforeCut
+  Cut -> on e Events.cut
+  Beforecopy -> on e Events.beforeCopy
+  Copy -> on e Events.copy
+  Beforepaste -> on e Events.beforePaste
+  Paste -> on e Events.paste
   Reset -> on e Events.reset
   Search -> on e Events.search
   Selectstart -> on e Element.selectStart

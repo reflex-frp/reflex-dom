@@ -287,7 +287,7 @@ checkboxView dAttrs dValue = do
   postBuild <- getPostBuild
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
-        t <- Event.getTarget evt
+        t <- Event.getTargetUnchecked evt
         b <- Input.getChecked $ uncheckedCastTo Input.HTMLInputElement t
         return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
@@ -299,7 +299,7 @@ checkboxView dAttrs dValue = do
             , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> case en of
                 Click -> error "impossible"
                 _ -> do
-                  e :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt
+                  e :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt
                   let myElement = uncheckedCastTo DOM.HTMLElement e
                   mr <- runReaderT (defaultDomEventHandler myElement en) evt
                   return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r

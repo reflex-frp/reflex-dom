@@ -181,7 +181,7 @@ runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> J
 runApp' app = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   body <- getBodyUnchecked doc
-  win <- getDefaultView doc
+  win <- getDefaultViewUnchecked doc
   rec o <- attachWidget body jsSing $ do
         w <- lift $ wrapWindow win $ _appOutput_windowConfig o
         app $ AppInput
