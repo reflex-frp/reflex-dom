@@ -37,8 +37,6 @@ import Reflex.PostBuild.Base
 import Reflex.Query.Base
 import Reflex.Query.Class
 import Reflex.Requester.Base
-import Reflex.Query.Base
-import Reflex.Query.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -583,25 +581,18 @@ instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive 
   textNode = liftTextNode
   element elementTag cfg (QueryT child) = QueryT $ do
     s <- get
-    let cfg' = cfg
-          { _elementConfig_eventSpec = _elementConfig_eventSpec cfg }
-    (e, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
+    (e, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
     put newS
     return (e, a)
-
-  inputElement cfg = lift $ inputElement $ cfg & inputElementConfig_elementConfig %~ liftElementConfig
-  textAreaElement cfg = lift $ textAreaElement $ cfg & textAreaElementConfig_elementConfig %~ liftElementConfig
+  inputElement = lift . inputElement
+  textAreaElement = lift . textAreaElement
   selectElement cfg (QueryT child) = QueryT $ do
     s <- get
-    let cfg' = cfg & selectElementConfig_elementConfig %~ \c ->
-          c { _elementConfig_eventSpec = _elementConfig_eventSpec c }
-    (e, (a, newS)) <- lift $ selectElement cfg' $ runStateT child s
+    (e, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
     put newS
     return (e, a)
   placeRawElement = lift . placeRawElement
-  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
-    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
-    }
+  wrapRawElement e = lift . wrapRawElement e
 
 -- * Convenience functions
 
@@ -626,27 +617,6 @@ instance Reflex t => HasDomEvent t (TextAreaElement EventResult d t) en where
 
 instance DomBuilder t m => DomBuilder t (ReaderT r m) where
   type DomBuilderSpace (ReaderT r m) = DomBuilderSpace m
-
-instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
-  type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
-  textNode = liftTextNode
-  element elementTag cfg (QueryT child) = QueryT $ do
-    s <- get
-    let cfg' = cfg
-          { _elementConfig_eventSpec = _elementConfig_eventSpec cfg }
-    (e, (a, newS)) <- lift $ element elementTag cfg' $ runStateT child s
-    put newS
-    return (e, a)
-
-  inputElement = lift . inputElement
-  textAreaElement = lift . textAreaElement
-  selectElement cfg (QueryT child) = QueryT $ do
-    s <- get
-    (e, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
-    put newS
-    return (e, a)
-  placeRawElement = lift . placeRawElement
-  wrapRawElement e = lift . wrapRawElement e
 
 type LiftDomBuilder t f m =
   ( Reflex t
