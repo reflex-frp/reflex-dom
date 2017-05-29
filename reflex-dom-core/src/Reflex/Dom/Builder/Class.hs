@@ -666,9 +666,7 @@ instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   requestDomAction_ = lift . requestDomAction_
 
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
-#if MIN_VERSION_base(4,9,1)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
-#endif
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
 deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 
