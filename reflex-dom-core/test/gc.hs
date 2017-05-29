@@ -23,7 +23,7 @@ main :: IO ()
 main = do
   mainThread <- myThreadId
   withSystemTempDirectory "reflex-dom-core_test_gc" $ \tmp -> do
-    browserProcess <- spawnCommand $ "xvfb-run -a chromium --user-data-dir=" ++ tmp ++ " http://localhost:3911"
+    browserProcess <- spawnCommand $ "xvfb-run -a chromium --disable-gpu --user-data-dir=" ++ tmp ++ " http://localhost:3911"
     let finishTest result = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result
