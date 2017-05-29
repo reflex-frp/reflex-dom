@@ -560,7 +560,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w, Monoid w) => DomBuilder t (EventWriterT t w m) where
+instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
   element elementTag cfg child = do
