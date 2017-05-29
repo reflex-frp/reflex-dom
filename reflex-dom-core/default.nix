@@ -25,6 +25,12 @@ in mkDerivation (addGcTestDepends {
   ] ++ (if ghc.isGhcjs or false then [
     hashable
   ] else []);
+
+  # The headless browser run as part of the tests will exit without this
+  preBuild = ''
+    export HOME="$PWD"
+  '';
+
   testHaskellDepends = [ base hlint ];
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;
