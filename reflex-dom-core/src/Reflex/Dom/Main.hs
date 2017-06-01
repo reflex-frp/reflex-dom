@@ -74,7 +74,7 @@ mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
 mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked doc
-  setInnerHTML headElement . Just $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
+  setInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" --TODO: Fix this
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
 
@@ -114,7 +114,7 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
 replaceElementContents e df = do
-  setInnerHTML e $ Just ("" :: String)
+  setInnerHTML e ("" :: String)
   _ <- appendChild e df
   return ()
 

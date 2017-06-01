@@ -471,14 +471,14 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
-    Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
-    v0 <- Input.getValueUnchecked domInputElement
-    let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
+    Input.setValue domInputElement $ cfg ^. inputElementConfig_initialValue
+    v0 <- Input.getValue domInputElement
+    let getMyValue = Input.getValue domInputElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        Input.setValue domInputElement $ Just v'
+        Input.setValue domInputElement v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
@@ -523,14 +523,14 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
-    TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
-    v0 <- TextArea.getValueUnchecked domTextAreaElement
-    let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
+    TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
+    v0 <- TextArea.getValue domTextAreaElement
+    let getMyValue = TextArea.getValue domTextAreaElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        TextArea.setValue domTextAreaElement $ Just v'
+        TextArea.setValue domTextAreaElement v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
