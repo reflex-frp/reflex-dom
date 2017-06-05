@@ -9,6 +9,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PolyKinds #-}
@@ -35,18 +36,37 @@ import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception (SomeException)
+import Control.Exception
 import Control.Lens
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Data.Aeson hiding (json)
 import Data.ByteString (ByteString)
 import Data.Default
 import Data.IORef
+import Data.JSString (JSString)
 import Data.Maybe (isJust)
 import Data.Text
+import Data.Text.Encoding
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.Marshal
+import qualified Language.Javascript.JSaddle as JS (jsg, js1)
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+
+#ifdef ghcjs_HOST_OS
+import GHCJS.DOM.Types ()
+import System.IO.Unsafe
+#else
+import Data.JSString.Text
+import qualified Data.ByteString.Lazy as LBS
+#endif
+-- When on ghcjs and using packages with jsstring patches it removes the FromJSVal
+-- instance for Value from ghcjs-base. This makes it so that if the patches
+-- are used then the instance comes from ghcjs-json
+#if defined(ghcjs_HOST_OS) && defined(USE_TEXT_JSSTRING)
+import JavaScript.JSON.Types.FromJSVal ()
+#endif
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
@@ -121,6 +141,32 @@ webSocket' url config onRawMessage = do
                          (\(_ :: SomeException) -> return False)) ctx
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
+
+textWebSocket :: (MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t Text -> m (RawWebSocket t Text)
+textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
+
+-- | Deserialize a JSON value from a JSString.
+-- When on ghcjs it uses JSON.parse which is usually faster than using aeson's decode to get a Value
+-- When on ghc the JSString is converted to Text and then to ByteString in order to use aeson's decode
+jsonDecode :: FromJSON a => JSString -> Maybe a
+jsonDecode t = do
+#ifdef ghcjs_HOST_OS
+  result <- unsafePerformIO $ handle (\(_ :: SomeException) -> pure Nothing) $ do
+    safeJsonParse t >>= \case
+      Nothing -> pure Nothing
+      Just a -> fromJSVal a
+  case fromJSON result of
+    Success a -> pure a
+    Error _ -> Nothing
+#else
+  decode $ LBS.fromStrict $ encodeUtf8 $ textFromJSString t
+#endif
+
+safeJsonParse :: JSString -> JSM (Maybe JSVal)
+safeJsonParse a = (Just <$> jsonParse a) `JS.catch` \(_ :: SomeException) -> return Nothing
+
+jsonParse :: JSString -> JSM JSVal
+jsonParse a = JS.jsg "JSON" ^. JS.js1 "parse" a
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
