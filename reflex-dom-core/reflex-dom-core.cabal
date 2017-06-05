@@ -110,6 +110,7 @@ library
     Reflex.Dom.Prerender
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
+    Reflex.Dom.WebSocket.Query
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
