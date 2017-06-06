@@ -1,15 +1,21 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
   , bsToArrayBuffer
+  , jsonParse
+  , safeJsonParse
   ) where
 
+import Control.Exception
+import Control.Lens
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Foreign.JavaScript.Internal.Utils (js_dataView)
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM.Types (ArrayBuffer (..))
+import qualified Language.Javascript.JSaddle as JS (catch, jsg, js1)
 import qualified JavaScript.TypedArray.ArrayBuffer as JS
-import Language.Javascript.JSaddle.Types (MonadJSM, ghcjsPure, jsval, liftJSM)
+import Language.Javascript.JSaddle.Types (JSString, JSM, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
 
 {-# INLINABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
@@ -25,3 +31,9 @@ bsToArrayBuffer bs = liftJSM $ do
                   else do
                     ref <- ghcjsPure (JS.getArrayBuffer b) >>= ghcjsPure . jsval
                     js_dataView off len ref
+
+safeJsonParse :: JSString -> JSM (Maybe JSVal)
+safeJsonParse a = (Just <$> jsonParse a) `JS.catch` \(_ :: SomeException) -> return Nothing
+
+jsonParse :: JSString -> JSM JSVal
+jsonParse a = JS.jsg "JSON" ^. JS.js1 "parse" a
