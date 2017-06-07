@@ -2,10 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
-#ifdef ghcjs_HOST_OS
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE JavaScriptFFI #-}
-#endif
 module Reflex.Dom.WebSocket.Query (runQuery, runWebSocketQuery) where
 
 import Data.Default
@@ -16,6 +12,7 @@ import Data.Text.Encoding
 import Data.Aeson
 import Reflex
 import Reflex.Dom.WebSocket
+import Reflex.Dom.WebSocket.Internal
 import Foreign.JavaScript.TH
 import Data.Maybe
 import Data.JSString.Text
