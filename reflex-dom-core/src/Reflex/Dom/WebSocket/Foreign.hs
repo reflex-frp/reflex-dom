@@ -15,6 +15,7 @@ import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 import Control.Monad.Reader
 import Data.Bifoldable
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
@@ -42,6 +43,9 @@ instance IsWebSocketMessage ByteString where
   webSocketSend (JSWebSocket ws) bs = do
     ab <- bsToArrayBuffer bs
     DOM.send ws ab
+
+instance IsWebSocketMessage LBS.ByteString where
+  webSocketSend ws = webSocketSend ws . LBS.toStrict
 
 -- Use plaintext websocket communication for Text, and String
 instance IsWebSocketMessage Text where
