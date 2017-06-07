@@ -125,7 +125,7 @@ webSocket' url config onRawMessage = do
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
-textWebSocket :: (MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t Text -> m (RawWebSocket t Text)
+textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
 textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
 
 #ifdef USE_TEMPLATE_HASKELL
