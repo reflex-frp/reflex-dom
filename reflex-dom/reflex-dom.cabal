@@ -70,6 +70,7 @@ library
     , Reflex.Dom.Core
     , Reflex.Dom.Location
     , Reflex.Dom.Main
+    , Reflex.Dom.Path
     , Reflex.Dom.Old
     , Reflex.Dom.Time
     , Reflex.Dom.WebSocket

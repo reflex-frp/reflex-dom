@@ -94,6 +94,7 @@ library
     Reflex.Dom.Location
     Reflex.Dom.Main
     Reflex.Dom.Old
+    Reflex.Dom.Path
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.Widget
