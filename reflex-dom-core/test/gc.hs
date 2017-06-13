@@ -17,7 +17,7 @@ import System.Process
 -- probably have a memory leak; going under the minimum doesn't indicate a
 -- memory leak, but may mean the test needs to be updated.
 minBytesAllowed, maxBytesAllowed :: Int64
-(minBytesAllowed, maxBytesAllowed) = (200000, 400000)
+(minBytesAllowed, maxBytesAllowed) = (200000, 450000)
 
 main :: IO ()
 main = do
