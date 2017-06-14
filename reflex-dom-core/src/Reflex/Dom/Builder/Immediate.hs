@@ -760,7 +760,11 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
       mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
       liftIO $ writeIORef placeholders $! phsAfter
 
+#if MIN_VERSION_base(4,9,0)
 data ChildReadyState k
+#else
+data ChildReadyState (k :: * -> *)
+#endif
    = ChildReadyState_Ready
    | ChildReadyState_Unready !(Maybe (Some k))
    deriving (Show, Read, Eq, Ord)
