@@ -16,13 +16,19 @@ import Reflex.Requester.Base (RequesterT)
 import Reflex.TriggerEvent.Base
 import Reflex.Query.Base (QueryT)
 
-instance (MonadJSM m, ReflexHost t) => MonadJSM (PostBuildT t m)
+instance (MonadJSM m, ReflexHost t) => MonadJSM (PostBuildT t m) where
+  liftJSM' = lift . liftJSM'
 instance (MonadJSM (HostFrame t), ReflexHost t) => MonadJSM (PerformEventT t m) where
   liftJSM' = PerformEventT . lift . liftJSM'
-instance MonadJSM m => MonadJSM (DynamicWriterT t w m)
-instance MonadJSM m => MonadJSM (EventWriterT t w m)
-instance MonadJSM m => MonadJSM (RequesterT t request response m)
-instance MonadJSM m => MonadJSM (TriggerEventT t m)
-instance MonadJSM m => MonadJSM (QueryT t q m)
+instance MonadJSM m => MonadJSM (DynamicWriterT t w m) where
+  liftJSM' = lift . liftJSM'
+instance MonadJSM m => MonadJSM (EventWriterT t w m) where
+  liftJSM' = lift . liftJSM'
+instance MonadJSM m => MonadJSM (RequesterT t request response m) where
+  liftJSM' = lift . liftJSM'
+instance MonadJSM m => MonadJSM (TriggerEventT t m) where
+  liftJSM' = lift . liftJSM'
+instance MonadJSM m => MonadJSM (QueryT t q m) where
+  liftJSM' = lift . liftJSM'
 
 #endif
