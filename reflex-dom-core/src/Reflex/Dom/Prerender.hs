@@ -7,7 +7,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -66,19 +65,19 @@ instance js ~ NoJavaScript => Prerender js (StaticDomBuilderT t m) where
   prerenderClientDict = Nothing
 
 instance (Prerender js m, ReflexHost t) => Prerender js (PostBuildT t m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (DynamicWriterT t w m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (ReaderT w m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (RequesterT t request response m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (QueryT t q m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (InputDisabledT m) where
-  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict @js @m)
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
