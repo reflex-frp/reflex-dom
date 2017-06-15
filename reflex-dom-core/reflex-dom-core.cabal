@@ -115,6 +115,7 @@ library
     Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
+    Reflex.Dom.WebSocket.Internal
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
@@ -124,7 +125,6 @@ library
   other-modules:
     Foreign.JavaScript.Internal.Utils
     Reflex.Dom.WebSocket.Foreign
-    Reflex.Dom.WebSocket.Internal
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType
     Reflex.Dom.Xhr.Exception

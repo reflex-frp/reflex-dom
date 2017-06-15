@@ -23,7 +23,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Reflex.Dom.WebSocket where
+module Reflex.Dom.WebSocket
+  ( module Reflex.Dom.WebSocket
+  , jsonDecode
+  ) where
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
