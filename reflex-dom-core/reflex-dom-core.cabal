@@ -94,6 +94,8 @@ library
     Reflex.Dom.Core
     Reflex.Dom.Location
     Reflex.Dom.Main
+    Reflex.Dom.Modals.Base
+    Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
     Reflex.Dom.Time
