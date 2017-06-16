@@ -7,7 +7,10 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-module Reflex.Dom.Modals.Base where
+module Reflex.Dom.Modals.Base
+  ( ModalsT (..)
+  , withModalLayerClass
+  )where
 
 import Control.Lens hiding (element)
 import Control.Monad.Fix
@@ -20,10 +23,13 @@ import Data.Dependent.Map (DMap, DSum (..), GCompare)
 import qualified Data.Dependent.Map as DMap
 import Data.Functor.Compose
 import Data.Proxy
+import Data.Semigroup
 import Data.Text (Text)
+import qualified Data.Text as T
 import Foreign.JavaScript.TH
-import Language.Javascript.JSaddle (JSM, MonadJSM)
+import Language.Javascript.JSaddle (MonadJSM)
 
+import Data.Functor.Misc
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
@@ -116,24 +122,60 @@ instance HasJSContext m => HasJSContext (ModalsT t m) where
 instance MonadJSM m => MonadJSM (ModalsT t m)
 #endif
 
-withModalLayerClass :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m) => Text -> ModalsT t m a -> m a
+withModalLayerClass :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m)
+                    => Text
+                    -> ModalsT t m a
+                    -> m a
 withModalLayerClass c (ModalsT a) = elAttr "div" ("class" =: c) $ do
   rec (result, requests) <- do
         runRequesterT a modalDone
-      let newModal = ffor requests $ \rs -> case DMap.minViewWithKey rs of
-            Nothing -> return never -- This should never happen
-            Just (k :=> v, _) -> do
-              (overlay, complete) <- elAttr' "div" ("style" =: "position:absolute;left:0;right:0;top:0;bottom:0;background-color:rgba(0,0,0,0.1);display:flex;justify-content:center;align-items:center") $ do --TODO: implement a stack rather than throwing away
-                let f = GhcjsEventFilter $ \_ -> return (stopPropagation, return Nothing)
-                    cfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
-                      & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (\_ -> stopPropagation)
-                      & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
-                fmap snd $ element "div" cfg $ do
-                  fst <$> runRequesterT (unModalsT (getCompose v)) never --TODO: Don't ignore modal requests from the modal
-              return $ leftmost
-                [ DMap.singleton k . Just <$> complete
-                , DMap.singleton k Nothing <$ domEvent Click overlay
-                ]
-      modal <- widgetHold (return never) $ leftmost [newModal, return never <$ modalDone]
-      let modalDone = switch $ current modal
+      modalDone <- modalInner requests
   return result
+
+modalInner :: forall t m k. (GCompare k, MonadHold t m, MonadFix m, DomBuilder t m)
+           => Event t (DMap k (Compose (ModalsT t m) (Event t)))
+           -> m (Event t (DMap k Maybe))
+modalInner rqs' = do
+  rec let rqs = fmap toInsertionsDMap rqs'
+          dones = fmap toDeletionsDMap modalDone
+      (m0, mpatch) <- traverseDMapWithKeyWithAdjust (\k v -> Compose <$> modalBody k v) DMap.empty (rqs <> dones)
+      modal <- fmap (merge . mapKeyValuePairsMonotonic wrapArgs) . incrementalToDynamic <$> holdIncremental m0 mpatch
+      let modalDone = fmap (mapKeyValuePairsMonotonic unwrapArgs) $ switch $ current modal
+  return modalDone
+ where
+  wrapArgs (k :=> v) = WrapArg k :=> getCompose v
+  unwrapArgs :: DSum (WrapArg Maybe k) Identity -> DSum k Maybe
+  unwrapArgs (WrapArg k :=> Identity v) = k :=> v
+  toInsertionsDMap :: DMap k v -> PatchDMap k v
+  toInsertionsDMap = coerce . DMap.map (ComposeMaybe . Just)
+  toDeletionsDMap :: forall k' v v'. DMap k' v -> PatchDMap k' v'
+  toDeletionsDMap = coerce . DMap.map (\(_ :: v a) -> ComposeMaybe (Nothing :: Maybe (v' a)))
+
+modalBody :: forall t m k a. (MonadHold t m, MonadFix m, DomBuilder t m)
+          => k a
+          -> Compose (ModalsT t m) (Event t) a
+          -> m (Event t (Maybe a))
+modalBody _ v = do
+  let style = T.intercalate ";"
+        [ "position:absolute"
+        , "left:0", "right:0", "top:0", "bottom:0"
+        , "background-color:rgba(0,0,0,0.1)"
+        , "display:flex", "justify-content:center", "align-items:center"
+        ]
+      backdropConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
+        & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click
+            (\_ -> stopPropagation)
+        & initialAttributes .~ ("style" =: style)
+  (overlay, complete) <- element "div" backdropConfig $ do
+    let bodyCfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
+          & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click
+              (\_ -> stopPropagation)
+          & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
+    fmap snd $ element "div" bodyCfg $ do
+      rec (rsps, rqs') <- runRequesterT (unModalsT (getCompose v)) innerDone
+          innerDone <- modalInner rqs'
+      return rsps
+  return $ leftmost
+    [ Just <$> complete
+    , Nothing <$ domEvent Click overlay
+    ]
