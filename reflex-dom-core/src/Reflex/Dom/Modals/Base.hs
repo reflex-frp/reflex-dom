@@ -9,7 +9,8 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Modals.Base
   ( ModalsT (..)
-  , withModalLayerClass
+  , ModalLayerConfig (..)
+  , withModalLayer
   )where
 
 import Control.Lens hiding (element)
@@ -35,7 +36,6 @@ import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Dom.Modals.Class
-import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
 
 instance (Reflex t, PrimMonad m) => ModalOpener t (ModalsT t m) where
@@ -122,23 +122,44 @@ instance HasJSContext m => HasJSContext (ModalsT t m) where
 instance MonadJSM m => MonadJSM (ModalsT t m)
 #endif
 
-withModalLayerClass :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m)
-                    => Text
-                    -> ModalsT t m a
-                    -> m a
-withModalLayerClass c (ModalsT a) = elAttr "div" ("class" =: c) $ do
+data ModalLayerConfig t m = ModalLayerConfig
+  { _modalLayerConfig_backdropElementConfig :: ElementConfig EventResult t (DomBuilderSpace m)
+  , _modalLayerConfig_bodyElementConfig :: ElementConfig EventResult t (DomBuilderSpace m)
+  }
+
+instance (DomBuilder t m) => Default (ModalLayerConfig t m) where
+  def = ModalLayerConfig
+    { _modalLayerConfig_backdropElementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
+        & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
+        & initialAttributes .~ ("style" =: (T.intercalate ";"
+            [ "position:absolute"
+            , "left:0", "right:0", "top:0", "bottom:0"
+            , "background-color:rgba(0,0,0,0.1)"
+            , "display:flex", "justify-content:center", "align-items:center"
+            ]))
+    , _modalLayerConfig_bodyElementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
+        & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
+        & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
+    }
+
+withModalLayer :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m)
+               => ModalLayerConfig t m
+               -> ModalsT t m a
+               -> m a
+withModalLayer cfg (ModalsT a) = do
   rec (result, requests) <- do
         runRequesterT a modalDone
-      modalDone <- modalInner requests
+      modalDone <- modalInner requests cfg
   return result
 
 modalInner :: forall t m k. (GCompare k, MonadHold t m, MonadFix m, DomBuilder t m)
            => Event t (DMap k (Compose (ModalsT t m) (Event t)))
+           -> ModalLayerConfig t m
            -> m (Event t (DMap k Maybe))
-modalInner rqs' = do
+modalInner rqs' cfg = do
   rec let rqs = fmap toInsertionsDMap rqs'
           dones = fmap toDeletionsDMap modalDone
-      (m0, mpatch) <- traverseDMapWithKeyWithAdjust (\k v -> Compose <$> modalBody k v) DMap.empty (rqs <> dones)
+      (m0, mpatch) <- traverseDMapWithKeyWithAdjust (\_ v -> Compose <$> modalBody cfg v) DMap.empty (rqs <> dones)
       modal <- fmap (merge . mapKeyValuePairsMonotonic wrapArgs) . incrementalToDynamic <$> holdIncremental m0 mpatch
       let modalDone = fmap (mapKeyValuePairsMonotonic unwrapArgs) $ switch $ current modal
   return modalDone
@@ -151,29 +172,15 @@ modalInner rqs' = do
   toDeletionsDMap :: forall k' v v'. DMap k' v -> PatchDMap k' v'
   toDeletionsDMap = coerce . DMap.map (\(_ :: v a) -> ComposeMaybe (Nothing :: Maybe (v' a)))
 
-modalBody :: forall t m k a. (MonadHold t m, MonadFix m, DomBuilder t m)
-          => k a
+modalBody :: forall t m a. (MonadHold t m, MonadFix m, DomBuilder t m)
+          => ModalLayerConfig t m
           -> Compose (ModalsT t m) (Event t) a
           -> m (Event t (Maybe a))
-modalBody _ v = do
-  let style = T.intercalate ";"
-        [ "position:absolute"
-        , "left:0", "right:0", "top:0", "bottom:0"
-        , "background-color:rgba(0,0,0,0.1)"
-        , "display:flex", "justify-content:center", "align-items:center"
-        ]
-      backdropConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
-        & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click
-            (\_ -> stopPropagation)
-        & initialAttributes .~ ("style" =: style)
-  (overlay, complete) <- element "div" backdropConfig $ do
-    let bodyCfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
-          & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click
-              (\_ -> stopPropagation)
-          & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
-    fmap snd $ element "div" bodyCfg $ do
+modalBody cfg v = do
+  (overlay, complete) <- element "div" (_modalLayerConfig_backdropElementConfig cfg) $ do
+    fmap snd $ element "div" (_modalLayerConfig_bodyElementConfig cfg) $ do
       rec (rsps, rqs') <- runRequesterT (unModalsT (getCompose v)) innerDone
-          innerDone <- modalInner rqs'
+          innerDone <- modalInner rqs' cfg
       return rsps
   return $ leftmost
     [ Just <$> complete
