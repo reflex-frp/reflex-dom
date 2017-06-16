@@ -102,7 +102,7 @@ instance MonadAtomicRef m => MonadAtomicRef (ModalsT t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
 instance (MonadAdjust t m, MonadHold t m) => MonadAdjust t (ModalsT t m) where
-  runWithReplace = coerce (runWithReplace :: Unwrapped (ModalsT t m a) -> Event t (Unwrapped (ModalsT t m b)) -> Unwrapped (ModalsT t m (a, Event t b)))
+  runWithReplace a0 a' = ModalsT $ runWithReplace (unModalsT a0) (fmapCheap unModalsT a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjust (coerce f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjustWithMove (coerce f) dm0 dm'
 
