@@ -8,7 +8,10 @@ import Reflex.Dom.Builder.Static as X
 import Reflex.Dom.Class as X
 import Reflex.Dom.Location as X
 import Reflex.Dom.Main as X
+import Reflex.Dom.Modals.Base as X
+import Reflex.Dom.Modals.Class as X
 import Reflex.Dom.Old as X
+import Reflex.Dom.Prerender as X
 import Reflex.Dom.Time as X
 import Reflex.Dom.WebSocket as X
 import Reflex.Dom.Widget as X

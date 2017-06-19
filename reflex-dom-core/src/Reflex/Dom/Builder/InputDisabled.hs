@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -15,6 +16,9 @@ import Control.Monad.Trans.Control
 import Data.Coerce
 import qualified Data.Map as Map
 import Foreign.JavaScript.TH
+#ifndef ghcjs_HOST_OS
+import GHCJS.DOM.Types (MonadJSM (..))
+#endif
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (HasDocument (..))
@@ -25,6 +29,11 @@ import Reflex.Host.Class
 -- attribute.  Note that 'element's that happen to have "input", "textarea", or
 -- "select" as their tag will NOT be disabled.
 newtype InputDisabledT m a = InputDisabledT { runInputDisabledT :: m a } deriving (Functor, Applicative, Monad, MonadAtomicRef, MonadFix, MonadIO)
+
+#ifndef ghcjs_HOST_OS
+instance MonadJSM m => MonadJSM (InputDisabledT m) where
+    liftJSM' = InputDisabledT . liftJSM'
+#endif
 
 deriving instance MonadSample t m => MonadSample t (InputDisabledT m)
 deriving instance MonadHold t m => MonadHold t (InputDisabledT m)
