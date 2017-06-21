@@ -217,9 +217,9 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTrigger
   where
     runInAnimationFrame win f x = do
       rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
-            v <- synchronously x
-            _ <- liftIO $ f v
             freeRequestAnimationFrameCallback cb
+            v <- synchronously x
+            void . liftIO $ f v
       _ <- Window.requestAnimationFrame win cb
       return ()
 
