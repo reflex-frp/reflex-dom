@@ -6,8 +6,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
 import GHC.Stats
-import Language.Javascript.JSaddle.Types (liftJSM)
-import Language.Javascript.JSaddle.Run
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import System.Exit
@@ -20,7 +18,7 @@ import System.Process
 -- probably have a memory leak; going under the minimum doesn't indicate a
 -- memory leak, but may mean the test needs to be updated.
 minBytesAllowed, resetThreshold, maxBytesAllowed :: Int64
-(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 440000)
+(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 490000)
 
 main :: IO ()
 main = do
@@ -40,13 +38,9 @@ main = do
                   d <- holdDyn mempty $ mempty <$ domEvent Click e
               return ()
         postBuild <- getPostBuild
-        let f (!failures, !n) = if n < 3000
-              then do
-                liftIO $ performMajorGC
-                liftJSM $ do
-                  _ <- waitForAnimationFrame
-                  syncPoint
-                liftIO $ do
+        let f (!failures, !n) = liftIO $ if n < 3000
+              then do performMajorGC
+                      threadDelay 5000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
                       gcStats <- getGCStats
                       print $ currentBytesUsed gcStats
                       when (currentBytesUsed gcStats < minBytesAllowed) $ do
@@ -58,10 +52,9 @@ main = do
                         putStrLn "FAILED: currentBytesUsed > maxBytesAllowed"
                         finishTest $ ExitFailure 1
                       return $ Just (if overMax then succ failures else (if underReset then 0 else failures), succ n)
-              else liftIO $ do
-                putStrLn "SUCCEEDED"
-                finishTest ExitSuccess
-                return Nothing
+              else do putStrLn "SUCCEEDED"
+                      finishTest ExitSuccess
+                      return Nothing
         rec redraw <- performEvent <=< delay 0 $ f <$> leftmost
               [ ((0 :: Int), (0 :: Int)) <$ postBuild
               , fmapMaybe id redraw

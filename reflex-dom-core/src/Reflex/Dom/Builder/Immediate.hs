@@ -208,20 +208,27 @@ runImmediateDomBuilderT
   -> ImmediateDomBuilderEnv t
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTriggerEventT eventChan $ do
-  win <- DOM.currentWindowUnchecked
-  rec (x, req) <- runRequesterT (runReaderT a env) rsp
-      rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame win f $
-        DMap.traverseWithKey (\_ r -> Identity <$> r) rm
-  return x
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
+  handlersMVar <- liftIO $ newMVar []
+  flip runTriggerEventT eventChan $ do
+    win <- DOM.currentWindowUnchecked
+    rec (x, req) <- runRequesterT (runReaderT a env) rsp
+        rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame handlersMVar win f $
+          DMap.traverseWithKey (\_ r -> Identity <$> r) rm
+    return x
   where
-    runInAnimationFrame win f x = do
-      rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
-            freeRequestAnimationFrameCallback cb
-            v <- synchronously x
-            void . liftIO $ f v
-      _ <- Window.requestAnimationFrame win cb
-      return ()
+    runInAnimationFrame handlersMVar win f x = do
+      handlers <- liftIO $ takeMVar handlersMVar
+      when (null handlers) $ do
+        rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
+              freeRequestAnimationFrameCallback cb
+              handlersToRun <- liftIO $ takeMVar handlersMVar
+              liftIO $ putMVar handlersMVar []
+              sequence_ handlersToRun
+        void $ Window.requestAnimationFrame win cb
+      liftIO $ putMVar handlersMVar $ handlers ++ [do
+        v <- synchronously x
+        void . liftIO $ f v]
 
 class Monad m => HasDocument m where
   askDocument :: m Document
