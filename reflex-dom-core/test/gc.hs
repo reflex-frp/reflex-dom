@@ -20,6 +20,16 @@ import System.Process
 minBytesAllowed, resetThreshold, maxBytesAllowed :: Int64
 (minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 490000)
 
+-- Some times the memory usage might flair up and then then return to normal
+-- this probably indicates an issue, but if you are trying to fix a slow consistent
+-- leak it can confuse the results by making the tests fail when the slow leak is
+-- fixed.
+-- Set this limit to say how many failures (currentBytesUsed > maxBytesAllowed)
+-- want to ignore.  If the memory usage goes back under resetThreshold
+-- the failure count is reset to 0.
+failureLimit :: Int
+failureLimit = 0
+
 main :: IO ()
 main = do
   mainThread <- myThreadId
@@ -48,10 +58,13 @@ main = do
                         finishTest $ ExitFailure 2
                       let overMax = currentBytesUsed gcStats > maxBytesAllowed
                           underReset = currentBytesUsed gcStats < resetThreshold
-                      when (overMax && failures > 4) $ do
+                      when (overMax && failures >= failureLimit) $ do
                         putStrLn "FAILED: currentBytesUsed > maxBytesAllowed"
                         finishTest $ ExitFailure 1
-                      return $ Just (if overMax then succ failures else (if underReset then 0 else failures), succ n)
+                      return $ Just (
+                          if overMax
+                              then succ failures
+                              else (if underReset then 0 else failures), succ n)
               else do putStrLn "SUCCEEDED"
                       finishTest ExitSuccess
                       return Nothing
