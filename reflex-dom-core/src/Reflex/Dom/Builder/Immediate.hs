@@ -224,11 +224,11 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
               freeRequestAnimationFrameCallback cb
               handlersToRun <- liftIO $ takeMVar handlersMVar
               liftIO $ putMVar handlersMVar []
-              sequence_ handlersToRun
+              sequence_ (reverse handlersToRun)
         void $ Window.requestAnimationFrame win cb
-      liftIO $ putMVar handlersMVar $ handlers ++ [do
+      liftIO $ putMVar handlersMVar ((do
         v <- synchronously x
-        void . liftIO $ f v]
+        void . liftIO $ f v) : handlers)
 
 class Monad m => HasDocument m where
   askDocument :: m Document
