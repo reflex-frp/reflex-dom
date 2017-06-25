@@ -69,7 +69,7 @@ main = do
                       finishTest ExitSuccess
                       return Nothing
         rec redraw <- performEvent <=< delay 0 $ f <$> leftmost
-              [ ((0 :: Int), (0 :: Int)) <$ postBuild
+              [ (0 :: Int, 0 :: Int) <$ postBuild
               , fmapMaybe id redraw
               ]
         _ <- widgetHold w $ w <$ redraw
