@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE BangPatterns #-}
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
@@ -16,8 +17,18 @@ import System.Process
 -- 363712.  Going over the maximum means the test has actually failed - we
 -- probably have a memory leak; going under the minimum doesn't indicate a
 -- memory leak, but may mean the test needs to be updated.
-minBytesAllowed, maxBytesAllowed :: Int64
-(minBytesAllowed, maxBytesAllowed) = (200000, 450000)
+minBytesAllowed, resetThreshold, maxBytesAllowed :: Int64
+(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 490000)
+
+-- Some times the memory usage might flair up and then then return to normal
+-- this probably indicates an issue, but if you are trying to fix a slow consistent
+-- leak it can confuse the results by making the tests fail when the slow leak is
+-- fixed.
+-- Set this limit to say how many failures (currentBytesUsed > maxBytesAllowed)
+-- want to ignore.  If the memory usage goes back under resetThreshold
+-- the failure count is reset to 0.
+failureLimit :: Int
+failureLimit = 0
 
 main :: IO ()
 main = do
@@ -28,6 +39,7 @@ main = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result
     run 3911 $ do
+      -- enableLogging True
       liftIO $ putStrLn "Running..."
       mainWidget $ do
         let w = do
@@ -36,23 +48,28 @@ main = do
                   d <- holdDyn mempty $ mempty <$ domEvent Click e
               return ()
         postBuild <- getPostBuild
-        let f n = liftIO $ if n < 3000
+        let f (!failures, !n) = liftIO $ if n < 3000
               then do performMajorGC
-                      threadDelay 1000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
+                      threadDelay 5000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
                       gcStats <- getGCStats
                       print $ currentBytesUsed gcStats
                       when (currentBytesUsed gcStats < minBytesAllowed) $ do
                         putStrLn "FAILED: currentBytesUsed < minBytesAllowed"
                         finishTest $ ExitFailure 2
-                      when (currentBytesUsed gcStats > maxBytesAllowed) $ do
+                      let overMax = currentBytesUsed gcStats > maxBytesAllowed
+                          underReset = currentBytesUsed gcStats < resetThreshold
+                      when (overMax && failures >= failureLimit) $ do
                         putStrLn "FAILED: currentBytesUsed > maxBytesAllowed"
                         finishTest $ ExitFailure 1
-                      return $ Just $ succ n
+                      return $ Just (
+                          if overMax
+                              then succ failures
+                              else (if underReset then 0 else failures), succ n)
               else do putStrLn "SUCCEEDED"
                       finishTest ExitSuccess
                       return Nothing
         rec redraw <- performEvent <=< delay 0 $ f <$> leftmost
-              [ (0 :: Int) <$ postBuild
+              [ ((0 :: Int), (0 :: Int)) <$ postBuild
               , fmapMaybe id redraw
               ]
         _ <- widgetHold w $ w <$ redraw

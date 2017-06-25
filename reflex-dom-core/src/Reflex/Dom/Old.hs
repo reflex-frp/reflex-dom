@@ -274,7 +274,7 @@ elDynHtmlAttr' elementTag attrs html = do
   let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
   (e, _) <- element elementTag cfg $ return ()
   postBuild <- getPostBuild
-  performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) . Just <$> leftmost [updated html, tag (current html) postBuild]
+  performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) <$> leftmost [updated html, tag (current html) postBuild]
   return e
 
 elDynHtml' :: MonadWidget t m => Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
