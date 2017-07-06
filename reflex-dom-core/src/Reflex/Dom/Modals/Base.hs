@@ -131,12 +131,12 @@ instance (DomBuilder t m) => Default (ModalLayerConfig t m) where
   def = ModalLayerConfig
     { _modalLayerConfig_backdropElementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
-        & initialAttributes .~ ("style" =: (T.intercalate ";"
+        & initialAttributes .~ ("style" =: T.intercalate ";"
             [ "position:absolute"
             , "left:0", "right:0", "top:0", "bottom:0"
             , "background-color:rgba(0,0,0,0.1)"
             , "display:flex", "justify-content:center", "align-items:center"
-            ]))
+            ])
     , _modalLayerConfig_bodyElementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
         & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
