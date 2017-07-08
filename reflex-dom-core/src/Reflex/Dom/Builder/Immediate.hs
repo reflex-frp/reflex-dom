@@ -325,7 +325,7 @@ extractUpTo df s e = liftJSM $ do
   void $ call f f (df, s, e)
 #endif
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -388,7 +388,7 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, MonadAdjust t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
@@ -640,7 +640,7 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
       liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
-instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) => Adjustable t (ImmediateDomBuilderT t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
@@ -753,7 +753,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
       liftIO $ writeIORef placeholders $! phsAfter
 
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
-traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
+traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
 traverseDMapWithKeyWithAdjust' = do
   let updateChildUnreadiness (p :: PatchDMap k (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) old = do
         let new :: forall a. k a -> ComposeMaybe (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
@@ -781,7 +781,7 @@ traverseDMapWithKeyWithAdjust' = do
     liftIO $ writeIORef placeholders $! fromMaybe phs $ apply (weakenPatchDMapWith (\(Compose (_, ph, _, _)) -> ph) $ PatchDMap p) phs
 
 {-# INLINABLE traverseIntMapWithKeyWithAdjust' #-}
-traverseIntMapWithKeyWithAdjust' :: forall t m v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m) => (IntMap.Key -> v -> ImmediateDomBuilderT t m v') -> IntMap v -> Event t (PatchIntMap v) -> ImmediateDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
+traverseIntMapWithKeyWithAdjust' :: forall t m v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m) => (IntMap.Key -> v -> ImmediateDomBuilderT t m v') -> IntMap v -> Event t (PatchIntMap v) -> ImmediateDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
 traverseIntMapWithKeyWithAdjust' = do
   let updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) old = do
         let new :: IntMap.Key -> Maybe (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IO (Maybe (IORef ChildReadyStateInt))
@@ -824,7 +824,7 @@ data ChildReadyStateInt
 
 {-# INLINE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
-  ( MonadAdjust t m
+  ( Adjustable t m
   , MonadIO m
   , MonadJSM m
   , MonadFix m
@@ -908,7 +908,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
 
 {-# INLINABLE hoistTraverseWithKeyWithAdjust #-}
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
-  ( MonadAdjust t m
+  ( Adjustable t m
   , MonadHold t m
   , DMap.GCompare k
   , MonadIO m

@@ -70,7 +70,7 @@ class Default (EventSpec d EventResult) => DomSpace d where
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
 -- dynamic DOM in the 'Reflex' timeline @t@
-class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomBuilder t m | m -> t where
+class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), Adjustable t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f

@@ -136,7 +136,7 @@ instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
   type PrimState (WithJSContextSingleton x m) = PrimState m
   primitive = lift . primitive
 
-instance MonadAdjust t m => MonadAdjust t (WithJSContextSingleton x m) where
+instance Adjustable t m => Adjustable t (WithJSContextSingleton x m) where
   runWithReplace a0 a' = WithJSContextSingleton $ runWithReplace (coerce a0) (coerceEvent a')
   traverseIntMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseIntMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')

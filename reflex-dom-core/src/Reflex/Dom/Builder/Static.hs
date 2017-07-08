@@ -33,6 +33,7 @@ import Data.Dependent.Sum (DSum (..))
 import Data.Functor.Compose
 import Data.Functor.Constant
 import qualified Data.Map as Map
+import Data.Map.Misc (applyMap)
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -41,7 +42,6 @@ import Data.Tuple
 import GHC.Generics
 import Reflex.Class
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.Widget.Basic (applyMap)
 import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
@@ -122,7 +122,7 @@ instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
 instance MonadAtomicRef m => MonadAtomicRef (StaticDomBuilderT t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
-type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, MonadAdjust t m)
+type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, Adjustable t m)
 
 data StaticDomSpace
 
@@ -146,7 +146,7 @@ instance DomSpace StaticDomSpace where
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
-instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomBuilderT t m) where
+instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
@@ -157,7 +157,7 @@ instance (Reflex t, MonadAdjust t m, MonadHold t m) => MonadAdjust t (StaticDomB
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
 
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
-  ( MonadAdjust t m
+  ( Adjustable t m
   , MonadHold t m
   , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
   , Patch (p k (Constant (Behavior t Builder)))

@@ -7,6 +7,7 @@
 module Reflex.Dom.Widget.Lazy where
 
 import Reflex.Class
+import Reflex.Collection
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class

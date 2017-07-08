@@ -67,7 +67,7 @@ displayRedrawTime e = do
   text "Time: "
   dynText =<< holdDyn "not yet run" (T.pack . show <$> diff)
 
-simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, MonadAdjust t m, Ord k) => (k -> v -> m ()) -> Map k v -> Event t (v -> v -> Ordering) -> Event t (v -> v -> Ordering) -> m ()
+simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, Adjustable t m, Ord k) => (k -> v -> m ()) -> Map k v -> Event t (v -> v -> Ordering) -> Event t (v -> v -> Ordering) -> m ()
 simpleSortableList f m0 resortFunc resortSlowFunc = do
   rec let resortPatchFast = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v

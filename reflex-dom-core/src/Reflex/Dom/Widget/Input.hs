@@ -41,6 +41,7 @@ import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
 import Reflex.Class
+import Reflex.Collection
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class

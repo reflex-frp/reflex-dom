@@ -76,7 +76,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabl
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
-instance MonadAdjust t m => MonadAdjust t (InputDisabledT m) where
+instance Adjustable t m => Adjustable t (InputDisabledT m) where
   runWithReplace a0 a' = InputDisabledT $ runWithReplace (coerce a0) (coerceEvent a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjust (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjustWithMove (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
