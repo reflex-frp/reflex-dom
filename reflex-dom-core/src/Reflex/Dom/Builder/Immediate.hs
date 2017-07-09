@@ -838,9 +838,6 @@ data ChildInstallation = ChildInstallation
   , _childInstallation_triggerUpdateLocalMountState :: !(MountState -> IO ())
   -- ^IO trigger to update the local mount state of the child, which is then zipped with the parent mount state.
   }
-   = ChildReadyState_Ready
-   | ChildReadyState_Unready !(Maybe (Some k))
-   deriving (Show, Read, Eq, Ord)
 
 -- |Enumerated state of a 'Child', representing whether it's installed in the DOM or not.
 #if MIN_VERSION_base(4,9,0)
