@@ -104,7 +104,8 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
   performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i ->
     setScrollTop (_element_raw viewport) (i * rowPx)
-  return (uniqDyn window, result)
+  uniqWindow <- holdUniqDyn window
+  return (uniqWindow, result)
   where
     toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>

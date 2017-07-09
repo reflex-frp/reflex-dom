@@ -92,6 +92,7 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
+import Reflex.Query.Base (QueryT)
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
@@ -130,6 +131,7 @@ import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setA
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
+import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.FileList as FileList
@@ -216,20 +218,27 @@ runImmediateDomBuilderT
   -> ImmediateDomBuilderEnv t
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = flip runTriggerEventT eventChan $ do
-  win <- DOM.currentWindowUnchecked
-  rec (x, req) <- runRequesterT (runReaderT a env) rsp
-      rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame win f $
-        DMap.traverseWithKey (\_ r -> Identity <$> r) rm
-  return x
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
+  handlersMVar <- liftIO $ newMVar []
+  flip runTriggerEventT eventChan $ do
+    win <- DOM.currentWindowUnchecked
+    rec (x, req) <- runRequesterT (runReaderT a env) rsp
+        rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame handlersMVar win f $
+          DMap.traverseWithKey (\_ r -> Identity <$> r) rm
+    return x
   where
-    runInAnimationFrame win f x = do
-      rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
-            v <- synchronously x
-            _ <- liftIO $ f v
-            freeRequestAnimationFrameCallback cb
-      _ <- Window.requestAnimationFrame win cb
-      return ()
+    runInAnimationFrame handlersMVar win f x = do
+      handlers <- liftIO $ takeMVar handlersMVar
+      when (null handlers) $ do
+        rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
+              freeRequestAnimationFrameCallback cb
+              handlersToRun <- liftIO $ takeMVar handlersMVar
+              liftIO $ putMVar handlersMVar []
+              sequence_ (reverse handlersToRun)
+        void $ Window.requestAnimationFrame win cb
+      liftIO $ putMVar handlersMVar ((do
+        v <- synchronously x
+        void . liftIO $ f v) : handlers)
 
 class Monad m => HasDocument m where
   askDocument :: m Document
@@ -242,6 +251,8 @@ instance HasDocument m => HasDocument (Lazy.StateT s m)
 instance HasDocument m => HasDocument (EventWriterT t w m)
 instance HasDocument m => HasDocument (DynamicWriterT t w m)
 instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)
 
 instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
   {-# INLINABLE askDocument #-}
@@ -460,7 +471,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
     { _ghcjsEventSpec_filters = mempty
     , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
-        t :: DOM.EventTarget <- withIsEvent en $ Event.getTarget evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
         let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
@@ -478,14 +489,14 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
-    Input.setValue domInputElement $ Just (cfg ^. inputElementConfig_initialValue)
-    v0 <- Input.getValueUnchecked domInputElement
-    let getMyValue = fromMaybe "" <$> Input.getValue domInputElement
+    Input.setValue domInputElement $ cfg ^. inputElementConfig_initialValue
+    v0 <- Input.getValue domInputElement
+    let getMyValue = Input.getValue domInputElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        Input.setValue domInputElement $ Just v'
+        Input.setValue domInputElement v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
@@ -515,9 +526,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       mfiles <- Input.getFiles domInputElement
       let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
       maybe (return []) getMyFiles mfiles
+    checked <- holdUniqDyn c
     return $ InputElement
       { _inputElement_value = v
-      , _inputElement_checked = uniqDyn c
+      , _inputElement_checked = checked
       , _inputElement_checkedChange =  checkedChangedByUI
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
@@ -529,14 +541,14 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
   textAreaElement cfg = do --TODO
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
-    TextArea.setValue domTextAreaElement $ Just (cfg ^. textAreaElementConfig_initialValue)
-    v0 <- TextArea.getValueUnchecked domTextAreaElement
-    let getMyValue = fromMaybe "" <$> TextArea.getValue domTextAreaElement
+    TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
+    v0 <- TextArea.getValue domTextAreaElement
+    let getMyValue = TextArea.getValue domTextAreaElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
     valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
       Nothing -> return never
       Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        TextArea.setValue domTextAreaElement $ Just v'
+        TextArea.setValue domTextAreaElement v'
         getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
@@ -826,9 +838,16 @@ data ChildInstallation = ChildInstallation
   , _childInstallation_triggerUpdateLocalMountState :: !(MountState -> IO ())
   -- ^IO trigger to update the local mount state of the child, which is then zipped with the parent mount state.
   }
+   = ChildReadyState_Ready
+   | ChildReadyState_Unready !(Maybe (Some k))
+   deriving (Show, Read, Eq, Ord)
 
 -- |Enumerated state of a 'Child', representing whether it's installed in the DOM or not.
+#if MIN_VERSION_base(4,9,0)
 data ChildReadyState k
+#else
+data ChildReadyState (k :: * -> *)
+#endif
   = ChildReadyState_Ready
   -- ^The child is installed in the DOM because it's become ready at some point.
   | ChildReadyState_Unready !(Maybe (Some k))
@@ -1287,6 +1306,7 @@ instance DOM.FromJSVal ElementEventTarget where
   fromJSVal = fmap (fmap ElementEventTarget) . DOM.fromJSVal
 instance DOM.IsEventTarget ElementEventTarget
 instance DOM.IsGlobalEventHandlers ElementEventTarget
+instance DOM.IsDocumentAndElementEventHandlers ElementEventTarget
 
 {-# INLINABLE elementOnEventName #-}
 elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
@@ -1324,12 +1344,12 @@ elementOnEventName en e_ = let e = ElementEventTarget (DOM.toElement e_) in case
   Select -> on e Events.select
   Submit -> on e Events.submit
   Wheel -> on e Events.wheel
-  Beforecut -> on e Element.beforeCut
-  Cut -> on e Element.cut
-  Beforecopy -> on e Element.beforeCopy
-  Copy -> on e Element.copy
-  Beforepaste -> on e Element.beforePaste
-  Paste -> on e Element.paste
+  Beforecut -> on e Events.beforeCut
+  Cut -> on e Events.cut
+  Beforecopy -> on e Events.beforeCopy
+  Copy -> on e Events.copy
+  Beforepaste -> on e Events.beforePaste
+  Paste -> on e Events.paste
   Reset -> on e Events.reset
   Search -> on e Events.search
   Selectstart -> on e Element.selectStart

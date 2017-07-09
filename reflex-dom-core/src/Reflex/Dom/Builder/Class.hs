@@ -7,6 +7,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+#if !MIN_VERSION_base(4,9,0)
+{-# LANGUAGE ImpredicativeTypes #-}
+#endif
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -34,6 +37,8 @@ import Reflex.DynamicWriter
 import Reflex.EventWriter
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.Query.Base
+import Reflex.Query.Class
 import Reflex.Requester.Base
 
 import qualified Control.Category
@@ -592,7 +597,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w, Monoid w) => DomBuilder t (EventWriterT t w m) where
+instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
   element elementTag cfg child = do
@@ -605,6 +610,24 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w, Monoid w) => D
     (el, (a, e)) <- lift $ selectElement cfg $ runEventWriterT child
     tellEvent e
     return (el, a)
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e = lift . wrapRawElement e
+
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
+  type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
+  textNode = liftTextNode
+  element elementTag cfg (QueryT child) = QueryT $ do
+    s <- get
+    (e, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
+    put newS
+    return (e, a)
+  inputElement = lift . inputElement
+  textAreaElement = lift . textAreaElement
+  selectElement cfg (QueryT child) = QueryT $ do
+    s <- get
+    (e, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
+    put newS
+    return (e, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
@@ -680,10 +703,9 @@ instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   requestDomAction_ = lift . requestDomAction_
 
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
-#if MIN_VERSION_base(4,9,1)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
-#endif
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
+deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s

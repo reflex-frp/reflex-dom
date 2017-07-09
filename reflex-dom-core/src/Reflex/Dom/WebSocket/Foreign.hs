@@ -16,7 +16,6 @@ import Control.Monad.Reader
 import Data.Bifoldable
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import qualified Data.Text as T (unpack)
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.CloseEvent
@@ -46,7 +45,7 @@ instance IsWebSocketMessage ByteString where
 
 -- Use plaintext websocket communication for Text, and String
 instance IsWebSocketMessage Text where
-  webSocketSend (JSWebSocket ws) = DOM.sendString ws . T.unpack
+  webSocketSend (JSWebSocket ws) = DOM.sendString ws
 
 closeWebSocket :: JSWebSocket -> Word -> Text -> JSM ()
 closeWebSocket (JSWebSocket ws) code reason = DOM.close ws (Just code) (Just reason)

@@ -1,5 +1,5 @@
 { mkDerivation, ghc, aeson, base, bifunctors, bimap, blaze-builder
-, bytestring, containers, contravariant, data-default
+, bytestring, constraints, containers, contravariant, data-default
 , dependent-map, dependent-sum, dependent-sum-template, directory
 , exception-transformers, ghcjs-dom, hlint, jsaddle, keycode, lens
 , monad-control, mtl, primitive, random, ref-tf, reflex, semigroups
@@ -16,8 +16,8 @@ in mkDerivation (addGcTestDepends {
   version = "0.4";
   src = ./.;
   libraryHaskellDepends = [
-    aeson base bifunctors bimap blaze-builder bytestring containers
-    contravariant data-default dependent-map dependent-sum
+    aeson base bifunctors bimap blaze-builder bytestring constraints
+    containers contravariant data-default dependent-map dependent-sum
     dependent-sum-template directory exception-transformers ghcjs-dom
     jsaddle keycode lens monad-control mtl primitive random ref-tf
     reflex semigroups stm template-haskell text these time transformers
@@ -25,6 +25,12 @@ in mkDerivation (addGcTestDepends {
   ] ++ (if ghc.isGhcjs or false then [
     hashable
   ] else []);
+
+  # The headless browser run as part of the tests will exit without this
+  preBuild = ''
+    export HOME="$PWD"
+  '';
+
   testHaskellDepends = [ base hlint ];
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;

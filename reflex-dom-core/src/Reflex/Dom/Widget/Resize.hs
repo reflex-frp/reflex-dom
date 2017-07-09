@@ -27,7 +27,8 @@ import qualified Data.Text as T
 import GHCJS.DOM.Element
 import GHCJS.DOM.EventM (on)
 import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
-import GHCJS.DOM.Types (MonadJSM, liftJSM)
+import GHCJS.DOM.Types (MonadJSM, liftJSM, uncheckedCastTo, HTMLElement(..))
+import GHCJS.DOM.HTMLElement (getOffsetWidth, getOffsetHeight)
 import qualified GHCJS.DOM.Types as DOM
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
@@ -54,8 +55,9 @@ resizeDetectorWithAttrs attrs w = do
       (expand, (expandChild, _)) <- elAttr' "div" containerAttrs $ elAttr' "div" ("style" =: childStyle) $ return ()
       (shrink, _) <- elAttr' "div" containerAttrs $ elAttr "div" ("style" =: (childStyle <> "width: 200%; height: 200%;")) $ return ()
       return (expand, expandChild, shrink, w')
-  let reset = do
-        let e = _element_raw expand
+  let p = uncheckedCastTo HTMLElement $ _element_raw parent
+      reset = do
+        let e = uncheckedCastTo HTMLElement $ _element_raw expand
             s = _element_raw shrink
         eow <- getOffsetWidth e
         eoh <- getOffsetHeight e
@@ -70,12 +72,12 @@ resizeDetectorWithAttrs attrs w = do
         setScrollLeft s ssw
         ssh <- getScrollHeight s
         setScrollTop s ssh
-        lastWidth <- getOffsetWidth (_element_raw parent)
-        lastHeight <- getOffsetHeight (_element_raw parent)
+        lastWidth <- getOffsetWidth p
+        lastHeight <- getOffsetHeight p
         return (Just lastWidth, Just lastHeight)
       resetIfChanged ds = do
-        pow <- getOffsetWidth (_element_raw parent)
-        poh <- getOffsetHeight (_element_raw parent)
+        pow <- getOffsetWidth p
+        poh <- getOffsetHeight p
         if ds == (Just pow, Just poh)
           then return Nothing
           else fmap Just reset
