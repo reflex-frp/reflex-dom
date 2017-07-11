@@ -7,6 +7,7 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Modals.Base
   ( ModalsT (..)
   , ModalLayerConfig (..)
@@ -141,6 +142,11 @@ instance (DomBuilder t m) => Default (ModalLayerConfig t m) where
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
         & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
     }
+
+instance (MonadQuery t q m, Monad m) => MonadQuery t q (ModalsT t m) where
+  tellQueryIncremental = lift . tellQueryIncremental
+  askQueryResult = lift askQueryResult
+  queryIncremental = lift . queryIncremental
 
 withModalLayer :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m)
                => ModalLayerConfig t m
