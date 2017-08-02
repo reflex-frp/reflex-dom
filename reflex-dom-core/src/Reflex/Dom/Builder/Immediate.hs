@@ -196,14 +196,12 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift . lift
 
-instance (Reflex t, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
-  {-
+instance (Reflex t, MonadFix m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT (runReaderT a e) $ runIdentity <$> rsp
       return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
--}
   requestDomAction = ImmediateDomBuilderT . lift . requestingIdentity
   requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
 
@@ -837,6 +835,7 @@ hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   ( MonadAdjust t m
   , MonadIO m
   , MonadJSM m
+  , MonadFix m
   , PrimMonad m
   , Monoid (p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
   , Functor p
