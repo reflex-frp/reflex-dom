@@ -44,12 +44,9 @@ import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
 
-{-# INLINABLE mainWidget #-}
+{-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
-mainWidget w = withJSContextSingleton $ \jsSing -> do
-  doc <- currentDocumentUnchecked
-  body <- getBodyUnchecked doc
-  attachWidget body jsSing w
+mainWidget = mainWidget'
 
 {-# INLINABLE mainWidget' #-}
 -- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
@@ -78,7 +75,7 @@ mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
 
-type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better
+type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better because it could avoid fmapping over every performEvent
 
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a

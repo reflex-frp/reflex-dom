@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Modals.Base
+where
+{-
   ( ModalsT (..)
   , ModalLayerConfig (..)
   , withModalLayer
@@ -102,7 +104,7 @@ instance MonadAtomicRef m => MonadAtomicRef (ModalsT t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
-instance (MonadAdjust t m, MonadHold t m) => MonadAdjust t (ModalsT t m) where
+instance (MonadAdjust t m, MonadHold t m, MonadFix m) => MonadAdjust t (ModalsT t m) where
   runWithReplace a0 a' = ModalsT $ runWithReplace (unModalsT a0) (fmapCheap unModalsT a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjust (coerce f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjustWithMove (coerce f) dm0 dm'
@@ -192,3 +194,4 @@ modalBody cfg v = do
     [ Just <$> complete
     , Nothing <$ domEvent Click overlay
     ]
+-}
