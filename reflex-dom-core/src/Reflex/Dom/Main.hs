@@ -23,6 +23,8 @@ import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 import Reflex.TriggerEvent.Base
 
+import Reflex.Dom.Specializations () -- For SPECIALIZATION pragmas, which are always re-exported
+
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
@@ -59,7 +61,7 @@ mainWidget' w = withJSContextSingletonMono $ \jsSing -> do
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> JSM ()
-mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
+mainWidgetWithHead h b = withJSContextSingletonMono $ \jsSing -> do
   doc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked doc
   attachWidget headElement jsSing h

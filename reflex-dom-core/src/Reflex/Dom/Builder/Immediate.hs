@@ -196,7 +196,7 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift . lift
 
-instance (Reflex t, MonadFix m, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadFix m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
@@ -271,7 +271,7 @@ localEnv :: Monad m => (ImmediateDomBuilderEnv t -> ImmediateDomBuilderEnv t) ->
 localEnv f = ImmediateDomBuilderT . local f . unImmediateDomBuilderT
 
 {-# INLINABLE append #-}
-append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
+append :: MonadJSM m => DOM.Node -> ImmediateDomBuilderT t m ()
 append n = do
   p <- askParent
   liftJSM $ appendChild_ p n
@@ -282,7 +282,7 @@ textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateD
 textNodeInternal !t = do
   doc <- askDocument
   n <- liftJSM $ createTextNode doc t
-  append n
+  append $ toNode n
   return n
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -352,7 +352,7 @@ collectUpToGivenParent currentParent s e = do
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
 {-# INLINABLE wrap #-}
-wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
+wrap :: forall m er t. (Reflex t, MonadFix m, MonadJSM m, MonadReflexCreateTrigger t m) => RawElement GhcjsDomSpace -> RawElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
@@ -396,7 +396,7 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, MonadAdjust t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
@@ -408,7 +408,7 @@ makeElement elementTag cfg child = do
   result <- flip localEnv child $ \env -> env
     { _immediateDomBuilderEnv_parent = toNode e
     }
-  append e
+  append $ toNode e
   wrapped <- wrap e $ extractRawElementConfig cfg
   return ((wrapped, result), e)
 
@@ -589,7 +589,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
           , _selectElement_raw = domSelectElement
           }
     return (wrapped, result)
-  placeRawElement = append
+  placeRawElement = append . toNode
   wrapRawElement = wrap
   notReadyUntil e = do
     eOnce <- headE e
@@ -672,7 +672,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Prim
           unreadyChildren <- liftIO $ newIORef 0
           let f = do
                 result <- a0
-                append after
+                append $ toNode after
                 return result
           result <- runReaderT (unImmediateDomBuilderT f) $ initialEnv
             { _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
@@ -903,7 +903,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
       placeholders0 = fmap (\(_, ph, _, _) -> ph) children0
       result' = ffor children' $ fmap $ \(_, _, _, r) -> r
   liftIO $ writeIORef placeholders $! placeholders0
-  _ <- IntMap.traverseWithKey (\_ (df, _, _, _) -> void $ append df) children0
+  _ <- IntMap.traverseWithKey (\_ (df, _, _, _) -> void $ append $ toNode df) children0
   liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
@@ -993,7 +993,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       placeholders0 = weakenDMapWith (\(Compose (_, ph, _, _)) -> ph) children0
       result' = ffor children' $ mapPatch $ \(Compose (_, _, _, r)) -> r
   liftIO $ writeIORef placeholders $! placeholders0
-  _ <- DMap.traverseWithKey (\_ (Compose (df, _, _, _)) -> Constant () <$ append df) children0
+  _ <- DMap.traverseWithKey (\_ (Compose (df, _, _, _)) -> Constant () <$ append (toNode df)) children0
   liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
