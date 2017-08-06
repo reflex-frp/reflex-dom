@@ -138,7 +138,7 @@ listHoldWithKey m0 m' f = do
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
-{- INLINABLE dynText #-}
+{-# INLINABLE dynText #-}
 dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
 dynText t = do
   postBuild <- getPostBuild

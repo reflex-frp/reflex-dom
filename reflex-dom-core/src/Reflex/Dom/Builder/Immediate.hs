@@ -804,7 +804,7 @@ traverseIntMapWithKeyWithAdjust' = do
             delete _ sRef = do
               writeIORef sRef $ ChildReadyStateInt_Unready Nothing
               return ()
-        p' <- fmap PatchIntMap $ IntMap.traverseWithKey new pInner
+        p' <- PatchIntMap <$> IntMap.traverseWithKey new pInner
         _ <- IntMap.traverseWithKey delete $ FastMutableIntMap.getDeletions p old
         return $ applyAlways p' old
   hoistTraverseIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust updateChildUnreadiness $ \placeholders lastPlaceholderRef (PatchIntMap p) -> do
@@ -814,7 +814,7 @@ traverseIntMapWithKeyWithAdjust' = do
       let nextPlaceholder = maybe lastPlaceholder snd $ IntMap.lookupGT k phs
       forM_ (IntMap.lookup k phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
       forM_ mv $ \(df, _, _, _) -> df `insertBefore` nextPlaceholder
-    liftIO $ writeIORef placeholders $! fromMaybe phs $ apply (fmap (\(_, ph, _, _) -> ph) $ PatchIntMap p) phs
+    liftIO $ writeIORef placeholders $! fromMaybe phs $ apply ((\(_, ph, _, _) -> ph) <$> PatchIntMap p) phs
 
 #if MIN_VERSION_base(4,9,0)
 data ChildReadyState k
