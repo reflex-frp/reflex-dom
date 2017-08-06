@@ -33,6 +33,11 @@ flag expose-all-unfoldings
   default: False
   manual: True
 
+flag profile-reflex
+  description: Add a layer of profiling to all Reflex events in the system
+  default: False
+  manual: True
+
 library
   hs-source-dirs: src
   build-depends:
@@ -122,6 +127,9 @@ library
 
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
+
+  if flag(profile-reflex)
+    cpp-options: -DPROFILE_REFLEX
 
   if flag(use-template-haskell)
     build-depends:
