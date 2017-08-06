@@ -114,6 +114,8 @@ executable benchmark
   hs-source-dirs: .
   main-is: benchmark.hs
   ghc-options: -O2 -fspecialise-aggressively
+  if !impl(ghcjs)
+    buildable: False
 
 source-repository head
   type: git
