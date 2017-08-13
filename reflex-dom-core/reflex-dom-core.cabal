@@ -146,8 +146,10 @@ test-suite gc
                , reflex-dom-core
                , jsaddle
                , jsaddle-warp
+               , linux-namespaces
                , process
                , temporary
+               , unix
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto
