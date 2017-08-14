@@ -635,7 +635,7 @@ type LiftDomBuilder t f m =
 
 class MonadTransControl t => MonadTransControlStateless t where
   stTCoercion :: proxy t -> Coercion (StT t a) a
-  default stTCoercion :: proxy t -> Coercion a a
+  default stTCoercion :: (a ~ StT t a) => proxy t -> Coercion (StT t a) a
   stTCoercion _ = Control.Category.id
 
 toStT :: MonadTransControlStateless t => proxy t -> a -> StT t a

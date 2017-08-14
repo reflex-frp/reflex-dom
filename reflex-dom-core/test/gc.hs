@@ -10,7 +10,9 @@ import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import System.Exit
 import System.IO.Temp
+import System.Linux.Namespaces
 import System.Mem
+import System.Posix
 import System.Process
 
 -- In initial testing, the minimum live bytes count was 233128 and maximum was
@@ -32,12 +34,16 @@ failureLimit = 0
 
 main :: IO ()
 main = do
+  uid <- getEffectiveUserID
+  unshare [User, Network]
+  writeUserMappings Nothing [UserMapping 0 uid 1]
   mainThread <- myThreadId
   withSystemTempDirectory "reflex-dom-core_test_gc" $ \tmp -> do
-    browserProcess <- spawnCommand $ "xvfb-run -a chromium --disable-gpu --user-data-dir=" ++ tmp ++ " http://localhost:3911"
+    browserProcess <- spawnCommand $ "ip link set lo up ; ip addr ; sleep 1 ; echo 'Starting Chromium' ; chromium --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=" ++ tmp ++ " http://localhost:3911 ; echo 'Chromium exited'"
     let finishTest result = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result
+    putStrLn "About to start the server"
     run 3911 $ do
       -- enableLogging True
       liftIO $ putStrLn "Running..."
