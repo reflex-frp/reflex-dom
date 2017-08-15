@@ -98,7 +98,6 @@ library
     Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
-    Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic

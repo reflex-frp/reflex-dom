@@ -7,10 +7,10 @@
 module Reflex.Dom.Widget.Resize where
 
 import Reflex.Class
+import Reflex.Time
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
-import Reflex.Dom.Time
 import Reflex.Dom.Widget.Basic
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class

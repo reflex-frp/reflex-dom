@@ -12,7 +12,6 @@ import Reflex.Dom.Modals.Base as X
 import Reflex.Dom.Modals.Class as X
 import Reflex.Dom.Old as X
 import Reflex.Dom.Prerender as X
-import Reflex.Dom.Time as X
 import Reflex.Dom.WebSocket as X
 import Reflex.Dom.Widget as X
 import Reflex.Dom.Xhr as X
