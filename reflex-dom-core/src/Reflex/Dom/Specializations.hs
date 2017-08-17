@@ -31,9 +31,9 @@ import qualified GHCJS.DOM.Types as DOM
 {-# SPECIALIZE wrap :: forall er. RawElement GhcjsDomSpace -> RawElementConfig er (SpiderTimeline Global) GhcjsDomSpace -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) (Element er GhcjsDomSpace (SpiderTimeline Global)) #-}
 
 {-# SPECIALIZE mapIntMapWithAdjustImpl :: forall v v'.
-     (   (IntMap.Key -> ((Bool, Event (SpiderTimeline Global) ()), v) -> (ImmediateDomBuilderT Spider (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) v')
-      -> IntMap ((Bool, Event (SpiderTimeline Global) ()), v)
-      -> Event (SpiderTimeline Global) (PatchIntMap ((Bool, Event (SpiderTimeline Global) ()), v))
+     (   (IntMap.Key -> (Event (SpiderTimeline Global) (), v) -> (ImmediateDomBuilderT Spider (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) v')
+      -> IntMap (Event (SpiderTimeline Global) (), v)
+      -> Event (SpiderTimeline Global) (PatchIntMap (Event (SpiderTimeline Global) (), v))
       -> (ImmediateDomBuilderT Spider (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (IntMap v', Event (SpiderTimeline Global) (PatchIntMap v'))
      )
   -> (IntMap.Key -> v -> PostBuildT (SpiderTimeline Global) (ImmediateDomBuilderT Spider (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) v')
