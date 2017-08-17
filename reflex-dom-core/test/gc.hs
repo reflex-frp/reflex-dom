@@ -1,6 +1,7 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE BangPatterns #-}
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
@@ -20,7 +21,7 @@ import System.Process
 -- probably have a memory leak; going under the minimum doesn't indicate a
 -- memory leak, but may mean the test needs to be updated.
 minBytesAllowed, resetThreshold, maxBytesAllowed :: Int64
-(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 490000)
+(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 600000)
 
 -- Some times the memory usage might flair up and then then return to normal
 -- this probably indicates an issue, but if you are trying to fix a slow consistent
