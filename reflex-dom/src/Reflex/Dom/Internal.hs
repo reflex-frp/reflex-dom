@@ -37,7 +37,7 @@ mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> IO ()
 mainWidgetWithCss css w = run $ Main.mainWidgetWithCss css w
 {-# INLINE mainWidgetWithCss #-}
 
-mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> IO ()
+mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> IO ()
 mainWidgetWithHead' w = run $ Main.mainWidgetWithHead' w
 {-# INLINE mainWidgetWithHead' #-}
 
