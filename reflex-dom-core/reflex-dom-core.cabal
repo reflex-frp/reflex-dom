@@ -71,7 +71,7 @@ library
     stm == 2.4.*,
     text == 1.2.*,
     these >= 0.4 && < 0.8,
-    time >= 1.4 && < 1.8,
+    time >= 1.4 && < 1.9,
     transformers >= 0.3 && < 0.6,
     unbounded-delays >= 0.1.0.9 && < 0.2,
     zenc == 0.1.*
@@ -145,7 +145,7 @@ library
       dependent-sum == 0.4.*
 
 test-suite hlint
-  build-depends: base, hlint == 1.9.*
+  build-depends: base, hlint
   hs-source-dirs: test
   main-is: hlint.hs
   type: exitcode-stdio-1.0
