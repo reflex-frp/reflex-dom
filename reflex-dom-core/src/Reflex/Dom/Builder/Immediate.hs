@@ -232,7 +232,7 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
 
 class Monad m => HasDocument m where
   askDocument :: m Document
-  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => f m' Document
+  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => m Document
   askDocument = lift askDocument
 
 instance HasDocument m => HasDocument (ReaderT r m)
