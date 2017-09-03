@@ -138,6 +138,7 @@ instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
 
 instance MonadAdjust t m => MonadAdjust t (WithJSContextSingleton x m) where
   runWithReplace a0 a' = WithJSContextSingleton $ runWithReplace (coerce a0) (coerceEvent a')
+  traverseIntMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseIntMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjustWithMove (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
 
@@ -284,6 +285,7 @@ class Monad m => MonadJS x m | m -> x where
 #ifdef ghcjs_HOST_OS
 
 data JSCtx_IO
+type HasJS' = HasJS JSCtx_IO
 
 instance MonadIO m => HasJS JSCtx_IO (WithJSContextSingleton x m) where
   type JSX (WithJSContextSingleton x m) = IO
@@ -334,6 +336,7 @@ foreign import javascript unsafe "function(){ return $1(arguments); }" funWithAr
 #else
 
 data JSCtx_JavaScriptCore x
+type HasJS' = HasJS (JSCtx_JavaScriptCore ())
 
 instance IsJSContext (JSCtx_JavaScriptCore x) where
   newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSVal }
@@ -420,7 +423,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithJSContext x IO) where
     f $ JSUint8Array payloadRef
   fromJSArray (JSRef_JavaScriptCore a) = liftJSM $ do
     len <- round <$> (valToNumber =<< (a ^. js "length"))
-    forM [0..len-1] $ \i -> JSRef_JavaScriptCore <$> a !! i
+    forM [0..len-1] $ fmap JSRef_JavaScriptCore . (a !!)
   fromJSUint8Array a = do
     vals <- fromJSArray a
     doubles <- mapM fromJSNumber vals

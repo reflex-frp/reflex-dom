@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -23,6 +24,8 @@ import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 import Reflex.TriggerEvent.Base
 
+import Reflex.Dom.Specializations () -- For SPECIALIZATION pragmas, which are always re-exported
+
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
@@ -44,12 +47,13 @@ import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
 
-{-# INLINABLE mainWidget #-}
+#ifdef PROFILE_REFLEX
+import Reflex.Profiled
+#endif
+
+{-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
-mainWidget w = withJSContextSingleton $ \jsSing -> do
-  doc <- currentDocumentUnchecked
-  body <- getBodyUnchecked doc
-  attachWidget body jsSing w
+mainWidget = mainWidget'
 
 {-# INLINABLE mainWidget' #-}
 -- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
@@ -62,7 +66,7 @@ mainWidget' w = withJSContextSingletonMono $ \jsSing -> do
 --TODO: The x's should be unified here
 {-# INLINABLE mainWidgetWithHead #-}
 mainWidgetWithHead :: (forall x. Widget x ()) -> (forall x. Widget x ()) -> JSM ()
-mainWidgetWithHead h b = withJSContextSingleton $ \jsSing -> do
+mainWidgetWithHead h b = withJSContextSingletonMono $ \jsSing -> do
   doc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked doc
   attachWidget headElement jsSing h
@@ -78,7 +82,27 @@ mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
 
-type Widget x = PostBuildT Spider (ImmediateDomBuilderT Spider (WithJSContextSingleton x (PerformEventT Spider (SpiderHost Global)))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better
+-- | The Reflex timeline for interacting with the DOM
+type DomTimeline =
+#ifdef PROFILE_REFLEX
+  ProfiledTimeline
+#endif
+  Spider
+
+-- | The ReflexHost the DOM lives in
+type DomHost =
+#ifdef PROFILE_REFLEX
+  ProfiledM
+#endif
+  (SpiderHost Global)
+
+runDomHost :: DomHost a -> IO a
+runDomHost = runSpiderHost
+#ifdef PROFILE_REFLEX
+  . runProfiledM
+#endif
+
+type Widget x = PostBuildT DomTimeline (ImmediateDomBuilderT DomTimeline (WithJSContextSingleton x (PerformEventT DomTimeline DomHost))) --TODO: Make this more abstract --TODO: Put the WithJSContext underneath PerformEventT - I think this would perform better because it could avoid fmapping over every performEvent
 
 {-# INLINABLE attachWidget #-}
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
@@ -95,7 +119,7 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   (events, fc) <- liftIO . attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT Spider (SpiderHost Global) c
+    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
         go w df = do
           unreadyChildren <- liftIO $ newIORef 0
           let builderEnv = ImmediateDomBuilderEnv
@@ -119,7 +143,7 @@ replaceElementContents e df = do
   return ()
 
 {-# INLINABLE attachWidget' #-}
-attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand Spider (SpiderHost Global))
+attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand DomTimeline DomHost)
 attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
@@ -138,22 +162,22 @@ attachWidget' rootElement jsSing w = do
   liftIO $ processAsyncEvents events fc
   return (a, fc)
 
-type EventChannel = Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+type EventChannel = Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
 
 {-# INLINABLE attachWidget'' #-}
-attachWidget'' :: (EventChannel -> PerformEventT Spider (SpiderHost Global) (a, IORef (Maybe (EventTrigger Spider ())))) -> IO (a, FireCommand Spider (SpiderHost Global))
+attachWidget'' :: (EventChannel -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))) -> IO (a, FireCommand DomTimeline DomHost)
 attachWidget'' w = do
   events <- newChan
-  runSpiderHost $ do
+  runDomHost $ do
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w events
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return (result, fc)
 
-processAsyncEvents :: EventChannel -> FireCommand Spider (SpiderHost Global) -> IO ()
+processAsyncEvents :: EventChannel -> FireCommand DomTimeline DomHost -> IO ()
 processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
   ers <- readChan events
-  _ <- runSpiderHost $ do
+  _ <- runDomHost $ do
     mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
       me <- readIORef er
       return $ fmap (\e -> e :=> Identity a) me
@@ -177,7 +201,7 @@ newtype AppOutput t = AppOutput --TODO: Add quit event
   { _appOutput_windowConfig :: WindowConfig t
   }
 
-runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> JSM ()
+runApp' :: (t ~ DomTimeline) => (forall x. AppInput t -> Widget x (AppOutput t)) -> JSM ()
 runApp' app = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   body <- getBodyUnchecked doc

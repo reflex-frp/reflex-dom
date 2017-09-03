@@ -1,7 +1,10 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 import Control.Concurrent
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
@@ -10,7 +13,9 @@ import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import System.Exit
 import System.IO.Temp
+import System.Linux.Namespaces
 import System.Mem
+import System.Posix
 import System.Process
 
 -- In initial testing, the minimum live bytes count was 233128 and maximum was
@@ -18,7 +23,7 @@ import System.Process
 -- probably have a memory leak; going under the minimum doesn't indicate a
 -- memory leak, but may mean the test needs to be updated.
 minBytesAllowed, resetThreshold, maxBytesAllowed :: Int64
-(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 490000)
+(minBytesAllowed, resetThreshold, maxBytesAllowed) = (200000, 400000, 600000)
 
 -- Some times the memory usage might flair up and then then return to normal
 -- this probably indicates an issue, but if you are trying to fix a slow consistent
@@ -32,12 +37,18 @@ failureLimit = 0
 
 main :: IO ()
 main = do
+  uid <- getEffectiveUserID
+  handle (\(_ :: IOError) -> return ()) $ do -- If we run into an exception with sandboxing, just don't bother
+    unshare [User, Network]
+    writeUserMappings Nothing [UserMapping 0 uid 1]
+    callCommand "ip link set lo up ; ip addr"
   mainThread <- myThreadId
   withSystemTempDirectory "reflex-dom-core_test_gc" $ \tmp -> do
-    browserProcess <- spawnCommand $ "xvfb-run -a chromium --disable-gpu --user-data-dir=" ++ tmp ++ " http://localhost:3911"
+    browserProcess <- spawnCommand $ "echo 'Starting Chromium' ; chromium --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=" ++ tmp ++ " http://localhost:3911 ; echo 'Chromium exited'"
     let finishTest result = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result
+    putStrLn "About to start the server"
     run 3911 $ do
       -- enableLogging True
       liftIO $ putStrLn "Running..."

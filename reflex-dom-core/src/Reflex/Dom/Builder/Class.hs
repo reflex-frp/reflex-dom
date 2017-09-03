@@ -163,8 +163,8 @@ class DomBuilder t m => MountableDomBuilder t m where
 type Namespace = Text
 
 data TextNodeConfig t
-   = TextNodeConfig { _textNodeConfig_initialContents :: Text
-                    , _textNodeConfig_setContents :: Maybe (Event t Text)
+   = TextNodeConfig { _textNodeConfig_initialContents :: {-# UNPACK #-} !Text
+                    , _textNodeConfig_setContents :: !(Maybe (Event t Text))
                     }
 
 #ifndef USE_TEMPLATE_HASKELL
@@ -550,15 +550,17 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
   textNode = liftTextNode
   element elementTag cfg (RequesterT child) = RequesterT $ do
     r <- ask
-    (el, (a, e)) <- lift $ lift $ element elementTag cfg $ runReaderT (runEventWriterT child) r
-    tellEvent e
+    old <- get
+    (el, (a, new)) <- lift $ lift $ element elementTag cfg $ runReaderT (runStateT child old) r
+    put new
     return (el, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
   selectElement cfg (RequesterT child) = RequesterT $ do
     r <- ask
-    (el, (a, e)) <- lift $ lift $ selectElement cfg $ runReaderT (runEventWriterT child) r
-    tellEvent e
+    old <- get
+    (el, (a, new)) <- lift $ lift $ selectElement cfg $ runReaderT (runStateT child old) r
+    put new
     return (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
@@ -566,15 +568,17 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
 instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
-  element elementTag cfg child = do
-    (el, (a, e)) <- lift $ element elementTag cfg $ runEventWriterT child
-    tellEvent e
+  element elementTag cfg (EventWriterT child) = EventWriterT $ do
+    old <- get
+    (el, (a, new)) <- lift $ element elementTag cfg $ runStateT child old
+    put new
     return (el, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
-  selectElement cfg child = do
-    (el, (a, e)) <- lift $ selectElement cfg $ runEventWriterT child
-    tellEvent e
+  selectElement cfg (EventWriterT child) = EventWriterT $ do
+    old <- get
+    (el, (a, new)) <- lift $ selectElement cfg $ runStateT child old
+    put new
     return (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
@@ -631,7 +635,7 @@ type LiftDomBuilder t f m =
 
 class MonadTransControl t => MonadTransControlStateless t where
   stTCoercion :: proxy t -> Coercion (StT t a) a
-  default stTCoercion :: (StT t a ~ a) => proxy t -> Coercion (StT t a) a
+  default stTCoercion :: (a ~ StT t a) => proxy t -> Coercion (StT t a) a
   stTCoercion _ = Control.Category.id
 
 toStT :: MonadTransControlStateless t => proxy t -> a -> StT t a
@@ -645,7 +649,7 @@ instance MonadTransControlStateless (ReaderT r)
 type RunStateless t = forall n b. Monad n => t n b -> n b
 
 liftWithStateless :: forall m t a. (Monad m, MonadTransControlStateless t) => (RunStateless t -> m a) -> t m a
-liftWithStateless a = liftWith $ \run -> a $ \x -> fromStT (Proxy :: Proxy t) <$> run x
+liftWithStateless a = liftWith $ \run -> a $ fmap (fromStT (Proxy :: Proxy t)) . run
 
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode (DomBuilderSpace m) t)
 liftTextNode = lift . textNode

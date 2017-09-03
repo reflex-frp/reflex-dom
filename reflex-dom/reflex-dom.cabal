@@ -81,6 +81,10 @@ library
     , Reflex.Dom.Xhr
 
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  if flag(expose-all-unfoldings)
+    ghc-options: -fexpose-all-unfoldings
+  if flag(use-reflex-optimizer)
+    ghc-options: -fplugin=Reflex.Optimizer
 
 executable sortableList
   build-depends: base
@@ -104,6 +108,21 @@ executable sortableList
     ghc-options: -fexpose-all-unfoldings
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
+
+executable benchmark
+  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum
+  hs-source-dirs: .
+  main-is: benchmark.hs
+  ghc-options: -O2 -fspecialise-aggressively
+  if !impl(ghcjs)
+    buildable: False
+
+benchmark krausest
+  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
+  hs-source-dirs: benchmarks
+  main-is: krausest.hs
+  ghc-options: -O2 -fspecialise-aggressively
+  type: exitcode-stdio-1.0
 
 source-repository head
   type: git

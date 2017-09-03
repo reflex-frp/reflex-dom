@@ -4,12 +4,12 @@
 , exception-transformers, ghcjs-dom, hlint, jsaddle, keycode, lens
 , monad-control, mtl, primitive, random, ref-tf, reflex, semigroups
 , stdenv, stm, template-haskell, temporary, text, these, time
-, transformers, unbounded-delays, unix, zenc, hashable, xvfb_run
-, chromium, process, jsaddle-warp
+, transformers, unbounded-delays, unix, zenc, hashable
+, chromium, process, jsaddle-warp, linux-namespaces, iproute
 }:
 let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
-      testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process ];
-      testSystemDepends = (drv.testSystemDepends or []) ++ [ xvfb_run chromium ];
+      testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
+      testSystemDepends = (drv.testSystemDepends or []) ++ [ chromium iproute ];
     };
 in mkDerivation (addGcTestDepends {
   pname = "reflex-dom-core";
@@ -30,6 +30,9 @@ in mkDerivation (addGcTestDepends {
   preBuild = ''
     export HOME="$PWD"
   '';
+
+  # Show some output while running tests, so we might notice what's wrong
+  testTarget = "--show-details=streaming";
 
   testHaskellDepends = [ base hlint ];
   description = "Functional Reactive Web Apps with Reflex";
