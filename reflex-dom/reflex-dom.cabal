@@ -122,6 +122,8 @@ benchmark krausest
   hs-source-dirs: benchmarks
   main-is: krausest.hs
   ghc-options: -O2 -fspecialise-aggressively -DGHCJS_GC_INTERVAL=60000
+  if impl(ghcjs)
+    ghc-options: -dedupe
   type: exitcode-stdio-1.0
 
 source-repository head
