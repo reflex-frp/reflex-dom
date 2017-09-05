@@ -22,6 +22,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+#ifdef ghcjs_HOST_OS
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
 module Reflex.Dom.Builder.Immediate
        ( EventTriggerRef (..)
        , ImmediateDomBuilderEnv (..)
@@ -297,16 +301,7 @@ deleteBetweenExclusive s e = liftJSM $ do
 --   and e will not be moved
 extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
 extractBetweenExclusive df s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(df,s,e){"
-    , "  var x;"
-    , "  for(;;){"
-    , "    x = s.nextSibling;"
-    , "    if(e===x) break;"
-    , "    df.appendChild(x);"
-    , "  }"
-    , "})"
-    ]
+  f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
   void $ call f f (df, s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -318,20 +313,17 @@ deleteUpTo s e = do
   extractUpTo df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
 
 extractUpTo :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+#ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2017-09-04)
+foreign import javascript unsafe
+  "(function() { var x = $2; while(x !== $3) { var y = x['nextSibling']; $1['appendChild'](x); x = y; } })()"
+  extractUpTo_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
+extractUpTo df s e = liftJSM $ extractUpTo_ df (toNode s) (toNode e)
+#else
 extractUpTo df s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(df,s,e){"
-    , "  var x = s;"
-    , "  var y;"
-    , "  for(;;) {"
-    , "    y = x.nextSibling;"
-    , "    df.appendChild(x);"
-    , "    if(e===y) break;"
-    , "    x = y;"
-    , "  }"
-    , "})"
-    ]
+  f <- eval ("(function(df,s,e){ var x = s; var y; for(;;) { y = x['nextSibling']; df['appendChild'](x); if(e===y) { break; } x = y; } })" :: Text)
   void $ call f f (df, s, e)
+#endif
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
 
@@ -1567,6 +1559,10 @@ instance MonadHold t m => MonadHold t (ImmediateDomBuilderT t m) where
   holdDyn v0 v' = lift $ holdDyn v0 v'
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 v' = lift $ holdIncremental v0 v'
+  {-# INLINABLE buildDynamic #-}
+  buildDynamic a0 = lift . buildDynamic a0
+  {-# INLINABLE headE #-}
+  headE = lift . headE
 
 data WindowConfig t = WindowConfig -- No config options yet
 

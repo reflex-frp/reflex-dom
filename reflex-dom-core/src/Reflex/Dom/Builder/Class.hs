@@ -610,7 +610,7 @@ class HasDomEvent t target eventName where
 instance Reflex t => HasDomEvent t (Element EventResult d t) en where
   type DomEventType (Element EventResult d t) en = EventResultType en
   {-# INLINABLE domEvent #-}
-  domEvent en e = unEventResult <$> Reflex.select (_element_events e) (WrapArg en)
+  domEvent en e = coerceEvent $ Reflex.select (_element_events e) (WrapArg en)
 
 instance Reflex t => HasDomEvent t (InputElement EventResult d t) en where
   type DomEventType (InputElement EventResult d t) en = EventResultType en

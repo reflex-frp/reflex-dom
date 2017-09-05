@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -ddump-simpl -ddump-rules -ddump-spec -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+{-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
 import Control.Monad.State
 import Data.Monoid
 import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
