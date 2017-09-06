@@ -185,7 +185,7 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift . lift
 
-instance (Reflex t, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
+instance (Reflex t, PrimMonad m, MonadFix m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
