@@ -115,7 +115,7 @@ executable sortableList
                , transformers
   hs-source-dirs: examples
   main-is: sortableList.hs
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
   if !flag(build-examples)
     buildable: False
@@ -136,7 +136,9 @@ benchmark krausest
   build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
-  ghc-options: -O2 -fspecialise-aggressively
+  ghc-options: -O2 -fspecialise-aggressively -DGHCJS_GC_INTERVAL=60000
+  if impl(ghcjs)
+    ghc-options: -dedupe
   type: exitcode-stdio-1.0
 
 source-repository head

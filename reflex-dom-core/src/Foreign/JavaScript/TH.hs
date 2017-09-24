@@ -170,6 +170,10 @@ instance MonadHold t m => MonadHold t (WithJSContextSingleton x m) where
   holdDyn v0 = lift . holdDyn v0
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 = lift . holdIncremental v0
+  {-# INLINABLE buildDynamic #-}
+  buildDynamic a0 = lift . buildDynamic a0
+  {-# INLINABLE headE #-}
+  headE = lift . headE
 
 instance MonadTransControl (WithJSContextSingleton x) where
   type StT (WithJSContextSingleton x) a = StT (ReaderT (JSContextSingleton x)) a
@@ -423,7 +427,7 @@ instance MonadJS (JSCtx_JavaScriptCore x) (WithJSContext x IO) where
     f $ JSUint8Array payloadRef
   fromJSArray (JSRef_JavaScriptCore a) = liftJSM $ do
     len <- round <$> (valToNumber =<< (a ^. js "length"))
-    forM [0..len-1] $ \i -> JSRef_JavaScriptCore <$> a !! i
+    forM [0..len-1] $ fmap JSRef_JavaScriptCore . (a !!)
   fromJSUint8Array a = do
     vals <- fromJSArray a
     doubles <- mapM fromJSNumber vals

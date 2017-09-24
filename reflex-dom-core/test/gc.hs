@@ -2,7 +2,9 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 import Control.Concurrent
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
@@ -36,11 +38,13 @@ failureLimit = 0
 main :: IO ()
 main = do
   uid <- getEffectiveUserID
-  unshare [User, Network]
-  writeUserMappings Nothing [UserMapping 0 uid 1]
+  handle (\(_ :: IOError) -> return ()) $ do -- If we run into an exception with sandboxing, just don't bother
+    unshare [User, Network]
+    writeUserMappings Nothing [UserMapping 0 uid 1]
+    callCommand "ip link set lo up ; ip addr"
   mainThread <- myThreadId
   withSystemTempDirectory "reflex-dom-core_test_gc" $ \tmp -> do
-    browserProcess <- spawnCommand $ "ip link set lo up ; ip addr ; sleep 1 ; echo 'Starting Chromium' ; chromium --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=" ++ tmp ++ " http://localhost:3911 ; echo 'Chromium exited'"
+    browserProcess <- spawnCommand $ "echo 'Starting Chromium' ; chromium --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=" ++ tmp ++ " http://localhost:3911 ; echo 'Chromium exited'"
     let finishTest result = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result

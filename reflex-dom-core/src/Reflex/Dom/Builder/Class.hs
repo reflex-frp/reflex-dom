@@ -610,7 +610,7 @@ class HasDomEvent t target eventName where
 instance Reflex t => HasDomEvent t (Element EventResult d t) en where
   type DomEventType (Element EventResult d t) en = EventResultType en
   {-# INLINABLE domEvent #-}
-  domEvent en e = unEventResult <$> Reflex.select (_element_events e) (WrapArg en)
+  domEvent en e = coerceEvent $ Reflex.select (_element_events e) (WrapArg en)
 
 instance Reflex t => HasDomEvent t (InputElement EventResult d t) en where
   type DomEventType (InputElement EventResult d t) en = EventResultType en
@@ -649,7 +649,7 @@ instance MonadTransControlStateless (ReaderT r)
 type RunStateless t = forall n b. Monad n => t n b -> n b
 
 liftWithStateless :: forall m t a. (Monad m, MonadTransControlStateless t) => (RunStateless t -> m a) -> t m a
-liftWithStateless a = liftWith $ \run -> a $ \x -> fromStT (Proxy :: Proxy t) <$> run x
+liftWithStateless a = liftWith $ \run -> a $ fmap (fromStT (Proxy :: Proxy t)) . run
 
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode (DomBuilderSpace m) t)
 liftTextNode = lift . textNode
