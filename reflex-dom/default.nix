@@ -1,18 +1,23 @@
 { mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, reflex
-, reflex-dom-core, stdenv, text, ghc
+, reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
 }:
-mkDerivation {
+let isAndroid = hostPlatform.libc == "bionic";
+in mkDerivation {
   pname = "reflex-dom";
   version = "0.4";
   src = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [ ".git" "dist" ])) ./.;
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
   ] ++ (if ghc.isGhcjs or false then [
-  ] else if stdenv.isDarwin then [
+  ] else if hostPlatform.isDarwin then [
     jsaddle-wkwebview
+  ] else if isAndroid then [
+    jsaddle-clib
+    android-activity
   ] else [
     jsaddle-webkit2gtk
   ]);
+  configureFlags = if isAndroid then [ "-fandroid" ] else [];
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;
 }

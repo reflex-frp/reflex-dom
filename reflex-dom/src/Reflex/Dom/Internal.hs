@@ -21,6 +21,20 @@ run :: a -> a
 run = id
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 import Language.Javascript.JSaddle.WKWebView (run)
+#elif defined(ANDROID)
+import Android.HaskellActivity
+import Control.Monad
+import Control.Concurrent
+import Data.Default
+import Data.String
+import Reflex.Dom.Android.MainWidget
+run _ = do
+  continueWithCallbacks $ traceActivityCallbacks $ def
+    { _activityCallbacks_onCreate = \_ -> do
+        a <- getHaskellActivity
+        startMainWidget a $ fromString "data:,Hello%2C%20World!" -- "file:///android_asset/index.html"
+    }
+  forever $ threadDelay 1000000000
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
 #endif
