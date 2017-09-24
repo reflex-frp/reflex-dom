@@ -45,12 +45,16 @@ library
   hs-source-dirs: src
   if flag(android)
     hs-source-dirs: src-android
+    other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
+      aeson,
       android-activity == 0.1.*,
       data-default == 0.7.*,
-      jsaddle-clib
+      jsaddle
     c-sources: cbits/MainWidget.c
+    include-dirs: cbits/include
     cpp-options: -DANDROID
+    build-tools: hsc2hs
   build-depends:
     base >= 4.7 && < 4.11,
     bytestring == 0.10.*,
@@ -94,7 +98,6 @@ library
     , Reflex.Dom.Widget.Lazy
     , Reflex.Dom.Widget.Resize
     , Reflex.Dom.Xhr
-
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings

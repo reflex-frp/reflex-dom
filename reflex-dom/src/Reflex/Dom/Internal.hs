@@ -28,11 +28,18 @@ import Control.Concurrent
 import Data.Default
 import Data.String
 import Reflex.Dom.Android.MainWidget
-run _ = do
-  continueWithCallbacks $ traceActivityCallbacks $ def
+import System.IO
+import Language.Javascript.JSaddle (JSM)
+
+run :: JSM () -> IO ()
+run jsm = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
+  continueWithCallbacks $ def
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
-        startMainWidget a $ fromString "data:,Hello%2C%20World!" -- "file:///android_asset/index.html"
+        let startPage = fromString "file:///android_asset/index.html"
+        startMainWidget a startPage jsm
     }
   forever $ threadDelay 1000000000
 #else
