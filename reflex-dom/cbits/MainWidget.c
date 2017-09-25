@@ -34,6 +34,8 @@ void Reflex_Dom_Android_MainWidget_runJS(jobject jsExecutor, const char* js) {
   jint attachResult = (*HaskellActivity_jvm)->AttachCurrentThread(HaskellActivity_jvm, &env, NULL);
   assert (attachResult == JNI_OK);
 
+  (*env)->PushLocalFrame(env, 5);
+
   //TODO: Don't search for this method every time
   jclass cls = (*env)->GetObjectClass(env, jsExecutor);
   assert(cls);
@@ -45,7 +47,8 @@ void Reflex_Dom_Android_MainWidget_runJS(jobject jsExecutor, const char* js) {
     __android_log_write(ANDROID_LOG_DEBUG, "MainWidget", "runJS exception");
     (*env)->ExceptionDescribe(env);
   }
-  (*env)->DeleteLocalRef(env, js_str);
+
+  (*env)->PopLocalFrame(env, 0);
 }
 
 JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_startProcessing (JNIEnv *env, jobject thisObj, long callbacksLong) {
