@@ -54,6 +54,7 @@ module Reflex.Dom.Widget.Basic
   , elDynClass'
   , elDynAttrNS'
   , dynamicAttributesToModifyAttributes
+  , dynamicAttributesToModifyAttributesWithInitial
 
   -- * List Utils
   , list
