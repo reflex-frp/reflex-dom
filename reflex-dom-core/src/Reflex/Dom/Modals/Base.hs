@@ -1,3 +1,4 @@
+{-
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -7,7 +8,11 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+-}
 module Reflex.Dom.Modals.Base
+where
+{-
   ( ModalsT (..)
   , ModalLayerConfig (..)
   , withModalLayer
@@ -101,7 +106,7 @@ instance MonadAtomicRef m => MonadAtomicRef (ModalsT t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
-instance (MonadAdjust t m, MonadHold t m) => MonadAdjust t (ModalsT t m) where
+instance (MonadAdjust t m, MonadHold t m, MonadFix m) => MonadAdjust t (ModalsT t m) where
   runWithReplace a0 a' = ModalsT $ runWithReplace (unModalsT a0) (fmapCheap unModalsT a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjust (coerce f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjustWithMove (coerce f) dm0 dm'
@@ -141,6 +146,11 @@ instance (DomBuilder t m) => Default (ModalLayerConfig t m) where
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
         & initialAttributes .~ ("style" =: "background-color:white;opacity:1;padding:1em")
     }
+
+instance (MonadQuery t q m, Monad m) => MonadQuery t q (ModalsT t m) where
+  tellQueryIncremental = lift . tellQueryIncremental
+  askQueryResult = lift askQueryResult
+  queryIncremental = lift . queryIncremental
 
 withModalLayer :: forall t m a. (Reflex t, MonadFix m, DomBuilder t m, MonadHold t m)
                => ModalLayerConfig t m
@@ -186,3 +196,4 @@ modalBody cfg v = do
     [ Just <$> complete
     , Nothing <$ domEvent Click overlay
     ]
+-}

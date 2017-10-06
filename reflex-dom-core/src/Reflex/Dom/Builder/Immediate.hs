@@ -22,6 +22,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+#ifdef ghcjs_HOST_OS
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
 module Reflex.Dom.Builder.Immediate
        ( EventTriggerRef (..)
        , ImmediateDomBuilderEnv (..)
@@ -56,6 +60,9 @@ module Reflex.Dom.Builder.Immediate
 #ifndef USE_TEMPLATE_HASKELL
        , phantom2
 #endif
+       , drawChildUpdate
+       , ChildReadyState (..)
+       , ChildReadyStateInt (..)
        , mkHasFocus
        , insertBefore
        , EventType
@@ -75,6 +82,11 @@ module Reflex.Dom.Builder.Immediate
        , WindowConfig (..)
        , Window (..)
        , wrapWindow
+       -- * Internal
+       , traverseDMapWithKeyWithAdjust'
+       , hoistTraverseWithKeyWithAdjust
+       , traverseIntMapWithKeyWithAdjust'
+       , hoistTraverseIntMapWithKeyWithAdjust
        ) where
 
 import Foreign.JavaScript.TH
@@ -153,6 +165,10 @@ import GHCJS.DOM.UIEvent
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import qualified GHCJS.DOM.Window as Window
 import Language.Javascript.JSaddle (call, eval)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+import Data.FastMutableIntMap (PatchIntMap (..))
+import qualified Data.FastMutableIntMap as FastMutableIntMap
 
 import Reflex.Requester.Base
 import Reflex.Requester.Class
@@ -167,16 +183,16 @@ instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
 
 -- |Structure forming the environment in which a DOM builder runs, tracking what document, where in that document is being built, and so on.
 data ImmediateDomBuilderEnv t = ImmediateDomBuilderEnv
-  { _immediateDomBuilderEnv_document :: Document -- TODO: is this really necessary? it's denormalized with respect to getOwnerDocument.
+  { _immediateDomBuilderEnv_document :: {-# UNPACK #-} !Document -- TODO: is this really necessary? it's denormalized with respect to getOwnerDocument.
   -- ^The document in which building is being performed.
-  , _immediateDomBuilderEnv_parent :: Node
+  , _immediateDomBuilderEnv_parent :: {-# UNPACK #-} !Node
   -- ^The DOM node where building is occurring within, often a document fragment.
-  , _immediateDomBuilderEnv_unreadyChildren :: IORef Word
+  , _immediateDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word)
   -- ^Number of children who still aren't fully rendered. While a DOM builder action has unready children, the parent being built into will typically be an
   -- unmounted document fragment. As each child becomes ready, this count is decremented until finally it reaches zero and the commit action is triggered.
-  , _immediateDomBuilderEnv_commitAction :: JSM ()
+  , _immediateDomBuilderEnv_commitAction :: {-# UNPACK #-} !(JSM ())
   -- ^Action to take when the unready children all become ready, usually to install the document fragment.
-  , _immediateDomBuilderEnv_mountState :: Dynamic t MountState
+  , _immediateDomBuilderEnv_mountState :: {-# UNPACK #-} !(Dynamic t MountState)
   -- ^'Dynamic' representing the current state of DOM nodes within the parent node with respect to the document as a whole. See 'MountState' for more.
   }
 
@@ -195,12 +211,12 @@ instance PrimMonad m => PrimMonad (ImmediateDomBuilderT x m) where
 instance MonadTrans (ImmediateDomBuilderT t) where
   lift = ImmediateDomBuilderT . lift . lift . lift
 
-instance (Reflex t, PrimMonad m) => DomRenderHook t (ImmediateDomBuilderT t m) where
+instance (Reflex t, MonadFix m) => DomRenderHook t (ImmediateDomBuilderT t m) where
   withRenderHook hook (ImmediateDomBuilderT a) = do
     e <- ImmediateDomBuilderT ask
     ImmediateDomBuilderT $ lift $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT (runReaderT a e) $ runIdentity <$> rsp
-      return (ffor req $ \rm -> hook $ DMap.traverseWithKey (\_ r -> Identity <$> r) rm, x)
+      return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
   requestDomAction = ImmediateDomBuilderT . lift . requestingIdentity
   requestDomAction_ = ImmediateDomBuilderT . lift . requesting_
 
@@ -224,7 +240,7 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
     win <- DOM.currentWindowUnchecked
     rec (x, req) <- runRequesterT (runReaderT a env) rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame handlersMVar win f $
-          DMap.traverseWithKey (\_ r -> Identity <$> r) rm
+          traverseRequesterData (\r -> Identity <$> r) rm
     return x
   where
     runInAnimationFrame handlersMVar win f x = do
@@ -242,7 +258,7 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
 
 class Monad m => HasDocument m where
   askDocument :: m Document
-  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => f m' Document
+  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => m Document
   askDocument = lift askDocument
 
 instance HasDocument m => HasDocument (ReaderT r m)
@@ -270,7 +286,7 @@ localEnv :: Monad m => (ImmediateDomBuilderEnv t -> ImmediateDomBuilderEnv t) ->
 localEnv f = ImmediateDomBuilderT . local f . unImmediateDomBuilderT
 
 {-# INLINABLE append #-}
-append :: (IsNode n, MonadJSM m) => n -> ImmediateDomBuilderT t m ()
+append :: MonadJSM m => DOM.Node -> ImmediateDomBuilderT t m ()
 append n = do
   p <- askParent
   liftJSM $ appendChild_ p n
@@ -278,10 +294,10 @@ append n = do
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
-textNodeInternal t = do
+textNodeInternal !t = do
   doc <- askDocument
   n <- liftJSM $ createTextNode doc t
-  append n
+  append $ toNode n
   return n
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -296,16 +312,7 @@ deleteBetweenExclusive s e = liftJSM $ do
 --   and e will not be moved
 extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
 extractBetweenExclusive df s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(df,s,e){"
-    , "  var x;"
-    , "  for(;;){"
-    , "    x = s.nextSibling;"
-    , "    if(e===x) break;"
-    , "    df.appendChild(x);"
-    , "  }"
-    , "})"
-    ]
+  f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
   void $ call f f (df, s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -317,20 +324,17 @@ deleteUpTo s e = do
   extractUpTo df s e -- In many places in ImmediateDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
 
 extractUpTo :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+#ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2017-09-04)
+foreign import javascript unsafe
+  "(function() { var x = $2; while(x !== $3) { var y = x['nextSibling']; $1['appendChild'](x); x = y; } })()"
+  extractUpTo_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
+extractUpTo df s e = liftJSM $ extractUpTo_ df (toNode s) (toNode e)
+#else
 extractUpTo df s e = liftJSM $ do
-  f <- eval $ T.unlines
-    [ "(function(df,s,e){"
-    , "  var x = s;"
-    , "  var y;"
-    , "  for(;;) {"
-    , "    y = x.nextSibling;"
-    , "    df.appendChild(x);"
-    , "    if(e===y) break;"
-    , "    x = y;"
-    , "  }"
-    , "})"
-    ]
+  f <- eval ("(function(df,s,e){ var x = s; var y; for(;;) { y = x['nextSibling']; df['appendChild'](x); if(e===y) { break; } x = y; } })" :: Text)
   void $ call f f (df, s, e)
+#endif
 
 type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
 
@@ -350,7 +354,8 @@ collectUpToGivenParent currentParent s e = do
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
-wrap :: forall m er t. SupportsImmediateDomBuilder t m => RawElement GhcjsDomSpace -> RawElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
+{-# INLINABLE wrap #-}
+wrap :: forall m er t. (Reflex t, MonadFix m, MonadJSM m, MonadReflexCreateTrigger t m) => RawElement GhcjsDomSpace -> RawElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m (Element er GhcjsDomSpace t)
 wrap e cfg = do
   events <- askEvents
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
@@ -394,7 +399,7 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. SupportsImmediateDomBuilder t m => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, MonadAdjust t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
@@ -407,7 +412,7 @@ makeElement elementTag cfg child = do
     { _immediateDomBuilderEnv_parent = toNode e
     -- plain element contents are always as mounted as their parent, so don't derive a new mount state
     }
-  append e
+  append $ toNode e
   wrapped <- wrap e $ extractRawElementConfig cfg
   return ((wrapped, result), e)
 
@@ -588,7 +593,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
           , _selectElement_raw = domSelectElement
           }
     return (wrapped, result)
-  placeRawElement = append
+  placeRawElement = append . toNode
   wrapRawElement = wrap
   notReadyUntil e = do
     eOnce <- headE e
@@ -649,7 +654,6 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
       insertBefore (_immediateDomFragment_document childFragment) after
       liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
-
 -}
 
 instance Monad m => HasMountStatus t (ImmediateDomBuilderT t m) where
@@ -665,6 +669,7 @@ data Cohort = Cohort
   }
 
 instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
+  {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
     before <- textNodeInternal ("" :: Text)
@@ -690,7 +695,7 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
           unreadyChildren <- liftIO $ newIORef 0
           let f = do
                 result <- a0
-                append after
+                append $ toNode after
                 return result
           result <- runReaderT (unImmediateDomBuilderT f) $ initialEnv
             { _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
@@ -730,37 +735,14 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
       return (commitActionToRunNow, result)
     requestDomAction_ $ fmapMaybe fst child'
     return (result0, snd <$> child')
-  traverseDMapWithKeyWithAdjust =
-    hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness applyDomUpdate_
-    where
-      updateChildUnreadiness (p :: PatchDMap k (Compose (Child k) v')) old = do
-        let new :: forall a. k a -> ComposeMaybe (Compose (Child k) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
-            new k (ComposeMaybe m) = ComposeMaybe <$> case m of
-              Nothing -> return Nothing
-              Just (Compose Child { _child_readyState = sRef }) -> do
-                readIORef sRef >>= \case
-                  ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
-                  ChildReadyState_Unready _ -> do
-                    writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
-                    return $ Just $ Constant sRef
-            delete _ (Constant sRef) = do
-              writeIORef sRef $ ChildReadyState_Unready Nothing
-              return $ Constant ()
-        p' <- fmap PatchDMap $ DMap.traverseWithKey new $ unPatchDMap p
-        _ <- DMap.traverseWithKey delete $ PatchDMap.getDeletions p old
-        return $ applyAlways p' old
-      applyDomUpdate_ currentChildInstallations lastPlaceholderRef (PatchDMap p) = do
-        childInstallations <- liftIO $ readIORef currentChildInstallations
-        forM_ (DMap.toList p) $ \(k :=> ComposeMaybe mv) -> do
-          lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
-          let nextPlaceholder = maybe lastPlaceholder (_childInstallation_placeholder . snd) $ Map.lookupGT (Some.This k) childInstallations
-          forM_ (Map.lookup (Some.This k) childInstallations) $ \ ci -> do
-            _childInstallation_placeholder ci `deleteUpTo` nextPlaceholder
-            liftIO $ _childInstallation_triggerUpdateLocalMountState ci Unmounted
-          forM_ mv $ \ (Compose child) -> do
-            _child_documentFragment child `insertBefore` nextPlaceholder
-            liftIO $ (_childInstallation_triggerUpdateLocalMountState . _child_installation) child Mounted
-        liftIO $ writeIORef currentChildInstallations $! applyAlways (weakenPatchDMapWith (_child_installation . getCompose) $ PatchDMap p) childInstallations
+
+  {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
+  traverseIntMapWithKeyWithAdjust = traverseIntMapWithKeyWithAdjust'
+
+  {-# INLINABLE traverseDMapWithKeyWithAdjust #-}
+  traverseDMapWithKeyWithAdjust = traverseDMapWithKeyWithAdjust'
+
+  {-# INLINABLE traverseDMapWithKeyWithAdjustWithMove #-}
   traverseDMapWithKeyWithAdjustWithMove =
     hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove updateChildUnreadiness applyDomUpdate_
     where
@@ -819,11 +801,108 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
         mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
         liftIO $ writeIORef currentChildInstallations $! childInstallationsAfter
 
--- |Structure keeping track of an individual DOM child managed by 'traverseDMapWithKeyWithAdjust' or 'traverseDMapWithKeyWithAdjustWithMove'.
-data Child k a = Child
+
+{-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
+traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
+traverseDMapWithKeyWithAdjust =
+  hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness applyDomUpdate_
+  where
+    updateChildUnreadiness (p :: PatchDMap k (Compose (Child k) v')) old = do
+      let new :: forall a. k a -> ComposeMaybe (Compose (Child k) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState k))) a)
+          new k (ComposeMaybe m) = ComposeMaybe <$> case m of
+            Nothing -> return Nothing
+            Just (Compose Child { _child_readyState = sRef }) -> do
+              readIORef sRef >>= \case
+                ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
+                ChildReadyState_Unready _ -> do
+                  writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
+                  return $ Just $ Constant sRef
+          delete _ (Constant sRef) = do
+            writeIORef sRef $ ChildReadyState_Unready Nothing
+            return $ Constant ()
+      p' <- fmap PatchDMap $ DMap.traverseWithKey new $ unPatchDMap p
+      _ <- DMap.traverseWithKey delete $ PatchDMap.getDeletions p old
+      return $ applyAlways p' old
+    applyDomUpdate_ currentChildInstallations lastPlaceholderRef (PatchDMap p) = do
+      childInstallations <- liftIO $ readIORef currentChildInstallations
+      forM_ (DMap.toList p) $ \(k :=> ComposeMaybe mv) -> do
+        lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
+        let nextPlaceholder = maybe lastPlaceholder (_childInstallation_placeholder . snd) $ Map.lookupGT (Some.This k) childInstallations
+        forM_ (Map.lookup (Some.This k) childInstallations) $ \ ci -> do
+          _childInstallation_placeholder ci `deleteUpTo` nextPlaceholder
+          liftIO $ _childInstallation_triggerUpdateLocalMountState ci Unmounted
+        forM_ mv $ \ (Compose child) -> do
+          _child_documentFragment child `insertBefore` nextPlaceholder
+          liftIO $ (_childInstallation_triggerUpdateLocalMountState . _child_installation) child Mounted
+      liftIO $ writeIORef currentChildInstallations $! applyAlways (weakenPatchDMapWith (_child_installation . getCompose) $ PatchDMap p) childInstallations
+
+{-# INLINABLE traverseIntMapWithKeyWithAdjust' #-}
+traverseIntMapWithKeyWithAdjust' :: forall t m v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m) => (IntMap.Key -> v -> ImmediateDomBuilderT t m v') -> IntMap v -> Event t (PatchIntMap v) -> ImmediateDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
+traverseIntMapWithKeyWithAdjust =
+  hoistTraverseIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust updateChildUnreadiness applyDomUpdate_
+  where
+    updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (Compose (Child k) v')) old = do
+      let new :: IntMap.Key -> ComposeMaybe (Compose ChildInt v') a -> IO (ComposeMaybe (Constant (IORef ChildReadyStateInt)) a)
+          new k (ComposeMaybe m) = ComposeMaybe <$> case m of
+            Nothing -> return Nothing
+            Just (Compose Child { _child_readyState = sRef }) -> do
+              readIORef sRef >>= \case
+                ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
+                ChildReadyState_Unready _ -> do
+                  writeIORef sRef $ ChildReadyState_Unready $ Just $ Some.This k
+                  return $ Just $ Constant sRef
+          delete _ (Constant sRef) = do
+            writeIORef sRef $ ChildReadyState_Unready Nothing
+            return $ Constant ()
+      p' <- fmap PatchDMap $ DMap.traverseWithKey new $ unPatchDMap p
+      _ <- DMap.traverseWithKey delete $ PatchDMap.getDeletions p old
+      return $ applyAlways p' old
+    applyDomUpdate_ currentChildInstallations lastPlaceholderRef (PatchDMap p) = do
+      childInstallations <- liftIO $ readIORef currentChildInstallations
+      forM_ (DMap.toList p) $ \(k :=> ComposeMaybe mv) -> do
+        lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
+        let nextPlaceholder = maybe lastPlaceholder (_childInstallation_placeholder . snd) $ Map.lookupGT (Some.This k) childInstallations
+        forM_ (Map.lookup (Some.This k) childInstallations) $ \ ci -> do
+          _childInstallation_placeholder ci `deleteUpTo` nextPlaceholder
+          liftIO $ _childInstallation_triggerUpdateLocalMountState ci Unmounted
+        forM_ mv $ \ (Compose child) -> do
+          _child_documentFragment child `insertBefore` nextPlaceholder
+          liftIO $ (_childInstallation_triggerUpdateLocalMountState . _child_installation) child Mounted
+      liftIO $ writeIORef currentChildInstallations $! applyAlways (weakenPatchDMapWith (_child_installation . getCompose) $ PatchDMap p) childInstallations
+
+{-# INLINABLE traverseIntMapWithKeyWithAdjust' #-}
+traverseIntMapWithKeyWithAdjust' = do
+  let updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) old = do
+        let new :: IntMap.Key -> Maybe (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IO (Maybe (IORef ChildReadyStateInt))
+            new k m = case m of
+              Nothing -> return Nothing
+              Just (_, _, sRef, _) -> do
+                readIORef sRef >>= \case
+                  ChildReadyStateInt_Ready -> return Nothing -- Delete this child, since it's ready
+                  ChildReadyStateInt_Unready _ -> do
+                    writeIORef sRef $ ChildReadyStateInt_Unready $ Just k
+                    return $ Just sRef
+            delete _ sRef = do
+              writeIORef sRef $ ChildReadyStateInt_Unready Nothing
+              return ()
+        p' <- PatchIntMap <$> IntMap.traverseWithKey new pInner
+        _ <- IntMap.traverseWithKey delete $ FastMutableIntMap.getDeletions p old
+        return $ applyAlways p' old
+  hoistTraverseIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust updateChildUnreadiness $ \placeholders lastPlaceholderRef (PatchIntMap p) -> do
+    phs <- liftIO $ readIORef placeholders
+    forM_ (IntMap.toList p) $ \(k, mv) -> do
+      lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
+      let nextPlaceholder = maybe lastPlaceholder snd $ IntMap.lookupGT k phs
+      forM_ (IntMap.lookup k phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
+      forM_ mv $ \(df, _, _, _) -> df `insertBefore` nextPlaceholder
+    liftIO $ writeIORef placeholders $! fromMaybe phs $ apply ((\(_, ph, _, _) -> ph) <$> PatchIntMap p) phs
+
+-- |Structure keeping track of an individual DOM child managed by 'traverseDMapWithKeyWithAdjust', 'traverseIntMapWithKeyWithAdjust',
+-- 'traverseDMapWithKeyWithAdjustWithMove', or 'traverseIntMapWithKeyWithAdjustWithMove'
+data Child rs a = Child
   { _child_documentFragment :: !DOM.DocumentFragment
   -- ^The document fragment installed in the DOM which should contain the intended DOM child tree for the entry in the 'DMap'.
-  , _child_readyState :: !(IORef (ChildReadyState k))
+  , _child_readyState :: !(IORef rs)
   -- ^Reference cell containing the current readiness of the child.
   , _child_installation :: !ChildInstallation
   -- ^Substructure with details that need to be maintained as long as the child is installed in the DOM.
@@ -839,7 +918,7 @@ data ChildInstallation = ChildInstallation
   -- ^IO trigger to update the local mount state of the child, which is then zipped with the parent mount state.
   }
 
--- |Enumerated state of a 'Child', representing whether it's installed in the DOM or not.
+-- |Enumerated state of a 'Child' being used with a 'DMap', representing whether it's installed in the DOM or not.
 #if MIN_VERSION_base(4,9,0)
 data ChildReadyState k
 #else
@@ -851,12 +930,124 @@ data ChildReadyState (k :: * -> *)
   -- ^The child is not yet installed in the DOM and if it has unready children then the key into the unready count tracking 'DMap' is given.
   deriving (Show, Read, Eq, Ord)
 
+-- |Enumerated state of a 'Child' being used with an 'IntMap', representing whether it's installed in the DOM or not.
+data ChildReadyStateInt
+   = ChildReadyStateInt_Ready
+  -- ^The child is installed in the DOM because it's become ready at some point.
+   | ChildReadyStateInt_Unready !(Maybe Int)
+  -- ^The child is not yet installed in the DOM and if it has unready children then the key into the unready count tracking 'DMap' is given.
+   deriving (Show, Read, Eq, Ord)
+
+-- |Hoist a 'traverseIntMapWithKeyWithAdjust' or 'traverseIntMapWithKeyWithAdjustWithMove' in the base monad that underlies a
+-- @'ImmediateDomBuilderT' m ~ 'RequesterT' t 'JSM' 'Identity' ('TriggerEventT' m)@. This is used to implement both 'traverseIntMapWithKeyWithAdjust' and
+-- 'traverseIntMapWithKeyWithAdjustWithMove' for 'ImmediateDomBuilderT'.
+--
+-- This is the core work which manages setting up the DOM structure and updating it over time on incoming patch events (@p v@), deferring the specifics of
+-- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
+{-# INLINABLE hoistTraverseIntMapWithKeyWithAdjust #-}
+hoistTraverseIntMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
+  ( MonadAdjust t m
+  , MonadHold t m
+  , MonadIO m
+  , MonadJSM m
+  , PrimMonad m
+  , MonadFix m
+  , MonadRef m, Ref m ~ IORef
+  , MonadReflexCreateTrigger t m
+  , Monoid (p (Compose (Child k) v'))
+  , Functor p
+  )
+  => (   (forall a. k a -> v -> RequesterT t JSM Identity (TriggerEventT t m) (Child ChildReadyStateInt v'))
+      -> IntMap v
+      -> Event t (p v)
+      -> RequesterT t JSM Identity (TriggerEventT t m) (IntMap (Child ChildReadyStateInt v'), Event t (p (Child ChildReadyStateInt v')))
+     )
+  -- ^@base@: The base monad's 'MonadAdjust' traversal function to augment with DOM handling.
+  -> (p (Compose (Child ChildReadyStateInt) v') -> IntMap (IORef ChildReadyStateInt) -> IO (IntMap (IORef ChildReadyStateInt)))
+  -- ^@updateChildUnreadiness@: Given a patch for the children DOM elements, produce a patch for the childrens' unreadiness state
+  -> (IORef (IntMap ChildInstallation) -> IORef DOM.Text -> p (Compose (Child ChildReadyStateInt) v') -> JSM ())
+  -- ^@applyDomUpdate_@: Apply a patch to the DOM
+  -> (IntMap.Key -> v -> ImmediateDomBuilderT t m v')
+  -- ^@f@: The function to apply to each pair in the initial 'DMap' or each pair that gets updated to produce the updated DOM structure for the value.
+  -> IntMap v
+  -- ^@im0@: The initial 'IntMap' to traverse, which will be successively updated by patch events.
+  -> Event t (p v)
+  -- ^@im'@: The stream of patch events to update @dm0@ with, applying @f@ for each change to build a new DOM structure.
+  -> ImmediateDomBuilderT t m (IntMap v', Event t (p v'))
+hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_ f im0 im' = do
+  initialEnv <- ImmediateDomBuilderT ask
+  let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
+  pendingChange :: IORef (IntMap (IORef ChildReadyStateInt), p (Compose (Child ChildReadyStateInt) v')) <- liftIO $ newIORef mempty
+  haveEverBeenReady <- liftIO $ newIORef False
+  currentChildInstallations <- liftIO $ newIORef $ error "currentChildInstallations not yet initialized"
+  lastPlaceholderRef <- liftIO $ newIORef $ error "lastPlaceholderRef not yet initialized"
+  let applyDomUpdate p = do
+        applyDomUpdate_ currentChildInstallations lastPlaceholderRef p
+        markSelfReady
+        liftIO $ writeIORef pendingChange $! mempty
+      markSelfReady = do
+        liftIO (readIORef haveEverBeenReady) >>= \case
+          True -> return ()
+          False -> do
+            liftIO $ writeIORef haveEverBeenReady True
+            old <- liftIO $ readIORef parentUnreadyChildren
+            let new = pred old
+            liftIO $ writeIORef parentUnreadyChildren $! new
+            when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
+      markChildReady :: IORef ChildReadyStateInt -> JSM ()
+      markChildReady childReadyState = do
+        liftIO (readIORef childReadyState) >>= \case
+          ChildReadyStateInt_Ready -> return ()
+          ChildReadyStateInt_Unready countedAt -> do
+            liftIO $ writeIORef childReadyState ChildReadyStateInt_Ready
+            case countedAt of
+              Nothing -> return ()
+              Just k -> do -- This child has been counted as unready, so we need to remove it from the unready set
+                (oldUnready, p) <- liftIO $ readIORef pendingChange
+                when (not $ IntMap.null oldUnready) $ do -- This shouldn't actually ever be null
+                  let newUnready = IntMap.delete k oldUnready
+                  liftIO $ writeIORef pendingChange (newUnready, p)
+                  when (IntMap.null newUnready) $ do
+                    applyDomUpdate p
+  (children0, children') <- ImmediateDomBuilderT $ lift $ base (\k v -> drawChildUpdateInt initialEnv markChildReady $ f k v) im0 im'
+  let processChild k (Compose Child { _child_readyState = sRef }) = ComposeMaybe <$> do
+        readIORef sRef >>= \case
+          ChildReadyStateInt_Ready -> return Nothing
+          ChildReadyStateInt_Unready _ -> do
+            writeIORef sRef $ ChildReadyStateInt_Unready $ Just k
+            return $ Just sRef
+  initialUnready <- liftIO $ IntMap.mapMaybe id <$> IntMap.traverseWithKey processChild children0
+  liftIO $ if IntMap.null initialUnready
+    then writeIORef haveEverBeenReady True
+    else do
+      modifyIORef' parentUnreadyChildren succ
+      writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
+  let result0 = IntMap.map (_child_result . getCompose) children0
+      childInstallations0 = fmap (\ (Compose Child { _child_installation = ci }) -> ci) children0
+      result' = ffor children' $ fmap $ _child_result . getCompose
+  liftIO $ writeIORef currentChildInstallations $! childInstallations0
+  let placeInitialChild _ (Compose child) = do
+        append $ _child_documentFragment child
+        liftIO $ (_childInstallation_triggerUpdateLocalMountState . _child_installation) child Mounted
+        return ()
+  _ <- IntMap.traverseWithKey placeInitialChild children0
+  liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
+  requestDomAction_ $ ffor children' $ \p -> do
+    (oldUnready, oldP) <- liftIO $ readIORef pendingChange
+    newUnready <- liftIO $ updateChildUnreadiness p oldUnready
+    let !newP = p <> oldP
+    liftIO $ writeIORef pendingChange (newUnready, newP)
+    when (IntMap.null newUnready) $ do
+      applyDomUpdate newP
+  return (result0, result')
+
 -- |Hoist a 'traverseWithKeyWithAdjust' or 'traverseWithKeyWithAdjustWithMove' in the base monad that underlies a
 -- @'ImmediateDomBuilderT' m ~ 'RequesterT' t 'JSM' 'Identity' ('TriggerEventT' m)@. This is used to implement both 'traverseWithKeyWithAdjust' and
 -- 'traverseWithKeyWithAdjustWithMove' for 'ImmediateDomBuilderT'.
 --
 -- This is the core work which manages setting up the DOM structure and updating it over time on incoming patch events (@p k v@), deferring the specifics of
 -- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
+{-# INLINABLE hoistTraverseWithKeyWithAdjust #-}
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( MonadAdjust t m
   , MonadHold t m
@@ -961,6 +1152,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
 
 -- |Helper which is used by 'hoistTraverseWithKeyWithAdjust' to create a 'Child' for some value in a 'DMap' which a DOM structure will be created for.
 -- This is invoked for each value in the input 'DMap' as well as any updated or inserted value patched in.
+{-# INLINABLE drawChildUpdate #-}
 drawChildUpdate :: (MonadIO m, MonadJSM m, MonadHold t m, MonadRef m, MonadReflexCreateTrigger t m, Ref m ~ IORef, Reflex t)
   => ImmediateDomBuilderEnv t
   -- ^@initialEnv@: The builder environment that the child will be placed in.
@@ -971,7 +1163,7 @@ drawChildUpdate :: (MonadIO m, MonadJSM m, MonadHold t m, MonadRef m, MonadRefle
   -- zero and then hits zero. If the unready count starts at zero, they're not called.
   -> ImmediateDomBuilderT t m (v' a)
   -- ^@child@: Action to build the DOM for @v' a@
-  -> RequesterT t JSM Identity (TriggerEventT t m) (Compose (Child k) v' a)
+  -> RequesterT t JSM Identity (TriggerEventT t m) (Compose (Child (ChildReadyState k)) v' a)
 drawChildUpdate initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyState_Unready Nothing
   unreadyChildren <- liftIO $ newIORef 0
@@ -988,6 +1180,38 @@ drawChildUpdate initialEnv markReady child = do
     }
   u <- liftIO $ readIORef unreadyChildren
   when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyState_Ready
+  return $ Compose $ Child df childReadyState (ChildInstallation placeholder triggerUpdateLocalMountState) result
+
+-- |Helper which is used by 'hoistTraverseIntMapWithKeyWithAdjust' to create a 'Child' for some value in an 'IntMap' which a DOM structure will be created for.
+-- This is invoked for each value in the input 'IntMap' as well as any updated or inserted value patched in.
+{-# INLINABLE drawChildUpdateInt #-}
+drawChildUpdateInt :: (MonadIO m, MonadJSM m)
+  => ImmediateDomBuilderEnv t
+  -- ^@initialEnv@: The builder environment that the child will be placed in.
+  -> (IORef ChildReadyStateInt -> JSM ()) -- This will NOT be called if the child is ready at initialization time; instead, the ChildReadyState return value will be ChildReadyState_Ready
+  -- ^@markReady@: Action to take when the child becomes ready, installed as the commit action when evaluating the DOM building function @child@.
+  -- This will NOT be called if the child is ready at initialization time; instead, the 'ChildReadyStateInt' return value will be 'ChildReadyStateInt_Ready'. This
+  -- is a natural consequence of this being installed as the commit action; commit actions are only called when the unready children count is larger than
+  -- zero and then hits zero. If the unready count starts at zero, they're not called.
+  -> ImmediateDomBuilderT t m v'
+  -- ^@child@: Action to build the DOM for @v'@
+  -> RequesterT t JSM Identity (TriggerEventT t m) (Compose (Child ChildReadyStateInt) v')
+drawChildUpdateInt initialEnv markReady child = do
+  childReadyState <- liftIO $ newIORef $ ChildReadyStateInt_Unready Nothing
+  unreadyChildren <- liftIO $ newIORef 0
+  df <- createDocumentFragment $ _immediateDomBuilderEnv_document initialEnv
+  let parentMountState = _immediateDomBuilderEnv_mountState initialEnv
+  (updateLocalMountState, triggerUpdateLocalMountState) <- newTriggerEvent
+  localMountState <- holdDyn Mounting updateLocalMountState
+  (placeholder, result) <- runReaderT (unImmediateDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ ImmediateDomBuilderEnv
+    { _immediateDomBuilderEnv_document = _immediateDomBuilderEnv_document initialEnv
+    , _immediateDomBuilderEnv_parent = toNode df
+    , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+    , _immediateDomBuilderEnv_commitAction = markReady childReadyState
+    , _immediateDomBuilderEnv_mountState = zipDynWith min parentMountState localMountState
+    }
+  u <- liftIO $ readIORef unreadyChildren
+  when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyStateInt_Ready
   return $ Compose $ Child df childReadyState (ChildInstallation placeholder triggerUpdateLocalMountState) result
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
@@ -1515,6 +1739,10 @@ instance MonadHold t m => MonadHold t (ImmediateDomBuilderT t m) where
   holdDyn v0 v' = lift $ holdDyn v0 v'
   {-# INLINABLE holdIncremental #-}
   holdIncremental v0 v' = lift $ holdIncremental v0 v'
+  {-# INLINABLE buildDynamic #-}
+  buildDynamic a0 = lift . buildDynamic a0
+  {-# INLINABLE headE #-}
+  headE = lift . headE
 
 data WindowConfig t = WindowConfig -- No config options yet
 

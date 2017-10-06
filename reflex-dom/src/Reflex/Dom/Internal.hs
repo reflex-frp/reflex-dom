@@ -21,6 +21,27 @@ run :: a -> a
 run = id
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 import Language.Javascript.JSaddle.WKWebView (run)
+#elif defined(ANDROID)
+import Android.HaskellActivity
+import Control.Monad
+import Control.Concurrent
+import Data.Default
+import Data.String
+import Reflex.Dom.Android.MainWidget
+import System.IO
+import Language.Javascript.JSaddle (JSM)
+
+run :: JSM () -> IO ()
+run jsm = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
+  continueWithCallbacks $ def
+    { _activityCallbacks_onCreate = \_ -> do
+        a <- getHaskellActivity
+        let startPage = fromString "file:///android_asset/index.html"
+        startMainWidget a startPage jsm
+    }
+  forever $ threadDelay 1000000000
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
 #endif
@@ -37,7 +58,7 @@ mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> IO ()
 mainWidgetWithCss css w = run $ Main.mainWidgetWithCss css w
 {-# INLINE mainWidgetWithCss #-}
 
-mainWidgetWithHead' :: (forall x. (a -> Widget x b, b -> Widget x a)) -> IO ()
+mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> IO ()
 mainWidgetWithHead' w = run $ Main.mainWidgetWithHead' w
 {-# INLINE mainWidgetWithHead' #-}
 

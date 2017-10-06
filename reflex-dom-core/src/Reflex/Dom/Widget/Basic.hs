@@ -54,6 +54,7 @@ module Reflex.Dom.Widget.Basic
   , elDynClass'
   , elDynAttrNS'
   , dynamicAttributesToModifyAttributes
+  , dynamicAttributesToModifyAttributesWithInitial
 
   -- * List Utils
   , list
@@ -138,6 +139,7 @@ listHoldWithKey m0 m' f = do
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
+{-# INLINABLE dynText #-}
 dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
 dynText t = do
   postBuild <- getPostBuild

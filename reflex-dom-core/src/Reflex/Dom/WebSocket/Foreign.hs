@@ -80,4 +80,4 @@ newWebSocket _ url onMessage onOpen onError onClose = do
   return $ JSWebSocket ws
 
 onBSMessage :: Either ByteString JSVal -> JSM ByteString
-onBSMessage = either return (\v -> encodeUtf8 <$> fromJSValUnchecked v)
+onBSMessage = either return $ fmap encodeUtf8 . fromJSValUnchecked

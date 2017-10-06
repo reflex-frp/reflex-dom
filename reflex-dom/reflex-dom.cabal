@@ -15,6 +15,7 @@ extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
+                    java/org/reflexfrp/reflexdom/MainWidget.java
 
 flag webkit2gtk
   description: Use WebKit2 version of WebKitGTK.
@@ -35,8 +36,25 @@ flag build-examples
   default: False
   manual: True
 
+flag android
+  description: Build an Android app
+  default: False
+  manual: True
+
 library
   hs-source-dirs: src
+  if flag(android)
+    hs-source-dirs: src-android
+    other-modules: Reflex.Dom.Android.MainWidget
+    build-depends:
+      aeson,
+      android-activity == 0.1.*,
+      data-default == 0.7.*,
+      jsaddle
+    c-sources: cbits/MainWidget.c
+    include-dirs: cbits/include
+    cpp-options: -DANDROID
+    build-tools: hsc2hs
   build-depends:
     base >= 4.7 && < 4.11,
     bytestring == 0.10.*,
@@ -52,8 +70,9 @@ library
         build-depends:
           jsaddle-webkit2gtk
       else
-        build-depends:
-          jsaddle-webkitgtk
+        if !flag(android)
+          build-depends:
+            jsaddle-webkitgtk
 
   exposed-modules:
     Reflex.Dom
@@ -79,8 +98,11 @@ library
     , Reflex.Dom.Widget.Lazy
     , Reflex.Dom.Widget.Resize
     , Reflex.Dom.Xhr
-
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  if flag(expose-all-unfoldings)
+    ghc-options: -fexpose-all-unfoldings
+  if flag(use-reflex-optimizer)
+    ghc-options: -fplugin=Reflex.Optimizer
 
 executable sortableList
   build-depends: base
@@ -96,7 +118,7 @@ executable sortableList
                , transformers
   hs-source-dirs: examples
   main-is: sortableList.hs
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
   if !flag(build-examples)
     buildable: False
@@ -104,6 +126,23 @@ executable sortableList
     ghc-options: -fexpose-all-unfoldings
   if flag(use-reflex-optimizer)
     ghc-options: -fplugin=Reflex.Optimizer
+
+executable benchmark
+  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum
+  hs-source-dirs: .
+  main-is: benchmark.hs
+  ghc-options: -O2 -fspecialise-aggressively
+  if !impl(ghcjs)
+    buildable: False
+
+benchmark krausest
+  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
+  hs-source-dirs: benchmarks
+  main-is: krausest.hs
+  ghc-options: -O2 -fspecialise-aggressively -DGHCJS_GC_INTERVAL=60000
+  if impl(ghcjs)
+    ghc-options: -dedupe
+  type: exitcode-stdio-1.0
 
 source-repository head
   type: git
