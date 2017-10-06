@@ -122,6 +122,7 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   ((events, postMountTriggerRef), fc) <- liftIO . attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    (postMount, postMountTriggerRef) <- newEventWithTriggerRef
     mountState <- holdDyn Mounting (Mounted <$ postMount)
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
         go w df = do
