@@ -135,13 +135,14 @@ executable benchmark
   if !impl(ghcjs)
     buildable: False
 
-benchmark krausest
+executable krausest
   build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
-  ghc-options: -O2 -fspecialise-aggressively -DGHCJS_GC_INTERVAL=60000
+  ghc-options: -O2 -fspecialise-aggressively
   if impl(ghcjs)
     ghc-options: -dedupe
+    cpp-options: -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=60000
   type: exitcode-stdio-1.0
 
 source-repository head
