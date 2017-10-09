@@ -143,6 +143,8 @@ executable krausest
   if impl(ghcjs)
     ghc-options: -dedupe
     cpp-options: -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=60000
+  else
+    buildable: False
   type: exitcode-stdio-1.0
 
 source-repository head
