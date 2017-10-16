@@ -20,7 +20,7 @@ jobject Reflex_Dom_Android_MainWidget_start(jobject activity, const char *url, c
   jstring jurl = (*env)->NewStringUTF(env, url);
   assert(jurl);
   jstring initialJS = (*env)->NewStringUTF(env, jsaddleCallbacks->jsaddleJsData);
-  jobject result = (*env)->CallStaticObjectMethod(env, cls, startMainWidget, activity, jurl, (long)jsaddleCallbacks, initialJS);
+  jobject result = (*env)->CallStaticObjectMethod(env, cls, startMainWidget, activity, jurl, (jlong)jsaddleCallbacks, initialJS);
   (*env)->DeleteLocalRef(env, initialJS);
   if((*env)->ExceptionOccurred(env)) {
     __android_log_write(ANDROID_LOG_DEBUG, "MainWidget", "startMainWidget exception");
@@ -51,13 +51,13 @@ void Reflex_Dom_Android_MainWidget_runJS(jobject jsExecutor, const char* js) {
   (*env)->PopLocalFrame(env, 0);
 }
 
-JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_startProcessing (JNIEnv *env, jobject thisObj, long callbacksLong) {
+JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_startProcessing (JNIEnv *env, jobject thisObj, jlong callbacksLong) {
   const JSaddleCallbacks *callbacks = (const JSaddleCallbacks *)callbacksLong;
   (*(callbacks->jsaddleStart))();
   return;
 }
 
-JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_processMessage (JNIEnv *env, jobject thisObj, long callbacksLong, jstring msg) {
+JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_processMessage (JNIEnv *env, jobject thisObj, jlong callbacksLong, jstring msg) {
   const JSaddleCallbacks *callbacks = (const JSaddleCallbacks *)callbacksLong;
   const char *msg_str = (*env)->GetStringUTFChars(env, msg, NULL);
   (*(callbacks->jsaddleResult))(msg_str);
@@ -65,7 +65,7 @@ JNIEXPORT void JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallb
   return;
 }
 
-JNIEXPORT jstring JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_processSyncMessage (JNIEnv *env, jobject thisObj, long callbacksLong, jstring msg) {
+JNIEXPORT jstring JNICALL Java_org_reflexfrp_reflexdom_MainWidget_00024JSaddleCallbacks_processSyncMessage (JNIEnv *env, jobject thisObj, jlong callbacksLong, jstring msg) {
   const JSaddleCallbacks *callbacks = (const JSaddleCallbacks *)callbacksLong;
   const char *msg_str = (*env)->GetStringUTFChars(env, msg, NULL);
   char *next_str = (*(callbacks->jsaddleSyncResult))(msg_str);
