@@ -2,10 +2,10 @@
 , bytestring, constraints, containers, contravariant, data-default
 , dependent-map, dependent-sum, dependent-sum-template, directory
 , exception-transformers, ghcjs-dom, hlint, jsaddle, keycode, lens
-, monad-control, mtl, primitive, random, ref-tf, reflex, semigroups
-, stdenv, stm, template-haskell, temporary, text, these, time
-, transformers, unbounded-delays, unix, zenc, hashable
-, chromium, process, jsaddle-warp, linux-namespaces, iproute
+, monad-control, mtl, primitive, ref-tf, reflex, semigroups, stdenv
+, stm, template-haskell, temporary, text, these, transformers
+, unix, zenc, hashable, chromium, process, jsaddle-warp
+, linux-namespaces, iproute
 }:
 let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
       testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
@@ -19,9 +19,9 @@ in mkDerivation (addGcTestDepends {
     aeson base bifunctors bimap blaze-builder bytestring constraints
     containers contravariant data-default dependent-map dependent-sum
     dependent-sum-template directory exception-transformers ghcjs-dom
-    jsaddle keycode lens monad-control mtl primitive random ref-tf
-    reflex semigroups stm template-haskell text these time transformers
-    unbounded-delays unix zenc
+    jsaddle keycode lens monad-control mtl primitive ref-tf
+    reflex semigroups stm template-haskell text these transformers
+    unix zenc
   ] ++ (if ghc.isGhcjs or false then [
     hashable
   ] else []);

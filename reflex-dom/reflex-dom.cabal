@@ -90,7 +90,6 @@ library
     , Reflex.Dom.Location
     , Reflex.Dom.Main
     , Reflex.Dom.Old
-    , Reflex.Dom.Time
     , Reflex.Dom.WebSocket
     , Reflex.Dom.Widget
     , Reflex.Dom.Widget.Basic
