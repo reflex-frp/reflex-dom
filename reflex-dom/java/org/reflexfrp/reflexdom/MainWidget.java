@@ -26,6 +26,7 @@ public class MainWidget {
     ws.setJavaScriptEnabled(true);
     ws.setAllowFileAccessFromFileURLs(true);
     ws.setAllowUniversalAccessFromFileURLs(true);
+    ws.setDomStorageEnabled(true);
     wv.setWebContentsDebuggingEnabled(true);
     // allow video to play without user interaction
     wv.getSettings().setMediaPlaybackRequiresUserGesture(false);
