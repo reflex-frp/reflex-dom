@@ -61,12 +61,6 @@ import System.IO.Unsafe
 import Data.JSString.Text
 import qualified Data.ByteString.Lazy as LBS
 #endif
--- When on ghcjs and using packages with jsstring patches it removes the FromJSVal
--- instance for Value from ghcjs-base. This makes it so that if the patches
--- are used then the instance comes from ghcjs-json
-#if defined(ghcjs_HOST_OS) && defined(USE_TEXT_JSSTRING)
-import JavaScript.JSON.Types.FromJSVal ()
-#endif
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]

@@ -33,11 +33,6 @@ flag expose-all-unfoldings
   default: False
   manual: True
 
-flag use-text-jsstring
-  description: Defines an identifier to determine if the package is being built with text-jsstring patched packages
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
   build-depends:
@@ -85,11 +80,6 @@ library
     hs-source-dirs: src-ghc
     if !os(windows)
       build-depends: unix == 2.7.*
-
-  if impl(ghcjs) && flag(use-text-jsstring)
-    build-depends:
-      ghcjs-json
-    cpp-options: -DUSE_TEXT_JSSTRING
 
   exposed-modules:
     Foreign.JavaScript.TH
