@@ -7,16 +7,9 @@ import Control.Exception
 import Data.Aeson
 import Data.JSString (JSString)
 import Foreign.JavaScript.Utils
+import GHCJS.Marshal ()
 import Language.Javascript.JSaddle
 import System.IO.Unsafe
--- When on ghcjs and using packages with jsstring patches it removes the FromJSVal
--- instance for Value from ghcjs-base. This makes it so that if the patches
--- are used then the instance comes from ghcjs-json
-#ifdef USE_TEXT_JSSTRING
-import JavaScript.JSON.Types.FromJSVal ()
-#else
-import GHCJS.Marshal ()
-#endif
 
 jsonDecode :: FromJSON a => JSString -> Maybe a
 jsonDecode t = do
