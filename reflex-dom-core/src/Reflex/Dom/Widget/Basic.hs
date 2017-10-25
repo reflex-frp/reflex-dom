@@ -59,6 +59,8 @@ module Reflex.Dom.Widget.Basic
   , tabDisplay
 
   , HasAttributes (..)
+  , module Reflex.Collection
+  , module Data.Map.Misc
   ) where
 
 import Reflex.Class
