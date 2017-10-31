@@ -76,30 +76,7 @@ Note the "list" functions do not imply particular HTML tags (ul, li, etc), thoug
 -- Same as dyn, but takes initial value and an update Event instead of a Dynamic.
 [W]   widgetHold :: m a ->   Event (m a) -> m (Dynamic a)
 
--- Turn a Dynamic key/value map into a set of dynamically-changing widgets.
-[W]   listWithKey :: Ord k =>
-          Dynamic (Map k v) -> (k -> Dynamic v -> m        a ) -> m (Dynamic (Map k a))
-
--- Same as above where the widget constructor doesn't care about the key.
-[W]   list        :: Ord k =>
-          Dynamic (Map k v) -> (     Dynamic v -> m        a ) -> m (Dynamic (Map k a))
-
--- Even simpler version where there are no keys and we just use a list.
-[W]   simpleList  ::
-          Dynamic       [v] -> (     Dynamic v -> m        a ) -> m (Dynamic       [a])
-
--- Like listWithKey specialized for widgets returning (Event a).
-[W]   listViewWithKey :: Ord k =>
-          Dynamic (Map k v) -> (k -> Dynamic v -> m (Event a)) -> m (Event   (Map k a))
-
--- Create a dynamically-changing set of widgets, one of which is selected at any time.
-[W]   selectViewListWithKey_ :: Ord k => Dynamic k ->
-          Dynamic (Map k v) -> (k -> Dynamic v -> Dynamic Bool -> m (Event a)) -> m (Event k)
-
--- Same as listWithKey, but takes initial values and an updates Event instead of a Dynamic.
-[W]   listWithKey' :: Ord k =>
-          Map k v -> Event (Map k (Maybe v)) -> (k -> v -> Event v -> m a) -> m (Dynamic (Map k a))
-```
+Also see the "Collection management functions" section in the `reflex` Quick Reference.
 
 ### Utility widgets
 
@@ -135,27 +112,12 @@ Some of these widget builders take a configuration record and return a record co
 
 ## Connecting to the real world (I/O)
 
-### Connecting to DOM events
-
 ```haskell
 -- Extract the specified Event from an 'El'.  See Reflex.Dom.Widget.Basic
 [ ]   domEvent :: EventName en -> El -> Event (EventResultType en)
 ```
 
-### Performing arbitrary I/O in response to Events
-
-```haskell
--- Run side-effecting actions in Event when it occurs; returned Event contains
--- results. Side effects run in (WidgetHost m) monad, which includes [S] and [H]
--- and can also do I/O via liftIO
-[W]   performEvent      :: Event (                WidgetHost m  a) -> m (Event a)
-
--- Just run side-effects; no return Event
-[W]   performEvent_     :: Event (                WidgetHost m ()) -> m ()
-
--- Actions run asynchronously; actions are given a callback to send return values
-[W]   performEventAsync :: Event ((a -> IO ()) -> WidgetHost m ()) -> m (Event a)
-```
+Also see the "Connection to the real world" and "Time" sections in the `reflex` Quick Reference.
 
 ### XMLHttpRequest
 
@@ -178,16 +140,6 @@ Convenience functions for XMLHttpRequest.  see Reflex.Dom.Xhr
 [W]   getAndDecode :: FromJSON a => Event Text -> m (Event (Maybe a))
 ```
 
-### Time
-
-```haskell
--- Create Event at given interval with given basis time.
-[W]   tickLossy :: NominalDiffTime -> UTCTime -> m (Event t TickInfo)
-
--- Delay an Event's occurrences by a given amount in seconds.
-[W]   delay :: NominalDiffTime -> Event t a -> m (Event t a)
-```
-
 ## Startup
 
 ```haskell
@@ -201,7 +153,6 @@ Convenience functions for XMLHttpRequest.  see Reflex.Dom.Xhr
 [I]   mainWidgetWithCss ::
           ByteString ->
           Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
-
--- One-shot Event that is triggered once all initial widgets are built
-[W]   getPostBuild :: m (Event ())
 ```
+
+Also see the corresponding section in the `reflex` Quick Reference.
