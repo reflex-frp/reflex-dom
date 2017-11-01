@@ -469,6 +469,23 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
         runReaderT (defaultDomEventHandler e en) evt
     }
 
+instance SupportsImmediateDomBuilder t m => NotReady t (ImmediateDomBuilderT t m) where
+  notReadyUntil e = do
+    eOnce <- headE e
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
+    let ready = do
+          old <- liftIO $ readIORef unreadyChildren
+          let new = pred old
+          liftIO $ writeIORef unreadyChildren $! new
+          when (new == 0) $ _immediateDomBuilderEnv_commitAction env
+    requestDomAction_ $ ready <$ eOnce
+  notReady = do
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
+
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
   type DomBuilderSpace (ImmediateDomBuilderT t m) = GhcjsDomSpace
   {-# INLINABLE textNode #-}
@@ -583,21 +600,6 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return (wrapped, result)
   placeRawElement = append . toNode
   wrapRawElement = wrap
-  notReadyUntil e = do
-    eOnce <- headE e
-    env <- ImmediateDomBuilderT ask
-    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
-    liftIO $ modifyIORef' unreadyChildren succ
-    let ready = do
-          old <- liftIO $ readIORef unreadyChildren
-          let new = pred old
-          liftIO $ writeIORef unreadyChildren $! new
-          when (new == 0) $ _immediateDomBuilderEnv_commitAction env
-    requestDomAction_ $ ready <$ eOnce
-  notReady = do
-    env <- ImmediateDomBuilderT ask
-    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
-    liftIO $ modifyIORef' unreadyChildren succ
 
 data FragmentState
   = FragmentState_Unmounted

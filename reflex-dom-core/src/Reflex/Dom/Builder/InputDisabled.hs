@@ -81,6 +81,10 @@ instance Adjustable t m => Adjustable t (InputDisabledT m) where
   traverseDMapWithKeyWithAdjust f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjust (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjustWithMove (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
 
+instance NotReady t m => NotReady t (InputDisabledT m) where
+  notReadyUntil = lift . notReadyUntil
+  notReady = lift notReady
+
 instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
   type DomBuilderSpace (InputDisabledT m) = DomBuilderSpace m
   inputElement cfg = lift $ inputElement $ cfg
