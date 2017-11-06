@@ -57,13 +57,14 @@ closeWebSocket (JSWebSocket ws) code reason = DOM.close ws (Just code) (Just rea
 newWebSocket
   :: a
   -> Text -- url
+  -> [Text] -- protocols
   -> (Either ByteString JSVal -> JSM ()) -- onmessage
   -> JSM () -- onopen
   -> JSM () -- onerror
   -> ((Bool, Word, Text) -> JSM ()) -- onclose
   -> JSM JSWebSocket
-newWebSocket _ url onMessage onOpen onError onClose = do
-  ws <- DOM.newWebSocket url ([] :: [Text])
+newWebSocket _ url protocols onMessage onOpen onError onClose = do
+  ws <- DOM.newWebSocket url protocols
   DOM.setBinaryType ws "arraybuffer"
   _ <- on ws DOM.open $ liftJSM onOpen
   _ <- on ws DOM.error $ liftJSM onError
