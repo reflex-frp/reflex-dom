@@ -12,9 +12,14 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
 import android.webkit.PermissionRequest;
+import android.webkit.MimeTypeMap;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.net.Uri;
 import android.annotation.TargetApi;
 import android.os.Build;
+import java.io.InputStream;
+import java.io.IOException;
 
 import java.nio.charset.StandardCharsets;
 
@@ -41,6 +46,30 @@ public class MainWidget {
         @Override
         public void onPageFinished(WebView _view, String _url) {
           wv.evaluateJavascript(initialJS, null);
+        }
+
+        // Re-route / to /android_asset
+        public WebResourceResponse shouldInterceptRequest (WebView view, WebResourceRequest request) {
+            Uri uri = request.getUrl();
+            if(!uri.getScheme().equals("file"))
+                return null;
+
+            String path = uri.getPath();
+            path = getAssetPath(path);
+
+            String mimeType = getMimeType(uri.toString());
+            String encoding = "";
+
+            try {
+                InputStream data = a.getApplicationContext().getAssets().open(path);
+                return new WebResourceResponse(mimeType, encoding, data);
+            }
+            catch (IOException e) {
+                Log.i("reflex", "Opening resource failed, Webview will handle the request ..");
+                e.printStackTrace();
+            }
+
+            return null;
         }
     });
 
@@ -80,6 +109,22 @@ public class MainWidget {
           });
       }
     };
+  }
+
+  private static String getMimeType(String url) {
+      String type = "";
+      String extension = MimeTypeMap.getFileExtensionFromUrl(url);
+      if (extension != null) {
+          type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+      }
+      return type;
+  }
+
+  /** Get the path of an asset. Strips leading / and leading /android_asset/ */
+  private static String getAssetPath(String path) {
+      path = path.startsWith("/android_asset") ? path.substring("/android_asset".length()) : path;
+      path = path.startsWith("/") ? path.substring(1) : path;
+      return path;
   }
 
   private static class JSaddleCallbacks {
