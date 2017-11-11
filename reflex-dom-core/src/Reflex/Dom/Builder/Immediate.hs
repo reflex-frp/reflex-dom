@@ -843,6 +843,7 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, Monad
         mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
         liftIO $ writeIORef currentChildInstallations $! childInstallationsAfter
 
+
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
 traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
 traverseDMapWithKeyWithAdjust' =
