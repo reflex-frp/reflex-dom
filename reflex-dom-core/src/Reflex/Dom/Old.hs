@@ -14,6 +14,7 @@
 #endif
 module Reflex.Dom.Old
        ( MonadWidget
+       , MonadWidgetConstraints
        , El
        , ElConfig (..)
        , elConfig_namespace
@@ -103,7 +104,6 @@ elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
 {-# INLINE elConfig_attributes #-}
 #endif
 
---TODO: HasDocument is still not accounted for
 type MonadWidgetConstraints t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
@@ -112,6 +112,7 @@ type MonadWidgetConstraints t m =
   , MonadSample t (Performable m)
   , MonadReflexCreateTrigger t m
   , PostBuild t m
+  , HasMountStatus t m
   , PerformEvent t m
   , MonadIO m
   , MonadIO (Performable m)

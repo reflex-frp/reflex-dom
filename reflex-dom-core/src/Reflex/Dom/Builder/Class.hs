@@ -155,10 +155,40 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), Adjustable t m) => DomBu
                    => m ()
   notReady = lift notReady
 
+{- 2017-05-19 dridus: Commented out per Ryan Trinkle. Note that this does not support mount state and possibly has issues with unready child handling.
+
 class DomBuilder t m => MountableDomBuilder t m where
   type DomFragment m :: *
   buildDomFragment :: m a -> m (DomFragment m, a)
   mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
+
+-}
+
+-- |'HasMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
+-- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
+--
+-- ___Note:___ once the current scope is replaced, any 'performEvent's in the scope will be cancelled and so if you want to observe the 'Unmounted' status
+-- you have to plumb the mount state dynamic back out of the current scope so the parent scope can react to it.
+class Monad m => HasMountStatus t m | m -> t where
+  -- |Get a 'Dynamic' representing the current 'MountState' of DOM elements created in the current scope.
+  getMountStatus :: m (Dynamic t MountState)
+
+instance HasMountStatus t m => HasMountStatus t (ReaderT r m) where
+  getMountStatus = lift getMountStatus
+instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
+  getMountStatus = lift getMountStatus
+
+-- |Type representing the current mount status of a DOM structure. Mount status refers to whether the DOM structure is currently within the document tree, not
+-- in the document tree, or transitioning.
+data MountState
+  -- note: order of these constructors is important, because Ord is derived and employed when combining parent and child mount states
+  = Unmounted
+  -- ^DOM structures have been removed from the document.
+  | Mounting
+  -- ^DOM structures are not yet installed in the document.
+  | Mounted
+  -- ^DOM structures are now in the document.
+  deriving (Eq, Ord, Show)
 
 type Namespace = Text
 
@@ -522,10 +552,14 @@ instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBui
   type DomBuilderSpace (PostBuildT t m) = DomBuilderSpace m
   wrapRawElement e = lift . wrapRawElement e
 
+{- 2017-05-19 dridus: Commented out per Ryan Trinkle. Note that this does not support mount state and possibly has issues with unready child handling.
+
 instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => MountableDomBuilder t (PostBuildT t m) where
   type DomFragment (PostBuildT t m) = DomFragment m
   buildDomFragment = liftThrough buildDomFragment
   mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
+
+-}
 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m

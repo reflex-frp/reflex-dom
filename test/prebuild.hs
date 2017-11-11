@@ -24,7 +24,7 @@ import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 main :: IO ()
 main = mainWidget w
 
-w :: forall t m. (MonadWidget t m, DomRenderHook t m, MountableDomBuilder t m) => m ()
+w :: forall t m. (MonadWidget t m, DomRenderHook t m) => m ()
 w = do
   let slow :: forall m'. (MonadWidget t m', DomRenderHook t m') => m' ()
       {-
