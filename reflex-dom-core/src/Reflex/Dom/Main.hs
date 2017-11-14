@@ -109,6 +109,10 @@ type Widget x = PostBuildT DomTimeline (ImmediateDomBuilderT DomTimeline (WithJS
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
+{-# INLINABLE attachWidgetWithActions #-}
+attachWidgetWithActions :: DOM.IsElement e => JSM () -> JSM () -> e -> JSContextSingleton x -> Widget x a -> JSM a
+attachWidgetWithActions commitAction renderAction rootElement wv w = fst <$> attachWidgetWithActions' commitAction renderAction rootElement wv w
+
 -- | Warning: `mainWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
 mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> JSM ()
 mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
@@ -128,6 +132,7 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
                 , _immediateDomBuilderEnv_parent = toNode df
                 , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
                 , _immediateDomBuilderEnv_commitAction = return () --TODO
+                , _immediateDomBuilderEnv_renderAction = return () --TODO
                 }
           runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
@@ -145,7 +150,11 @@ replaceElementContents e df = do
 
 {-# INLINABLE attachWidget' #-}
 attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand DomTimeline DomHost)
-attachWidget' rootElement jsSing w = do
+attachWidget' = attachWidgetWithActions' (return ()) (return ()) -- TODO
+
+{-# INLINABLE attachWidgetWithActions' #-}
+attachWidgetWithActions' :: DOM.IsElement e => JSM () -> JSM () -> e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand DomTimeline DomHost)
+attachWidgetWithActions' commitAction renderAction rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
   ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
@@ -155,7 +164,8 @@ attachWidget' rootElement jsSing w = do
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
-          , _immediateDomBuilderEnv_commitAction = return () --TODO
+          , _immediateDomBuilderEnv_commitAction = commitAction
+          , _immediateDomBuilderEnv_renderAction = renderAction
           }
     a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events), postBuildTriggerRef)

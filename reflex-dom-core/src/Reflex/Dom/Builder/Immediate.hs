@@ -184,6 +184,7 @@ data ImmediateDomBuilderEnv t
                             , _immediateDomBuilderEnv_parent :: {-# UNPACK #-} !Node
                             , _immediateDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word) -- Number of children who still aren't fully rendered
                             , _immediateDomBuilderEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
+                            , _immediateDomBuilderEnv_renderAction :: !(JSM ()) -- Action to take per animation frame
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) (RequesterT t JSM Identity (TriggerEventT t m)) a }
@@ -239,7 +240,7 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
               freeRequestAnimationFrameCallback cb
               handlersToRun <- liftIO $ takeMVar handlersMVar
               liftIO $ putMVar handlersMVar []
-              sequence_ (reverse handlersToRun)
+              sequence_ (reverse $ _immediateDomBuilderEnv_renderAction env : handlersToRun)
         void $ Window.requestAnimationFrame win cb
       liftIO $ putMVar handlersMVar ((do
         v <- synchronously x
