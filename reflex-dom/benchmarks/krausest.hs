@@ -46,7 +46,7 @@ bodyW seed = divClass "main" $ divClass "container" $ mdo
       , buttonW "add"      "Append 1,000 rows"     $ appendRows 1000
       , buttonW "update"   "Update every 10th row" $ updateRows (\i -> mod i 10 == 0) (<> " !!!")
       , buttonW "clear"    "Clear"                 $ clearRows
-      , buttonW "swaprows" "Swap Rows"             $ swapRows (4, 9)
+      , buttonW "swaprows" "Swap Rows"             $ swapRows (1, 998)
       ]
 
   let initial = Model { rng = mkStdGen seed, nextNum = 1, selection = Nothing }
