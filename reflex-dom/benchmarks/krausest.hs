@@ -120,8 +120,9 @@ filterByIndex :: (Int -> Bool) -> [a] -> [a]
 filterByIndex p = map snd . filter (\(i, _) -> p i) . zip [0..]
 
 swapRows :: (RowIndex, RowIndex) -> (Model, Table) -> (Model, TableDiff)
-swapRows (a, b) (m, t) = (m, PatchIntMap $ point a b <> point b a)
+swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else empty)
   where
+    swap = point a b <> point b a
     point x y = singleton (fst (val x)) $ Just $ snd $ val y
     val = (assocs t !!)
 
