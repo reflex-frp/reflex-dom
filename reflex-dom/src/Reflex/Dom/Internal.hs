@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
@@ -20,7 +21,15 @@ import qualified Reflex.Dom.Main as Main
 run :: a -> a
 run = id
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
-import Language.Javascript.JSaddle.WKWebView (run)
+import Language.Javascript.JSaddle.WKWebView (runFile)
+import Language.Javascript.JSaddle (JSM)
+import Data.Default (def)
+
+--TODO: Eliminate this; it is needed because otherwise the app's base
+--URL will be set to "about:blank" due to jsaddleMain rather than
+--jsaddleMainFile being used
+run :: JSM () -> IO ()
+run = runFile "index.html" "" def
 #elif defined(ANDROID)
 import Android.HaskellActivity
 import Control.Monad
