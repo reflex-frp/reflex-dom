@@ -26,6 +26,7 @@
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
+       , module Reflex.NotReady.Class
        ) where
 
 import Reflex.Class as Reflex
@@ -35,6 +36,7 @@ import Reflex.Dom.Builder.Class.TH
 #endif
 import Reflex.DynamicWriter
 import Reflex.EventWriter
+import Reflex.NotReady.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Query.Base
@@ -70,7 +72,7 @@ class Default (EventSpec d EventResult) => DomSpace d where
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
 -- dynamic DOM in the 'Reflex' timeline @t@
-class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), Adjustable t m) => DomBuilder t m | m -> t where
+class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f
@@ -140,20 +142,6 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), Adjustable t m) => DomBu
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
   {-# INLINABLE wrapRawElement #-}
-  notReadyUntil :: Event t a -> m ()
-  default notReadyUntil :: ( MonadTrans f
-                           , m ~ f m'
-                           , DomBuilder t m'
-                           )
-                        => Event t a -> m ()
-  notReadyUntil = lift . notReadyUntil
-  notReady :: m ()
-  default notReady :: ( MonadTrans f
-                      , m ~ f m'
-                      , DomBuilder t m'
-                      )
-                   => m ()
-  notReady = lift notReady
 
 class DomBuilder t m => MountableDomBuilder t m where
   type DomFragment m :: *

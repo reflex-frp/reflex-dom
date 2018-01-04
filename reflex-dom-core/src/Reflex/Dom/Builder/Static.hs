@@ -189,6 +189,10 @@ hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
       sample o
   return (result0, result')
 
+instance SupportsStaticDomBuilder t m => NotReady t (StaticDomBuilderT t m) where
+  notReadyUntil _ = pure ()
+  notReady = pure ()
+
 -- TODO: the uses of illegal lenses in this instance causes it to be somewhat less efficient than it can be. replacing them with explicit cases to get the underlying Maybe Event and working with those is ideal.
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
@@ -277,8 +281,6 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     return (wrapped, result)
   placeRawElement () = return ()
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
-  notReadyUntil _ = return () --TODO: Do we need to support this somehow?
-  notReady = return () --TODO: Do we need to support this somehow?
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
