@@ -71,6 +71,7 @@ library
     text == 1.2.*,
     these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,
+    network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
 
   if impl(ghcjs)

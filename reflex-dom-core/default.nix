@@ -5,7 +5,7 @@
 , monad-control, mtl, primitive, ref-tf, reflex, semigroups, stdenv
 , stm, template-haskell, temporary, text, these, transformers
 , unix, zenc, hashable, chromium, process, jsaddle-warp
-, linux-namespaces, iproute
+, linux-namespaces, iproute, network-uri
 }:
 let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
       testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
@@ -21,7 +21,7 @@ in mkDerivation (addGcTestDepends {
     dependent-sum-template directory exception-transformers ghcjs-dom
     jsaddle keycode lens monad-control mtl primitive ref-tf
     reflex semigroups stm template-haskell text these transformers
-    unix zenc
+    unix zenc network-uri
   ] ++ (if ghc.isGhcjs or false then [
     hashable
   ] else []);
