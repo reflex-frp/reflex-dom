@@ -106,6 +106,8 @@ import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
 import Reflex.Query.Base (QueryT)
 
+import Control.Applicative
+import Control.Arrow ((&&&))
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
@@ -137,7 +139,7 @@ import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
-import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
+import GHCJS.DOM.Element (getScrollLeft, getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
@@ -459,6 +461,23 @@ ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName 
 ghcjsEventSpec_handler f (GhcjsEventSpec _ (GhcjsEventHandler b)) = phantom2 (f b)
 {-# INLINE ghcjsEventSpec_handler #-}
 #endif
+
+records_el' :: forall t m a. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace) => Text -> m a -> m (Element EventProps (DomBuilderSpace m) t, a)
+records_el' tag = element tag $ def'
+
+test :: (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace) => m (Event t MouseEventProps)
+test = do
+  (e, a) <- records_el' "button" $ pure ()
+  pure $ onEvent Click e
+
+instance er ~ EventProps => Default' (GhcjsEventSpec er) where
+  def' = GhcjsEventSpec
+    { _ghcjsEventSpec_filters = mempty
+    , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> do
+        t :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt --TODO: Rework this; defaultDomEventHandler shouldn't need to take this as an argument
+        let e = uncheckedCastTo DOM.Element t
+        runReaderT (fullAPIDomEventHandler e en) evt
+    }
 
 instance er ~ EventResult => Default (GhcjsEventSpec er) where
   def = GhcjsEventSpec
@@ -1141,6 +1160,56 @@ type family EventType en where
   EventType 'TouchendTag = TouchEvent
   EventType 'TouchcancelTag = TouchEvent
 
+{-# INLINABLE fullAPIDomEventHandler #-}
+fullAPIDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventProps en))
+fullAPIDomEventHandler e evt = fmap (Just . EventProps) $ case evt of
+  Click -> getMouseEventProps
+  Dblclick -> getMouseEventProps
+  Keypress -> getKeyboardEventProps
+  Scroll -> fromIntegral <$> getScrollTop e
+  Keydown -> getKeyboardEventProps
+  Keyup -> getKeyboardEventProps
+  Mousemove -> getMouseEventProps
+  Mouseup -> getMouseEventProps
+  Mousedown -> getMouseEventProps
+  Mouseenter -> return ()
+  Mouseleave -> return ()
+  Focus -> return ()
+  Blur -> return ()
+  Change -> return ()
+  Drag -> return ()
+  Dragend -> return ()
+  Dragenter -> return ()
+  Dragleave -> return ()
+  Dragover -> return ()
+  Dragstart -> return ()
+  Drop -> return ()
+  Abort -> return ()
+  Contextmenu -> return ()
+  Error -> return ()
+  Input -> return ()
+  Invalid -> return ()
+  Load -> return ()
+  Mouseout -> return ()
+  Mouseover -> return ()
+  Select -> return ()
+  Submit -> return ()
+  Beforecut -> return ()
+  Cut -> return ()
+  Beforecopy -> return ()
+  Copy -> return ()
+  Beforepaste -> return ()
+  Paste -> return ()
+  Reset -> return ()
+  Search -> return ()
+  Selectstart -> return ()
+  Touchstart -> getTouchEvent
+  Touchmove -> getTouchEvent
+  Touchend -> getTouchEvent
+  Touchcancel -> getTouchEvent
+  Mousewheel -> return ()
+  Wheel -> return ()
+
 {-# INLINABLE defaultDomEventHandler #-}
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
@@ -1501,6 +1570,28 @@ getKeyEvent = do
     if charCode /= 0 then return charCode else
       getKeyCode e
 
+{-# INLINABLE getMouseEventProps #-}
+getMouseEventProps :: EventM e MouseEvent MouseEventProps
+getMouseEventProps = do
+  e <- event
+  pure MouseEventProps
+    <*> getClientX e
+    <*> getClientY e
+    <*> getButton e
+
+getKeyboardEventProps :: EventM e KeyboardEvent KeyboardEventProps
+getKeyboardEventProps = do
+  e <- event
+  pure KeyboardEventProps
+    <*> getCharCode e
+    <*> KeyboardEvent.getWhich e
+
+{-# INLINABLE getElementProps #-}
+getElementProps :: IsElement e => e -> EventM e UIEvent ElementProps
+getElementProps e = pure ElementProps
+  <*> fmap fromIntegral (getScrollLeft e)
+  <*> fmap fromIntegral (getScrollTop  e)
+
 {-# INLINABLE getMouseEventCoords #-}
 getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
@@ -1547,6 +1638,27 @@ getTouchEvent = do
     , _touchEventResult_targetTouches = targetTouches
     , _touchEventResult_touches = touches
     }
+
+shortcut :: (Reflex t, HasOnEvent t target eventName)
+  => EventName eventName
+  -> (OnEventType target eventName -> a)
+  -> target
+  -> Event t a
+shortcut ev prop el = prop <$> onEvent ev el
+
+dblClick :: (MouseEventProps ~ OnEventType target 'DblclickTag,
+             Reflex t,
+             HasOnEvent t target 'DblclickTag) =>
+            target -> Event t MouseEventProps
+dblClick = shortcut Dblclick id
+
+dblClickXY :: (MouseEventProps ~ OnEventType target 'DblclickTag,
+              Reflex t,
+              HasOnEvent t target 'DblclickTag) =>
+              target -> Event t (Int, Int)
+dblClickXY = shortcut Dblclick (_mouseEventProps_clientX &&& _mouseEventProps_clientY)
+
+
 
 instance MonadSample t m => MonadSample t (ImmediateDomBuilderT t m) where
   {-# INLINABLE sample #-}

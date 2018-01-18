@@ -135,6 +135,7 @@ data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 data StaticEventSpec (er :: EventTag -> *) = StaticEventSpec deriving (Generic)
 
 instance Default (StaticEventSpec er)
+instance Default'(StaticEventSpec er)
 
 instance DomSpace StaticDomSpace where
   type EventSpec StaticDomSpace = StaticEventSpec

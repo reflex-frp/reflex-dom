@@ -9,6 +9,12 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Builder.Class.Events where
 
+import GHCJS.DOM.MouseEvent    (MouseEvent)
+import GHCJS.DOM.KeyboardEvent (KeyboardEvent)
+import GHCJS.DOM.UIEvent       (UIEvent)
+import GHCJS.DOM.WheelEvent    (WheelEvent)
+import GHCJS.DOM.TouchEvent    (TouchEvent)
+
 #ifdef USE_TEMPLATE_HASKELL
 import Data.GADT.Compare.TH
 #else
@@ -111,6 +117,94 @@ data EventName :: EventTag -> * where
   Touchmove :: EventName 'TouchmoveTag
   Touchend :: EventName 'TouchendTag
   Touchcancel :: EventName 'TouchcancelTag
+
+data MouseEventProps = MouseEventProps
+  { _mouseEventProps_clientX :: Int
+  , _mouseEventProps_clientY :: Int
+  , _mouseEventProps_button  :: Word
+  }
+  deriving (Show, Read, Eq, Ord)
+
+data KeyboardEventProps = KeyboardEventProps
+  { _keyboardEventProps_charCode :: Word
+  , _keyboardEventProps_which    :: Word
+  }
+  deriving (Show, Read, Eq, Ord)
+
+data ElementProps = ElementProps -- meh name
+  { _elementProps_scrollLeft     :: Double
+  , _elementProps_scrollTop      :: Double
+  }
+  deriving (Show, Read, Eq, Ord)
+
+data UIEventProps = UIEventProps
+-- data TouchEventProps = TouchEventProps -- WIP: replace TouchEventResult?
+data DOMEventProps = DOMEventProps
+data FocusEventProps = FocusEventProps
+data WheelEventProps = WheelEventProps
+
+
+-- WIP: go over this carefully
+type family EventGroupPropsType et where
+--  EventGroupPropsType DOM.Event     = DOMEventProps
+--  EventGroupPropsType FocusEvent    = FocusEventProps
+  EventGroupPropsType MouseEvent    = MouseEventProps
+  EventGroupPropsType KeyboardEvent = KeyboardEventProps
+  EventGroupPropsType TouchEvent    = TouchEventResult -- WIP: should we keep this one?
+  EventGroupPropsType UIEvent       = UIEventProps
+  EventGroupPropsType WheelEvent    = WheelEventProps
+
+newtype EventProps en = EventProps  { unEventProps :: EventPropsType en }
+
+--  EventPropsType en = EventGroupPropsType (EventType en)
+type family EventPropsType (en :: EventTag) :: * where
+  EventPropsType 'ClickTag = MouseEventProps
+  EventPropsType 'DblclickTag = MouseEventProps
+  EventPropsType 'KeypressTag = KeyboardEventProps
+  EventPropsType 'KeydownTag = KeyboardEventProps
+  EventPropsType 'KeyupTag = KeyboardEventProps
+  EventPropsType 'ScrollTag = Double
+  EventPropsType 'MousemoveTag = MouseEventProps
+  EventPropsType 'MousedownTag = MouseEventProps
+  EventPropsType 'MouseupTag = MouseEventProps
+  EventPropsType 'MouseenterTag = ()
+  EventPropsType 'MouseleaveTag = ()
+  EventPropsType 'FocusTag = ()
+  EventPropsType 'BlurTag = ()
+  EventPropsType 'ChangeTag = ()
+  EventPropsType 'DragTag = ()
+  EventPropsType 'DragendTag = ()
+  EventPropsType 'DragenterTag = ()
+  EventPropsType 'DragleaveTag = ()
+  EventPropsType 'DragoverTag = ()
+  EventPropsType 'DragstartTag = ()
+  EventPropsType 'DropTag = ()
+  EventPropsType 'AbortTag = ()
+  EventPropsType 'ContextmenuTag = ()
+  EventPropsType 'ErrorTag = ()
+  EventPropsType 'InputTag = ()
+  EventPropsType 'InvalidTag = ()
+  EventPropsType 'LoadTag = ()
+  EventPropsType 'MouseoutTag = ()
+  EventPropsType 'MouseoverTag = ()
+  EventPropsType 'MousewheelTag = ()
+  EventPropsType 'SelectTag = ()
+  EventPropsType 'SubmitTag = ()
+  EventPropsType 'BeforecutTag = ()
+  EventPropsType 'CutTag = ()
+  EventPropsType 'BeforecopyTag = ()
+  EventPropsType 'CopyTag = ()
+  EventPropsType 'BeforepasteTag = ()
+  EventPropsType 'PasteTag = ()
+  EventPropsType 'ResetTag = ()
+  EventPropsType 'SearchTag = ()
+  EventPropsType 'SelectstartTag = ()
+  EventPropsType 'TouchstartTag = TouchEventResult
+  EventPropsType 'TouchmoveTag = TouchEventResult
+  EventPropsType 'TouchendTag = TouchEventResult
+  EventPropsType 'TouchcancelTag = TouchEventResult
+  EventPropsType 'WheelTag = ()
+
 
 newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
