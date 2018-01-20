@@ -45,7 +45,7 @@ Widgets may return any type (this is 'a' in many of the functions below).  Often
 -- Even shorter-cut for above when element type is "div".  Create a div of given class.
 [W]   divClass   ::                               Text ->    m a -> m a
 
--- Create a widget of given type with arbitrary, Dymamic HTML inside.
+-- Create a widget of given type with arbitrary, Dynamic HTML inside.
 [W]   elDynHtml'     :: Text ->                        Dynamic Text ->   m El
 [W]   elDynHtmlAttr' :: Text ->   Map Text Text ->     Dynamic Text ->   m El
 
