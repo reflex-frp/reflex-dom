@@ -11,10 +11,12 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Unsafe as BSU
 import Data.IORef
 import Data.Monoid
 import Foreign.C.String
 import Foreign.Marshal.Utils
+import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
 import Language.Javascript.JSaddle (JSM)
@@ -80,9 +82,12 @@ foreign import ccall "wrapper" wrapIO :: IO () -> IO (FunPtr (IO ()))
 foreign import ccall "wrapper" wrapCStringIO :: (CString -> IO ()) -> IO (FunPtr (CString -> IO ()))
 foreign import ccall "wrapper" wrapCStringIOCString :: (CString -> IO CString) -> IO (FunPtr (CString -> IO CString))
 
---TODO: Get rid of the extra copy step
 newCStringFromByteString :: ByteString -> IO CString
-newCStringFromByteString bs = BS.useAsCString bs $ newCString <=< peekCString
+newCStringFromByteString bs = BSU.unsafeUseAsCStringLen bs $ \(src, len) -> do
+  dest <- mallocArray0 len
+  copyArray dest src len
+  poke (advancePtr dest len) 0
+  return dest
 
 jsaddleCallbacksToPtrs :: JSaddleCallbacks -> IO JSaddleCallbacksPtrs
 jsaddleCallbacksToPtrs jc = JSaddleCallbacksPtrs
