@@ -11,6 +11,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import java.nio.charset.StandardCharsets;
 
 public class MainWidget {
   private static Object startMainWidget(Activity a, String url, long jsaddleCallbacks, final String initialJS) {
@@ -44,11 +45,12 @@ public class MainWidget {
 
     final Handler hnd = new Handler();
     return new Object() {
-      public final void evaluateJavascript(final String js) {
+      public final void evaluateJavascript(final byte[] js) {
+        final String jsStr = new String(js, StandardCharsets.UTF_8);
         hnd.post(new Runnable() {
             @Override
             public void run() {
-              wv.evaluateJavascript(js, null);
+              wv.evaluateJavascript(jsStr, null);
             }
           });
       }
@@ -58,8 +60,8 @@ public class MainWidget {
   private static class JSaddleCallbacks {
     private final long callbacks;
     private native void startProcessing(long callbacks);
-    private native void processMessage(long callbacks, String msg);
-    private native String processSyncMessage(long callbacks, String msg);
+    private native void processMessage(long callbacks, byte[] msg);
+    private native byte[] processSyncMessage(long callbacks, byte[] msg);
 
     public JSaddleCallbacks(long _callbacks) {
       callbacks = _callbacks;
@@ -73,13 +75,14 @@ public class MainWidget {
 
     @JavascriptInterface
     public boolean postMessage(final String msg) {
-      processMessage(callbacks, msg);
+      processMessage(callbacks, msg.getBytes(StandardCharsets.UTF_8));
       return true;
     }
 
     @JavascriptInterface
     public String syncMessage(final String msg) {
-      return processSyncMessage(callbacks, msg);
+      return new String(processSyncMessage(callbacks, msg.getBytes(StandardCharsets.UTF_8)),
+                        StandardCharsets.UTF_8);
     }
   }
 }

@@ -15,6 +15,7 @@ import qualified Data.ByteString.Unsafe as BSU
 import Data.IORef
 import Data.Monoid
 import Foreign.C.String
+import Foreign.C.Types
 import Foreign.Marshal.Utils
 import Foreign.Marshal.Array
 import Foreign.Ptr
@@ -32,8 +33,8 @@ startMainWidget a url jsm = do
   executorRef <- newIORef $ error "startMainWidget: executor not created yet"
   let go batch = do
         executor <- readIORef executorRef
-        BS.useAsCString (LBS.toStrict $ "runJSaddleBatch(" <> encode batch <> ");") $ \cstr -> do
-          runJS executor cstr
+        BSU.unsafeUseAsCStringLen (LBS.toStrict $ "runJSaddleBatch(" <> encode batch <> ");") $ \(cstr, len) -> do
+          runJS executor cstr (fromIntegral len)
   (processResult, processSyncResult, start) <- runJavaScript go jsm
   callbacks <- new <=< jsaddleCallbacksToPtrs $ JSaddleCallbacks
     { _jsaddleCallbacks_jsaddleStart = void $ forkIO start
@@ -62,7 +63,7 @@ newtype JSExecutor = JSExecutor { unJSExecutor :: Ptr JSExecutor }
 
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_start" startMainWidget_ :: HaskellActivity -> CString -> Ptr JSaddleCallbacksPtrs -> IO JSExecutor
 
-foreign import ccall safe "Reflex_Dom_Android_MainWidget_runJS" runJS :: JSExecutor -> CString -> IO ()
+foreign import ccall safe "Reflex_Dom_Android_MainWidget_runJS" runJS :: JSExecutor -> CString -> CSize -> IO ()
 
 data JSaddleCallbacks = JSaddleCallbacks
   { _jsaddleCallbacks_jsaddleStart :: IO ()
@@ -73,28 +74,33 @@ data JSaddleCallbacks = JSaddleCallbacks
 
 data JSaddleCallbacksPtrs = JSaddleCallbacksPtrs
   { _jsaddleCallbacksPtrs_jsaddleStart :: !(FunPtr (IO ()))
-  , _jsaddleCallbacksPtrs_jsaddleResult :: !(FunPtr (CString -> IO ()))
-  , _jsaddleCallbacksPtrs_jsaddleSyncResult :: !(FunPtr (CString -> IO CString))
+  , _jsaddleCallbacksPtrs_jsaddleResult :: !(FunPtr (CString -> CSize -> IO ()))
+  , _jsaddleCallbacksPtrs_jsaddleSyncResult :: !(FunPtr (CString -> CSize -> Ptr CString -> Ptr CSize -> IO ()))
   , _jsaddleCallbacksPtrs_jsaddleJsData :: !CString
   }
 
 foreign import ccall "wrapper" wrapIO :: IO () -> IO (FunPtr (IO ()))
-foreign import ccall "wrapper" wrapCStringIO :: (CString -> IO ()) -> IO (FunPtr (CString -> IO ()))
-foreign import ccall "wrapper" wrapCStringIOCString :: (CString -> IO CString) -> IO (FunPtr (CString -> IO CString))
+foreign import ccall "wrapper" wrapCStringCSizeIO :: (CString -> CSize -> IO ()) -> IO (FunPtr (CString -> CSize -> IO ()))
+foreign import ccall "wrapper" wrapCStringCSizeCStringCSizeIO :: (CString -> CSize -> Ptr CString -> Ptr CSize -> IO ()) -> IO (FunPtr (CString -> CSize -> Ptr CString -> Ptr CSize -> IO ()))
 
-newCStringFromByteString :: ByteString -> IO CString
+newCStringFromByteString :: ByteString -> IO (CString, CSize)
 newCStringFromByteString bs = BSU.unsafeUseAsCStringLen bs $ \(src, len) -> do
   dest <- mallocArray0 len
   copyArray dest src len
   poke (advancePtr dest len) 0
-  return dest
+  return (dest, fromIntegral len)
 
 jsaddleCallbacksToPtrs :: JSaddleCallbacks -> IO JSaddleCallbacksPtrs
 jsaddleCallbacksToPtrs jc = JSaddleCallbacksPtrs
   <$> wrapIO (_jsaddleCallbacks_jsaddleStart jc)
-  <*> wrapCStringIO (\cstr -> _jsaddleCallbacks_jsaddleResult jc =<< BS.packCString cstr)
-  <*> wrapCStringIOCString (\cstr -> newCStringFromByteString =<< _jsaddleCallbacks_jsaddleSyncResult jc =<< BS.packCString cstr)
-  <*> newCStringFromByteString (_jsaddleCallbacks_jsaddleJsData jc)
+  <*> wrapCStringCSizeIO (\cstr len -> _jsaddleCallbacks_jsaddleResult jc =<< BS.packCStringLen (cstr, fromIntegral len))
+  <*> wrapCStringCSizeCStringCSizeIO (\cstr len result resultLen -> do
+                                         inStr <- BS.packCStringLen (cstr, fromIntegral len)
+                                         outStr <- _jsaddleCallbacks_jsaddleSyncResult jc inStr
+                                         (outStrBytes, outStrLen) <- newCStringFromByteString outStr
+                                         poke result outStrBytes
+                                         poke resultLen outStrLen)
+  <*> (fst <$> newCStringFromByteString (_jsaddleCallbacks_jsaddleJsData jc))
 
 instance Storable JSaddleCallbacksPtrs where
   sizeOf _ = #{size JSaddleCallbacks}
