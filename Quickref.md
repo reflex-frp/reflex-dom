@@ -75,6 +75,7 @@ Note the "list" functions do not imply particular HTML tags (ul, li, etc), thoug
 
 -- Same as dyn, but takes initial value and an update Event instead of a Dynamic.
 [W]   widgetHold :: m a ->   Event (m a) -> m (Dynamic a)
+```
 
 Also see the "Collection management functions" section in the `reflex` Quick Reference.
 
