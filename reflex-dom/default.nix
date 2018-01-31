@@ -1,4 +1,4 @@
-{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, reflex
+{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, reflex
 , reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
 }:
 let isAndroid = hostPlatform.libc == "bionic";
@@ -11,11 +11,13 @@ in mkDerivation {
   ] ++ (if ghc.isGhcjs or false then [
   ] else if hostPlatform.isDarwin then [
     jsaddle-wkwebview
+    jsaddle-warp
   ] else if isAndroid then [
     jsaddle-clib
     android-activity
   ] else [
     jsaddle-webkit2gtk
+    jsaddle-warp
   ]);
   configureFlags = if isAndroid then [ "-fandroid" ] else [];
   description = "Functional Reactive Web Apps with Reflex";

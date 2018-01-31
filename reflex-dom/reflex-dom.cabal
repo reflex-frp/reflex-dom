@@ -17,6 +17,10 @@ extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/Xhr/Exception.hs
                     java/org/reflexfrp/reflexdom/MainWidget.java
 
+flag use-warp
+  description: Use jsaddle-warp server
+  default: True
+
 flag webkit2gtk
   description: Use WebKit2 version of WebKitGTK.
   default: True
@@ -68,13 +72,18 @@ library
         jsaddle,
         jsaddle-wkwebview
     else
-      if flag(webkit2gtk)
+      if flag(use-warp)
         build-depends:
-          jsaddle-webkit2gtk
+          jsaddle,
+          jsaddle-warp
       else
-        if !flag(android)
+        if flag(webkit2gtk)
           build-depends:
-            jsaddle-webkitgtk
+            jsaddle-webkit2gtk
+        else
+          if !flag(android)
+            build-depends:
+              jsaddle-webkit2gtk
 
   exposed-modules:
     Reflex.Dom
