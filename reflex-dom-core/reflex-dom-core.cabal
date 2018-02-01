@@ -13,6 +13,8 @@ Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
 extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
+                    src-ghc/Reflex/Dom/WebSocket/Internal.hs
+                    src-ghcjs/Reflex/Dom/WebSocket/Internal.hs
                     src/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
@@ -104,6 +106,7 @@ library
     Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
+    Reflex.Dom.WebSocket.Internal
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input

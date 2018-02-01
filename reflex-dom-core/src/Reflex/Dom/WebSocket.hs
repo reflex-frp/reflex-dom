@@ -9,6 +9,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PolyKinds #-}
@@ -22,30 +23,38 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Reflex.Dom.WebSocket where
+module Reflex.Dom.WebSocket
+  ( module Reflex.Dom.WebSocket
+  , jsonDecode
+  ) where
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
 import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.Dom.WebSocket.Foreign
+import Reflex.Dom.WebSocket.Internal
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception (SomeException)
+import Control.Exception
 import Control.Lens
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Default
 import Data.IORef
+import Data.JSString.Text
 import Data.Maybe (isJust)
 import Data.Text
+import Data.Text.Encoding
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
 data WebSocketConfig t a
@@ -121,6 +130,14 @@ webSocket' url config onRawMessage = do
                          (\(_ :: SomeException) -> return False)) ctx
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
+
+textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
+textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
+
+jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
+jsonWebSocket url cfg = do
+  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap encode <$> _webSocketConfig_send cfg }
+  return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
