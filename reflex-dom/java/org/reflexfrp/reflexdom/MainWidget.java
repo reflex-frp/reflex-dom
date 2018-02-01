@@ -21,6 +21,8 @@ import android.webkit.WebViewClient;
 import android.graphics.Bitmap;
 import java.io.IOException;
 import java.io.InputStream;
+import android.content.Intent;
+
 import java.nio.charset.StandardCharsets;
 
 public class MainWidget {
@@ -73,6 +75,15 @@ public class MainWidget {
             return null;
         }
 
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if( url != null && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+                view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                return true;
+            } else {
+                return false;
+            }
+        }
     });
 
     wv.setWebChromeClient(new WebChromeClient() {
