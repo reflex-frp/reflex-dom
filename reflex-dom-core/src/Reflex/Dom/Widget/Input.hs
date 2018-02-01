@@ -112,7 +112,15 @@ textInputGetEnter = keypress Enter
 
 {-# INLINABLE keypress #-}
 keypress :: (Reflex t, HasDomEvent t e 'KeypressTag, DomEventType e 'KeypressTag ~ Word) => Key -> e -> Event t ()
-keypress key i = fmapMaybe (\n -> if keyCodeLookup (fromIntegral n) == key then Just () else Nothing) $ domEvent Keypress i
+keypress key = fmapMaybe (\n -> guard $ keyCodeLookup (fromIntegral n) == key) . domEvent Keypress
+
+{-# INLINABLE keydown #-}
+keydown :: (Reflex t, HasDomEvent t e 'KeydownTag, DomEventType e 'KeydownTag ~ Word) => Key -> e -> Event t ()
+keydown key = fmapMaybe (\n -> guard $ keyCodeLookup (fromIntegral n) == key) . domEvent Keydown
+
+{-# INLINABLE keyup #-}
+keyup :: (Reflex t, HasDomEvent t e 'KeyupTag, DomEventType e 'KeyupTag ~ Word) => Key -> e -> Event t ()
+keyup key = fmapMaybe (\n -> guard $ keyCodeLookup (fromIntegral n) == key) . domEvent Keyup
 
 data RangeInputConfig t
    = RangeInputConfig { _rangeInputConfig_initialValue :: Float
