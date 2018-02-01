@@ -1,11 +1,8 @@
 package org.reflexfrp.reflexdom;
 
 import android.annotation.TargetApi;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.net.Uri;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Build;
 import android.os.Handler;
 import android.util.Log;
@@ -21,6 +18,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.graphics.Bitmap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -51,6 +49,7 @@ public class MainWidget {
         }
 
         // Re-route / to /android_asset
+        @Override
         public WebResourceResponse shouldInterceptRequest (WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
             if(!uri.getScheme().equals("file"))
@@ -73,6 +72,7 @@ public class MainWidget {
 
             return null;
         }
+
     });
 
     wv.setWebChromeClient(new WebChromeClient() {
@@ -92,6 +92,11 @@ public class MainWidget {
                     }
                 }
             });
+        }
+
+        @Override
+        public Bitmap getDefaultVideoPoster() {
+            return Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888);
         }
     });
 
