@@ -19,7 +19,8 @@ extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
 
 flag use-warp
   description: Use jsaddle-warp server
-  default: True
+  default: False
+  manual: True
 
 flag webkit2gtk
   description: Use WebKit2 version of WebKitGTK.
