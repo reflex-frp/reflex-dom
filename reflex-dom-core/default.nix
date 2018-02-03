@@ -26,6 +26,8 @@ in mkDerivation (addGcTestDepends {
     hashable
   ] else []);
 
+  doCheck = !(ghc.isGhcjs or false);
+
   # The headless browser run as part of the tests will exit without this
   preBuild = ''
     export HOME="$PWD"
