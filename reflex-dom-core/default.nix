@@ -26,7 +26,7 @@ in mkDerivation (addGcTestDepends {
     hashable
   ] else []);
 
-  doCheck = !(ghc.isGhcjs or false);
+  doCheck = stdenv.hostPlatform == stdenv.buildPlatform && !(ghc.isGhcjs or false);
 
   # The headless browser run as part of the tests will exit without this
   preBuild = ''
