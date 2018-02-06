@@ -36,11 +36,15 @@ bsToArrayBuffer bs = liftJSM $ do
                     js_dataView off len ref
 
 jsonDecode :: FromJSON a => JSString -> Maybe a
+#ifdef ghcjs_HOST_OS
 jsonDecode t = do
   result <- unsafePerformIO $ (fromJSVal =<< js_jsonParse t) `catch` (\(_ :: SomeException) -> pure Nothing)
   case fromJSON result of
     Success a -> Just a
     Error _ -> Nothing
+#else
+jsonDecode = decode . LBS.fromStrict . encodeUtf8 . textFromJSString
+#endif
 
 js_jsonParse :: JSString -> JSM JSVal
 js_jsonParse a = jsg "JSON" ^. js1 "parse" a
