@@ -33,7 +33,6 @@ import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 import Reflex.Class
 import Reflex.Dom.Class
 import Reflex.Dom.WebSocket.Foreign
-import Reflex.Dom.WebSocket.Internal
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
@@ -53,6 +52,7 @@ import Data.JSString.Text
 import Data.Maybe (isJust)
 import Data.Text
 import Data.Text.Encoding
+import Foreign.JavaScript.Utils (jsonDecode)
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)

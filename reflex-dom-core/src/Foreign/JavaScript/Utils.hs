@@ -2,20 +2,23 @@
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
   , bsToArrayBuffer
-  , jsonParse
-  , safeJsonParse
+  , jsonDecode
+  , js_jsonParse
   ) where
 
-import Control.Exception
+import Control.Exception (SomeException)
 import Control.Lens
+import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Foreign.JavaScript.Internal.Utils (js_dataView)
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM.Types (ArrayBuffer (..))
-import qualified Language.Javascript.JSaddle as JS (catch, jsg, js1)
+import GHCJS.Marshal ()
+import Language.Javascript.JSaddle (fromJSVal, catch, jsg, js1)
 import qualified JavaScript.TypedArray.ArrayBuffer as JS
 import Language.Javascript.JSaddle.Types (JSString, JSM, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
+import System.IO.Unsafe
 
 {-# INLINABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
@@ -32,8 +35,12 @@ bsToArrayBuffer bs = liftJSM $ do
                     ref <- ghcjsPure (JS.getArrayBuffer b) >>= ghcjsPure . jsval
                     js_dataView off len ref
 
-safeJsonParse :: JSString -> JSM (Maybe JSVal)
-safeJsonParse a = (Just <$> jsonParse a) `JS.catch` \(_ :: SomeException) -> return Nothing
+jsonDecode :: FromJSON a => JSString -> Maybe a
+jsonDecode t = do
+  result <- unsafePerformIO $ (fromJSVal =<< js_jsonParse t) `catch` (\(_ :: SomeException) -> pure Nothing)
+  case fromJSON result of
+    Success a -> Just a
+    Error _ -> Nothing
 
-jsonParse :: JSString -> JSM JSVal
-jsonParse a = JS.jsg "JSON" ^. JS.js1 "parse" a
+js_jsonParse :: JSString -> JSM JSVal
+js_jsonParse a = jsg "JSON" ^. js1 "parse" a
