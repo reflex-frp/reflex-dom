@@ -81,6 +81,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Misc
 import Data.Maybe
+import Data.Proxy (Proxy(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -228,6 +229,37 @@ elDynAttrNS' mns elementTag attrs child = do
 {-# INLINABLE elDynAttrNS #-}
 elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m a
 elDynAttrNS mns elementTag attrs child = fmap snd $ elDynAttrNS' mns elementTag attrs child
+
+
+-- | Like 'elDynAttr'' but allows you to modify the element configuration.
+elDynAttrWithModifyConfig'
+  :: forall t m a. (DomBuilder t m, PostBuild t m)
+  => (ElementConfig EventResult t (DomBuilderSpace m) -> ElementConfig EventResult t (DomBuilderSpace m))
+  -> Text
+  -> Dynamic t (Map Text Text)
+  -> m a
+  -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynAttrWithModifyConfig' f elementTag attrs child = do
+  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
+  let cfg = def & modifyAttributes .~ fmapCheap mapKeysToAttributeName modifyAttrs
+  result <- element elementTag (f cfg) child
+  postBuild <- getPostBuild
+  notReadyUntil postBuild
+  pure result
+
+
+-- | Like 'elDynAttr'' but configures "prevent default" on the given event.
+elDynAttrWithPreventDefaultEvent'
+  :: forall en t m a. (DomBuilder t m, PostBuild t m)
+  => EventName en              -- ^ Event on the element to configure with 'preventDefault'
+  -> Text                      -- ^ Element tag
+  -> Dynamic t (Map Text Text) -- ^ Element attributes
+  -> m a                       -- ^ Child of element
+  -> m (Element EventResult (DomBuilderSpace m) t, a) -- An element and the result of the child
+elDynAttrWithPreventDefaultEvent' ev = elDynAttrWithModifyConfig'
+  (\elCfg -> elCfg & elementConfig_eventSpec %~
+    addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) ev (const preventDefault))
+
 
 dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty
