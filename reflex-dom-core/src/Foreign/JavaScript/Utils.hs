@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
@@ -6,7 +7,6 @@ module Foreign.JavaScript.Utils
   , js_jsonParse
   ) where
 
-import Control.Exception (SomeException)
 import Control.Lens
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -15,10 +15,18 @@ import Foreign.JavaScript.Internal.Utils (js_dataView)
 import qualified GHCJS.Buffer as JS
 import GHCJS.DOM.Types (ArrayBuffer (..))
 import GHCJS.Marshal ()
-import Language.Javascript.JSaddle (fromJSVal, catch, jsg, js1)
+import Language.Javascript.JSaddle (jsg, js1)
 import qualified JavaScript.TypedArray.ArrayBuffer as JS
 import Language.Javascript.JSaddle.Types (JSString, JSM, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
+#ifdef ghcjs_HOST_OS
+import Control.Exception (SomeException)
+import Language.Javascript.JSaddle (fromJSVal, catch)
 import System.IO.Unsafe
+#else
+import qualified Data.ByteString.Lazy as LBS
+import Data.Text.Encoding
+import Language.Javascript.JSaddle (textFromJSString)
+#endif
 
 {-# INLINABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString

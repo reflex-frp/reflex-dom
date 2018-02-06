@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecursiveDo #-}
 module Reflex.Dom.WebSocket.Query (cropQueryT, runWebSocketQuery) where
 
