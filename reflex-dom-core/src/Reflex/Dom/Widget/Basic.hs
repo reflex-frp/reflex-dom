@@ -20,7 +20,6 @@ module Reflex.Dom.Widget.Basic
   , button
   , dyn
   , widgetHold
-  , untilReady
 
   -- * Creating DOM Elements
   , el
@@ -47,20 +46,14 @@ module Reflex.Dom.Widget.Basic
   , dtdd
   , blank
 
-  -- * Workflows
-  , Workflow (..)
-  , workflow
-  , workflowView
-  , mapWorkflow
-  , mapWorkflowCheap
-
   -- * Tables and Lists
   , tableDynAttr
   , tabDisplay
 
   , HasAttributes (..)
-  , module Reflex.Collection
   , module Data.Map.Misc
+  , module Reflex.Collection
+  , module Reflex.Workflow
   ) where
 
 import Reflex.Class
@@ -68,7 +61,10 @@ import Reflex.Collection
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dynamic
+import Reflex.Network
+import Reflex.NotReady.Class
 import Reflex.PostBuild.Class
+import Reflex.Workflow
 
 import Control.Arrow
 import Control.Lens hiding (children, element)
@@ -88,9 +84,6 @@ import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
-
-widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
-widgetHoldInternal = runWithReplace
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.
@@ -137,25 +130,13 @@ button t = do
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
-dyn child = do
-  postBuild <- getPostBuild
-  let newChild = leftmost [updated child, tagCheap (current child) postBuild]
-  snd <$> widgetHoldInternal notReady newChild
+dyn = networkView 
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened.
 widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
-widgetHold child0 newChild = do
-  (result0, newResult) <- widgetHoldInternal child0 newChild
-  holdDyn result0 newResult
-
--- | Render a placeholder widget to be shown while another widget is not yet
--- done rendering
-untilReady :: (DomBuilder t m, PostBuild t m) => m a -> m b -> m (a, Event t b)
-untilReady a b = do
-  postBuild <- getPostBuild
-  runWithReplace a $ b <$ postBuild
+widgetHold = networkHold
 
 -- | Create a DOM element
 -- > el "div" (text "Hello World")
@@ -294,25 +275,6 @@ dtdd h w = do
 
 blank :: forall m. Monad m => m ()
 blank = return ()
-
-newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
-
-workflow :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m) => Workflow t m a -> m (Dynamic t a)
-workflow w0 = do
-  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ snd <$> current eResult
-  return $ fmap fst eResult
-
-workflowView :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m) => Workflow t m a -> m (Event t a)
-workflowView w0 = do
-  rec eResult <- dyn . fmap unWorkflow =<< holdDyn w0 eReplace
-      eReplace <- fmap switch $ hold never $ fmap snd eResult
-  return $ fmap fst eResult
-
-mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
-mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
-
-mapWorkflowCheap :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
-mapWorkflowCheap f (Workflow x) = Workflow (fmap (f *** fmapCheap (mapWorkflowCheap f)) x)
 
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)

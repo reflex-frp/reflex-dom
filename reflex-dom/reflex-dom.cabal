@@ -64,6 +64,8 @@ library
   if !impl(ghcjs)
     if os(osx) || os(ios)
       build-depends:
+        data-default == 0.7.*,
+        jsaddle,
         jsaddle-wkwebview
     else
       if flag(webkit2gtk)
