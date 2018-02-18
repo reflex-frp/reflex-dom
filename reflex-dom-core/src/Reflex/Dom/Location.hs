@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-
 module Reflex.Dom.Location
   ( browserHistoryWith
   , getLocationAfterHost
@@ -11,6 +11,11 @@ module Reflex.Dom.Location
   , getLocationPath
   , getLocationProtocol
   , getLocationUrl
+  , manageHistory
+  , HistoryCommand (..)
+  , HistoryStateUpdate (..)
+  , HistoryItem (..)
+  , getLocationUri
   ) where
 
 import Reflex
@@ -18,16 +23,19 @@ import Reflex.Dom.Builder.Immediate (wrapDomEvent)
 
 import Control.Lens ((^.))
 import Control.Monad ((>=>))
+import Data.Monoid
 import Data.Text (Text)
 import qualified GHCJS.DOM as DOM
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.Location as Location
-import GHCJS.DOM.Types (Location)
+import qualified GHCJS.DOM.History as History
+import qualified GHCJS.DOM.PopStateEvent as PopStateEvent
+import GHCJS.DOM.Types (Location, History, SerializedScriptValue (..), liftJSM)
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.Window as Window
 import qualified GHCJS.DOM.WindowEventHandlers as DOM
-import Language.Javascript.JSaddle (FromJSString, MonadJSM, ToJSString, fromJSValUnchecked, js1, toJSVal)
-
+import Language.Javascript.JSaddle (FromJSString, MonadJSM, ToJSString, fromJSValUnchecked, js1, ToJSVal (..), FromJSVal (..))
+import Network.URI
 
 withLocation :: (MonadJSM m) => (Location -> m a) -> m a
 withLocation f = DOM.currentWindowUnchecked >>= Window.getLocation >>= f
@@ -84,3 +92,70 @@ browserHistoryWith f = do
   loc0 <- f location
   locEv <- wrapDomEvent window (`DOM.on` DOM.popState) $ f location
   holdDyn loc0 locEv
+
+--TODO: Pending https://github.com/haskell/network-uri/issues/39, ensure that
+--we're handling escaping of URIs correctly
+data HistoryItem = HistoryItem
+  { _historyItem_state :: SerializedScriptValue
+  , _historyItem_uri :: URI
+  -- ^ NOTE: All URIs in this module are assumed to be already percent-escaped
+  }
+
+data HistoryStateUpdate = HistoryStateUpdate
+  { _historyStateUpdate_state :: SerializedScriptValue
+  , _historyStateUpdate_title :: Text
+  , _historyStateUpdate_uri :: Maybe URI
+  -- ^ If Just, update the URI; otherwise leave it unchanged
+  -- NOTE: All URIs in this module are assumed to be already percent-escaped
+  }
+
+data HistoryCommand
+   = HistoryCommand_PushState HistoryStateUpdate
+   | HistoryCommand_ReplaceState HistoryStateUpdate
+
+runHistoryCommand :: MonadJSM m => History -> HistoryCommand -> m ()
+runHistoryCommand history = \case
+  HistoryCommand_PushState su -> History.pushState history
+    (_historyStateUpdate_state su)
+    (_historyStateUpdate_title su)
+    (show <$> _historyStateUpdate_uri su)
+  HistoryCommand_ReplaceState su -> History.replaceState history
+    (_historyStateUpdate_state su)
+    (_historyStateUpdate_title su)
+    (show <$> _historyStateUpdate_uri su)
+
+getLocationUriAuth :: MonadJSM m => Location -> m URIAuth
+getLocationUriAuth location = URIAuth "" -- Username and password don't seem to be available in most browsers
+  <$> Location.getHostname location
+  <*> (appendColonIfNotEmpty <$> Location.getPort location)
+  where appendColonIfNotEmpty = \case
+          "" -> ""
+          x -> ":" <> x
+
+getLocationUri :: MonadJSM m => Location -> m URI
+getLocationUri location = URI
+  <$> Location.getProtocol location
+  <*> (Just <$> getLocationUriAuth location)
+  <*> Location.getPathname location
+  <*> Location.getSearch location
+  <*> Location.getHash location
+
+manageHistory :: (MonadJSM m, TriggerEvent t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m)) => Event t HistoryCommand -> m (Dynamic t HistoryItem)
+manageHistory runCmd = do
+  window <- DOM.currentWindowUnchecked
+  location <- Window.getLocation window
+  history <- Window.getHistory window
+  let getCurrentHistoryItem = HistoryItem
+        <$> History.getState history
+        <*> getLocationUri location
+  item0 <- liftJSM getCurrentHistoryItem
+  itemSetInternal <- performEvent $ ffor runCmd $ \cmd -> liftJSM $ do
+    runHistoryCommand history cmd
+    getCurrentHistoryItem
+  itemSetExternal <- wrapDomEvent window (`DOM.on` DOM.popState) $ do
+    e <- DOM.event
+    HistoryItem
+      <$> (SerializedScriptValue <$> PopStateEvent.getState e)
+      <*> getLocationUri location
+  holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
+--TODO: Handle title setting better

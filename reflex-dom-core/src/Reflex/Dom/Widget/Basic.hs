@@ -19,7 +19,9 @@ module Reflex.Dom.Widget.Basic
   , display
   , button
   , dyn
+  , dyn_
   , widgetHold
+  , widgetHold_
 
   -- * Creating DOM Elements
   , el
@@ -27,6 +29,7 @@ module Reflex.Dom.Widget.Basic
   , elClass
   , elDynAttr
   , elDynClass
+  , elDynAttrNS
 
   -- ** With Element Results
   , el'
@@ -73,6 +76,7 @@ import Data.Align
 import Data.Default
 import Data.Either
 import Data.Foldable
+import Data.Functor (void)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Map.Misc
@@ -130,13 +134,21 @@ button t = do
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
-dyn = networkView 
+dyn = networkView
+
+-- | Like 'dyn' but discards result.
+dyn_ :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m ()
+dyn_ = void . dyn
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened.
 widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold = networkHold
+
+-- | Like 'widgetHold' but discards result.
+widgetHold_ :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m ()
+widgetHold_ z = void . widgetHold z
 
 -- | Create a DOM element
 -- > el "div" (text "Hello World")
@@ -212,6 +224,10 @@ elDynAttrNS' mns elementTag attrs child = do
   postBuild <- getPostBuild
   notReadyUntil postBuild
   return result
+
+{-# INLINABLE elDynAttrNS #-}
+elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m a
+elDynAttrNS mns elementTag attrs child = fmap snd $ elDynAttrNS' mns elementTag attrs child
 
 dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty

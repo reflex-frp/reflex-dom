@@ -45,7 +45,7 @@ Widgets may return any type (this is 'a' in many of the functions below).  Often
 -- Even shorter-cut for above when element type is "div".  Create a div of given class.
 [W]   divClass   ::                               Text ->    m a -> m a
 
--- Create a widget of given type with arbitrary, Dymamic HTML inside.
+-- Create a widget of given type with arbitrary, Dynamic HTML inside.
 [W]   elDynHtml'     :: Text ->                        Dynamic Text ->   m El
 [W]   elDynHtmlAttr' :: Text ->   Map Text Text ->     Dynamic Text ->   m El
 
@@ -75,6 +75,7 @@ Note the "list" functions do not imply particular HTML tags (ul, li, etc), thoug
 
 -- Same as dyn, but takes initial value and an update Event instead of a Dynamic.
 [W]   widgetHold :: m a ->   Event (m a) -> m (Dynamic a)
+```
 
 Also see the "Collection management functions" section in the `reflex` Quick Reference.
 

@@ -20,6 +20,18 @@ import qualified Reflex.Dom.Main as Main
 #if defined(ghcjs_HOST_OS)
 run :: a -> a
 run = id
+#elif defined(MIN_VERSION_jsaddle_warp)
+import Data.Maybe (maybe)
+import Data.Monoid ((<>))
+import Language.Javascript.JSaddle (JSM)
+import qualified Language.Javascript.JSaddle.Warp as JW
+import System.Environment (lookupEnv)
+
+run :: JSM () -> IO()
+run jsm = do
+  port <- maybe 3003 read <$> lookupEnv "JSADDLE_WARP_PORT"
+  putStrLn $ "Running jsaddle-warp server on port " <> show port
+  JW.run port jsm
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 import Language.Javascript.JSaddle.WKWebView (runFile)
 import Language.Javascript.JSaddle (JSM)

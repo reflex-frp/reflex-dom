@@ -56,7 +56,7 @@ library
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.9.0.0 && < 0.10,
+    ghcjs-dom >= 0.9.1.0 && < 0.10,
     jsaddle >=0.9.0.0 && <0.10,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
@@ -71,6 +71,7 @@ library
     text == 1.2.*,
     these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,
+    network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
 
   if impl(ghcjs)
@@ -103,6 +104,7 @@ library
     Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
+    Reflex.Dom.WebSocket.Query
     Reflex.Dom.Widget
     Reflex.Dom.Widget.Basic
     Reflex.Dom.Widget.Input
