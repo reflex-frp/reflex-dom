@@ -15,7 +15,7 @@ jobject Reflex_Dom_Android_MainWidget_start(jobject activity, const char *url, c
 
   jclass cls = (*env)->FindClass(env, "org/reflexfrp/reflexdom/MainWidget");
   assert(cls);
-  jmethodID startMainWidget = (*env)->GetStaticMethodID(env, cls, "startMainWidget", "(Landroid/app/Activity;Ljava/lang/String;JLjava/lang/String;)Ljava/lang/Object;");
+  jmethodID startMainWidget = (*env)->GetStaticMethodID(env, cls, "startMainWidget", "(Lsystems/obsidian/HaskellActivity;Ljava/lang/String;JLjava/lang/String;)Ljava/lang/Object;");
   assert(startMainWidget);
 
   jstring jurl = (*env)->NewStringUTF(env, url);

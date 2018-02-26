@@ -1,7 +1,6 @@
 package org.reflexfrp.reflexdom;
 
 import android.annotation.TargetApi;
-import android.app.Activity;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -25,8 +24,10 @@ import android.content.Intent;
 
 import java.nio.charset.StandardCharsets;
 
+import systems.obsidian.HaskellActivity;
+
 public class MainWidget {
-  private static Object startMainWidget(final Activity a, String url, long jsaddleCallbacks, final String initialJS) {
+  private static Object startMainWidget(final HaskellActivity a, String url, long jsaddleCallbacks, final String initialJS) {
     CookieManager.setAcceptFileSchemeCookies(true); //TODO: Can we do this just for our own WebView?
 
     // Remove title and notification bars
@@ -90,19 +91,18 @@ public class MainWidget {
         // Need to accept permissions to use the camera and audio
         @Override
         public void onPermissionRequest(final PermissionRequest request) {
-            a.runOnUiThread(new Runnable() {
-                @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-                @Override
-                public void run() {
-                    // Make sure the request is coming from the file system ...
-                    if(request.getOrigin().toString().startsWith("file://")) {
-                        request.grant(request.getResources());
-                    }
-                    else {
-                        request.deny();
-                    }
-                }
-            });
+            if(request.getOrigin().toString().startsWith("file://")) {
+                a.requestWebViewPermissions(request);
+            }
+            else {
+                a.runOnUiThread(new Runnable() {
+                        @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+                        @Override
+                        public void run() {
+                            request.deny();
+                        }
+                    });
+            }
         }
 
         @Override
