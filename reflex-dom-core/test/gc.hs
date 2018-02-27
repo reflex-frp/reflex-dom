@@ -19,6 +19,8 @@ import System.Mem
 import System.Posix
 import System.Process
 
+import System.IO
+
 -- In initial testing, the minimum live bytes count was 233128 and maximum was
 -- 363712.  Going over the maximum means the test has actually failed - we
 -- probably have a memory leak; going under the minimum doesn't indicate a
@@ -38,6 +40,8 @@ failureLimit = 0
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
   uid <- getEffectiveUserID
   handle (\(_ :: IOError) -> return ()) $ do -- If we run into an exception with sandboxing, just don't bother
     unshare [User, Network]
