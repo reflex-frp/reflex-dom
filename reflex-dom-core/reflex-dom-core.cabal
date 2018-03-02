@@ -160,8 +160,8 @@ test-suite gc
                , temporary
                , unix
   hs-source-dirs: test
-  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -threaded
+  ghc-prof-options: -fprof-auto -optP-DPROFILING "-with-rtsopts=-T -xt"
   main-is: gc.hs
   type: exitcode-stdio-1.0
   if !os(linux) || !arch(x86_64)
