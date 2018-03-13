@@ -59,6 +59,7 @@ import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
+import GHCJS.DOM.Debug (DomHasCallStack)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
@@ -74,68 +75,75 @@ class Default (EventSpec d EventResult) => DomSpace d where
 -- dynamic DOM in the 'Reflex' timeline @t@
 class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
-  textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
+  textNode :: DomHasCallStack => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f
                       , m ~ f m'
                       , DomBuilderSpace m' ~ DomBuilderSpace m
                       , DomBuilder t m'
+                      , DomHasCallStack
                       )
                    => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   textNode = lift . textNode
   {-# INLINABLE textNode #-}
-  element :: Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
+  element :: DomHasCallStack => Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   default element :: ( MonadTransControl f
                      , StT f a ~ a
                      , m ~ f m'
                      , DomBuilderSpace m' ~ DomBuilderSpace m
                      , DomBuilder t m'
+                     , DomHasCallStack
                      )
                   => Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t cfg $ run child
   {-# INLINABLE element #-}
-  inputElement :: InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
+  inputElement :: DomHasCallStack => InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
   default inputElement :: ( MonadTransControl f
                           , m ~ f m'
                           , DomBuilderSpace m' ~ DomBuilderSpace m
                           , DomBuilder t m'
+                          , DomHasCallStack
                           )
                        => InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
   inputElement = lift . inputElement
   {-# INLINABLE inputElement #-}
-  textAreaElement :: TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
+  textAreaElement :: DomHasCallStack => TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
   default textAreaElement :: ( MonadTransControl f
                              , m ~ f m'
                              , DomBuilderSpace m' ~ DomBuilderSpace m
                              , DomBuilder t m'
+                             , DomHasCallStack
                              )
                           => TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
   textAreaElement = lift . textAreaElement
   {-# INLINABLE textAreaElement #-}
-  selectElement :: SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
+  selectElement :: DomHasCallStack => SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
   default selectElement :: ( MonadTransControl f
                            , StT f a ~ a
                            , m ~ f m'
                            , DomBuilderSpace m' ~ DomBuilderSpace m
                            , DomBuilder t m'
+                           , DomHasCallStack
                            )
                         => SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
   selectElement cfg child = do
     liftWith $ \run -> selectElement cfg $ run child
   {-# INLINABLE selectElement #-}
-  placeRawElement :: RawElement (DomBuilderSpace m) -> m ()
+  placeRawElement :: DomHasCallStack => RawElement (DomBuilderSpace m) -> m ()
   default placeRawElement :: ( MonadTrans f
                              , m ~ f m'
                              , DomBuilderSpace m' ~ DomBuilderSpace m
                              , DomBuilder t m'
+                             , DomHasCallStack
                              )
                           => RawElement (DomBuilderSpace m) -> m ()
   placeRawElement = lift . placeRawElement
   {-# INLINABLE placeRawElement #-}
-  wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
+  wrapRawElement :: DomHasCallStack => RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
   default wrapRawElement :: ( MonadTrans f
                             , m ~ f m'
                             , DomBuilderSpace m' ~ DomBuilderSpace m
                             , DomBuilder t m'
+                            , DomHasCallStack
                             )
                          => RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
   wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
@@ -145,8 +153,8 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
 
 class DomBuilder t m => MountableDomBuilder t m where
   type DomFragment m :: *
-  buildDomFragment :: m a -> m (DomFragment m, a)
-  mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
+  buildDomFragment :: DomHasCallStack => m a -> m (DomFragment m, a)
+  mountDomFragment :: DomHasCallStack => DomFragment m -> Event t (DomFragment m) -> m ()
 
 type Namespace = Text
 

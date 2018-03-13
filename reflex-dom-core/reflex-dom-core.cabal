@@ -56,7 +56,7 @@ library
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.9.1.0 && < 0.10,
+    ghcjs-dom >= 0.9.4.0 && < 0.10,
     jsaddle >=0.9.0.0 && <0.10,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,

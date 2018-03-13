@@ -40,6 +40,7 @@ import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
+import GHCJS.DOM.Debug (DomHasCallStack)
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dom.Builder.Class
@@ -88,7 +89,7 @@ instance Reflex t => Default (TextInputConfig t) where
 
 -- | Create an input whose value is a string.  By default, the "type" attribute is set to "text", but it can be changed using the _textInputConfig_inputType field.  Note that only types for which the value is always a string will work - types whose value may be null will not work properly with this widget.
 {-# INLINABLE textInput #-}
-textInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextInputConfig t -> m (TextInput t)
+textInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, DomHasCallStack) => TextInputConfig t -> m (TextInput t)
 textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.insert "type" inputType) dAttrs
   i <- inputElement $ def
@@ -146,7 +147,7 @@ data RangeInput t
 -- | Create an input whose value is a float.
 --   https://www.w3.org/wiki/HTML/Elements/input/range
 {-# INLINABLE rangeInput #-}
-rangeInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => RangeInputConfig t -> m (RangeInput t)
+rangeInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, DomHasCallStack) => RangeInputConfig t -> m (RangeInput t)
 rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.insert "type" "range") dAttrs
   i <- inputElement $ def
@@ -183,7 +184,7 @@ data TextArea t
               }
 
 {-# INLINABLE textArea #-}
-textArea :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextAreaConfig t -> m (TextArea t)
+textArea :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, DomHasCallStack) => TextAreaConfig t -> m (TextArea t)
 textArea (TextAreaConfig initial eSet attrs) = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   i <- textAreaElement $ def
@@ -217,7 +218,7 @@ data Checkbox t
 -- | Create an editable checkbox
 --   Note: if the "type" or "checked" attributes are provided as attributes, they will be ignored
 {-# INLINABLE checkbox #-}
-checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Checkbox t)
+checkbox :: (DomBuilder t m, PostBuild t m, DomHasCallStack) => Bool -> CheckboxConfig t -> m (Checkbox t)
 checkbox checked config = do
   let permanentAttrs = "type" =: "checkbox"
       dAttrs = Map.delete "checked" . Map.union permanentAttrs <$> _checkboxConfig_attributes config
@@ -289,7 +290,7 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 
 --TODO
 {-# INLINABLE checkboxView #-}
-checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m, DomHasCallStack) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
   let permanentAttrs = "type" =: "checkbox"
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
@@ -334,7 +335,7 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace, DomHasCallStack)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
@@ -431,7 +432,7 @@ regularToDropdownViewEventType en r = case en of
 --TODO: We should allow the user to specify an ordering instead of relying on the ordering of the Map
 -- | Create a dropdown box
 --   The first argument gives the initial value of the dropdown; if it is not present in the map of options provided, it will be added with an empty string as its text
-dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m, Ord k) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
+dropdown :: forall k t m. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m, Ord k, DomHasCallStack) => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
 dropdown k0 options (DropdownConfig setK attrs) = do
   optionsWithAddedKeys <- fmap (zipDynWith Map.union options) $ foldDyn Map.union (k0 =: "") $ fmap (=: "") setK
   defaultKey <- holdDyn k0 setK
