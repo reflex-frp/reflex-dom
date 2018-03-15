@@ -61,10 +61,11 @@ data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
                      , _webSocketConfig_close :: Event t (Word, Text)
                      , _webSocketConfig_reconnect :: Bool
+                     , _webSocketConfig_protocols :: [Text]
                      }
 
 instance Reflex t => Default (WebSocketConfig t a) where
-  def = WebSocketConfig never never True
+  def = WebSocketConfig never never True []
 
 type WebSocket t = RawWebSocket t ByteString
 
@@ -103,7 +104,7 @@ webSocket' url config onRawMessage = do
           liftIO $ threadDelay 1000000
           start
       start = do
-        ws <- newWebSocket wv url (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
+        ws <- newWebSocket wv url (_webSocketConfig_protocols config) (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
         return ()
   performEvent_ . (liftJSM start <$) =<< getPostBuild
@@ -145,16 +146,20 @@ makeLensesWith (lensRules & simpleLenses .~ True) ''RawWebSocket
 #else
 
 webSocketConfig_send :: Lens' (WebSocketConfig t a) (Event t [a])
-webSocketConfig_send f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig y x2 x3) <$> f x1
+webSocketConfig_send f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig y x2 x3 x4) <$> f x1
 {-# INLINE webSocketConfig_send #-}
 
 webSocketConfig_close :: Lens' (WebSocketConfig t a) (Event t (Word, Text))
-webSocketConfig_close f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 y x3) <$> f x2
+webSocketConfig_close f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 y x3 x4) <$> f x2
 {-# INLINE webSocketConfig_close #-}
 
 webSocketConfig_reconnect :: Lens' (WebSocketConfig t a) Bool
-webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 x2 y) <$> f x3
+webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 x2 y x4) <$> f x3
 {-# INLINE webSocketConfig_reconnect #-}
+
+webSocketConfig_protocols :: Lens' (WebSocketConfig t a) [Text]
+webSocketConfig_protocols f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 x2 x3 y) <$> f x4
+{-# INLINE webSocketConfig_protocols #-}
 
 webSocket_recv :: Lens' (RawWebSocket t a) (Event t a)
 webSocket_recv f (RawWebSocket x1 x2 x3 x4) = (\y -> RawWebSocket y x2 x3 x4) <$> f x1
