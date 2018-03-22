@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import java.io.IOException;
 import java.io.InputStream;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 
 import java.nio.charset.StandardCharsets;
 
@@ -82,7 +83,7 @@ public class MainWidget {
                 try {
                     view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                 }
-                catch(Exception e) {
+                catch(ActivityNotFoundException  e) {
                     Log.e("reflex", "Starting activity for intent '" + url + "' failed!");
                 }
                 return true;
