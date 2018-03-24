@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import systems.obsidian.HaskellActivity;
 
 public class MainWidget {
+  private static void startMainWidget(final HaskellActivity a, String url, long jsaddleCallbacks, final String initialJS) {
   private static Object startMainWidget(final HaskellActivity a, String url, long jsaddleCallbacks, final String initialJS) {
     CookieManager.setAcceptFileSchemeCookies(true); //TODO: Can we do this just for our own WebView?
 
@@ -69,7 +70,7 @@ public class MainWidget {
                 return new WebResourceResponse(mimeType, encoding, data);
             }
             catch (IOException e) {
-                Log.i("reflex", "Opening resource failed, Webview will handle the request ..");
+                Log.i("reflex-dom", "Opening resource failed, Webview will handle the request ..");
                 e.printStackTrace();
             }
 
@@ -111,22 +112,9 @@ public class MainWidget {
         }
     });
 
-    wv.addJavascriptInterface(new JSaddleCallbacks(jsaddleCallbacks), "jsaddle");
+    wv.addJavascriptInterface(new JSaddleCallbacks(jsaddleCallbacks), "jsaddleCallbacks");
 
     wv.loadUrl(url);
-
-    final Handler hnd = new Handler();
-    return new Object() {
-      public final void evaluateJavascript(final byte[] js) {
-        final String jsStr = new String(js, StandardCharsets.UTF_8);
-        hnd.post(new Runnable() {
-            @Override
-            public void run() {
-              wv.evaluateJavascript(jsStr, null);
-            }
-          });
-      }
-    };
   }
 
   private static String getMimeType(String url) {

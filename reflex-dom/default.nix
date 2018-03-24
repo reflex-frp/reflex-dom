@@ -1,5 +1,6 @@
 { mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, reflex
 , reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
+, http-types , wai, wai-websockets, warp, websockets
 , ghcBackend ? "webkit2gtk"
 }:
 assert (builtins.elem ghcBackend [ "warp" "webkit2gtk" ]);
@@ -19,8 +20,13 @@ in mkDerivation {
     jsaddle-wkwebview
     jsaddle-warp
   ] else if isAndroid then [
-    jsaddle-clib
     android-activity
+    http-types
+    jsaddle-clib
+    wai
+    wai-websockets
+    warp
+    websockets
   ] else [
     ghcBackendPackage
   ]);

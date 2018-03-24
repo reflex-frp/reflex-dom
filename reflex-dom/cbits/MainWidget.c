@@ -15,19 +15,18 @@ jobject Reflex_Dom_Android_MainWidget_start(jobject activity, const char *url, c
 
   jclass cls = (*env)->FindClass(env, "org/reflexfrp/reflexdom/MainWidget");
   assert(cls);
-  jmethodID startMainWidget = (*env)->GetStaticMethodID(env, cls, "startMainWidget", "(Lsystems/obsidian/HaskellActivity;Ljava/lang/String;JLjava/lang/String;)Ljava/lang/Object;");
+  jmethodID startMainWidget = (*env)->GetStaticMethodID(env, cls, "startMainWidget", "(Lsystems/obsidian/HaskellActivity;Ljava/lang/String;JLjava/lang/String;)V");
   assert(startMainWidget);
 
   jstring jurl = (*env)->NewStringUTF(env, url);
   assert(jurl);
   jstring initialJS = (*env)->NewStringUTF(env, jsaddleCallbacks->jsaddleJsData);
-  jobject result = (*env)->CallStaticObjectMethod(env, cls, startMainWidget, activity, jurl, (jlong)jsaddleCallbacks, initialJS);
+  (*env)->CallStaticVoidMethod(env, cls, startMainWidget, activity, jurl, (jlong)jsaddleCallbacks, initialJS);
   (*env)->DeleteLocalRef(env, initialJS);
   if((*env)->ExceptionOccurred(env)) {
     __android_log_write(ANDROID_LOG_DEBUG, "MainWidget", "startMainWidget exception");
     (*env)->ExceptionDescribe(env);
   }
-  return (*env)->NewGlobalRef(env, result);
 }
 
 void Reflex_Dom_Android_MainWidget_runJS(jobject jsExecutor, const char* js, size_t js_len) {

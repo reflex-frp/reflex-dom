@@ -55,7 +55,12 @@ library
       aeson,
       android-activity == 0.1.*,
       data-default == 0.7.*,
-      jsaddle
+      http-types,
+      jsaddle,
+      wai,
+      wai-websockets,
+      warp,
+      websockets
     c-sources: cbits/MainWidget.c
     include-dirs: cbits/include
     cpp-options: -DANDROID
