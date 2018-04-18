@@ -39,7 +39,7 @@ runQuery notifications app = do
   postBuild <- getPostBuild
   rec (a, requestPatch) <- runQueryT app e
       let request = incrementalToDynamic requestPatch
-      e <- fromNotifications requestUniq notifications
+      e <- fromNotifications request notifications
   let request' = leftmost
         [ updated request
         , tag (current request) postBuild
