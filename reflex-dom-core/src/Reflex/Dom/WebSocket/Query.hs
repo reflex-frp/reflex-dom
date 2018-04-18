@@ -38,13 +38,13 @@ runQuery :: (MonadHold t m, PostBuild t m, MonadFix m, Query q, Additive q, Grou
 runQuery notifications app = do
   postBuild <- getPostBuild
   rec (a, requestPatch) <- runQueryT app e
-      requestUniq <- holdUniqDyn $ incrementalToDynamic requestPatch
+      let request = incrementalToDynamic requestPatch
       e <- fromNotifications requestUniq notifications
-  let request = leftmost
-        [ updated requestUniq
-        , tag (current requestUniq) postBuild
+  let request' = leftmost
+        [ updated request
+        , tag (current request) postBuild
         ]
-  return (a, request)
+  return (a, request')
 
 fromNotifications :: (Query q, MonadHold t m, Reflex t, MonadFix m)
                   => Dynamic t q
