@@ -378,7 +378,7 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 
 -- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
-decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
+decodeXhrResponse = decodeText <=< _xhrResponse_responseText
 
 #ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM makeLenses
