@@ -1,11 +1,25 @@
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
 import Control.Monad.State
+import Control.Monad.Reader
 import Data.Monoid
 import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
+import qualified Data.IntMap as IntMap
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Vector (Vector)
@@ -82,16 +96,61 @@ buttonW id txt val = divClass "col-sm-6 smallpad" $ buttonW' ("class" =: "btn bt
       (b, _) <- elAttr' "button" attrs $ text txt
       pure $ val <$ domEvent Click b
 
+data MultiTimeline k t
+
+--TODO: Probably needs a phantom parameter?
+instance (Reflex t, Ord k) => Reflex (MultiTimeline k t) where
+  newtype Event (MultiTimeline k t) a = Event_MultiTimeline (Event t (Map k a))
+  newtype Behavior (MultiTimeline k t) a = Behavior_MultiTimeline (a, Behavior t (Map k a))
+  newtype Dynamic (MultiTimeline k t) a = Dynamic_MultiTimeline (a, Dynamic t (Map k a))
+  type PushM (MultiTimeline k t) = MultiPushM k t
+  type PullM (MultiTimeline k t) = MultiPullM k t
+
+--TODO: Can these monads *also* contain templates?  Perhaps they can do some of their processing in bulk as well
+newtype MultiPushM (k :: *) (t :: *) a = MultiPushM { unMultiPushM :: ReaderT (Event t (Set k), k) (PushM t) a }
+newtype MultiPullM k t a = MultiPullM { unMultiPullM :: ReaderT (Event t (Set k), k) (PullM t) a }
+
+deriving instance Reflex t => Functor (Dynamic (MultiTimeline k t))
+instance Reflex t => Applicative (Dynamic (MultiTimeline k t))
+instance Reflex t => Monad (Dynamic (MultiTimeline k t))
+deriving instance Reflex t => Functor (MultiPushM k t)
+deriving instance Reflex t => Applicative (MultiPushM k t)
+deriving instance Reflex t => Monad (MultiPushM k t)
+deriving instance Reflex t => MonadFix (MultiPushM k t)
+deriving instance Reflex t => Functor (MultiPullM k t)
+deriving instance Reflex t => Applicative (MultiPullM k t)
+deriving instance Reflex t => Monad (MultiPullM k t)
+--deriving instance Reflex t => MonadFix (MultiPullM k t)
+
+instance (Reflex t, Ord k) => MonadHold (MultiTimeline k t) (MultiPushM k t) where
+  hold :: a -> Event (MultiTimeline k t) a -> MultiPushM k t (Behavior (MultiTimeline k t) a)
+  hold v0 (Event_MultiTimeline v') = MultiPushM $ do
+    b <- lift $ accumB (\old new -> Map.union new old) mempty v'
+    return $ Behavior_MultiTimeline (v0, b)
+  holdDyn = undefined
+  holdIncremental = undefined
+instance (Reflex t, Ord k) => MonadSample (MultiTimeline k t) (MultiPushM k t)
+instance (Reflex t, Ord k) => MonadSample (MultiTimeline k t) (MultiPullM k t)
+
+
+data WidgetTemplate r (m :: * -> *) a
+
+withAsk :: (r -> m (Event t a)) -> WidgetTemplate r m (Event (MultiTimeline r t) a)
+withAsk = undefined
+
+drawTemplate :: (Dynamic (MultiTimeline IntMap.Key t) v -> WidgetTemplate IntMap.Key m v') -> IntMap v -> Event t (PatchIntMap v) -> m (IntMap v', Event t (PatchIntMap v'))
+drawTemplate = undefined
+
 tableW :: MonadWidget t m => Event t TableDiff -> m (Event t (IntMap Step))
 tableW diff = do
   elClass "table" "table table-hover table-striped test-data" $ do
     el "tbody" $ do
-      (v0, v') <- traverseIntMapWithKeyWithAdjust (\_ -> rowW) empty diff
+      (v0, v') <- drawTemplate rowW empty diff
       rowEvents <- holdIncremental v0 v'
       return $ mergeIntIncremental rowEvents
 
-rowW :: MonadWidget t m => Row -> m (Event t Step)
-rowW row = elClass "tr" (if selected row then "danger" else "") $
+rowW :: MonadWidget t m => Dynamic (MultiTimeline IntMap.Key t) Row -> WidgetTemplate IntMap.Key m (Event t Step)
+rowW row = elClass "tr" (fmap (\r -> if selected r then "danger" else "") row) $
   do
     elClass "td" "col-md-1" $ do
       text $ T.pack $ show $ num row
