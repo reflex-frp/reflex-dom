@@ -1,5 +1,6 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -11,8 +12,10 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+import Control.Applicative (liftA2)
 import Control.Monad.State
 import Control.Monad.Reader
+import Data.Foldable (foldrM)
 import Data.Monoid
 import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
 import qualified Data.IntMap as IntMap
@@ -103,6 +106,8 @@ instance (Reflex t, Ord k) => Reflex (MultiTimeline k t) where
   newtype Event (MultiTimeline k t) a = Event_MultiTimeline (Event t (Map k a))
   newtype Behavior (MultiTimeline k t) a = Behavior_MultiTimeline (a, Behavior t (Map k a))
   newtype Dynamic (MultiTimeline k t) a = Dynamic_MultiTimeline (a, Dynamic t (Map k a))
+  newtype Incremental (MultiTimeline k t) p = Incremental_MultiTimeline (PatchTarget p, Dynamic t (Map k p))
+
   type PushM (MultiTimeline k t) = MultiPushM k t
   type PullM (MultiTimeline k t) = MultiPullM k t
 
@@ -111,8 +116,27 @@ newtype MultiPushM (k :: *) (t :: *) a = MultiPushM { unMultiPushM :: ReaderT (E
 newtype MultiPullM k t a = MultiPullM { unMultiPullM :: ReaderT (Event t (Set k), k) (PullM t) a }
 
 deriving instance Reflex t => Functor (Dynamic (MultiTimeline k t))
-instance Reflex t => Applicative (Dynamic (MultiTimeline k t))
-instance Reflex t => Monad (Dynamic (MultiTimeline k t))
+
+instance (Reflex t, Ord k) => Applicative (Dynamic (MultiTimeline k t)) where
+  pure a = Dynamic_MultiTimeline (a, pure Map.empty)
+
+  (<*>) (Dynamic_MultiTimeline (atob,dAtoB)) (Dynamic_MultiTimeline (a,dA)) =
+    -- Docs for Map indicate that the intersection will be approx O(m*log(n/m + 1)), m <= n
+    -- unsure if good enough ?
+    Dynamic_MultiTimeline (atob a, liftA2 (Map.intersectionWith ($)) dAtoB dA)
+
+instance (Reflex t, Ord k) => Monad (Dynamic (MultiTimeline k t)) where
+  return = pure
+
+  -- TODO: This seems like it might recurse off into the distance or be horrifically
+  -- inefficient. Need to think on this one... Also doesn't seem law-abiding. :/
+  (>>=) (Dynamic_MultiTimeline (a, dA)) aToDMTofB =
+    let
+      (Dynamic_MultiTimeline (b, _)) = aToDMTofB a
+      m = fmap ((\(Dynamic_MultiTimeline (_, dB)) -> dB) . aToDMTofB) <$> dA
+    in
+      Dynamic_MultiTimeline (b, foldr Map.union mempty <$> joinDynThroughMap m)
+
 deriving instance Reflex t => Functor (MultiPushM k t)
 deriving instance Reflex t => Applicative (MultiPushM k t)
 deriving instance Reflex t => Monad (MultiPushM k t)
@@ -123,23 +147,53 @@ deriving instance Reflex t => Monad (MultiPullM k t)
 --deriving instance Reflex t => MonadFix (MultiPullM k t)
 
 instance (Reflex t, Ord k) => MonadHold (MultiTimeline k t) (MultiPushM k t) where
-  hold :: a -> Event (MultiTimeline k t) a -> MultiPushM k t (Behavior (MultiTimeline k t) a)
+  hold
+    :: a
+    -> Event (MultiTimeline k t) a
+    -> MultiPushM k t (Behavior (MultiTimeline k t) a)
   hold v0 (Event_MultiTimeline v') = MultiPushM $ do
     b <- lift $ accumB (\old new -> Map.union new old) mempty v'
     return $ Behavior_MultiTimeline (v0, b)
-  holdDyn = undefined
-  holdIncremental = undefined
+
+  holdDyn
+    :: a
+    -> Event (MultiTimeline k t) a
+    -> MultiPushM k t (Dynamic (MultiTimeline k t) a)
+  holdDyn v0 (Event_MultiTimeline v') = MultiPushM $ do
+    d <- lift $ foldDyn (flip Map.union) mempty v'
+    return $ Dynamic_MultiTimeline (v0, d)
+
+  holdIncremental
+    :: Patch p
+    => PatchTarget p
+    -> Event (MultiTimeline k t) p
+    -> MultiPushM k t (Incremental (MultiTimeline k t) p)
+  holdIncremental pt (Event_MultiTimeline v') = MultiPushM $ do
+    -- This is the idea, yes? Continually collect all the patches?
+    i <- lift $ foldDyn (flip Map.union) mempty v'
+    return $ Incremental_MultiTimeline (pt, i)
+
 instance (Reflex t, Ord k) => MonadSample (MultiTimeline k t) (MultiPushM k t)
 instance (Reflex t, Ord k) => MonadSample (MultiTimeline k t) (MultiPullM k t)
 
+data WidgetTemplate t r (m :: * -> *) a = WidgetTemplate
+  -- TODO: Should this be `ReaderT r m (Map r a)` ?
+  { unWidgetTemplate :: ReaderT r m a
+  }
 
-data WidgetTemplate r (m :: * -> *) a
+withAsk
+  :: (r -> m (Event t a))
+  -> WidgetTemplate t r m (Event (MultiTimeline r t) a)
+withAsk =
+  undefined
 
-withAsk :: (r -> m (Event t a)) -> WidgetTemplate r m (Event (MultiTimeline r t) a)
-withAsk = undefined
-
-drawTemplate :: (Dynamic (MultiTimeline IntMap.Key t) v -> WidgetTemplate IntMap.Key m v') -> IntMap v -> Event t (PatchIntMap v) -> m (IntMap v', Event t (PatchIntMap v'))
-drawTemplate = undefined
+drawTemplate
+  :: (Dynamic (MultiTimeline IntMap.Key t) v -> WidgetTemplate t IntMap.Key m v')
+  -> IntMap v
+  -> Event t (PatchIntMap v)
+  -> m (IntMap v', Event t (PatchIntMap v'))
+drawTemplate =
+  undefined
 
 tableW :: MonadWidget t m => Event t TableDiff -> m (Event t (IntMap Step))
 tableW diff = do
@@ -149,8 +203,26 @@ tableW diff = do
       rowEvents <- holdIncremental v0 v'
       return $ mergeIntIncremental rowEvents
 
-rowW :: MonadWidget t m => Dynamic (MultiTimeline IntMap.Key t) Row -> WidgetTemplate IntMap.Key m (Event t Step)
-rowW row = elClass "tr" (fmap (\r -> if selected r then "danger" else "") row) $
+-- TODO: An attempt to avoid unpacking the Dynamic_MultiTimeline
+--
+-- rowW' :: MonadWidget t m => Dynamic (MultiTimeline IntMap.Key t) Row -> WidgetTemplate t IntMap.Key m (Event t Step)
+-- rowW' row = _F $ traverse gg row
+--   where
+--     gg row' =
+--       let
+--         tagClick f el = f row' <$ (domEvent Click el)
+--       in
+--       elClass "tr" ((\r -> if selected r then "danger" else "") row') $ do
+--         elClass "td" "col-md-1" $ do
+--           text . T.pack . show . num $ row'
+--         (sel, _) <- elClass' "td" "col-md-4". el "a" . text $ txt row'
+--         (del, _) <- elClass' "td" "col-md-1" deleteW
+--         elClass "td" "col-md-6" blank
+--         pure . leftmost $ zipWith tagClick [selectRow, deleteRow] [sel, del]
+
+rowW :: MonadWidget t m => Dynamic (MultiTimeline IntMap.Key t) Row -> WidgetTemplate t IntMap.Key m (Event t Step)
+rowW (Dynamic_MultiTimeline (row,_)) =
+  WidgetTemplate $ elClass "tr" ((\r -> if selected r then "danger" else "") row) $
   do
     elClass "td" "col-md-1" $ do
       text $ T.pack $ show $ num row
