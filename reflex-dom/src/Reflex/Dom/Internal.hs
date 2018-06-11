@@ -33,15 +33,7 @@ run jsm = do
   putStrLn $ "Running jsaddle-warp server on port " <> show port
   JW.run port jsm
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
-import Language.Javascript.JSaddle.WKWebView (runFile)
-import Language.Javascript.JSaddle (JSM)
-import Data.Default (def)
-
---TODO: Eliminate this; it is needed because otherwise the app's base
---URL will be set to "about:blank" due to jsaddleMain rather than
---jsaddleMainFile being used
-run :: JSM () -> IO ()
-run = runFile "index.html" "" def
+import Language.Javascript.JSaddle.WKWebView (run)
 #elif defined(ANDROID)
 import Android.HaskellActivity
 import Control.Monad
