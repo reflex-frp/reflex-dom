@@ -30,7 +30,6 @@ in mkDerivation {
     "-fuse-warp"
   ] else [
   ];
-  strictDeps = true;
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;
 }
