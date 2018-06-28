@@ -149,6 +149,8 @@ test-suite hlint
   main-is: hlint.hs
   type: exitcode-stdio-1.0
 
+-- broken test on base 4.11 & ghc 8.4.3
+-- needs to be updated for changes in GHC.Stats
 test-suite gc
   build-depends: base
                , reflex
@@ -164,7 +166,7 @@ test-suite gc
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64)
+  if !os(linux) || !arch(x86_64) || impl(ghc >= 8.4.0)
     buildable: False
 
 source-repository head
