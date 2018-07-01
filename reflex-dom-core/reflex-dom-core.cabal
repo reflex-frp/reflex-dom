@@ -102,6 +102,8 @@ library
     Reflex.Dom.Old
     Reflex.Dom.Prerender
     Reflex.Dom.Specializations
+    Reflex.Dom.Tags
+    Reflex.Dom.Tags.Internal
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
