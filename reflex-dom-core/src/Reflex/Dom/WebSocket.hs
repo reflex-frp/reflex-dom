@@ -46,6 +46,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import Data.IORef
 import Data.JSString.Text
@@ -137,7 +138,7 @@ textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSV
 
 jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
 jsonWebSocket url cfg = do
-  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap encode <$> _webSocketConfig_send cfg }
+  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg }
   return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }
 
 #ifdef USE_TEMPLATE_HASKELL
