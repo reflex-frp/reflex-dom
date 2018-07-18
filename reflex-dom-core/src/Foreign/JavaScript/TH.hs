@@ -254,6 +254,10 @@ instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
   liftJS = lift . liftJS
 
+instance HasJS x m => HasJS x (EventWriterT t w m) where
+  type JSX (EventWriterT t w m) = JSX m
+  liftJS = lift . liftJS
+
 instance HasJS x m => HasJS x (RequesterT t request response m) where
   type JSX (RequesterT t request response m) = JSX m
   liftJS = lift . liftJS
