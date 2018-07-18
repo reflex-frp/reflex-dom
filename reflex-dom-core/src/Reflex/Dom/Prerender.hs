@@ -69,6 +69,9 @@ instance (Prerender js m, ReflexHost t) => Prerender js (PostBuildT t m) where
 instance Prerender js m => Prerender js (DynamicWriterT t w m) where
   prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
+instance Prerender js m => Prerender js (EventWriterT t w m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
+
 instance Prerender js m => Prerender js (ReaderT w m) where
   prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
