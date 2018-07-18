@@ -138,6 +138,7 @@ instance Default (StaticEventSpec er)
 
 instance DomSpace StaticDomSpace where
   type EventSpec StaticDomSpace = StaticEventSpec
+  type RawDocument StaticDomSpace = ()
   type RawTextNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
   type RawFile StaticDomSpace = ()
@@ -145,6 +146,9 @@ instance DomSpace StaticDomSpace where
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
+
+instance Monad m => HasDocument (StaticDomBuilderT t m) where
+  askDocument = pure ()
 
 instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do

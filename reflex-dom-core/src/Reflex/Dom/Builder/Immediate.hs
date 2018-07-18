@@ -234,20 +234,6 @@ runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan =
         v <- synchronously x
         void . liftIO $ f v
 
-class Monad m => HasDocument m where
-  askDocument :: m Document
-  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => m Document
-  askDocument = lift askDocument
-
-instance HasDocument m => HasDocument (ReaderT r m)
-instance HasDocument m => HasDocument (StateT s m)
-instance HasDocument m => HasDocument (Lazy.StateT s m)
-instance HasDocument m => HasDocument (EventWriterT t w m)
-instance HasDocument m => HasDocument (DynamicWriterT t w m)
-instance HasDocument m => HasDocument (PostBuildT t m)
-instance HasDocument m => HasDocument (RequesterT t request response m)
-instance HasDocument m => HasDocument (QueryT t q m)
-
 instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
   {-# INLINABLE askDocument #-}
   askDocument = ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_document
@@ -403,6 +389,7 @@ data GhcjsDomSpace
 
 instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
+  type RawDocument GhcjsDomSpace = DOM.Document
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.Element
   type RawFile GhcjsDomSpace = DOM.File

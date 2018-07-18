@@ -46,6 +46,7 @@ import Reflex.Requester.Base
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
+import qualified Control.Monad.State as Lazy
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
@@ -62,6 +63,7 @@ import GHCJS.DOM.Types (JSM)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
+  type RawDocument d :: *
   type RawTextNode d :: *
   type RawElement d :: *
   type RawFile d :: *
@@ -660,6 +662,11 @@ instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   requestDomAction = lift . requestDomAction
   requestDomAction_ = lift . requestDomAction_
 
+instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
+  withRenderHook hook (Lazy.StateT a) = Lazy.StateT $ \s -> withRenderHook hook $ a s
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
+
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
@@ -668,3 +675,22 @@ deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
 liftElementConfig = id
+
+class Monad m => HasDocument m where
+  askDocument :: m (RawDocument (DomBuilderSpace m))
+  default askDocument
+    :: ( m ~ f m'
+       , RawDocument (DomBuilderSpace m) ~ RawDocument (DomBuilderSpace m')
+       , MonadTrans f
+       , Monad m'
+       , HasDocument m'
+       )
+    => m (RawDocument (DomBuilderSpace m))
+  askDocument = lift askDocument
+
+instance HasDocument m => HasDocument (ReaderT r m)
+instance HasDocument m => HasDocument (EventWriterT t w m)
+instance HasDocument m => HasDocument (DynamicWriterT t w m)
+instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)
