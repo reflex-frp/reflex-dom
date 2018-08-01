@@ -49,6 +49,7 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Spider
 import Reflex.TriggerEvent.Class
+import Reflex.Adjustable.Class
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool

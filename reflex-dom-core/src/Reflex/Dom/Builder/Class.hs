@@ -42,6 +42,7 @@ import Reflex.PostBuild.Base
 import Reflex.Query.Base
 import Reflex.Query.Class
 import Reflex.Requester.Base
+import Reflex.Adjustable.Class
 
 import qualified Control.Category
 import Control.Lens hiding (element)
