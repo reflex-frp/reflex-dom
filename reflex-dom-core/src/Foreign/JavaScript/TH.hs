@@ -36,6 +36,7 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Requester.Base
 import Reflex.Query.Base (QueryT (..))
+import Reflex.Adjustable.Class
 
 #ifdef USE_TEMPLATE_HASKELL
 import Language.Haskell.TH

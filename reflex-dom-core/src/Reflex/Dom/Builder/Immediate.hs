@@ -105,6 +105,7 @@ import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
 import Reflex.Query.Base (QueryT)
+import Reflex.Adjustable.Class
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)

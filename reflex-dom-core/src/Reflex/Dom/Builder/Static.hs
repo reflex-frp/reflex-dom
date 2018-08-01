@@ -49,6 +49,7 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Spider
 import Reflex.TriggerEvent.Class
+import Reflex.Adjustable.Class
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
@@ -147,8 +148,8 @@ instance DomSpace StaticDomSpace where
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
-instance Monad m => HasDocument (StaticDomBuilderT t m) where
-  askDocument = pure ()
+-- instance Monad m => HasDocument (StaticDomBuilderT t m) where
+--   askDocument = pure ()
 
 instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
