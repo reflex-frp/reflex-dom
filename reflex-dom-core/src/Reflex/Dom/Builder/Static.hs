@@ -148,8 +148,8 @@ instance DomSpace StaticDomSpace where
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
-instance Monad m => HasDocument (StaticDomBuilderT t m) where
-  askDocument = pure ()
+-- instance Monad m => HasDocument (StaticDomBuilderT t m) where
+--   askDocument = pure ()
 
 instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
