@@ -118,7 +118,7 @@ library
     Reflex.Dom.Xhr.ResponseType
     Reflex.Dom.Xhr.Exception
 
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
 
   if flag(expose-all-unfoldings)
