@@ -29,13 +29,14 @@ module Reflex.Dom.Builder.Class
        , module Reflex.NotReady.Class
        ) where
 
+import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
-import Reflex.DynamicWriter
-import Reflex.EventWriter
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
 import Reflex.NotReady.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base

@@ -64,7 +64,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
   let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
-    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     toContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")

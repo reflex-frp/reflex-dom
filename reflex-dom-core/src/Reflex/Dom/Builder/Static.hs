@@ -40,6 +40,7 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
+import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
@@ -147,7 +148,7 @@ instance DomSpace StaticDomSpace where
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
-instance Monad m => HasDocument (StaticDomBuilderT t m) where
+instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilderT t m) where
   askDocument = pure ()
 
 instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where

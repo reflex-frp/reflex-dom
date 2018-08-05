@@ -20,7 +20,6 @@ import Data.IORef
 import GHCJS.DOM.Types (JSM)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Data.FastMutableIntMap
 
 import qualified GHCJS.DOM.Element as DOM
 import qualified GHCJS.DOM.Types as DOM

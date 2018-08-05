@@ -90,21 +90,18 @@ module Reflex.Dom.Builder.Immediate
        ) where
 
 import Foreign.JavaScript.TH
+import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
-import Reflex.DynamicWriter (DynamicWriterT)
-import Reflex.EventWriter (EventWriterT)
 import Reflex.Host.Class
 import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Base
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
-import Reflex.Query.Base (QueryT)
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
@@ -112,8 +109,6 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.State.Strict (StateT)
-import qualified Control.Monad.State as Lazy (StateT)
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -133,9 +128,7 @@ import Data.Monoid hiding (Product)
 import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
-import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element

@@ -65,7 +65,6 @@ import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dynamic
 import Reflex.Network
-import Reflex.NotReady.Class
 import Reflex.PostBuild.Class
 import Reflex.Workflow
 
