@@ -8,7 +8,6 @@ module Reflex.Dom.Internal
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Reflex.Spider (Spider)
 import Reflex.Dom.Core (Widget)
 import Reflex.Dom.Main as Main hiding
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
@@ -87,6 +86,6 @@ mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> IO ()
 mainWidgetInElementById eid w = run $ Main.mainWidgetInElementById eid w
 {-# INLINE mainWidgetInElementById #-}
 
-runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> IO ()
+runApp' :: (forall x. AppInput DomTimeline -> Widget x (AppOutput DomTimeline)) -> IO ()
 runApp' app = run $ Main.runApp' app
 {-# INLINE runApp' #-}
