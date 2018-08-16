@@ -95,6 +95,7 @@ library
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Core
+    Reflex.Dom.CssClass
     Reflex.Dom.Location
     Reflex.Dom.Main
     Reflex.Dom.Modals.Base
@@ -103,6 +104,7 @@ library
     Reflex.Dom.Prerender
     Reflex.Dom.Specializations
     Reflex.Dom.Time
+    Reflex.Dom.Vanishing
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
     Reflex.Dom.Widget

@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
-module Reflex.Dom.Contrib.CssClass where
+module Reflex.Dom.CssClass where
 
 ------------------------------------------------------------------------------
 import           Data.Default

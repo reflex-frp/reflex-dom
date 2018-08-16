@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings     #-}
 
-module Reflex.Dom.Contrib.Vanishing where
+module Reflex.Dom.Vanishing where
 
 ------------------------------------------------------------------------------
 import Data.Map (Map)
