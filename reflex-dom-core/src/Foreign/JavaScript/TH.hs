@@ -111,8 +111,8 @@ instance HasJSContext m => HasJSContext (PostBuildT t m) where
   type JSContextPhantom (PostBuildT t m) = JSContextPhantom m
   askJSContext = lift askJSContext
 
-instance HasJSContext m => HasJSContext (PerformEventT t m) where
-  type JSContextPhantom (PerformEventT t m) = JSContextPhantom m
+instance (ReflexHost t, HasJSContext (HostFrame t)) => HasJSContext (PerformEventT t m) where
+  type JSContextPhantom (PerformEventT t m) = JSContextPhantom (HostFrame t)
   askJSContext = PerformEventT $ lift askJSContext
 
 instance HasJSContext m => HasJSContext (EventWriterT t w m) where
@@ -247,9 +247,9 @@ instance HasJS x m => HasJS x (PostBuildT t m) where
   type JSX (PostBuildT t m) = JSX m
   liftJS = lift . liftJS
 
-instance HasJS x m => HasJS x (PerformEventT t m) where
-  type JSX (PerformEventT t m) = JSX m
-  liftJS = lift . liftJS
+instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) where
+  type JSX (PerformEventT t m) = JSX (HostFrame t)
+  liftJS = PerformEventT . lift . liftJS
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
