@@ -1,6 +1,6 @@
 { mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, reflex
 , reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
-, ghcBackend ? "webkit2gtk"
+, ghcBackend ? if hostPlatform.isDarwin then "warp" else "webkit2gtk"
 }:
 assert (builtins.elem ghcBackend [ "warp" "webkit2gtk" ]);
 let isAndroid = hostPlatform.libc == "bionic";
@@ -15,12 +15,14 @@ in mkDerivation {
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
   ] ++ (if ghc.isGhcjs or false then [
-  ] else if hostPlatform.isDarwin then [
+  ] else if hostPlatform.isiOS then [
     jsaddle-wkwebview
-    jsaddle-warp
   ] else if isAndroid then [
     jsaddle-clib
     android-activity
+  ] else if hostPlatform.isMacOS then [
+    jsaddle-wkwebview
+    ghcBackendPackage
   ] else [
     ghcBackendPackage
   ]);
