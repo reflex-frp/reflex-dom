@@ -5,13 +5,12 @@
 {-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
 import Control.Monad.State
 import Data.Monoid
-import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
+import Data.IntMap (IntMap, assocs, empty, fromList, singleton)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Reflex.Dom.Core
-import Data.FastMutableIntMap
 import System.Random
 
 type RNG = StdGen
@@ -76,10 +75,10 @@ step (m, t) f = ((m', t'), dt)
     t' = applyAlways dt t
 
 buttonW :: MonadWidget t m => Text -> Text -> a -> m (Event t a)
-buttonW id txt val = divClass "col-sm-6 smallpad" $ buttonW' ("class" =: "btn btn-primary btn-block" <> "id" =: id)
+buttonW bid t val = divClass "col-sm-6 smallpad" $ buttonW' ("class" =: "btn btn-primary btn-block" <> "id" =: bid)
   where
     buttonW' attrs = do
-      (b, _) <- elAttr' "button" attrs $ text txt
+      (b, _) <- elAttr' "button" attrs $ text t
       pure $ val <$ domEvent Click b
 
 tableW :: MonadWidget t m => Event t TableDiff -> m (Event t (IntMap Step))
@@ -100,7 +99,7 @@ rowW row = elClass "tr" (if selected row then "danger" else "") $
     elClass "td" "col-md-6" blank
     pure . leftmost $ zipWith tagClick [selectRow, deleteRow] [sel, del]
   where
-    tagClick f el = f row <$ (domEvent Click el)
+    tagClick f e = f row <$ domEvent Click e
 
 deleteW :: MonadWidget t m => m ()
 deleteW = el "a" $ elAttr "span" ("aria-hidden" =: "true" <> "class" =: "glyphicon glyphicon-remove") blank
@@ -127,14 +126,14 @@ swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else 
     val = (assocs t !!)
 
 selectRow :: Row -> (Model, Table) -> (Model, TableDiff)
-selectRow r (m, t) = (m { selection = Just r}, PatchIntMap $ dr <> ds)
+selectRow r (m, _) = (m { selection = Just r}, PatchIntMap $ dr <> ds)
   where
     dr = sel True r
     ds = maybe empty (sel False) $ selection m
     sel b r' = singleton (num r') $ Just r' { selected = b }
 
 deleteRow :: Row -> (Model, Table) -> (Model, TableDiff)
-deleteRow r (m, t) = (m { selection = mfilter (/= r) (selection m) }, PatchIntMap $ singleton (num r) Nothing)
+deleteRow r (m, _) = (m { selection = mfilter (/= r) (selection m) }, PatchIntMap $ singleton (num r) Nothing)
 
 resetRows :: Int -> (Model, Table) -> (Model, TableDiff)
 resetRows n (m, t) = (m'', dt <> dt')
@@ -146,9 +145,9 @@ appendRows :: Int -> (Model, Table) -> (Model, TableDiff)
 appendRows n (m, t) = addRows n (m, t)
 
 addRows :: Int -> (Model, Table) -> (Model, TableDiff)
-addRows count (m, t) = (m { rng = rng', nextNum = nextNum' }, PatchIntMap diff)
+addRows n (m, _) = (m { rng = rng', nextNum = nextNum' }, PatchIntMap diff)
   where
-    rowsST = sequence (rowST <$ [0..count-1])
+    rowsST = sequence (rowST <$ [0..n-1])
     (rows, (nextNum', rng')) = runState rowsST (nextNum m, rng m)
     diff = fromList . fmap (\r -> (num r, Just r)) $ rows
 
