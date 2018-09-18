@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
 import Control.Monad.State
-import Data.Monoid
+import Data.Semigroup (First(..), (<>))
 import Data.IntMap (IntMap, assocs, empty, fromList, singleton)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -17,9 +17,9 @@ type RNG = StdGen
 type Entropy   = Int
 type RowNumber = Int
 type RowIndex  = Int
-data Row   = Row { num :: RowNumber, txt :: Text, selected :: Bool } deriving (Eq, Show)
+data Row   = Row { num :: RowNumber, txt :: Text } deriving (Eq, Show)
 type Table = IntMap Row
-data Model = Model { rng :: RNG, nextNum :: RowNumber, selection :: Maybe Row } deriving Show
+data Model = Model { rng :: RNG, nextNum :: RowNumber } deriving Show
 type TableDiff = PatchIntMap Row
 
 main :: IO ()
@@ -48,10 +48,11 @@ bodyW seed = divClass "main" $ divClass "container" $ mdo
       , buttonW "swaprows" "Swap Rows"             $ swapRows (1, 998)
       ]
 
-  let initial = Model { rng = mkStdGen seed, nextNum = 1, selection = Nothing }
+  let initial = Model { rng = mkStdGen seed, nextNum = 1 }
   let events = leftmost $ fmap (foldl1 sequenceSteps) rowEvents : buttonEvents
 
-  rowEvents <- tableW dynMT
+  n <- holdDyn (First Nothing) sels
+  (rowEvents, sels) <- runEventWriterT $ tableW n dynMT
 
   dynMT <- mapAccum_ step (initial, empty) events
 
@@ -81,33 +82,34 @@ buttonW bid t val = divClass "col-sm-6 smallpad" $ buttonW' ("class" =: "btn btn
       (b, _) <- elAttr' "button" attrs $ text t
       pure $ val <$ domEvent Click b
 
-tableW :: MonadWidget t m => Event t TableDiff -> m (Event t (IntMap Step))
-tableW diff = do
+tableW :: MonadWidget t m => Dynamic t (First (Maybe RowNumber)) -> Event t TableDiff -> EventWriterT t (First (Maybe RowNumber)) m (Event t (IntMap Step))
+tableW n diff = do
   elClass "table" "table table-hover table-striped test-data" $ do
     el "tbody" $ do
-      (v0, v') <- traverseIntMapWithKeyWithAdjust (\_ -> rowW) empty diff
+      let demuxN = demuxed (demux n)
+      (v0 , v') <- traverseIntMapWithKeyWithAdjust (\_ rn -> rowW (demuxN (First $ Just $ num rn)) rn) empty diff
       rowEvents <- holdIncremental v0 v'
       return $ mergeIntIncremental rowEvents
 
-rowW :: MonadWidget t m => Row -> m (Event t Step)
-rowW row = elClass "tr" (if selected row then "danger" else "") $
-  do
+rowW :: MonadWidget t m => Dynamic t Bool -> Row -> EventWriterT t (First (Maybe RowNumber)) m (Event t Step)
+rowW selected row = elDynAttr "tr" attrs $ do
     elClass "td" "col-md-1" $ do
       text $ T.pack $ show $ num row
     (sel, _) <- elClass' "td" "col-md-4". el "a" . text $ txt row
     (del, _) <- elClass' "td" "col-md-1" deleteW
     elClass "td" "col-md-6" blank
-    pure . leftmost $ zipWith tagClick [selectRow, deleteRow] [sel, del]
+    tellEvent $ First (Just $ num row) <$ domEvent Click sel
+    tellEvent $ attachWithMaybe (\p _ -> if p then Just (First Nothing) else Nothing) (current selected) $ domEvent Click del
+    return $ deleteRow row <$ domEvent Click del
   where
-    tagClick f e = f row <$ domEvent Click e
+    attrs = ffor selected $ \p -> if p then "class" =: "danger" else mempty
 
 deleteW :: MonadWidget t m => m ()
 deleteW = el "a" $ elAttr "span" ("aria-hidden" =: "true" <> "class" =: "glyphicon glyphicon-remove") blank
 
-
 {- Domain logic -}
 clearRows :: (Model, Table) -> (Model, TableDiff)
-clearRows (m, t) = (m { selection = Nothing }, PatchIntMap $ Nothing <$ t)
+clearRows (m, t) = (m, PatchIntMap $ Nothing <$ t)
 
 updateRows :: (RowIndex -> Bool) -> (Text -> Text) -> (Model, Table) -> (Model, TableDiff)
 updateRows p f (m, t) = (m, PatchIntMap $ Just . update <$> targets)
@@ -125,15 +127,8 @@ swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else 
     point x y = singleton (fst (val x)) $ Just $ snd $ val y
     val = (assocs t !!)
 
-selectRow :: Row -> (Model, Table) -> (Model, TableDiff)
-selectRow r (m, _) = (m { selection = Just r}, PatchIntMap $ dr <> ds)
-  where
-    dr = sel True r
-    ds = maybe empty (sel False) $ selection m
-    sel b r' = singleton (num r') $ Just r' { selected = b }
-
 deleteRow :: Row -> (Model, Table) -> (Model, TableDiff)
-deleteRow r (m, _) = (m { selection = mfilter (/= r) (selection m) }, PatchIntMap $ singleton (num r) Nothing)
+deleteRow r (m, _) = (m, PatchIntMap $ singleton (num r) Nothing)
 
 resetRows :: Int -> (Model, Table) -> (Model, TableDiff)
 resetRows n (m, t) = (m'', dt <> dt')
@@ -152,7 +147,7 @@ addRows n (m, _) = (m { rng = rng', nextNum = nextNum' }, PatchIntMap diff)
     diff = fromList . fmap (\r -> (num r, Just r)) $ rows
 
 rowST :: State (RowNumber, RNG) Row
-rowST  = state (\(n, g) -> let (e, g') = next g in (Row {num = n, txt = randomName e, selected = False}, (n+1, g')))
+rowST  = state (\(n, g) -> let (e, g') = next g in (Row {num = n, txt = randomName e}, (n+1, g')))
 
 randomName :: Entropy -> Text
 randomName e = T.intercalate " " $ (`modIndex` e) <$> [adjectives, colours, nouns]
