@@ -10,7 +10,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
-import Reflex.Dom
+import Reflex.Dom.Core
 import Data.FastMutableIntMap
 import System.Random
 
