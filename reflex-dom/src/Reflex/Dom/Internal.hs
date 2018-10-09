@@ -35,6 +35,7 @@ run jsm = do
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 #if defined(ios_HOST_OS)
 import Data.Default
+import Data.Monoid ((<>))
 import Language.Javascript.JSaddle (JSM)
 import Language.Javascript.JSaddle.WKWebView (run', mainBundleResourcePath)
 import Language.Javascript.JSaddle.WKWebView.Internal (jsaddleMainHTMLWithBaseURL)
