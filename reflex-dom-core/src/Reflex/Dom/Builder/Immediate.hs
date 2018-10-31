@@ -129,7 +129,7 @@ import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified GHCJS.DOM as DOM
-import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
+import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
@@ -254,6 +254,14 @@ textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateD
 textNodeInternal !t = do
   doc <- askDocument
   n <- liftJSM $ createTextNode doc t
+  append $ toNode n
+  return n
+
+{-# INLINABLE commentNodeInternal #-}
+commentNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Comment
+commentNodeInternal !t = do
+  doc <- askDocument
+  n <- liftJSM $ createComment doc t
   append $ toNode n
   return n
 
@@ -384,6 +392,7 @@ instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
   type RawDocument GhcjsDomSpace = DOM.Document
   type RawTextNode GhcjsDomSpace = DOM.Text
+  type RawCommentNode GhcjsDomSpace = DOM.Comment
   type RawElement GhcjsDomSpace = DOM.Element
   type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
@@ -462,6 +471,11 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     n <- textNodeInternal initialContents
     mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     return $ TextNode n
+  {-# INLINABLE commentNode #-}
+  commentNode (CommentNodeConfig initialContents mSetContents) = do
+    n <- commentNodeInternal initialContents
+    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    return $ CommentNode n
   {-# INLINABLE element #-}
   element elementTag cfg child = fst <$> makeElement elementTag cfg child
   {-# INLINABLE inputElement #-}

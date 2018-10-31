@@ -66,6 +66,7 @@ class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
   type RawDocument d :: *
   type RawTextNode d :: *
+  type RawCommentNode d :: *
   type RawElement d :: *
   type RawFile d :: *
   type RawInputElement d :: *
@@ -86,6 +87,15 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                    => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   textNode = lift . textNode
   {-# INLINABLE textNode #-}
+  commentNode :: CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
+  default commentNode :: ( MonadTrans f
+                      , m ~ f m'
+                      , DomBuilderSpace m' ~ DomBuilderSpace m
+                      , DomBuilder t m'
+                      )
+                   => CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
+  commentNode = lift . commentNode
+  {-# INLINABLE commentNode #-}
   element :: Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   default element :: ( MonadTransControl f
                      , StT f a ~ a
@@ -173,6 +183,28 @@ instance (Reflex t) => Default (TextNodeConfig t) where
 
 newtype TextNode d t = TextNode
   { _textNode_raw :: RawTextNode d
+  }
+
+data CommentNodeConfig t
+   = CommentNodeConfig { _commentNodeConfig_initialContents :: {-# UNPACK #-} !Text
+                       , _commentNodeConfig_setContents :: !(Maybe (Event t Text))
+                       }
+
+#ifndef USE_TEMPLATE_HASKELL
+commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Comment
+commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNodeConfig a' b) <$> f a
+{-# INLINE commentNodeConfig_initialContents #-}
+#endif
+
+instance (Reflex t) => Default (CommentNodeConfig t) where
+  {-# INLINABLE def #-}
+  def = CommentNodeConfig
+    { _commentNodeConfig_initialContents = mempty
+    , _commentNodeConfig_setContents = Nothing
+    }
+
+newtype CommentNode d t = CommentNode
+  { _commentNode_raw :: RawCommentNode d
   }
 
 data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
