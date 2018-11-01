@@ -425,6 +425,7 @@ data SelectElement er d t = SelectElement
 #ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM (uncurry makeLensesWithoutField)
   [ (["_textNodeConfig_setContents"], ''TextNodeConfig)
+  , (["_commentNodeConfig_setContents"], ''CommentNodeConfig)
   , ([ "_inputElementConfig_setValue"
      , "_inputElementConfig_setChecked" ], ''InputElementConfig)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
@@ -439,6 +440,13 @@ textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfi
 textNodeConfig_setContents =
   let getter = fromMaybe never . _textNodeConfig_setContents
       setter t e = t { _textNodeConfig_setContents = Just e }
+  in lens getter setter
+
+-- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+commentNodeConfig_setContents :: Reflex t => Lens (CommentNodeConfig t) (CommentNodeConfig t) (Event t Text) (Event t Text)
+commentNodeConfig_setContents =
+  let getter = fromMaybe never . _commentNodeConfig_setContents
+      setter t e = t { _commentNodeConfig_setContents = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
@@ -553,6 +561,7 @@ instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (DynamicWriterT child) = DynamicWriterT $ do
     s <- get
     (el, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
@@ -571,6 +580,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
 instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT t request response m) where
   type DomBuilderSpace (RequesterT t request response m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (RequesterT child) = RequesterT $ do
     r <- ask
     old <- get
@@ -591,6 +601,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
 instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (EventWriterT child) = EventWriterT $ do
     old <- get
     (el, (a, new)) <- lift $ element elementTag cfg $ runStateT child old
@@ -609,6 +620,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder 
 instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
   type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (QueryT child) = QueryT $ do
     s <- get
     (e, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
@@ -676,6 +688,9 @@ liftWithStateless a = liftWith $ \run -> a $ fmap (fromStT (Proxy :: Proxy t)) .
 
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode (DomBuilderSpace m) t)
 liftTextNode = lift . textNode
+
+liftCommentNode :: (MonadTrans f, DomBuilder t m) => CommentNodeConfig t -> f m (CommentNode (DomBuilderSpace m) t)
+liftCommentNode = lift . commentNode
 
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (DomBuilderSpace m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag cfg $ run child
