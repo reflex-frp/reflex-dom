@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,7 @@ module Reflex.Dom.Prerender
 
 import Control.Monad.Reader
 import Data.Constraint
+import Data.Default
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex
@@ -44,10 +46,24 @@ class Prerender js m | m -> js where
 -- | Draw one widget when prerendering (e.g. server-side) and another when the
 -- widget is fully instantiated.  In a given execution of this function, there
 -- will be exactly one invocation of exactly one of the arguments.
-prerender :: forall js m a. Prerender js m => m a -> (PrerenderClientConstraint js m => m a) -> m a
+prerender :: forall js t m a. (Prerender js m, DomBuilder t m) => m a -> (PrerenderClientConstraint js m => m a) -> m a
 prerender server client = case prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)) of
-  Nothing -> server
-  Just Dict -> client
+  Nothing -> prerenderStart *> server <* prerenderEnd
+  Just Dict -> rerenderStart *> client <* rerenderEnd
+
+-- TODO: add a unique ID
+prerenderStart :: DomBuilder t m => m ()
+prerenderStart = void $ commentNode $ def { _commentNodeConfig_initialContents = "prerender-start" }
+
+prerenderEnd :: DomBuilder t m => m ()
+prerenderEnd = void $ commentNode $ def { _commentNodeConfig_initialContents = "prerender-end" }
+
+-- TODO: add a unique ID
+rerenderStart :: DomBuilder t m => m ()
+rerenderStart = void $ commentNode $ def { _commentNodeConfig_initialContents = "rerender-start" }
+
+rerenderEnd :: DomBuilder t m => m ()
+rerenderEnd = void $ commentNode $ def { _commentNodeConfig_initialContents = "rerender-end" }
 
 instance ( HasJS js m
          , HasJS js (Performable m)

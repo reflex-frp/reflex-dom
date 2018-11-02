@@ -123,11 +123,15 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
         go w df = do
           unreadyChildren <- liftIO $ newIORef 0
+          hydrating <- liftIO $ newIORef True
+          hydrationNode <- liftIO $ newIORef Nothing
           let builderEnv = ImmediateDomBuilderEnv
                 { _immediateDomBuilderEnv_document = toDocument doc
                 , _immediateDomBuilderEnv_parent = toNode df
                 , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
                 , _immediateDomBuilderEnv_commitAction = return () --TODO
+                , _immediateDomBuilderEnv_hydrating = hydrating
+                , _immediateDomBuilderEnv_hydrationNode = hydrationNode
                 }
           runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
@@ -151,11 +155,15 @@ attachWidget' rootElement jsSing w = do
   ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     unreadyChildren <- liftIO $ newIORef 0
+    hydrating <- liftIO $ newIORef True
+    hydrationNode <- liftIO $ newIORef Nothing
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = return () --TODO
+          , _immediateDomBuilderEnv_hydrating = hydrating
+          , _immediateDomBuilderEnv_hydrationNode = hydrationNode
           }
     a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events), postBuildTriggerRef)

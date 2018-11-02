@@ -128,6 +128,7 @@ import Data.Monoid hiding (Product)
 import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
@@ -145,8 +146,10 @@ import GHCJS.DOM.MouseEvent
 import qualified GHCJS.DOM.Touch as Touch
 import qualified GHCJS.DOM.TouchEvent as TouchEvent
 import qualified GHCJS.DOM.TouchList as TouchList
-import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
+import GHCJS.DOM.Node (appendChild_, getChildNodes, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
 import qualified GHCJS.DOM.Node as DOM (insertBefore_)
+import qualified GHCJS.DOM.Node as Node
+import qualified GHCJS.DOM.NodeList as NodeList
 import GHCJS.DOM.Types
        (liftJSM, askJSM, runJSM, JSM, MonadJSM,
         FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
@@ -155,7 +158,7 @@ import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import qualified GHCJS.DOM.Window as Window
-import Language.Javascript.JSaddle (call, eval)
+import Language.Javascript.JSaddle (call, eval, jsg, js1)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.FastMutableIntMap (PatchIntMap (..))
@@ -172,11 +175,19 @@ instance MonadJSM m => MonadJSM (ImmediateDomBuilderT t m) where
     liftJSM' = ImmediateDomBuilderT . liftJSM'
 #endif
 
+{- Hydration:
+    - Fence off `prerender` and totally replace immediately
+    - Fence off `runWithReplace` and hydrate at postBuild
+    - Otherwise hydrate at build time, skipping elements without SSR attribute, stripping the attrs as we go
+-}
+
 data ImmediateDomBuilderEnv t
    = ImmediateDomBuilderEnv { _immediateDomBuilderEnv_document :: {-# UNPACK #-} !Document
                             , _immediateDomBuilderEnv_parent :: {-# UNPACK #-} !Node
                             , _immediateDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word) -- Number of children who still aren't fully rendered
                             , _immediateDomBuilderEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
+                            , _immediateDomBuilderEnv_hydrating :: {-# UNPACK #-} !(IORef Bool) -- In hydration mode?
+                            , _immediateDomBuilderEnv_hydrationNode :: {-# UNPACK #-} !(IORef (Maybe Node)) -- Hydration node index
                             }
 
 newtype ImmediateDomBuilderT t m a = ImmediateDomBuilderT { unImmediateDomBuilderT :: ReaderT (ImmediateDomBuilderEnv t) (RequesterT t JSM Identity (TriggerEventT t m)) a }
@@ -249,21 +260,76 @@ append n = do
   liftJSM $ appendChild_ p n
   return ()
 
+getHydrationMode :: MonadIO m => ImmediateDomBuilderT t m Bool
+getHydrationMode = do
+  ref <- ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_hydrating
+  liftIO $ readIORef ref
+
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Text
 textNodeInternal !t = do
   doc <- askDocument
-  n <- liftJSM $ createTextNode doc t
-  append $ toNode n
-  return n
+--  n <- liftJSM $ createTextNode doc t
+--  append $ toNode n
+--  return n
+  parent <- askParent
+  getHydrationMode >>= \case
+    False -> do
+      liftIO $ print $ "Not in hydration mode, creating text node: " <> DOM.toJSString t
+      n <- liftJSM $ createTextNode doc t -- not in hydration mode, create as usual
+      append $ toNode n
+      pure n
+    True -> do
+      lastHydrationNodeRef <- ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_hydrationNode
+      lastHydrationNode <- liftIO $ readIORef lastHydrationNodeRef
+      let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+            Nothing -> do
+              liftIO $ print $ "No node found, building text node: " <> DOM.toJSString t
+              tn <- liftJSM $ createTextNode doc t
+              append $ toNode tn -- we can append because there's no node at this index (we have exhausted all previous nodes)
+              pure tn
+            Just node -> DOM.castTo DOM.Text node >>= \case
+              Nothing -> do
+                liftIO $ putStrLn $ "Not a text node, skipping"
+                go (Just node)
+              Just tn -> do
+                liftIO $ print $ "Using existing text node: instead of building " <> DOM.toJSString t
+                pure tn
+      n <- go lastHydrationNode
+      liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode n)
+      pure n
 
 {-# INLINABLE commentNodeInternal #-}
 commentNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> ImmediateDomBuilderT t m DOM.Comment
 commentNodeInternal !t = do
   doc <- askDocument
-  n <- liftJSM $ createComment doc t
-  append $ toNode n
-  return n
+  parent <- askParent
+
+  getHydrationMode >>= \case
+    False -> do
+      liftIO $ print $ "Not in hydration mode, creating comment node: " <> DOM.toJSString t
+      n <- liftJSM $ createComment doc t -- not in hydration mode, create as usual
+      append $ toNode n
+      pure n
+    True -> do
+      lastHydrationNodeRef <- ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_hydrationNode
+      lastHydrationNode <- liftIO $ readIORef lastHydrationNodeRef
+      let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+            Nothing -> do
+              liftIO $ print $ "No node found, building comment node: " <> DOM.toJSString t
+              tn <- liftJSM $ createComment doc t
+              append $ toNode tn -- we can append because there's no node at this index (we have exhausted all previous nodes)
+              pure tn
+            Just node -> DOM.castTo DOM.Comment node >>= \case
+              Nothing -> do
+                liftIO $ putStrLn $ "Not a comment node, skipping"
+                go (Just node)
+              Just tn -> do
+                liftIO $ print $ "Using existing comment node: instead of building " <> DOM.toJSString t
+                pure tn
+      n <- go lastHydrationNode
+      liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode n)
+      pure n
 
 -- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
@@ -367,16 +433,45 @@ wrap e cfg = do
 makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
-    Nothing -> createElement doc elementTag
-    Just ens -> createElementNS doc (Just ens) elementTag
-  ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
-    Nothing -> lift $ setAttribute e n v
-    Just ans -> lift $ setAttributeNS e (Just ans) n v
-  result <- flip localEnv child $ \env -> env
-    { _immediateDomBuilderEnv_parent = toNode e
-    }
-  append $ toNode e
+  parent <- askParent
+  let buildElement = do
+        e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
+          Nothing -> createElement doc elementTag
+          Just ens -> createElementNS doc (Just ens) elementTag
+        ImmediateDomBuilderT $ iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
+          Nothing -> lift $ setAttribute e n v
+          Just ans -> lift $ setAttributeNS e (Just ans) n v
+        pure e
+  e <- getHydrationMode >>= \case
+    False -> do
+      liftIO $ print $ "Not in hydration mode, creating " <> elementTag
+      e <- buildElement -- not in hydration mode, create as usual
+      append $ toNode e
+      pure e
+    True -> do
+      lastHydrationNodeRef <- ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_hydrationNode
+      lastHydrationNode <- liftIO $ readIORef lastHydrationNodeRef
+      let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+            Nothing -> do
+              liftIO $ print $ "No node found, building element: " <> elementTag
+              e <- buildElement
+              append $ toNode e -- we can append because there's no node at this index (we have exhausted all previous nodes)
+              pure e
+            Just node -> DOM.castTo DOM.Element node >>= \case
+              Nothing -> do
+                liftIO $ putStrLn $ "Not an element, skipping"
+                go (Just node) -- TODO maybe check for SSR attribute?
+              Just e -> do
+                tn <- Element.getTagName e
+                liftIO $ print $ "Using existing element: " <> tn <> " instead of building " <> elementTag
+                pure e
+      e <- go lastHydrationNode
+      liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode e)
+      pure e
+
+  -- TODO: prerender needs completely replacing
+  childNode <- liftIO $ newIORef Nothing
+  result <- localEnv (\env -> env { _immediateDomBuilderEnv_parent = toNode e, _immediateDomBuilderEnv_hydrationNode = childNode }) child
   wrapped <- wrap e $ extractRawElementConfig cfg
   return ((wrapped, result), e)
 
@@ -625,11 +720,62 @@ instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomB
       liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
+localNoHydration :: MonadIO m => ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m a
+localNoHydration m = do
+  h <- liftIO $ newIORef False
+  localEnv (\env -> env { _immediateDomBuilderEnv_hydrating = h }) m
+
+skipToCommentId :: (MonadJSM m, IsNode a) => Text -> ImmediateDomBuilderT t m a -> (a -> Maybe DOM.Node -> ImmediateDomBuilderT t m ()) -> ImmediateDomBuilderT t m (a, Text)
+skipToCommentId prefix buildElement replaceOrCreate = do
+  doc <- askDocument
+  parent <- askParent
+  lastHydrationNodeRef <- ImmediateDomBuilderT $ asks _immediateDomBuilderEnv_hydrationNode
+  lastHydrationNode <- liftIO $ readIORef lastHydrationNodeRef
+  let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+        Nothing -> do
+          liftIO $ print $ "No node found, building comment"
+          a <- buildElement
+          replaceOrCreate a Nothing
+          pure (a, "")
+        Just node -> DOM.castTo DOM.Comment node >>= \case
+          Just comment -> do
+            commentText <- Node.getTextContentUnchecked comment
+            case T.stripPrefix prefix commentText of
+              Just key -> do
+                new <- buildElement
+                replaceOrCreate new (Just node)
+                pure (new, key)
+              Nothing -> do
+                liftIO $ putStrLn $ "Not a comment, skipping"
+                go (Just node)
+          Nothing -> do
+            liftIO $ putStrLn $ "Not a comment, skipping"
+            go (Just node)
+  (a, key) <- go lastHydrationNode
+  liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode a)
+  pure (a, key)
+
+skipToReplaceStart :: MonadJSM m => ImmediateDomBuilderT t m (DOM.Text, Text)
+skipToReplaceStart = do
+  doc <- askDocument
+  parent <- askParent
+  skipToCommentId "replace-start" (liftJSM $ createTextNode doc ("" :: Text)) $ \new -> \case
+    Nothing -> void $ append $ toNode new
+    Just node -> void $ liftJSM $ Node.replaceChild parent new node
+
+skipToReplaceEnd :: MonadJSM m => Text -> ImmediateDomBuilderT t m DOM.Text
+skipToReplaceEnd key = do
+  doc <- askDocument
+  parent <- askParent
+  fmap fst $ skipToCommentId "replace-end" (liftJSM $ createTextNode doc ("" :: Text)) $ \new -> \case
+    Nothing -> void $ append $ toNode new
+    Just node -> void $ liftJSM $ Node.replaceChild parent new node
+
 instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) => Adjustable t (ImmediateDomBuilderT t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
-    before <- textNodeInternal ("" :: Text)
+    (before, beforeKey) <- skipToReplaceStart
     let parentUnreadyChildren = _immediateDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
     currentCohort <- liftIO $ newIORef (-1 :: Int) -- Equal to the cohort currently in the DOM
@@ -644,14 +790,17 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
               when (new == 0) $ _immediateDomBuilderEnv_commitAction initialEnv
     -- We draw 'after' in this roundabout way to avoid using MonadFix
     doc <- askDocument
-    after <- createTextNode doc ("" :: Text)
+    after <- skipToReplaceEnd beforeKey
     let drawInitialChild = do
           unreadyChildren <- liftIO $ newIORef 0
-          let f = do
-                result <- a0
-                append $ toNode after
-                return result
-          result <- runReaderT (unImmediateDomBuilderT f) $ initialEnv
+--          let f = do
+--                result <- a0
+--                append $ toNode after
+--                Node.getNextSibling (toNode result) >>= \case
+--                  Nothing -> append (toNode after)
+--                  Just next -> insertBefore (toNode after) next
+--                return result
+          result <- runReaderT (unImmediateDomBuilderT a0) initialEnv
             { _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
             , _immediateDomBuilderEnv_commitAction = myCommitAction
             }
@@ -670,11 +819,12 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
               insertBefore df after
               liftIO $ writeIORef currentCohort cohortId
               myCommitAction
-      result <- runReaderT (unImmediateDomBuilderT child) $ initialEnv
-        { _immediateDomBuilderEnv_parent = toNode df
-        , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
-        , _immediateDomBuilderEnv_commitAction = commitAction
-        }
+      let env = initialEnv
+            { _immediateDomBuilderEnv_parent = toNode df
+            , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
+            , _immediateDomBuilderEnv_commitAction = commitAction
+            }
+      result <- runReaderT (unImmediateDomBuilderT child) env
       uc <- liftIO $ readIORef unreadyChildren
       let commitActionToRunNow = if uc == 0
             then Just commitAction
@@ -1026,6 +1176,11 @@ mkHasFocus e = do
     [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
     , True <$ Reflex.select (_element_events e) (WrapArg Focus)
     ]
+
+insertAfter :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
+insertAfter new existing = do
+  p <- getParentNodeUnchecked existing
+  Node.getNextSibling existing >>= DOM.insertBefore_ p new
 
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do

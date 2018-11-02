@@ -152,15 +152,23 @@ instance DomSpace StaticDomSpace where
 instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilderT t m) where
   askDocument = pure ()
 
-instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
+instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
+    replaceStart
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
+    replaceEnd
     return (fst result0, fmapCheap fst result')
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
+
+replaceStart :: DomBuilder t m => m ()
+replaceStart = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-start" }
+
+replaceEnd :: DomBuilder t m => m ()
+replaceEnd = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-end" }
 
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( Adjustable t m
