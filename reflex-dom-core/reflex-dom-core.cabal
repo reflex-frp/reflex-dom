@@ -90,6 +90,7 @@ library
     Foreign.JavaScript.Utils
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
+    Reflex.Dom.Builder.Hydration
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
