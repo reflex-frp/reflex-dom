@@ -37,6 +37,7 @@ import Data.Map.Misc (applyMap)
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
@@ -50,6 +51,7 @@ import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.TriggerEvent.Class
+import System.Random (randomRIO)
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
@@ -155,20 +157,24 @@ instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilde
 instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
-    replaceStart
+    key <- replaceStart
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
-    replaceEnd
+    replaceEnd key
     return (fst result0, fmapCheap fst result')
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
 
-replaceStart :: DomBuilder t m => m ()
-replaceStart = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-start" }
+replaceStart :: (DomBuilder t m, MonadIO m) => m Text
+replaceStart = do
+  str <- liftIO $ replicateM 8 $ randomRIO ('a', 'z')
+  let key = "-" <> T.pack str
+  _ <- commentNode $ def { _commentNodeConfig_initialContents = "replace-start" <> key }
+  pure key
 
-replaceEnd :: DomBuilder t m => m ()
-replaceEnd = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-end" }
+replaceEnd :: DomBuilder t m => Text -> m ()
+replaceEnd key = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-end" <> key }
 
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( Adjustable t m
@@ -238,7 +244,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
       (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing
-      attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
+      attrs0 <- foldDyn applyMap (Map.insert "ssr" "" $ cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       selectValue <- asks _staticDomBuilderEnv_selectValue
       let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
             Just v | v == sel -> attrs <> Map.singleton "selected" ""

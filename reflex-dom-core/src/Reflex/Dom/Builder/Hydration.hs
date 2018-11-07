@@ -124,10 +124,11 @@ import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Typeable (Typeable, typeRep)
 import GHC.Generics (Generic)
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
-import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
+import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute, hasAttributeNS)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
@@ -303,20 +304,20 @@ getHydrationMode = do
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> HydrationDomBuilderT t m DOM.Text
-textNodeInternal !t = makeNodeInternal (askDocument >>= \doc -> liftJSM $ createTextNode doc t) DOM.Text
+textNodeInternal !t = makeNodeInternal (const $ pure True) (askDocument >>= \doc -> liftJSM $ createTextNode doc t) DOM.Text
 
 {-# INLINABLE commentNodeInternal #-}
 commentNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> HydrationDomBuilderT t m DOM.Comment
-commentNodeInternal !t = makeNodeInternal (askDocument >>= \doc -> liftJSM $ createComment doc t) DOM.Comment
+commentNodeInternal !t = makeNodeInternal (const $ pure True) (askDocument >>= \doc -> liftJSM $ createComment doc t) DOM.Comment
 
 {-# INLINABLE makeNodeInternal #-}
-makeNodeInternal :: (MonadJSM m, IsNode node) => HydrationDomBuilderT t m node -> (DOM.JSVal -> node) -> HydrationDomBuilderT t m node
-makeNodeInternal mkNode constructor = do
+makeNodeInternal :: (MonadJSM m, IsNode node, Typeable node) => (node -> HydrationDomBuilderT t m Bool) -> HydrationDomBuilderT t m node -> (DOM.JSVal -> node) -> HydrationDomBuilderT t m node
+makeNodeInternal check mkNode constructor = do
   doc <- askDocument
   parent <- askParent
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
-      liftIO $ print $ "Not in hydration mode, creating node"
+      liftIO $ putStrLn $ "Not in hydration mode, creating node: " <> show (typeRep constructor)
       n <- mkNode
       append $ toNode n
       return n
@@ -329,9 +330,13 @@ makeNodeInternal mkNode constructor = do
               Nothing -> do
                 liftIO $ putStrLn $ "Wrong node type, skipping"
                 go (Just node)
-              Just tn -> do
-                liftIO $ print $ "Using existing node"
-                return tn
+              Just tn -> check tn >>= \case
+                True -> do
+                  liftIO $ putStrLn $ "Using existing node"
+                  return tn
+                False -> do
+                  liftIO $ putStrLn $ "Node failed check, skipping"
+                  go (Just node)
       n <- go lastHydrationNode
       liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode n)
       return n
@@ -445,7 +450,6 @@ wrap events e cfg = do
 makeElement :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m) => Text -> ElementConfig er t HydrationDomSpace -> HydrationDomBuilderT t m a -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  parent <- askParent
   let buildElement = do
         e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
           Nothing -> createElement doc elementTag
@@ -454,8 +458,12 @@ makeElement elementTag cfg child = do
           Nothing -> setAttribute e n v
           Just ans -> setAttributeNS e (Just ans) n v
         pure e
+      ssrAttr = "ssr" :: DOM.JSString
+      hasSSRAttribute e = case cfg ^. namespace of
+        Nothing -> hasAttribute e ssrAttr -- TODO: disabled for debugging <* removeAttribute e ssrAttr
+        Just ns -> hasAttributeNS e (Just ns) ssrAttr -- TODO: disabled for debugging <* removeAttributeNS e (Just ns) ssrAttr
   -- TODO: prerender needs completely replacing
-  e <- makeNodeInternal buildElement DOM.Element
+  e <- makeNodeInternal hasSSRAttribute buildElement DOM.Element
   -- Run the child builder with updated parent and previous sibling references
   childNode <- liftIO $ newIORef Nothing
   result <- localEnv (\env -> env { _hydrationDomBuilderEnv_parent = toNode e, _hydrationDomBuilderEnv_hydrationNode = childNode }) child
@@ -467,7 +475,7 @@ makeElement elementTag cfg child = do
         liftIO $ fire es
   hydrationResultRef <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationResult
   liftIO $ modifyIORef' hydrationResultRef (beh :)
-  collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click))
+  collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click)) -- TODO! this can't stay here, obviously.
   let evts = fan collapsed
   return ((Element evts (), result), e)
 
@@ -649,7 +657,7 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
       liftIO $ writeIORef (_hydrationDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_hydrationDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
-skipToCommentId :: MonadJSM m => Text -> HydrationDomBuilderT t m (DOM.Comment, Text)
+skipToCommentId :: MonadJSM m => Text -> HydrationDomBuilderT t m (DOM.Node, Text)
 skipToCommentId prefix = do
   doc <- askDocument
   parent <- askParent
@@ -672,20 +680,27 @@ skipToCommentId prefix = do
             go (Just node)
   (a, key) <- go lastHydrationNode
   liftIO $ modifyIORef' lastHydrationNodeRef (\_ -> Just $ toNode a)
-  pure (a, key)
+  pure (toNode a, key)
 
-skipToReplaceStart :: MonadJSM m => HydrationDomBuilderT t m (DOM.Comment, Text)
+skipToReplaceStart :: MonadJSM m => HydrationDomBuilderT t m (DOM.Node, Text)
 skipToReplaceStart = skipToCommentId "replace-start"
 
-skipToReplaceEnd :: MonadJSM m => Text -> HydrationDomBuilderT t m DOM.Comment
+skipToReplaceEnd :: MonadJSM m => Text -> HydrationDomBuilderT t m DOM.Node
 skipToReplaceEnd key = fmap fst $ skipToCommentId $ "replace-end" <> key
 
 instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ref m ~ IORef, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadRef m) => Adjustable t (HydrationDomBuilderT t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
+    liftIO $ putStrLn "In runWithReplace"
     initialEnv <- HydrationDomBuilderT ask
-    (before, beforeKey) <- skipToReplaceStart
     let hydrating = _hydrationDomBuilderEnv_hydrationMode initialEnv
+    initialHydrationMode <- liftIO $ readIORef hydrating
+    (before, beforeKey) <- case initialHydrationMode of
+      HydrationMode_Hydrating -> skipToReplaceStart
+      HydrationMode_Immediate -> do
+        t <- textNodeInternal ("" :: Text)
+        append $ toNode t
+        pure (toNode t, "")
     let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
     currentCohort <- liftIO $ newIORef (-1 :: Int) -- Equal to the cohort currently in the DOM
@@ -701,7 +716,12 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
     -- We draw 'after' in this roundabout way to avoid using MonadFix
     doc <- askDocument
     parent <- askParent
-    after <- skipToReplaceEnd beforeKey
+    after <- case initialHydrationMode of
+      HydrationMode_Hydrating -> skipToReplaceEnd beforeKey
+      HydrationMode_Immediate -> do
+        t <- textNodeInternal ("" :: Text)
+        append $ toNode t
+        pure (toNode t)
     let drawInitialChild = do
           liftIO $ putStrLn "drawInitialChild"
           df <- createDocumentFragment doc
@@ -726,6 +746,7 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
       df <- createDocumentFragment doc
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
+            liftIO $ putStrLn "Committing runWithReplace update"
             c <- liftIO $ readIORef currentCohort
             when (c <= cohortId) $ do -- If a newer cohort has already been committed, just ignore this
               deleteBetweenExclusive before after
@@ -743,7 +764,9 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
       uc <- liftIO $ readIORef unreadyChildren
       result <- case h of
         HydrationMode_Hydrating -> pure Nothing
-        HydrationMode_Immediate -> Just <$> child'
+        HydrationMode_Immediate -> do
+          liftIO $ putStrLn "Running child in immediate mode"
+          Just <$> child'
       let commitActionToRunNow = if uc == 0
             then Just $ commitAction
             else Nothing -- A child will run it when unreadyChildren is decremented to 0
