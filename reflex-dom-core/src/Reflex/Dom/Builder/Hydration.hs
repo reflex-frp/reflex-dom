@@ -724,72 +724,67 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
         pure (toNode t)
     let drawInitialChild = do
           liftIO $ putStrLn "drawInitialChild"
-          df <- createDocumentFragment doc
+          p <- liftIO (readIORef hydrating) >>= \case
+            HydrationMode_Hydrating -> pure parent
+            HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
           unreadyChildren <- liftIO $ newIORef 0
           hydrationNode <- liftIO $ newIORef Nothing
-          hydrationResult <- liftIO $ newIORef []
-          localHydrationMode <- liftIO $ newIORef HydrationMode_Immediate
+          r <- liftIO $ newIORef []
           result <- runReaderT (unHydrationDomBuilderT a0) initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = myCommitAction
             , _hydrationDomBuilderEnv_hydrationNode = hydrationNode
-            , _hydrationDomBuilderEnv_parent = toNode df
-            , _hydrationDomBuilderEnv_hydrationMode = localHydrationMode
+            , _hydrationDomBuilderEnv_parent = p
+            , _hydrationDomBuilderEnv_hydrationResult = r
             }
+          h' <- liftIO $ readIORef r
           liftIO $ readIORef unreadyChildren >>= \case
             0 -> writeIORef haveEverBeenReady True
             _ -> modifyIORef' parentUnreadyChildren succ
           liftIO $ putStrLn "drawInitialChild: end"
-          return result
+          return (h', result)
     a'' <- numberOccurrences a'
     (result0, child') <- HydrationDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
-      df <- createDocumentFragment doc
+      p <- liftIO (readIORef hydrating) >>= \case
+        HydrationMode_Hydrating -> pure parent
+        HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
             liftIO $ putStrLn "Committing runWithReplace update"
             c <- liftIO $ readIORef currentCohort
             when (c <= cohortId) $ do -- If a newer cohort has already been committed, just ignore this
               deleteBetweenExclusive before after
-              insertBefore df after
+              insertBefore p after
               liftIO $ writeIORef currentCohort cohortId
               myCommitAction
       hydrationNode <- liftIO $ newIORef (Just $ toNode before)
-      h <- liftIO $ readIORef hydrating
-      let child' = runReaderT (unHydrationDomBuilderT child) $ initialEnv
+      r <- liftIO $ newIORef []
+      result <- runReaderT (unHydrationDomBuilderT child) $ initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = commitAction
             , _hydrationDomBuilderEnv_hydrationNode = hydrationNode
-            , _hydrationDomBuilderEnv_parent = toNode df
+            , _hydrationDomBuilderEnv_parent = p
+            , _hydrationDomBuilderEnv_hydrationResult = r
             }
       uc <- liftIO $ readIORef unreadyChildren
-      result <- case h of
-        HydrationMode_Hydrating -> pure Nothing
-        HydrationMode_Immediate -> do
-          liftIO $ putStrLn "Running child in immediate mode"
-          Just <$> child'
+      h <- liftIO $ readIORef hydrating
+      h' <- liftIO $ readIORef r
       let commitActionToRunNow = if uc == 0
             then Just $ commitAction
             else Nothing -- A child will run it when unreadyChildren is decremented to 0
           commitActionToRunNow' = if h == HydrationMode_Hydrating then Nothing else commitActionToRunNow
-          hydrationAction = if h == HydrationMode_Hydrating then Just child' else Nothing
+          hydrationAction = if h == HydrationMode_Hydrating then Just h' else Nothing
       return (hydrationAction, commitActionToRunNow', result)
-    let drawInitialChild' = do
-          unreadyChildren <- liftIO $ newIORef 0
-          hydrationNode <- liftIO $ newIORef (Just $ toNode before)
-          result <- runReaderT (unHydrationDomBuilderT a0) initialEnv
-            { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-            , _hydrationDomBuilderEnv_commitAction = myCommitAction
-            , _hydrationDomBuilderEnv_hydrationNode = hydrationNode
-            }
-          return result
     env <- HydrationDomBuilderT ask
     let f :: RequesterT t JSM Identity (TriggerEventT t m) x -> m ()
         f = void . flip runHydrationDomBuilderT env . HydrationDomBuilderT . lift
-    beh <- hold (f drawInitialChild') (fmapMaybe (\(h,_,_) -> f <$> h) child')
+        g :: [Behavior t (m ())] -> Behavior t (m ())
+        g = fmap (void . sequence) . sequence
+    beh <- hold (g $ fst result0) (fmapMaybe (\(h,_,_) -> g <$> h) child')
     hydrationResultRef <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationResult
-    liftIO $ modifyIORef' hydrationResultRef (beh :)
+    liftIO $ modifyIORef' hydrationResultRef (join beh :)
     requestDomAction_ $ fmapMaybe (\(_,c,_) -> c) child'
-    return (result0, fmapMaybe (\(_,_,r) -> r) child')
+    return (snd result0, fmap (\(_,_,r) -> r) child')
 
   {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
   traverseIntMapWithKeyWithAdjust = traverseIntMapWithKeyWithAdjust'
