@@ -104,6 +104,7 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
+import Control.Monad.State
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -217,12 +218,11 @@ data HydrationDomBuilderEnv t m
                             , _hydrationDomBuilderEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
                             , _hydrationDomBuilderEnv_hydrationMode :: {-# UNPACK #-} !(IORef HydrationMode) -- In hydration mode?
                             , _hydrationDomBuilderEnv_hydrationNode :: {-# UNPACK #-} !(IORef (Maybe Node)) -- Hydration node index
-                            , _hydrationDomBuilderEnv_hydrationResult :: {-# UNPACK #-} !(IORef [Behavior t (m ())])
                             , _hydrationDomBuilderEnv_prerenderDepth :: {-# UNPACK #-} !(IORef Word)
                             , _hydrationDomBuilderEnv_eventChan :: {-# UNPACK #-} !(Chan [DSum (EventTriggerRef t) TriggerInvocation])
                             }
 
-newtype HydrationDomBuilderT t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (RequesterT t JSM Identity (TriggerEventT t m)) a }
+newtype HydrationDomBuilderT t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (StateT [Behavior t (m ())] (RequesterT t JSM Identity (TriggerEventT t m))) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
@@ -234,14 +234,17 @@ instance PrimMonad m => PrimMonad (HydrationDomBuilderT x m) where
   primitive = lift . primitive
 
 instance MonadTrans (HydrationDomBuilderT t) where
-  lift = HydrationDomBuilderT . lift . lift . lift
+  lift = HydrationDomBuilderT . lift . lift . lift . lift
 
 instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT t m) where
   withRenderHook hook (HydrationDomBuilderT a) = do
     e <- HydrationDomBuilderT ask
-    HydrationDomBuilderT $ lift $ withRequesting $ \rsp -> do
-      (x, req) <- lift $ runRequesterT (runReaderT a e) $ runIdentity <$> rsp
+    s <- HydrationDomBuilderT get
+    (a, s') <- HydrationDomBuilderT $ lift $ lift $ withRequesting $ \rsp -> do
+      (x, req) <- lift $ runRequesterT (runStateT (runReaderT a e) s) $ runIdentity <$> rsp
       return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
+    HydrationDomBuilderT $ put s'
+    pure a
   requestDomAction = HydrationDomBuilderT . lift . requestingIdentity
   requestDomAction_ = HydrationDomBuilderT . lift . requesting_
 
@@ -258,10 +261,10 @@ runHydrationDomBuilderT
   => HydrationDomBuilderT t m a
   -> HydrationDomBuilderEnv t m
 --  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
-  -> m a
+  -> m (a, [Behavior t (m ())])
 runHydrationDomBuilderT (HydrationDomBuilderT a) env =
   flip runTriggerEventT (_hydrationDomBuilderEnv_eventChan env) $ do
-    rec (x, req) <- runRequesterT (runReaderT a env) rsp
+    rec (x, req) <- runRequesterT (runStateT (runReaderT a env) []) rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
           traverseRequesterData (\r -> Identity <$> r) rm
     return x
@@ -280,7 +283,7 @@ askParent = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_parent
 
 {-# INLINABLE askEvents #-}
 askEvents :: Monad m => HydrationDomBuilderT t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
-askEvents = HydrationDomBuilderT . lift . lift $ TriggerEventT.askEvents
+askEvents = HydrationDomBuilderT . lift . lift . lift $ TriggerEventT.askEvents
 
 localEnv :: Monad m => (HydrationDomBuilderEnv t m -> HydrationDomBuilderEnv t m) -> HydrationDomBuilderT t m a -> HydrationDomBuilderT t m a
 localEnv f = HydrationDomBuilderT . local f . unHydrationDomBuilderT
@@ -473,8 +476,7 @@ makeElement elementTag cfg child = do
   let beh = pure $ void . flip runHydrationDomBuilderT env $ do
         es <- wrap events e $ extractRawElementConfig cfg
         liftIO $ fire es
-  hydrationResultRef <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationResult
-  liftIO $ modifyIORef' hydrationResultRef (beh :)
+  HydrationDomBuilderT $ modify (beh :)
   collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click)) -- TODO! this can't stay here, obviously.
   let evts = fan collapsed
   return ((Element evts (), result), e)
@@ -729,22 +731,19 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
             HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
           unreadyChildren <- liftIO $ newIORef 0
           hydrationNode <- liftIO $ newIORef Nothing
-          r <- liftIO $ newIORef []
-          result <- runReaderT (unHydrationDomBuilderT a0) initialEnv
+          (result, h') <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT a0) initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = myCommitAction
             , _hydrationDomBuilderEnv_hydrationNode = hydrationNode
             , _hydrationDomBuilderEnv_parent = p
-            , _hydrationDomBuilderEnv_hydrationResult = r
             }
-          h' <- liftIO $ readIORef r
           liftIO $ readIORef unreadyChildren >>= \case
             0 -> writeIORef haveEverBeenReady True
             _ -> modifyIORef' parentUnreadyChildren succ
           liftIO $ putStrLn "drawInitialChild: end"
           return (h', result)
     a'' <- numberOccurrences a'
-    (result0, child') <- HydrationDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
+    (result0, child') <- HydrationDomBuilderT $ lift $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       p <- liftIO (readIORef hydrating) >>= \case
         HydrationMode_Hydrating -> pure parent
         HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
@@ -758,17 +757,14 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
               liftIO $ writeIORef currentCohort cohortId
               myCommitAction
       hydrationNode <- liftIO $ newIORef (Just $ toNode before)
-      r <- liftIO $ newIORef []
-      result <- runReaderT (unHydrationDomBuilderT child) $ initialEnv
+      (result, h') <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT child) $ initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = commitAction
             , _hydrationDomBuilderEnv_hydrationNode = hydrationNode
             , _hydrationDomBuilderEnv_parent = p
-            , _hydrationDomBuilderEnv_hydrationResult = r
             }
       uc <- liftIO $ readIORef unreadyChildren
       h <- liftIO $ readIORef hydrating
-      h' <- liftIO $ readIORef r
       let commitActionToRunNow = if uc == 0
             then Just $ commitAction
             else Nothing -- A child will run it when unreadyChildren is decremented to 0
@@ -776,13 +772,10 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
           hydrationAction = if h == HydrationMode_Hydrating then Just h' else Nothing
       return (hydrationAction, commitActionToRunNow', result)
     env <- HydrationDomBuilderT ask
-    let f :: RequesterT t JSM Identity (TriggerEventT t m) x -> m ()
-        f = void . flip runHydrationDomBuilderT env . HydrationDomBuilderT . lift
-        g :: [Behavior t (m ())] -> Behavior t (m ())
-        g = fmap (void . sequence) . sequence
-    beh <- hold (g $ fst result0) (fmapMaybe (\(h,_,_) -> g <$> h) child')
-    hydrationResultRef <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationResult
-    liftIO $ modifyIORef' hydrationResultRef (join beh :)
+    let f :: [Behavior t (m ())] -> Behavior t (m ())
+        f = fmap (void . sequence) . sequence
+    beh <- hold (f $ fst result0) (fmapMaybe (\(h,_,_) -> f <$> h) child')
+    HydrationDomBuilderT $ modify (join beh :)
     requestDomAction_ $ fmapMaybe (\(_,c,_) -> c) child'
     return (snd result0, fmap (\(_,_,r) -> r) child')
 
@@ -953,7 +946,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
                   liftIO $ writeIORef pendingChange (newUnready, p)
                   when (IntMap.null newUnready) $ do
                     applyDomUpdate p
-  (children0, children') <- HydrationDomBuilderT $ lift $ base (\k v -> drawChildUpdateInt initialEnv markChildReady $ f k v) dm0 dm'
+  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdateInt initialEnv markChildReady $ f k v) dm0 dm'
   let processChild k (_, _, sRef, _) = do
         readIORef sRef >>= \case
           ChildReadyStateInt_Ready -> return Nothing
@@ -1043,7 +1036,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
                   liftIO $ writeIORef pendingChange (newUnready, p)
                   when (DMap.null newUnready) $ do
                     applyDomUpdate p
-  (children0, children') <- HydrationDomBuilderT $ lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
+  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
   let processChild k (Compose (_, _, sRef, _)) = ComposeMaybe <$> do
         readIORef sRef >>= \case
           ChildReadyState_Ready -> return Nothing
@@ -1081,7 +1074,7 @@ drawChildUpdate initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyState_Unready Nothing
   unreadyChildren <- liftIO $ newIORef 0
   df <- createDocumentFragment $ _hydrationDomBuilderEnv_document initialEnv
-  (placeholder, result) <- runReaderT (unHydrationDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
+  (placeholder, result) <- flip evalStateT [] $ runReaderT (unHydrationDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
     { _hydrationDomBuilderEnv_parent = toNode df
     , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
     , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
@@ -1100,7 +1093,7 @@ drawChildUpdateInt initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyStateInt_Unready Nothing
   unreadyChildren <- liftIO $ newIORef 0
   df <- createDocumentFragment $ _hydrationDomBuilderEnv_document initialEnv
-  (placeholder, result) <- runReaderT (unHydrationDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
+  (placeholder, result) <- flip evalStateT [] $ runReaderT (unHydrationDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
     { _hydrationDomBuilderEnv_parent = toNode df
     , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
     , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
