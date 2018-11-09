@@ -15,6 +15,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Data.IORef (IORef)
 import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
 import Control.Monad.Exception
@@ -181,6 +182,7 @@ hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   , MonadHold t m
   , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
   , Patch (p k (Constant (Behavior t Builder)))
+  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
   )
   => (forall vv vv'.
          (forall a. k a -> vv a -> m (vv' a))
@@ -194,6 +196,7 @@ hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   -> Event t (p k v)
   -> StaticDomBuilderT t m (DMap k v', Event t (p k v'))
 hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
+  key <- replaceStart
   e <- StaticDomBuilderT ask
   (children0, children') <- lift $ base (\k v -> fmap (Compose . swap) (runStaticDomBuilderT (f k v) e)) dm0 dm'
   let result0 = DMap.map (snd . getCompose) children0
@@ -207,6 +210,7 @@ hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
     os <- sample $ currentIncremental outputs
     fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
       sample o
+  replaceEnd key
   return (result0, result')
 
 instance SupportsStaticDomBuilder t m => NotReady t (StaticDomBuilderT t m) where
