@@ -22,6 +22,8 @@ module Reflex.Dom.Widget.Basic
   , dyn_
   , widgetHold
   , widgetHold_
+  , widgetReady
+  , widgetReady_
 
   -- * Creating DOM Elements
   , el
@@ -149,6 +151,16 @@ widgetHold = networkHold
 -- | Like 'widgetHold' but discards result.
 widgetHold_ :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m ()
 widgetHold_ z = void . widgetHold z
+
+-- | Given widget 'a' and widget 'b', render widget a until widget b's postBuild event fires.
+--   This is useful for example when widget b takes too long to render, but you still want to render
+--   something in its place (say, a loading animation)
+widgetReady :: (Adjustable t m, PostBuild t m) => m a -> m b -> m (a, Event t b)
+widgetReady = untilReady
+
+-- | Like 'widgetReady', but discards the result.
+widgetReady_ :: (Adjustable t m, PostBuild t m) => m a -> m b -> m ()
+widgetReady_ = void . untilReady
 
 -- | Create a DOM element
 -- > el "div" (text "Hello World")
