@@ -496,6 +496,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
       ]
+    case _inputElementConfig_setInvalid cfg of
+      Nothing -> pure never
+      Just eSetInvalid -> requestDomAction $ ffor eSetInvalid $ \v' -> do
+        Input.setCustomValidity domInputElement v'
     let initialFocus = False --TODO: Is this correct?
     hasFocus <- holdDyn initialFocus $ leftmost
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)

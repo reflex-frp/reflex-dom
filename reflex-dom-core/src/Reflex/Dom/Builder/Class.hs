@@ -254,6 +254,8 @@ data InputElementConfig er t s
                         , _inputElementConfig_setValue :: Maybe (Event t Text)
                         , _inputElementConfig_initialChecked :: Bool
                         , _inputElementConfig_setChecked :: Maybe (Event t Bool)
+                        , -- | The empty string sets valid instead.
+                          _inputElementConfig_setInvalid :: Maybe (Event t Text)
                         , _inputElementConfig_elementConfig :: ElementConfig er t s
                         }
 
@@ -280,6 +282,7 @@ instance (Reflex t, er ~ EventResult, DomSpace s) => Default (InputElementConfig
     , _inputElementConfig_setValue = Nothing
     , _inputElementConfig_initialChecked = False
     , _inputElementConfig_setChecked = Nothing
+    , _inputElementConfig_setInvalid = Nothing
     , _inputElementConfig_elementConfig = def
     }
 
@@ -394,7 +397,8 @@ data SelectElement er d t = SelectElement
 concat <$> mapM (uncurry makeLensesWithoutField)
   [ (["_textNodeConfig_setContents"], ''TextNodeConfig)
   , ([ "_inputElementConfig_setValue"
-     , "_inputElementConfig_setChecked" ], ''InputElementConfig)
+     , "_inputElementConfig_setChecked"
+     , "_inputElementConfig_setInvalid" ], ''InputElementConfig)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
   , (["_elementConfig_modifyAttributes"], ''ElementConfig)
   , (["_textAreaElementConfig_setValue"], ''TextAreaElementConfig)
@@ -421,6 +425,13 @@ inputElementConfig_setChecked :: Reflex t => Lens' (InputElementConfig er t m) (
 inputElementConfig_setChecked =
   let getter = fromMaybe never . _inputElementConfig_setChecked
       setter t e = t { _inputElementConfig_setChecked = Just e }
+  in lens getter setter
+
+-- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+inputElementConfig_setInvalid :: Reflex t => Lens' (InputElementConfig er t m) (Event t Text)
+inputElementConfig_setInvalid =
+  let getter = fromMaybe never . _inputElementConfig_setInvalid
+      setter t e = t { _inputElementConfig_setInvalid = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
