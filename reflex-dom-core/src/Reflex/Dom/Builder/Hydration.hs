@@ -108,6 +108,7 @@ import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
+import Control.Exception (bracketOnError)
 import Control.Lens hiding (element, ix)
 import Control.Monad.Exception
 import Control.Monad.Primitive
@@ -500,16 +501,15 @@ collectUpToGivenParent currentParent s e = do
   extractUpTo df s e
   return df
 
+-- | This 'wrap' is only partial: it doesn't create the 'EventSelector' itself
 {-# INLINABLE wrap #-}
 wrap
   :: forall m er t. (Reflex t, MonadJSM m, MonadReflexCreateTrigger t m, DomRenderHook t m)
   => Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> RawElement GhcjsDomSpace
   -> RawElementConfig er t HydrationDomSpace
---  -> m (Event t (DMap (WrapArg er EventName) Identity))
-  -> m (EventSelector t (WrapArg er EventName))
+  -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
-  liftIO $ putStrLn $ "called wrap"
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
@@ -526,28 +526,7 @@ wrap events e cfg = do
       mv <- liftJSM k --TODO: Only do this when the event is subscribed
       liftIO $ forM_ mv $ \v -> writeChan events [EventTriggerRef triggerRef :=> TriggerInvocation v (return ())]
     return $ en :=> EventFilterTriggerRef triggerRef
-  es <- do
-    let h :: GhcjsEventHandler er
-        !h = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec cfg -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
-    ctx <- askJSM
-
-    newFanEventWithTrigger $ \(WrapArg en) t ->
-      case DMap.lookup en eventTriggerRefs of
-        Just (EventFilterTriggerRef r) -> do
-          writeIORef r $ Just t
-          return $ do
-            writeIORef r Nothing
-        Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
-          evt <- DOM.event
-          mv <- lift $ unGhcjsEventHandler h (en, GhcjsDomEvent evt)
-          case mv of
-            Nothing -> return ()
-            Just v -> liftIO $ do
-              --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
-              ref <- newIORef $ Just t
-              writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
-
-  return es
+  return eventTriggerRefs
 
 {-# INLINABLE makeElement #-}
 makeElement
@@ -558,6 +537,9 @@ makeElement
   -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
+  ctx <- askJSM
+  events <- askEvents
+
   let buildElement :: HydrationDomBuilderT' env state t m DOM.Element
       buildElement = do
         e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
@@ -572,6 +554,25 @@ makeElement elementTag cfg child = do
       hasSSRAttribute e = case cfg ^. namespace of
         Nothing -> hasAttribute e ssrAttr -- TODO: disabled for debugging <* removeAttribute e ssrAttr
         Just ns -> hasAttributeNS e (Just ns) ssrAttr -- TODO: disabled for debugging <* removeAttributeNS e (Just ns) ssrAttr
+      -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't
+      -- retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
+      handler :: GhcjsEventHandler er
+      !handler = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec $ extractRawElementConfig cfg
+      triggerBody :: DMap EventName (EventFilterTriggerRef t er) -> DOM.Element -> WrapArg er EventName x -> EventTrigger t x -> IO (IO ())
+      triggerBody eventTriggerRefs e (WrapArg en) t = case DMap.lookup en eventTriggerRefs of
+        Just (EventFilterTriggerRef r) -> do
+          writeIORef r $ Just t
+          return $ do
+            writeIORef r Nothing
+        Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
+          evt <- DOM.event
+          mv <- lift $ unGhcjsEventHandler handler (en, GhcjsDomEvent evt)
+          case mv of
+            Nothing -> return ()
+            Just v -> liftIO $ do
+              --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
+              ref <- newIORef $ Just t
+              writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
       -- TODO: prerender needs completely replacing
@@ -580,26 +581,48 @@ makeElement elementTag cfg child = do
       -- Run the child builder with updated parent and previous sibling references
       result <- localEnv (\hs -> hs) (\env -> env { _hydrationDomBuilderEnv_parent = p }) child
       events <- askEvents
-      es <- wrap events e $ extractRawElementConfig cfg
+      eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
+      es <- newFanEventWithTrigger $ triggerBody eventTriggerRefs e
       return ((Element es (), result), e)
     HydrationMode_Hydrating -> do
       -- Schedule everything for after postBuild, except for getting the result itself
-      p <- liftIO $ newIORef $ error "Parent not yet initialized"
+      parent <- liftIO $ newIORef $ error "Parent not yet initialized"
       env <- HydrationDomBuilderT ask
-      let env' = env { _hydrationDomBuilderEnv_parent = p}
+      let env' = env { _hydrationDomBuilderEnv_parent = parent}
           hs = HydrationDomBuilderState { _hydrationDomBuilderState_delayed = [] }
       (result, hs') <- HydrationDomBuilderT $ lift $ lift $ runStateT (runReaderT (unHydrationDomBuilderT child) env') hs
-      (ese, fire) <- newTriggerEvent
+      wrapResult <- liftIO newEmptyMVar
       let activateElement = do
             e <- hydrateNode hasSSRAttribute buildElement DOM.Element
-            liftIO $ writeIORef p $ toNode e
-            events <- askEvents
-            void $ liftIO . fire <=< wrap events e $ extractRawElementConfig cfg
+            -- Update the parent node used by the children
+            liftIO $ writeIORef parent $ toNode e
+            -- Setup events, store the result so we can wait on it later
+            refs <- wrap events e $ extractRawElementConfig cfg
+            liftIO $ putMVar wrapResult (e, refs)
             pure $ toNode e
       addAction $ DOM_Element activateElement $ _hydrationDomBuilderState_delayed hs'
-      -- TODO! vvv this can't stay here, obviously.
-      collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click))
-      return ((Element (fan collapsed) (), result), error "makeElement: DOM.Element")
+
+      -- We need the EventSelector to switch to the real event handler after activation
+      es <- newFanEventWithTrigger $ \(WrapArg en) t -> do
+        cleanup <- newEmptyMVar
+        threadId <- forkIO $ do
+          -- Wait on the data we need from the delayed action
+          (e, eventTriggerRefs) <- readMVar wrapResult
+          bracketOnError
+            -- Run the setup, acquiring the cleanup action
+            (triggerBody eventTriggerRefs e (WrapArg en) t)
+            -- Run the cleanup, if we have it - but only when an exception is
+            -- raised (we might get killed between acquiring the cleanup action
+            -- from 'triggerBody' and putting it in the MVar)
+            (\m -> m)
+            -- Try to put this action into the cleanup MVar
+            (\m -> putMVar cleanup m)
+        pure $ do
+          tryReadMVar cleanup >>= \case
+            Nothing -> killThread threadId
+            Just c -> c
+
+      return ((Element es (), result), error "makeElement: DOM.Element")
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (MonadJSM m, MonadFix m, ToDOMString contents, Reflex t) => contents -> Maybe (Event t contents) -> HydrationDomBuilderT t m DOM.Text
