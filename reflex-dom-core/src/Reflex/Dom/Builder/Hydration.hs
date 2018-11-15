@@ -3,7 +3,10 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -31,7 +34,13 @@ module Reflex.Dom.Builder.Hydration
        ( EventTriggerRef (..)
        , HydrationDomBuilderEnv (..)
        , HydrationDomBuilderT (..)
+       , HydrationDomBuilderT' (..)
+       , HydrationDomBuilderState (..)
        , HydrationMode (..)
+       , HydrationRunnerT (..)
+       , DOM(..), runDOMForest
+       , HydrationRunnerEnv (..)
+       , HydrationRunnerState (..)
        , runHydrationDomBuilderT
        , askParent
        , askEvents
@@ -113,6 +122,7 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
+import Data.Foldable (foldl')
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
@@ -125,7 +135,7 @@ import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Typeable (Typeable, typeRep)
+import Data.Typeable (Typeable, typeRep, Proxy(..))
 import GHC.Generics (Generic)
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
@@ -170,7 +180,7 @@ import Foreign.JavaScript.Internal.Utils
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 
-instance MonadJSM m => MonadJSM (HydrationDomBuilderT t m) where
+instance MonadJSM m => MonadJSM (HydrationDomBuilderT' env state t m) where
     liftJSM' = HydrationDomBuilderT . liftJSM'
 #endif
 
@@ -200,39 +210,84 @@ instance DomSpace HydrationDomSpace where
         in DMap.alter f' en $ _ghcjsEventSpec_filters es
     }
 
-data HydrationDomBuilderEnv t m
-   = HydrationDomBuilderEnv { _hydrationDomBuilderEnv_document :: {-# UNPACK #-} !Document
-                            , _hydrationDomBuilderEnv_parent :: {-# UNPACK #-} !Node
-                            , _hydrationDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word) -- Number of children who still aren't fully rendered
-                            , _hydrationDomBuilderEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
-                            , _hydrationDomBuilderEnv_hydrationMode :: {-# UNPACK #-} !(IORef HydrationMode) -- In hydration mode?
-                            , _hydrationDomBuilderEnv_prerenderDepth :: {-# UNPACK #-} !(IORef Word)
-                            , _hydrationDomBuilderEnv_eventChan :: {-# UNPACK #-} !(Chan [DSum (EventTriggerRef t) TriggerInvocation])
-                            }
-
-data HydrationState t m = HydrationState
-  { _hydrationState_actions :: [Behavior t (m ())]
-  , _hydrationState_previousNode :: {-# UNPACK #-} !(Maybe Node)
+data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
+  { _hydrationDomBuilderEnv_document :: {-# UNPACK #-} !Document
+  , _hydrationDomBuilderEnv_parent :: {-# UNPACK #-} !(IORef Node)
+  , _hydrationDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word) -- Number of children who still aren't fully rendered
+  , _hydrationDomBuilderEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
+  , _hydrationDomBuilderEnv_hydrationMode :: {-# UNPACK #-} !(IORef HydrationMode) -- In hydration mode?
+  , _hydrationDomBuilderEnv_prerenderDepth :: {-# UNPACK #-} !(IORef Word)
   }
 
-addAction :: Monad m => Behavior t (m ()) -> HydrationDomBuilderT t m ()
-addAction a = HydrationDomBuilderT $ modify $ \(HydrationState as n) -> HydrationState (a : as) n
+data HydrationRunnerEnv = HydrationRunnerEnv
+  { _hydrationRunnerEnv_document :: {-# UNPACK #-} !Document
+  , _hydrationRunnerEnv_parent :: {-# UNPACK #-} !Node
+  , _hydrationRunnerEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word) -- Number of children who still aren't fully rendered
+  , _hydrationRunnerEnv_commitAction :: !(JSM ()) -- Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
+  }
 
-newtype HydrationDomBuilderT t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (StateT (HydrationState t m) (RequesterT t JSM Identity (TriggerEventT t m))) a }
+--newtype Forest a = Forest { unForest :: [DOM a] } deriving (Functor, Foldable, Traversable)
+data DOM t m
+  = DOM_Element (HydrationRunnerT t m Node) [DOM t m]
+  -- ^ Nodes with children, the action returns the node for the children to use as a parent
+  | DOM_Node (HydrationRunnerT t m ())
+  -- ^ Nodes without children
+  | DOM_Replace (Behavior t [DOM t m])
+  -- ^ runWithReplace content changes over time
+
+runDOMForest
+  :: (Ref m ~ IORef, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, DOM.MonadJSM m, DOM.MonadJSM (Performable m), MonadRef m, MonadSample t m)
+  => [DOM t m]
+  -> HydrationRunnerT t m ()
+runDOMForest = foldl' (\acc d -> runDOMTree d >> acc) (pure ())
+
+runDOMTree
+  :: (Ref m ~ IORef, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, DOM.MonadJSM m, DOM.MonadJSM (Performable m), MonadRef m, MonadSample t m)
+  => DOM t m -> HydrationRunnerT t m ()
+runDOMTree = \case
+  DOM_Node m -> m
+  DOM_Element m children -> m >>= \p -> localEnv (\_ -> HydrationRunnerState Nothing) (\e -> e { _hydrationRunnerEnv_parent = p }) $ runDOMForest children
+  DOM_Replace b -> runDOMForest =<< sample b
+
+data HydrationDomBuilderState t m = HydrationDomBuilderState
+  { _hydrationDomBuilderState_delayed :: [DOM t m]
+  }
+
+-- | The monad which performs the delayed actions to reuse prerendered nodes and set up events
+type HydrationRunnerT t m a = HydrationDomBuilderT' HydrationRunnerEnv HydrationRunnerState t m a
+
+data HydrationRunnerState = HydrationRunnerState
+  { _hydrationRunnerState_previousNode :: {-# UNPACK #-} !(Maybe Node)
+  }
+
+addAction :: Monad m => DOM t m -> HydrationDomBuilderT t m ()
+addAction a = HydrationDomBuilderT $ modify $ \(HydrationDomBuilderState as) -> HydrationDomBuilderState (a : as)
+
+-- TODO probably can separate these two monads entirely, they have grown apart
+-- over the course of refactoring
+
+-- | A monad for DomBuilder which just gets the results of children and pushes
+-- work into an action that is delayed until after postBuild (to match the
+-- static builder). The action runs in 'HydrationRunnerT', which performs the
+-- DOM takeover and sets up the events, after which point this monad will
+-- continue in the vein of 'ImmediateDomBuilderT'.
+type HydrationDomBuilderT t m a = HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m a
+
+newtype HydrationDomBuilderT' env state t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT env (StateT state (RequesterT t JSM Identity (TriggerEventT t m))) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
 #endif
            )
 
-instance PrimMonad m => PrimMonad (HydrationDomBuilderT x m) where
-  type PrimState (HydrationDomBuilderT x m) = PrimState m
+instance PrimMonad m => PrimMonad (HydrationDomBuilderT' env state x m) where
+  type PrimState (HydrationDomBuilderT' env state x m) = PrimState m
   primitive = lift . primitive
 
-instance MonadTrans (HydrationDomBuilderT t) where
+instance MonadTrans (HydrationDomBuilderT' env state t) where
   lift = HydrationDomBuilderT . lift . lift . lift . lift
 
-instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT t m) where
+instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT' env state t m) where
   withRenderHook hook (HydrationDomBuilderT a) = do
     e <- HydrationDomBuilderT ask
     s <- HydrationDomBuilderT get
@@ -241,8 +296,8 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT t m) wh
       return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
     HydrationDomBuilderT $ put s'
     pure a
-  requestDomAction = HydrationDomBuilderT . lift . requestingIdentity
-  requestDomAction_ = HydrationDomBuilderT . lift . requesting_
+  requestDomAction = HydrationDomBuilderT . lift . lift . requestingIdentity
+  requestDomAction_ = HydrationDomBuilderT . lift . lift . requesting_
 
 {-# INLINABLE runHydrationDomBuilderT #-}
 runHydrationDomBuilderT
@@ -254,51 +309,44 @@ runHydrationDomBuilderT
      , MonadRef m
      , Ref m ~ IORef
      )
-  => HydrationDomBuilderT t m a
-  -> HydrationDomBuilderEnv t m
-  -> Maybe Node
-  -> m (a, [Behavior t (m ())])
-runHydrationDomBuilderT (HydrationDomBuilderT a) env prev = do
-  (a, hs) <- flip runTriggerEventT (_hydrationDomBuilderEnv_eventChan env) $ do
-    rec (result, req) <- runRequesterT (runStateT (runReaderT a env) (HydrationState [] prev)) rsp
+  => HydrationDomBuilderT' env state t m a
+  -> env
+  -> state
+  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
+  -> m (a, state)
+runHydrationDomBuilderT (HydrationDomBuilderT a) env st events = do
+  flip runTriggerEventT events $ do
+    rec (result, req) <- runRequesterT (runStateT (runReaderT a env) st) rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
           traverseRequesterData (\r -> Identity <$> r) rm
     return result
-  return (a, _hydrationState_actions hs)
   where
     runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
         v <- synchronously x
         void . liftIO $ f v
 
-instance Monad m => HasDocument (HydrationDomBuilderT t m) where
+instance Monad m => HasDocument (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) where
   {-# INLINABLE askDocument #-}
-  askDocument = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_document
+  askDocument = askDocumentEnv
 
-{-# INLINABLE askParent #-}
-askParent :: Monad m => HydrationDomBuilderT t m Node
-askParent = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_parent
+class HasDocEnv env where
+  askDocumentEnv :: Monad m => HydrationDomBuilderT' env state t m DOM.Document
 
-{-# INLINABLE askEvents #-}
-askEvents :: Monad m => HydrationDomBuilderT t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
-askEvents = HydrationDomBuilderT . lift . lift . lift $ TriggerEventT.askEvents
+instance HasDocEnv (HydrationDomBuilderEnv t m) where
+  askDocumentEnv = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_document
+
+instance HasDocEnv HydrationRunnerEnv where
+  askDocumentEnv = HydrationDomBuilderT $ asks _hydrationRunnerEnv_document
 
 {-# INLINABLE localEnv #-}
-localEnv :: Monad m => (HydrationState t m -> HydrationState t m) -> (HydrationDomBuilderEnv t m -> HydrationDomBuilderEnv t m) -> HydrationDomBuilderT t m a -> HydrationDomBuilderT t m a
+localEnv :: Monad m => (s -> s) -> (e -> e) -> HydrationDomBuilderT' e s t m a -> HydrationDomBuilderT' e s t m a
 localEnv f g (HydrationDomBuilderT m) = HydrationDomBuilderT $ do
   env <- ask
   hs <- get
   lift $ lift $ evalStateT (runReaderT m $ g env) (f hs)
 
-{-# INLINABLE getPreviousNode #-}
-getPreviousNode :: Monad m => HydrationDomBuilderT t m (Maybe DOM.Node)
-getPreviousNode = HydrationDomBuilderT $ gets _hydrationState_previousNode
-
-{-# INLINABLE setPreviousNode #-}
-setPreviousNode :: Monad m => Maybe DOM.Node -> HydrationDomBuilderT t m ()
-setPreviousNode n = HydrationDomBuilderT $ modify $ \hs -> hs { _hydrationState_previousNode = n }
-
 {-# INLINABLE append #-}
-append :: MonadJSM m => DOM.Node -> HydrationDomBuilderT t m ()
+append :: (MonadJSM m, HasParent env) => DOM.Node -> HydrationDomBuilderT' env state t m ()
 append n = do
   p <- askParent
   appendChild_ p n
@@ -309,51 +357,96 @@ data HydrationMode
   | HydrationMode_Immediate
   deriving (Eq, Ord, Show)
 
-{-# INLINABLE getHydrationMode #-}
-getHydrationMode :: MonadIO m => HydrationDomBuilderT t m HydrationMode
-getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_hydrationMode)
+class HasParent env where
+  askParent :: (Monad m, MonadIO m) => HydrationDomBuilderT' env state t m DOM.Node
 
-{-# INLINABLE textNodeInternal #-}
-textNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> HydrationDomBuilderT t m DOM.Text
-textNodeInternal !t = makeNodeInternal (const $ pure True) (askDocument >>= \doc -> createTextNode doc t) DOM.Text
+instance HasParent (HydrationDomBuilderEnv t m) where
+  {-# INLINABLE askParent #-}
+  askParent = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_parent)
 
-{-# INLINABLE commentNodeInternal #-}
-commentNodeInternal :: (MonadJSM m, ToDOMString contents) => contents -> HydrationDomBuilderT t m DOM.Comment
-commentNodeInternal !t = makeNodeInternal (const $ pure True) (askDocument >>= \doc -> createComment doc t) DOM.Comment
+instance HasParent HydrationRunnerEnv where
+  {-# INLINABLE askParent #-}
+  askParent = HydrationDomBuilderT $ asks _hydrationRunnerEnv_parent
+
+class HasUnreadyChildren env where
+  askUnreadyChildren :: Monad m => HydrationDomBuilderT' env state t m (IORef Word)
+  askCommitAction :: Monad m => HydrationDomBuilderT' env state t m (JSM ())
+
+instance HasUnreadyChildren (HydrationDomBuilderEnv t m) where
+  {-# INLINABLE askUnreadyChildren #-}
+  askUnreadyChildren = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_unreadyChildren
+  {-# INLINABLE askCommitAction #-}
+  askCommitAction = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_commitAction
+
+instance HasUnreadyChildren HydrationRunnerEnv where
+  {-# INLINABLE askUnreadyChildren #-}
+  askUnreadyChildren = HydrationDomBuilderT $ asks _hydrationRunnerEnv_unreadyChildren
+  {-# INLINABLE askCommitAction #-}
+  askCommitAction = HydrationDomBuilderT $ asks _hydrationRunnerEnv_commitAction
+
+
+class HasPreviousNode state where
+  getPreviousNode :: Monad m => HydrationDomBuilderT' env state t m (Maybe DOM.Node)
+  setPreviousNode :: Monad m => Maybe DOM.Node -> HydrationDomBuilderT' env state t m ()
+
+instance HasPreviousNode HydrationRunnerState where
+  {-# INLINABLE getPreviousNode #-}
+  getPreviousNode = HydrationDomBuilderT $ gets _hydrationRunnerState_previousNode
+  {-# INLINABLE setPreviousNode #-}
+  setPreviousNode n = HydrationDomBuilderT $ modify $ \hs -> hs { _hydrationRunnerState_previousNode = n }
+
+class HasHydrationMode env where
+  getHydrationMode :: MonadIO m => HydrationDomBuilderT' env state t m HydrationMode
+
+instance HasHydrationMode (HydrationDomBuilderEnv t m) where
+  {-# INLINABLE getHydrationMode #-}
+  getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_hydrationMode)
+
+{-# INLINABLE askEvents #-}
+askEvents :: Monad m => HydrationDomBuilderT' env state t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
+askEvents = HydrationDomBuilderT . lift . lift . lift $ TriggerEventT.askEvents
+
 
 {-# INLINABLE makeNodeInternal #-}
--- | This function, in hydration mode, expects the existing DOM at the current
--- hydration node to be correct. It skips any nodes that are the wrong type, or
--- that fail the @check@. The previous node reference is also updated.
-makeNodeInternal :: (MonadJSM m, IsNode node, Typeable node) => (node -> HydrationDomBuilderT t m Bool) -> HydrationDomBuilderT t m node -> (DOM.JSVal -> node) -> HydrationDomBuilderT t m node
-makeNodeInternal check mkNode constructor = do
-  doc <- askDocument
+makeNodeInternal
+  :: forall node env state t m. (MonadJSM m, IsNode node, Typeable node, HasParent env)
+  => HydrationDomBuilderT' env state t m node -> HydrationDomBuilderT' env state t m node
+makeNodeInternal mkNode = do
+  liftIO $ putStr $ show (typeRep (Proxy :: Proxy node)) <> ": "
+  liftIO $ putStrLn $ "Not in hydration mode, creating node"
+  n <- mkNode
+  append $ toNode n
+  return n
+
+{-# INLINABLE hydrateNode #-}
+-- | This function expects the existing DOM at the current hydration node to be
+-- correct. It skips any nodes that are the wrong type, or that fail the
+-- @check@. The previous node reference is also updated.
+hydrateNode
+  :: (MonadJSM m, IsNode node, Typeable node, HasPreviousNode state, HasParent env)
+  => (node -> HydrationDomBuilderT' env state t m Bool) -> HydrationDomBuilderT' env state t m node -> (DOM.JSVal -> node) -> HydrationDomBuilderT' env state t m node
+hydrateNode check mkNode constructor = do
   parent <- askParent
   liftIO $ putStr $ show (typeRep constructor) <> ": "
-  getHydrationMode >>= \case
-    HydrationMode_Immediate -> do
-      liftIO $ putStrLn $ "Not in hydration mode, creating node"
-      n <- mkNode
-      append $ toNode n
-      return n
-    HydrationMode_Hydrating -> do
-      lastHydrationNode <- getPreviousNode
-      let go mLastNode = do
-            node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
-            DOM.castTo constructor node >>= \case
-              Nothing -> do
-                liftIO $ putStrLn $ "Wrong node type, skipping"
-                go (Just node)
-              Just tn -> check tn >>= \case
-                True -> do
-                  liftIO $ putStrLn $ "Using existing node"
-                  return tn
-                False -> do
-                  liftIO $ putStrLn $ "Node failed check, skipping"
-                  go (Just node)
-      n <- go lastHydrationNode
-      setPreviousNode $ Just $ toNode n
-      return n
+  lastHydrationNode <- getPreviousNode
+  let go mLastNode = do
+        node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
+        DOM.castTo constructor node >>= \case
+          Nothing -> do
+            liftIO $ putStr $ "Wrong node type, skipping... "
+            go (Just node)
+          Just tn -> check tn >>= \case
+            True -> do
+              liftIO $ putStr $ "Using existing node... "
+              return tn
+            False -> do
+              liftIO $ putStr $ "Node failed check, skipping... "
+              go (Just node)
+  n <- go lastHydrationNode
+  liftIO $ putStrLn ""
+  setPreviousNode $ Just $ toNode n
+  return n
+
 
 -- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
@@ -457,10 +550,16 @@ wrap events e cfg = do
   return es
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m) => Text -> ElementConfig er t HydrationDomSpace -> HydrationDomBuilderT t m a -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), DOM.Element)
+makeElement
+  :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m)
+  => Text
+  -> ElementConfig er t HydrationDomSpace
+  -> HydrationDomBuilderT t m a
+  -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
-  let buildElement = do
+  let buildElement :: HydrationDomBuilderT' env state t m DOM.Element
+      buildElement = do
         e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
           Nothing -> createElement doc elementTag
           Just ens -> createElementNS doc (Just ens) elementTag
@@ -469,52 +568,161 @@ makeElement elementTag cfg child = do
           Just ans -> setAttributeNS e (Just ans) n v
         pure e
       ssrAttr = "ssr" :: DOM.JSString
+      hasSSRAttribute :: DOM.Element -> HydrationDomBuilderT' env state t m Bool
       hasSSRAttribute e = case cfg ^. namespace of
         Nothing -> hasAttribute e ssrAttr -- TODO: disabled for debugging <* removeAttribute e ssrAttr
         Just ns -> hasAttributeNS e (Just ns) ssrAttr -- TODO: disabled for debugging <* removeAttributeNS e (Just ns) ssrAttr
-  -- TODO: prerender needs completely replacing
-  e <- makeNodeInternal hasSSRAttribute buildElement DOM.Element
-  -- Run the child builder with updated parent and previous sibling references
-  result <- localEnv (\hs -> hs { _hydrationState_previousNode = Nothing }) (\env -> env { _hydrationDomBuilderEnv_parent = toNode e }) child
-  events <- askEvents
-  env <- HydrationDomBuilderT ask
-  (ese, fire) <- newTriggerEvent
-  addAction $ pure $ void $ runHydrationDomBuilderT (liftIO . fire <=< wrap events e $ extractRawElementConfig cfg) env Nothing
-  collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click)) -- TODO! this can't stay here, obviously.
-  let evts = fan collapsed
-  return ((Element evts (), result), e)
+  getHydrationMode >>= \case
+    HydrationMode_Immediate -> do
+      -- TODO: prerender needs completely replacing
+      e <- makeNodeInternal buildElement
+      p <- liftIO $ newIORef $ toNode e
+      -- Run the child builder with updated parent and previous sibling references
+      result <- localEnv (\hs -> hs) (\env -> env { _hydrationDomBuilderEnv_parent = p }) child
+      events <- askEvents
+      es <- wrap events e $ extractRawElementConfig cfg
+      return ((Element es (), result), e)
+    HydrationMode_Hydrating -> do
+      -- Schedule everything for after postBuild, except for getting the result itself
+      p <- liftIO $ newIORef $ error "Parent not yet initialized"
+      env <- HydrationDomBuilderT ask
+      let env' = env { _hydrationDomBuilderEnv_parent = p}
+          hs = HydrationDomBuilderState { _hydrationDomBuilderState_delayed = [] }
+      (result, hs') <- HydrationDomBuilderT $ lift $ lift $ runStateT (runReaderT (unHydrationDomBuilderT child) env') hs
+      (ese, fire) <- newTriggerEvent
+      let activateElement = do
+            e <- hydrateNode hasSSRAttribute buildElement DOM.Element
+            liftIO $ writeIORef p $ toNode e
+            events <- askEvents
+            void $ liftIO . fire <=< wrap events e $ extractRawElementConfig cfg
+            pure $ toNode e
+      addAction $ DOM_Element activateElement $ _hydrationDomBuilderState_delayed hs'
+      -- TODO! vvv this can't stay here, obviously.
+      collapsed <- switchHold never $ ffor ese $ \es -> DMap.singleton (WrapArg Click) . Identity <$> (select es (WrapArg Click))
+      return ((Element (fan collapsed) (), result), error "makeElement: DOM.Element")
 
-instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT t m) where
+{-# INLINABLE textNodeInternal #-}
+textNodeInternal :: (MonadJSM m, MonadFix m, ToDOMString contents, Reflex t) => contents -> Maybe (Event t contents) -> HydrationDomBuilderT t m DOM.Text
+textNodeInternal !t mSetContents = getHydrationMode >>= \case
+  HydrationMode_Immediate -> do
+    n <- makeNodeInternal (askDocumentEnv >>= \doc -> createTextNode doc t)
+    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    pure n
+  HydrationMode_Hydrating -> do
+    let activateText = do
+          liftIO $ putStrLn $ "Action: Text: " <> show (DOM.toJSString t)
+          n <- hydrateNode (const $ pure True) (askDocumentEnv >>= \doc -> createTextNode doc t) DOM.Text
+          --case mSetContents of
+          --  Nothing -> liftIO $ putStrLn "No update events for text"
+          --  Just e -> requestDomAction_ $ setNodeValue n . Just <$> e
+          mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    addAction $ DOM_Node activateText
+    pure $ error "textNodeInternal: DOM.Text"
+
+{-# INLINABLE commentNodeInternal #-}
+commentNodeInternal :: (MonadJSM m, MonadFix m, ToDOMString contents, Reflex t) => contents -> Maybe (Event t contents) -> HydrationDomBuilderT t m DOM.Comment
+commentNodeInternal !t mSetContents = getHydrationMode >>= \case
+  HydrationMode_Immediate -> do
+    n <- makeNodeInternal (askDocumentEnv >>= \doc -> createComment doc t)
+    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    pure n
+  HydrationMode_Hydrating -> do
+    let activateComment = do
+          liftIO $ putStrLn $ "Action: Comment: " <> show (DOM.toJSString t)
+          n <- hydrateNode (const $ pure True) (askDocumentEnv >>= \doc -> createComment doc t) DOM.Comment
+          mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    addAction $ DOM_Node activateComment
+    pure $ error "commentNodeInternal: DOM.Comment"
+
+-- | We leave markers in the static builder as comments, and rip these comments
+-- out at hydration time, replacing them with empty text nodes.
+skipToAndReplaceComment :: (MonadJSM m, Reflex t, MonadFix m) => Text -> IORef Text -> HydrationDomBuilderT t m (IORef DOM.Text, IORef Text)
+skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
+  HydrationMode_Immediate -> do
+    -- If we're in immediate mode, we don't try to replace an existing comment,
+    -- and just return a dummy key
+    t <- textNodeInternal ("" :: Text) Nothing
+    append $ toNode t
+    textNodeRef <- liftIO $ newIORef t
+    keyRef <- liftIO $ newIORef ""
+    pure (textNodeRef, keyRef)
+  HydrationMode_Hydrating -> do
+    doc <- askDocument
+    textNodeRef <- liftIO $ newIORef $ error "textNodeRef not yet initialized"
+    keyRef <- liftIO $ newIORef $ error "keyRef not yet initialized"
+    let go key0 mLastNode = do
+          parent <- askParent
+          node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
+          DOM.castTo DOM.Comment node >>= \case
+            Just comment -> do
+              commentText <- Node.getTextContentUnchecked comment
+              liftIO $ putStr $ T.unpack $ "[" <> prefix <> "]"
+              liftIO $ putStr $ T.unpack $ "{" <> commentText <> "}"
+              case T.stripPrefix (prefix <> key0) commentText of
+                Just key -> do
+                  -- Replace the comment with an (invisible) text node
+                  textNode <- createTextNode doc ("" :: Text)
+                  liftIO $ putStr "Replacing existing comment..."
+                  Node.replaceChild_ parent textNode comment
+                  pure (textNode, key)
+                Nothing -> do
+                  liftIO $ putStr "Bad key in comment, skipping... "
+                  go key0 (Just node)
+            Nothing -> do
+              liftIO $ putStr "Not a comment, skipping... "
+              go key0 (Just node)
+        switchComment = do
+          key0 <- liftIO $ readIORef key0Ref
+          liftIO $ putStrLn $ "///////////////////////////////// switchComment " <> T.unpack key0
+          (textNode, key) <- go key0 =<< getPreviousNode
+          liftIO $ putStrLn $ T.unpack key
+          setPreviousNode $ Just $ toNode textNode
+          liftIO $ do
+            writeIORef textNodeRef textNode
+            writeIORef keyRef key
+    addAction $ DOM_Node switchComment
+    pure (textNodeRef, keyRef)
+
+
+skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m) => HydrationDomBuilderT t m (IORef DOM.Text, IORef Text)
+skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORef "")
+
+skipToReplaceEnd :: (MonadJSM m, Reflex t, MonadFix m) => IORef Text -> HydrationDomBuilderT t m (IORef DOM.Text)
+skipToReplaceEnd key = fmap fst $ skipToAndReplaceComment "replace-end" key
+
+instance (HasUnreadyChildren env, SupportsHydrationDomBuilder t m) => NotReady t (HydrationDomBuilderT' env state t m) where
   notReadyUntil e = do
     eOnce <- headE e
-    env <- HydrationDomBuilderT ask
-    let unreadyChildren = _hydrationDomBuilderEnv_unreadyChildren env
+    unreadyChildren <- askUnreadyChildren
+    commitAction <- askCommitAction
     liftIO $ modifyIORef' unreadyChildren succ
     let ready = do
           old <- liftIO $ readIORef unreadyChildren
           let new = pred old
           liftIO $ writeIORef unreadyChildren $! new
-          when (new == 0) $ _hydrationDomBuilderEnv_commitAction env
+          when (new == 0) commitAction
     requestDomAction_ $ ready <$ eOnce
   notReady = do
     env <- HydrationDomBuilderT ask
-    let unreadyChildren = _hydrationDomBuilderEnv_unreadyChildren env
+    unreadyChildren <- askUnreadyChildren
     liftIO $ modifyIORef' unreadyChildren succ
 
-instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT t m) where
-  type DomBuilderSpace (HydrationDomBuilderT t m) = HydrationDomSpace
+instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) where
+  type DomBuilderSpace (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) = HydrationDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
-    n <- textNodeInternal initialContents
-    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    liftIO $ putStrLn $ "Text: " <> T.unpack initialContents
+    textNodeInternal initialContents mSetContents
     return $ TextNode ()
   {-# INLINABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = do
-    n <- commentNodeInternal initialContents
-    mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    liftIO $ putStrLn $ "Comment: " <> T.unpack initialContents
+    commentNodeInternal initialContents mSetContents
     return $ CommentNode ()
   {-# INLINABLE element #-}
-  element elementTag cfg child = fst <$> makeElement elementTag cfg child
+  element elementTag cfg child = do
+    liftIO $ putStrLn $ "Element: " <> T.unpack elementTag
+    fst <$> makeElement elementTag cfg child
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -639,19 +847,20 @@ extractFragment fragment = do
       extractBetweenExclusive (_hydrationDomFragment_document fragment) before after
       liftIO $ writeIORef (_hydrationDomFragment_state fragment) FragmentState_Unmounted
 
-instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomBuilderT t m) where
-  type DomFragment (HydrationDomBuilderT t m) = HydrationDomFragment
+instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) where
+  type DomFragment (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) = HydrationDomFragment
   buildDomFragment w = do
     df <- createDocumentFragment =<< askDocument
-    result <- localEnv id (\env -> env { _hydrationDomBuilderEnv_parent = toNode df }) w
+    p <- liftIO $ newIORef $ toNode df
+    result <- localEnv id (\env -> env { _hydrationDomBuilderEnv_parent = p }) w
     state <- liftIO $ newIORef FragmentState_Unmounted
     return (HydrationDomFragment df state, result)
   mountDomFragment fragment setFragment = do
     parent <- askParent
     extractFragment fragment
-    before <- textNodeInternal ("" :: Text)
+    before <- textNodeInternal ("" :: Text) Nothing
     appendChild_ parent $ _hydrationDomFragment_document fragment
-    after <- textNodeInternal ("" :: Text)
+    after <- textNodeInternal ("" :: Text) Nothing
     xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
     requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
       extractFragment previousFragment
@@ -660,61 +869,14 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
       liftIO $ writeIORef (_hydrationDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_hydrationDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
--- | We leave markers in the static builder as comments, and rip these comments
--- out at hydration time, replacing them with empty text nodes.
-skipToAndReplaceComment :: MonadJSM m => Text -> HydrationDomBuilderT t m (DOM.Text, Text)
-skipToAndReplaceComment prefix = getHydrationMode >>= \case
-  HydrationMode_Immediate -> do
-    -- If we're in immediate mode, we don't try to replace an existing comment,
-    -- and just return a dummy key
-    t <- textNodeInternal ("" :: Text)
-    pure (t, "")
-  HydrationMode_Hydrating -> do
-    doc <- askDocument
-    parent <- askParent
-    lastHydrationNode <- getPreviousNode
-    let go mLastNode = do
-          node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
-          DOM.castTo DOM.Comment node >>= \case
-            Just comment -> do
-              commentText <- Node.getTextContentUnchecked comment
-              case T.stripPrefix prefix commentText of
-                Just key -> do
-                  -- Replace the comment with an (invisible) text node
-                  textNode <- createTextNode doc ("" :: Text)
-                  Node.replaceChild_ parent textNode comment
-                  pure (textNode, key)
-                Nothing -> do
-                  liftIO $ putStrLn $ "Bad key in comment, skipping"
-                  go (Just node)
-            Nothing -> do
-              commentText <- Node.getTextContentUnchecked node
-              liftIO $ putStrLn $ "Not a comment, skipping"
-              liftIO $ putStrLn commentText
-              go (Just node)
-    (a, key) <- go lastHydrationNode
-    setPreviousNode $ Just $ toNode a
-    pure (a, key)
-
-skipToReplaceStart :: MonadJSM m => HydrationDomBuilderT t m (DOM.Text, Text)
-skipToReplaceStart = skipToAndReplaceComment "replace-start"
-
-skipToReplaceEnd :: MonadJSM m => Text -> HydrationDomBuilderT t m DOM.Text
-skipToReplaceEnd key = fmap fst $ skipToAndReplaceComment $ "replace-end" <> key
-
-instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ref m ~ IORef, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadRef m) => Adjustable t (HydrationDomBuilderT t m) where
+instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ref m ~ IORef, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadRef m) => Adjustable t (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) (HydrationDomBuilderState t m) t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     liftIO $ putStrLn "In runWithReplace"
     initialEnv <- HydrationDomBuilderT ask
     let hydrating = _hydrationDomBuilderEnv_hydrationMode initialEnv
     initialHydrationMode <- liftIO $ readIORef hydrating
-    (before, beforeKey) <- case initialHydrationMode of
-      HydrationMode_Hydrating -> skipToReplaceStart
-      HydrationMode_Immediate -> do
-        t <- textNodeInternal ("" :: Text)
-        append $ toNode t
-        pure (t, "")
+    (before, beforeKey) <- skipToReplaceStart
     let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
     currentCohort <- liftIO $ newIORef (-1 :: Int) -- Equal to the cohort currently in the DOM
@@ -730,19 +892,16 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
     -- We draw 'after' in this roundabout way to avoid using MonadFix
     doc <- askDocument
     parent <- askParent
-    after <- case initialHydrationMode of
-      HydrationMode_Hydrating -> skipToReplaceEnd beforeKey
-      HydrationMode_Immediate -> do
-        t <- textNodeInternal ("" :: Text)
-        append $ toNode t
-        pure t
+    after <- skipToReplaceEnd beforeKey
+    -- TODO improve skipToReplace nonsense
+    addAction $ DOM_Node $ setPreviousNode . Just . toNode =<< liftIO (readIORef before)
     let drawInitialChild = do
           liftIO $ putStrLn "drawInitialChild"
           p <- liftIO (readIORef hydrating) >>= \case
-            HydrationMode_Hydrating -> pure parent
-            HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
+            HydrationMode_Hydrating -> liftIO $ newIORef parent
+            HydrationMode_Immediate -> liftIO . newIORef . toNode =<< createDocumentFragment doc
           unreadyChildren <- liftIO $ newIORef 0
-          (result, HydrationState h' _) <- flip runStateT (HydrationState [] Nothing) $ runReaderT (unHydrationDomBuilderT a0) initialEnv
+          (result, HydrationDomBuilderState h') <- flip runStateT (HydrationDomBuilderState []) $ runReaderT (unHydrationDomBuilderT a0) initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = myCommitAction
             , _hydrationDomBuilderEnv_parent = p
@@ -754,25 +913,30 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
           return (h', result)
     a'' <- numberOccurrences a'
     (result0, evt) <- HydrationDomBuilderT $ lift $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
-      p <- liftIO (readIORef hydrating) >>= \case
+      h <- liftIO $ readIORef hydrating
+      p' <- case h of
         HydrationMode_Hydrating -> pure parent
         HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
+      p <- liftIO $ newIORef p'
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
             liftIO $ putStrLn "Committing runWithReplace update"
             c <- liftIO $ readIORef currentCohort
+            !before' <- liftIO $ readIORef before
+            !after' <- liftIO $ readIORef after
             when (c <= cohortId) $ do -- If a newer cohort has already been committed, just ignore this
-              deleteBetweenExclusive before after
-              insertBefore p after
+              deleteBetweenExclusive before' after'
+              insertBefore p' after'
               liftIO $ writeIORef currentCohort cohortId
               myCommitAction
-      (result, HydrationState h' _) <- flip runStateT (HydrationState [] $ Just $ toNode before) $ runReaderT (unHydrationDomBuilderT child) $ initialEnv
+      (result, HydrationDomBuilderState h') <- flip runStateT (HydrationDomBuilderState []) $ runReaderT (unHydrationDomBuilderT child) $ initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-            , _hydrationDomBuilderEnv_commitAction = commitAction
+            , _hydrationDomBuilderEnv_commitAction = case h of
+              HydrationMode_Hydrating -> myCommitAction
+              HydrationMode_Immediate -> commitAction
             , _hydrationDomBuilderEnv_parent = p
             }
       uc <- liftIO $ readIORef unreadyChildren
-      h <- liftIO $ readIORef hydrating
       let commitActionToRunNow = if uc == 0
             then Just $ commitAction
             else Nothing -- A child will run it when unreadyChildren is decremented to 0
@@ -781,9 +945,8 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
             HydrationMode_Immediate -> Right commitActionToRunNow
       return (actions, result)
     let (hydrationAction, commitAction) = fanEither $ fmap fst evt
-        f :: [Behavior t (m ())] -> Behavior t (m ())
-        f = fmap (void . sequence) . sequence
-    addAction . join =<< hold (f $ fst result0) (fmap f hydrationAction)
+    base :: Behavior t [DOM t m] <- hold (fst result0) hydrationAction
+    addAction $ DOM_Replace base
     requestDomAction_ $ fmapMaybe id commitAction
     return (snd result0, fmap snd evt)
 
@@ -925,6 +1088,7 @@ hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   -> Event t (p v)
   -> HydrationDomBuilderT t m (IntMap v', Event t (p v'))
 hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_ f dm0 dm' = do
+  (_, key) <- skipToReplaceStart
   initialEnv <- HydrationDomBuilderT ask
   let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
   pendingChange :: IORef (IntMap (IORef ChildReadyStateInt), p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) <- liftIO $ newIORef mempty
@@ -959,7 +1123,9 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
                   liftIO $ writeIORef pendingChange (newUnready, p)
                   when (IntMap.null newUnready) $ do
                     applyDomUpdate p
-  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdateInt initialEnv markChildReady $ f k v) dm0 dm'
+  stateRef <- liftIO . newIORef =<< HydrationDomBuilderT get
+  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdateInt stateRef initialEnv markChildReady $ f k v) dm0 dm'
+  HydrationDomBuilderT . put =<< liftIO (readIORef stateRef)
   let processChild k (_, _, sRef, _) = do
         readIORef sRef >>= \case
           ChildReadyStateInt_Ready -> return Nothing
@@ -976,8 +1142,10 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
       placeholders0 = fmap (\(_, ph, _, _) -> ph) children0
       result' = ffor children' $ fmap $ \(_, _, _, r) -> r
   liftIO $ writeIORef placeholders $! placeholders0
-  _ <- IntMap.traverseWithKey (\_ (df, _, _, _) -> void $ append $ toNode df) children0
-  liftIO . writeIORef lastPlaceholderRef =<< textNodeInternal ("" :: Text)
+  getHydrationMode >>= \case
+    HydrationMode_Immediate -> void $ IntMap.traverseWithKey (\_ (df, _, _, _) -> void $ append $ toNode df) children0
+    _ -> pure ()
+  lastPlaceholderRef <- skipToReplaceEnd key
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
     newUnready <- liftIO $ updateChildUnreadiness p oldUnready
@@ -1072,7 +1240,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
   getHydrationMode >>= \case
     HydrationMode_Immediate -> void $ DMap.traverseWithKey (\_ (Compose (df, _, _, _)) -> Constant () <$ append (toNode df)) children0
     _ -> pure ()
-  liftIO . writeIORef lastPlaceholderRef =<< skipToReplaceEnd key
+  lastPlaceholderRef <- skipToReplaceEnd key
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
     newUnready <- liftIO $ updateChildUnreadiness p oldUnready
@@ -1084,7 +1252,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
 
 {-# INLINABLE drawChildUpdate #-}
 drawChildUpdate :: (MonadIO m, MonadJSM m)
-  => IORef (HydrationState t m)
+  => IORef (HydrationDomBuilderState t m)
   -> HydrationDomBuilderEnv t m
   -> (IORef (ChildReadyState k) -> JSM ()) -- This will NOT be called if the child is ready at initialization time; instead, the ChildReadyState return value will be ChildReadyState_Ready
   -> HydrationDomBuilderT t m (v' a)
@@ -1099,43 +1267,64 @@ drawChildUpdate stateRef initialEnv markReady child = do
   p <- case hydrationMode of
     HydrationMode_Hydrating -> do
       let p = _hydrationDomBuilderEnv_parent initialEnv
-      case _hydrationState_previousNode initialState of
-        Nothing -> Node.appendChild_ p placeholder
-        Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ p placeholder
+      p' <- liftIO $ readIORef p
+--      case _hydrationState_previousNode initialState of
+--        Nothing -> Node.appendChild_ p' placeholder
+--        Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ p' placeholder
       pure (Left p)
     HydrationMode_Immediate -> do
       df <- createDocumentFragment doc
       Node.appendChild_ df placeholder
       pure (Right df)
+  p' <- either pure (liftIO . newIORef . toNode) p
   let env = initialEnv
-        { _hydrationDomBuilderEnv_parent = either id toNode p
+        { _hydrationDomBuilderEnv_parent = p'
         , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
         , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
         }
-  (result, finalState) <- runStateT (runReaderT (unHydrationDomBuilderT child) env) (initialState { _hydrationState_previousNode = Just $ toNode placeholder })
+  (result, finalState) <- runStateT (runReaderT (unHydrationDomBuilderT child) env) initialState-- { _hydrationState_previousNode = Just $ toNode placeholder })
   liftIO $ writeIORef stateRef finalState
   u <- liftIO $ readIORef unreadyChildren
   when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyState_Ready
-  return (Compose (either (const $ error "Tried to use document fragment in hydration mode") id p, placeholder, childReadyState, result))
+  return (Compose (either (const $ error "drawChildUpdate: Tried to use document fragment in hydration mode") id p, placeholder, childReadyState, result))
 
 {-# INLINABLE drawChildUpdateInt #-}
 drawChildUpdateInt :: (MonadIO m, MonadJSM m)
-  => HydrationDomBuilderEnv t m
+  => IORef (HydrationDomBuilderState t m)
+  -> HydrationDomBuilderEnv t m
   -> (IORef ChildReadyStateInt -> JSM ()) -- This will NOT be called if the child is ready at initialization time; instead, the ChildReadyState return value will be ChildReadyState_Ready
   -> HydrationDomBuilderT t m v'
   -> RequesterT t JSM Identity (TriggerEventT t m) (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')
-drawChildUpdateInt initialEnv markReady child = do
+drawChildUpdateInt stateRef initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyStateInt_Unready Nothing
+  let doc = _hydrationDomBuilderEnv_document initialEnv
   unreadyChildren <- liftIO $ newIORef 0
-  df <- createDocumentFragment $ _hydrationDomBuilderEnv_document initialEnv
-  (placeholder, result) <- flip evalStateT (HydrationState [] Nothing) $ runReaderT (unHydrationDomBuilderT $ (,) <$> textNodeInternal ("" :: Text) <*> child) $ initialEnv
-    { _hydrationDomBuilderEnv_parent = toNode df
-    , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-    , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
-    }
+  hydrationMode <- liftIO $ readIORef $ _hydrationDomBuilderEnv_hydrationMode initialEnv
+  initialState <- liftIO $ readIORef stateRef
+  placeholder <- createTextNode doc ("" :: Text)
+  p <- case hydrationMode of
+    HydrationMode_Hydrating -> do
+      let p = _hydrationDomBuilderEnv_parent initialEnv
+      p' <- liftIO $ readIORef p
+--      case _hydrationState_previousNode initialState of
+--        Nothing -> Node.appendChild_ p' placeholder
+--        Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ p' placeholder
+      pure (Left p)
+    HydrationMode_Immediate -> do
+      df <- createDocumentFragment doc
+      Node.appendChild_ df placeholder
+      pure (Right df)
+  p' <- either pure (liftIO . newIORef . toNode) p
+  let env = initialEnv
+        { _hydrationDomBuilderEnv_parent = p'
+        , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
+        , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
+        }
+  (result, finalState) <- runStateT (runReaderT (unHydrationDomBuilderT child) env) initialState --{ _hydrationState_previousNode = Just $ toNode placeholder })
+  liftIO $ writeIORef stateRef finalState
   u <- liftIO $ readIORef unreadyChildren
   when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyStateInt_Ready
-  return (df, placeholder, childReadyState, result)
+  return (either (const $ error "drawChildUpdateInt: Tried to use document fragment in hydration mode") id p, placeholder, childReadyState, result)
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
@@ -1147,32 +1336,35 @@ mkHasFocus e = do
 
 insertAfter :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertAfter new existing = do
+  liftIO $ putStrLn "insertAfter"
   p <- getParentNodeUnchecked existing
   Node.getNextSibling existing >>= DOM.insertBefore_ p new
 
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do
+  liftIO $ putStrLn "insertBefore"
   p <- getParentNodeUnchecked existing
+  liftIO $ putStrLn "insertBefore2"
   DOM.insertBefore_ p new (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
-instance PerformEvent t m => PerformEvent t (HydrationDomBuilderT t m) where
-  type Performable (HydrationDomBuilderT t m) = Performable m
+instance PerformEvent t m => PerformEvent t (HydrationDomBuilderT' env state t m) where
+  type Performable (HydrationDomBuilderT' env state t m) = Performable m
   {-# INLINABLE performEvent_ #-}
   performEvent_ e = lift $ performEvent_ e
   {-# INLINABLE performEvent #-}
   performEvent e = lift $ performEvent e
 
-instance PostBuild t m => PostBuild t (HydrationDomBuilderT t m) where
+instance PostBuild t m => PostBuild t (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE getPostBuild #-}
   getPostBuild = lift getPostBuild
 
-instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationDomBuilderT t m) where
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE newEventWithTrigger #-}
   newEventWithTrigger = lift . newEventWithTrigger
   {-# INLINABLE newFanEventWithTrigger #-}
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
-instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => TriggerEvent t (HydrationDomBuilderT t m) where
+instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => TriggerEvent t (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE newTriggerEvent #-}
   newTriggerEvent = HydrationDomBuilderT . lift . lift $ newTriggerEvent
   {-# INLINABLE newTriggerEventWithOnComplete #-}
@@ -1180,12 +1372,12 @@ instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => 
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete f = HydrationDomBuilderT . lift . lift $ newEventWithLazyTriggerWithOnComplete f
 
-instance HasJSContext m => HasJSContext (HydrationDomBuilderT t m) where
-  type JSContextPhantom (HydrationDomBuilderT t m) = JSContextPhantom m
+instance HasJSContext m => HasJSContext (HydrationDomBuilderT' env state t m) where
+  type JSContextPhantom (HydrationDomBuilderT' env state t m) = JSContextPhantom m
   askJSContext = lift askJSContext
 
-instance MonadRef m => MonadRef (HydrationDomBuilderT t m) where
-  type Ref (HydrationDomBuilderT t m) = Ref m
+instance MonadRef m => MonadRef (HydrationDomBuilderT' env state t m) where
+  type Ref (HydrationDomBuilderT' env state t m) = Ref m
   {-# INLINABLE newRef #-}
   newRef = lift . newRef
   {-# INLINABLE readRef #-}
@@ -1193,12 +1385,12 @@ instance MonadRef m => MonadRef (HydrationDomBuilderT t m) where
   {-# INLINABLE writeRef #-}
   writeRef r = lift . writeRef r
 
-instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT t m) where
+instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
-instance (HasJS x m, ReflexHost t) => HasJS x (HydrationDomBuilderT t m) where
-  type JSX (HydrationDomBuilderT t m) = JSX m
+instance (HasJS x m, ReflexHost t) => HasJS x (HydrationDomBuilderT' env state t m) where
+  type JSX (HydrationDomBuilderT' env state t m) = JSX m
   liftJS = lift . liftJS
 
 {-# INLINABLE wrapDomEvent #-}
@@ -1218,11 +1410,11 @@ subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
     etr <- newIORef $ Just et
     writeChan eventChan [EventTriggerRef etr :=> TriggerInvocation v (return ())]
 
-instance MonadSample t m => MonadSample t (HydrationDomBuilderT t m) where
+instance MonadSample t m => MonadSample t (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE sample #-}
   sample = lift . sample
 
-instance MonadHold t m => MonadHold t (HydrationDomBuilderT t m) where
+instance MonadHold t m => MonadHold t (HydrationDomBuilderT' env state t m) where
   {-# INLINABLE hold #-}
   hold v0 v' = lift $ hold v0 v'
   {-# INLINABLE holdDyn #-}
