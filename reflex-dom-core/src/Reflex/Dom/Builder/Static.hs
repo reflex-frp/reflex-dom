@@ -33,6 +33,8 @@ import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
 import Data.Functor.Compose
 import Data.Functor.Constant
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
 import Data.Monoid
@@ -164,6 +166,7 @@ instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m)
     StaticDomBuilderT $ modify $ (:) $ join o
     replaceEnd key
     return (fst result0, fmapCheap fst result')
+  traverseIntMapWithKeyWithAdjust = hoistIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
 
@@ -176,6 +179,42 @@ replaceStart = do
 
 replaceEnd :: DomBuilder t m => Text -> m ()
 replaceEnd key = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-end" <> key }
+
+hoistIntMapWithKeyWithAdjust :: forall t m p a b.
+  ( Adjustable t m
+  , MonadHold t m
+  , Patch (p a)
+  , Functor p
+  , Patch (p (Behavior t Builder))
+  , PatchTarget (p (Behavior t Builder)) ~ IntMap (Behavior t Builder)
+  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
+  )
+  => (forall x. (IntMap.Key -> a -> m x)
+      -> IntMap a
+      -> Event t (p a)
+      -> m (IntMap x, Event t (p x))
+     ) -- ^ The base monad's traversal
+  -> (IntMap.Key -> a -> StaticDomBuilderT t m b)
+  -> IntMap a
+  -> Event t (p a)
+  -> StaticDomBuilderT t m (IntMap b, Event t (p b))
+hoistIntMapWithKeyWithAdjust base f im0 im' = do
+  key <- replaceStart
+  e <- StaticDomBuilderT ask
+  (children0, children') <- lift $ base (\k v -> runStaticDomBuilderT (f k v) e) im0 im'
+  let result0 = IntMap.map fst children0
+      result' = (fmap . fmap) fst children'
+      outputs0 :: IntMap (Behavior t Builder)
+      outputs0 = IntMap.map snd children0
+      outputs' :: Event t (p (Behavior t Builder))
+      outputs' = (fmap . fmap) snd children'
+  outputs <- holdIncremental outputs0 outputs'
+  StaticDomBuilderT $ modify $ (:) $ pull $ do
+    os <- sample $ currentIncremental outputs
+    fmap mconcat $ forM (IntMap.toList os) $ \(_, o) -> do
+      sample o
+  replaceEnd key
+  return (result0, result')
 
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( Adjustable t m
