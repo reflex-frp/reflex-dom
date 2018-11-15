@@ -252,6 +252,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       , _inputElement_checked = c0
       , _inputElement_checkedChange = never
       , _inputElement_input = never
+      , _inputElement_validityChange = never
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
       , _inputElement_raw = ()

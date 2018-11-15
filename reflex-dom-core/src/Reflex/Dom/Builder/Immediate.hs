@@ -155,6 +155,7 @@ import qualified GHCJS.DOM.Types as DOM
 import GHCJS.DOM.UIEvent
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import qualified GHCJS.DOM.Window as Window
+import qualified GHCJS.DOM.ValidityState as Validity
 import Language.Javascript.JSaddle (call, eval)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -481,13 +482,13 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
+    let getMyChecked = Input.getChecked domInputElement
     Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
-    checkedChangedByUI <- wrapDomEvent domInputElement (`on` Events.click) $ do
-      Input.getChecked domInputElement
+    checkedChangedByUI <- wrapDomEvent domInputElement (`on` Events.click) $ lift getMyChecked
     checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
       Nothing -> return never
       Just eNewchecked -> requestDomAction $ ffor eNewchecked $ \newChecked -> do
-        oldChecked <- Input.getChecked domInputElement
+        oldChecked <- getMyChecked
         Input.setChecked domInputElement newChecked
         return $ if newChecked /= oldChecked
                     then Just newChecked
@@ -496,10 +497,17 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
       ]
-    case _inputElementConfig_setInvalid cfg of
+    let getMyValidity = Validity.getValid =<< Input.getValidity domInputElement
+    validityChangedByUI <- wrapDomEvent domInputElement (`on` Events.invalid) $ lift getMyValidity
+    validityChangedBySetInvalid <- case _inputElementConfig_setInvalid cfg of
       Nothing -> pure never
       Just eSetInvalid -> requestDomAction $ ffor eSetInvalid $ \v' -> do
         Input.setCustomValidity domInputElement v'
+        getMyValidity -- We get the validity after setting it in case the browser has mucked with it somehow
+    let validity = leftmost
+          [ validityChangedBySetInvalid
+          , validityChangedByUI
+          ]
     let initialFocus = False --TODO: Is this correct?
     hasFocus <- holdDyn initialFocus $ leftmost
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
@@ -513,8 +521,9 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return $ InputElement
       { _inputElement_value = v
       , _inputElement_checked = checked
-      , _inputElement_checkedChange =  checkedChangedByUI
+      , _inputElement_checkedChange = checkedChangedByUI
       , _inputElement_input = valueChangedByUI
+      , _inputElement_validityChange = validity
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
       , _inputElement_raw = domInputElement

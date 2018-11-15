@@ -291,6 +291,7 @@ data InputElement er d t
                   , _inputElement_checked :: Dynamic t Bool
                   , _inputElement_checkedChange :: Event t Bool
                   , _inputElement_input :: Event t Text
+                  , _inputElement_validityChange :: Event t Bool
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
