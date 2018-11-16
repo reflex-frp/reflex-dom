@@ -89,7 +89,7 @@ instance ( HasJS js m
          , MonadFix m
          , MonadFix (Performable m)
          , ReflexHost t
-         ) => Prerender js (HydrationDomBuilderT' (HydrationDomBuilderEnv t m) state t m) where
+         ) => Prerender js (HydrationDomBuilderT t m) where
   prerenderClientDict = Just Dict
   startPrerenderBlock = do
     depth <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_prerenderDepth
