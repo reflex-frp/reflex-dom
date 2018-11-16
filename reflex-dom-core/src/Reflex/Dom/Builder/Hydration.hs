@@ -671,7 +671,11 @@ commentNodeInternal !t mSetContents = getHydrationMode >>= \case
 
 -- | We leave markers in the static builder as comments, and rip these comments
 -- out at hydration time, replacing them with empty text nodes.
-skipToAndReplaceComment :: (MonadJSM m, Reflex t, MonadFix m) => Text -> IORef Text -> HydrationDomBuilderT t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
+skipToAndReplaceComment
+  :: (MonadJSM m, Reflex t, MonadFix m)
+  => Text
+  -> IORef Text
+  -> HydrationDomBuilderT t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
 skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
   HydrationMode_Immediate -> do
     -- If we're in immediate mode, we don't try to replace an existing comment,
@@ -691,8 +695,6 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
           DOM.castTo DOM.Comment node >>= \case
             Just comment -> do
               commentText <- Node.getTextContentUnchecked comment
-              liftIO $ putStr $ T.unpack $ "[" <> prefix <> "]"
-              liftIO $ putStr $ T.unpack $ "{" <> commentText <> "}"
               case T.stripPrefix (prefix <> key0) commentText of
                 Just key -> do
                   -- Replace the comment with an (invisible) text node
@@ -708,16 +710,12 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
               go key0 (Just node)
         switchComment = do
           key0 <- liftIO $ readIORef key0Ref
-          liftIO $ putStrLn $ "///////////////////////////////// switchComment " <> T.unpack key0
           (textNode, key) <- go key0 =<< getPreviousNode
-          liftIO $ putStrLn $ T.unpack key
           setPreviousNode $ Just $ toNode textNode
           liftIO $ do
             writeIORef textNodeRef textNode
             writeIORef keyRef key
---    hydrateDOM $ DOM_Node switchComment
     pure (switchComment, textNodeRef, keyRef)
-
 
 skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m) => HydrationDomBuilderT t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
 skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORef "")
@@ -913,10 +911,8 @@ instance (Reflex t, Monad m, Adjustable t m, MonadHold t m, MonadFix m) => Adjus
 instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ref m ~ IORef, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadRef m) => Adjustable t (HydrationDomBuilderT t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
-    liftIO $ putStrLn "In runWithReplace"
     initialEnv <- HydrationDomBuilderT ask
     let hydrating = _hydrationDomBuilderEnv_hydrationMode initialEnv
-    initialHydrationMode <- liftIO $ readIORef hydrating
     (hydrateStart, before, beforeKey) <- skipToReplaceStart
     let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
     haveEverBeenReady <- liftIO $ newIORef False
@@ -935,7 +931,6 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
     parent <- getParent
     (hydrateEnd, after) <- skipToReplaceEnd beforeKey
     let drawInitialChild = do
-          liftIO $ putStrLn "drawInitialChild"
           p <- liftIO (readIORef hydrating) >>= \case
             HydrationMode_Hydrating -> liftIO $ newIORef parent
             HydrationMode_Immediate -> liftIO . newIORef . toNode =<< createDocumentFragment doc
@@ -948,10 +943,9 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
           liftIO $ readIORef unreadyChildren >>= \case
             0 -> writeIORef haveEverBeenReady True
             _ -> modifyIORef' parentUnreadyChildren succ
-          liftIO $ putStrLn "drawInitialChild: end"
           return (dom, result)
     a'' <- numberOccurrences a'
-    (result0, evt) <- HydrationDomBuilderT $ lift $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
+    ((hydrate0, result0), child') <- HydrationDomBuilderT $ lift $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       h <- liftIO $ readIORef hydrating
       p' <- case h of
         HydrationMode_Hydrating -> pure parent
@@ -959,11 +953,10 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
       p <- liftIO $ newIORef p'
       unreadyChildren <- liftIO $ newIORef 0
       let commitAction = do
-            liftIO $ putStrLn "Committing runWithReplace update"
             c <- liftIO $ readIORef currentCohort
-            !before' <- liftIO $ readIORef before
-            !after' <- liftIO $ readIORef after
             when (c <= cohortId) $ do -- If a newer cohort has already been committed, just ignore this
+              !before' <- liftIO $ readIORef before
+              !after' <- liftIO $ readIORef after
               deleteBetweenExclusive before' after'
               insertBefore p' after'
               liftIO $ writeIORef currentCohort cohortId
@@ -983,11 +976,10 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
             HydrationMode_Hydrating -> Left dom
             HydrationMode_Immediate -> Right commitActionToRunNow
       return (actions, result)
-    let (hydrationAction, commitAction) = fanEither $ fmap fst evt
-    base :: Behavior t [DOM t m] <- hold (fst result0) hydrationAction
-    hydrateDOM $ DOM_Replace hydrateStart hydrateEnd base
+    let (hydrate', commitAction) = fanEither $ fmap fst child'
+    hydrateDOM . DOM_Replace hydrateStart hydrateEnd =<< hold hydrate0 hydrate'
     requestDomAction_ $ fmapMaybe id commitAction
-    return (snd result0, fmap snd evt)
+    return (result0, snd <$> child')
 
   {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
   traverseIntMapWithKeyWithAdjust = traverseIntMapWithKeyWithAdjust'
