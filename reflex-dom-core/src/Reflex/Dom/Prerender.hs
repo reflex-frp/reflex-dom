@@ -117,6 +117,7 @@ endMarker = "prerender/end"
 deleteToPrerenderEnd :: (MonadIO m, MonadJSM m) => HydrationRunnerT t m ()
 deleteToPrerenderEnd = do
   depth <- liftIO $ newIORef 0
+  ref <- getPreviousNode
   startNode <- hydrateNode (\e -> do
     n :: DOM.JSString <- Element.getTagName e
     mt :: Maybe DOM.JSString <- Element.getAttribute e ("type" :: DOM.JSString)
@@ -137,7 +138,8 @@ deleteToPrerenderEnd = do
             pure False
       _ -> pure False
     pure $ n == "SCRIPT" && attrCheck) DOM.Element
-  deleteBetweenExclusive startNode endNode
+  deleteBetweenInclusive startNode endNode
+  setPreviousNode ref
 
 data NoJavaScript -- This type should never have a HasJS instance
 

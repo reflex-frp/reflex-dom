@@ -40,6 +40,7 @@ module Reflex.Dom.Builder.Hydration
        , DOM(..), runDOMForest
        , hydrateDOM
        , hydrateNode
+       , getPreviousNode, setPreviousNode
        , runHydrationDomBuilderT
        , askParent
        , askEvents
@@ -47,6 +48,8 @@ module Reflex.Dom.Builder.Hydration
        , textNodeInternal
        , deleteBetweenExclusive
        , extractBetweenExclusive
+       , deleteBetweenInclusive
+       , extractBetweenInclusive
        , deleteUpTo
        , extractUpTo
        , SupportsHydrationDomBuilder
@@ -480,6 +483,21 @@ deleteBetweenExclusive s e = do
 extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
 extractBetweenExclusive df s e = liftJSM $ do
   f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
+  void $ call f f (df, s, e)
+
+-- | s and e must both be children of the same node and s must precede e;
+--   all nodes between s and e will be removed, including s and e
+deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
+deleteBetweenInclusive s e = do
+  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
+  extractBetweenInclusive df s e -- In many places in HydrationDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
+
+-- | s and e must both be children of the same node and s must precede e; all
+--   nodes between s and e will be moved into the given DocumentFragment,
+--   including s and e
+extractBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+extractBetweenInclusive df s e = liftJSM $ do
+  f <- eval ("(function(df,s,e) { var x = s; var next; for(;;) { next = x['nextSibling']; df['appendChild'](x); if(e===x) { break; }; x = next; } })" :: Text)
   void $ call f f (df, s, e)
 
 -- | s and e must both be children of the same node and s must precede e;
