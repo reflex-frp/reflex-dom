@@ -235,7 +235,7 @@ hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   -> Event t (p k v)
   -> StaticDomBuilderT t m (DMap k v', Event t (p k v'))
 hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
-  key <- replaceStart
+--  key <- replaceStart
   e <- StaticDomBuilderT ask
   (children0, children') <- lift $ base (\k v -> fmap (Compose . swap) (runStaticDomBuilderT (f k v) e)) dm0 dm'
   let result0 = DMap.map (snd . getCompose) children0
@@ -249,7 +249,7 @@ hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
     os <- sample $ currentIncremental outputs
     fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
       sample o
-  replaceEnd key
+--  replaceEnd key
   return (result0, result')
 
 instance SupportsStaticDomBuilder t m => NotReady t (StaticDomBuilderT t m) where

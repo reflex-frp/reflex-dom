@@ -112,6 +112,7 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Maybe
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -1077,11 +1078,11 @@ traverseIntMapWithKeyWithAdjust'
   -> Event t (PatchIntMap v)
   -> HydrationDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
 traverseIntMapWithKeyWithAdjust' = do
-  let updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) old = do
-        let new :: IntMap.Key -> Maybe (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IO (Maybe (IORef ChildReadyStateInt))
+  let updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) old = do
+        let new :: IntMap.Key -> Maybe (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IO (Maybe (IORef ChildReadyStateInt))
             new k m = case m of
               Nothing -> return Nothing
-              Just (_, _, sRef, _) -> do
+              Just (_, _, _, sRef, _) -> do
                 readIORef sRef >>= \case
                   ChildReadyStateInt_Ready -> return Nothing -- Delete this child, since it's ready
                   ChildReadyStateInt_Unready _ -> do
@@ -1099,8 +1100,8 @@ traverseIntMapWithKeyWithAdjust' = do
       lastPlaceholder <- liftIO $ readIORef lastPlaceholderRef
       let nextPlaceholder = maybe lastPlaceholder snd $ IntMap.lookupGT k phs
       forM_ (IntMap.lookup k phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
-      forM_ mv $ \(df, _, _, _) -> df `insertBefore` nextPlaceholder
-    liftIO $ writeIORef placeholders $! fromMaybe phs $ apply ((\(_, ph, _, _) -> ph) <$> PatchIntMap p) phs
+      forM_ mv $ \(_, df, _, _, _) -> df `insertBefore` nextPlaceholder
+    liftIO $ writeIORef placeholders $! fromMaybe phs $ apply ((\(_, _, ph, _, _) -> ph) <$> PatchIntMap p) phs
 
 {-# INLINE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
@@ -1109,16 +1110,19 @@ hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   , MonadJSM m
   , MonadFix m
   , PrimMonad m
-  , Monoid (p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
+  , Monoid (p (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
   , Functor p
+  , PatchTarget (p (DOM t m)) ~ IntMap (DOM t m)
+  , MonadHold t m
+  , Patch (p (DOM t m))
   )
-  => (   (IntMap.Key -> v -> DomRenderHookT t m (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
+  => (   (IntMap.Key -> v -> DomRenderHookT t m (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
       -> IntMap v
       -> Event t (p v)
-      -> DomRenderHookT t m (IntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'), Event t (p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')))
+      -> DomRenderHookT t m (IntMap (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'), Event t (p (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')))
      ) -- ^ The base monad's traversal
-  -> (p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IntMap (IORef ChildReadyStateInt) -> IO (IntMap (IORef ChildReadyStateInt))) -- ^ Given a patch for the children DOM elements, produce a patch for the childrens' unreadiness state
-  -> (IORef (IntMap DOM.Text) -> IORef DOM.Text -> p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> JSM ()) -- ^ Apply a patch to the DOM
+  -> (p (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IntMap (IORef ChildReadyStateInt) -> IO (IntMap (IORef ChildReadyStateInt))) -- ^ Given a patch for the children DOM elements, produce a patch for the childrens' unreadiness state
+  -> (IORef (IntMap DOM.Text) -> IORef DOM.Text -> p (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> JSM ()) -- ^ Apply a patch to the DOM
   -> (IntMap.Key -> v -> HydrationDomBuilderT t m v')
   -> IntMap v
   -> Event t (p v)
@@ -1127,7 +1131,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
   (hydrateStart, _, key) <- skipToReplaceStart
   initialEnv <- HydrationDomBuilderT ask
   let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
-  pendingChange :: IORef (IntMap (IORef ChildReadyStateInt), p (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) <- liftIO $ newIORef mempty
+  pendingChange :: IORef (IntMap (IORef ChildReadyStateInt), p (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) <- liftIO $ newIORef mempty
   haveEverBeenReady <- liftIO $ newIORef False
   placeholders <- liftIO $ newIORef $ error "placeholders not yet initialized"
   lastPlaceholderRef <- liftIO $ newIORef $ error "lastPlaceholderRef not yet initialized"
@@ -1159,10 +1163,8 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
                   liftIO $ writeIORef pendingChange (newUnready, p)
                   when (IntMap.null newUnready) $ do
                     applyDomUpdate p
-  stateRef <- liftIO . newIORef =<< HydrationDomBuilderT get
-  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdateInt stateRef initialEnv markChildReady $ f k v) dm0 dm'
-  HydrationDomBuilderT . put =<< liftIO (readIORef stateRef)
-  let processChild k (_, _, sRef, _) = do
+  (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdateInt initialEnv markChildReady $ f k v) dm0 dm'
+  let processChild k (_, _, _, sRef, _) = do
         readIORef sRef >>= \case
           ChildReadyStateInt_Ready -> return Nothing
           ChildReadyStateInt_Unready _ -> do
@@ -1174,12 +1176,27 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
     else do
       modifyIORef' parentUnreadyChildren succ
       writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
-  let result0 = IntMap.map (\(_, _, _, v) -> v) children0
-      placeholders0 = fmap (\(_, ph, _, _) -> ph) children0
-      result' = ffor children' $ fmap $ \(_, _, _, r) -> r
+  let result0 = IntMap.map (\(_, _, _, _, v) -> v) children0
+      placeholders0 = fmap (\(_, _, ph, _, _) -> ph) children0
+      delayed0 :: IntMap (DOM t m)
+      delayed0 = IntMap.map (\(delayed, _, _, _, _) -> delayed) children0
+      delayed' :: Event t (p (DOM t m))
+      delayed' = ffor children' $ fmap $ \(delayed, _, _, _, _) -> delayed
+      result' = ffor children' $ fmap $ \(_, _, _, _, r) -> r
+  delayed <- accumMaybeB (flip apply) delayed0 delayed'
+  doc <- askDocument
+  let setFinalPlaceholder = do
+        ph <- createTextNode doc ("" :: Text)
+        parent <- askParent
+        pn <- runMaybeT $ MaybeT . Node.getNextSibling =<< MaybeT getPreviousNode
+        Node.insertBefore_ parent ph pn
+        liftIO $ writeIORef lastPlaceholderRef ph
+        setPreviousNode $ Just $ toNode ph
+  hydrateDOM $ DOM_Replace (pure ()) setFinalPlaceholder
+    (reverse . IntMap.elems <$> delayed)
   liftIO $ writeIORef placeholders $! placeholders0
   getHydrationMode >>= \case
-    HydrationMode_Immediate -> void $ IntMap.traverseWithKey (\_ (df, _, _, _) -> void $ append $ toNode df) children0
+    HydrationMode_Immediate -> void $ IntMap.traverseWithKey (\_ (_, df, _, _, _) -> void $ append $ toNode df) children0
     _ -> pure ()
   (hydrateEnd, lastPlaceholderRef) <- skipToReplaceEnd key
   requestDomAction_ $ ffor children' $ \p -> do
@@ -1190,13 +1207,6 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
     when (IntMap.null newUnready) $ do
       applyDomUpdate newP
   return (result0, result')
-
--- traverseDMapWithKeyWithAdjust
---   :: GCompare k
---   => (forall a. k a -> v a -> m (v' a))
---   -> DMap k v
---   -> Event t (PatchDMap k v)
---   -> m (DMap k v', Event t (PatchDMap k v'))
 
 {-# INLINABLE hoistTraverseWithKeyWithAdjust #-}
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
@@ -1228,7 +1238,7 @@ hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   -> Event t (p k v)
   -> HydrationDomBuilderT t m (DMap k v', Event t (p k v'))
 hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpdate_ (f :: forall a. k a -> v a -> HydrationDomBuilderT t m (v' a)) (dm0 :: DMap k v) dm' = do
-  (hydrateStart, _, key) <- skipToReplaceStart
+--  (hydrateStart, _, key) <- skipToReplaceStart -- TODO
   initialEnv <- HydrationDomBuilderT ask
   let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
   pendingChange :: IORef (DMap k (Constant (IORef (ChildReadyState k))), p k (Compose ((,,,,) (DOM t m) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v')) <- liftIO $ newIORef mempty
@@ -1264,7 +1274,6 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
                   when (DMap.null newUnready) $ do
                     applyDomUpdate p
   (children0, children') <- HydrationDomBuilderT $ lift $ lift $ base (\k v -> drawChildUpdate initialEnv markChildReady $ f k v) dm0 dm'
---  HydrationDomBuilderT . put =<< liftIO (readIORef stateRef)
   let processChild k (Compose (_, _, _, sRef, _)) = ComposeMaybe <$> do
         readIORef sRef >>= \case
           ChildReadyState_Ready -> return Nothing
@@ -1285,13 +1294,20 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       delayed' = ffor children' $ mapPatch $ \(Compose (d, _, _, _, _)) -> Const d
       result' = ffor children' $ mapPatch $ \(Compose (_, _, _, _, r)) -> r
   delayed <- accumMaybeB (flip apply) delayed0 delayed'
-  hydrateDOM $ DOM_Replace (liftIO $ putStr "one") (liftIO $ putStr "two")
-    (fmap (\(_ :=> Const d) -> d) . DMap.toList <$> delayed)
+  doc <- askDocument
+  let setFinalPlaceholder = do
+        ph <- createTextNode doc ("" :: Text)
+        parent <- askParent
+        pn <- runMaybeT $ MaybeT . Node.getNextSibling =<< MaybeT getPreviousNode
+        Node.insertBefore_ parent ph pn
+        liftIO $ writeIORef lastPlaceholderRef ph
+        setPreviousNode $ Just $ toNode ph
+  hydrateDOM $ DOM_Replace (pure ()) setFinalPlaceholder
+    (fmap (\(_ :=> Const d) -> d) . reverse . DMap.toList <$> delayed)
   liftIO $ writeIORef placeholders $! placeholders0
   getHydrationMode >>= \case
     HydrationMode_Immediate -> void $ DMap.traverseWithKey (\_ (Compose (_, df, _, _, _)) -> Constant () <$ append (toNode df)) children0
     _ -> pure ()
-  (hydrateEnd, lastPlaceholderRef) <- skipToReplaceEnd key
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
     newUnready <- liftIO $ updateChildUnreadiness p oldUnready
@@ -1313,18 +1329,20 @@ drawChildUpdate initialEnv markReady child = do
   unreadyChildren <- liftIO $ newIORef 0
   hydrationMode <- liftIO $ readIORef $ _hydrationDomBuilderEnv_hydrationMode initialEnv
   placeholder <- createTextNode doc ("" :: Text)
-  p <- case hydrationMode of
-    HydrationMode_Hydrating -> do
-      let p = _hydrationDomBuilderEnv_parent initialEnv
-      p' <- liftIO $ readIORef p
---      case _hydrationState_previousNode initialState of
---        Nothing -> Node.appendChild_ p' placeholder
---        Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ p' placeholder
-      pure (Left p)
+  (p, delayed) <- case hydrationMode of
+    HydrationMode_Hydrating -> pure
+      ( Left $ _hydrationDomBuilderEnv_parent initialEnv
+      , do
+        parent <- askParent
+        getPreviousNode >>= \case
+          Nothing -> Node.getFirstChild parent >>= Node.insertBefore_ parent placeholder
+          Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ parent placeholder
+        setPreviousNode $ Just $ toNode placeholder
+      )
     HydrationMode_Immediate -> do
       df <- createDocumentFragment doc
       Node.appendChild_ df placeholder
-      pure (Right df)
+      pure (Right df, pure ())
   p' <- either pure (liftIO . newIORef . toNode) p
   (result, finalState) <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT child) initialEnv
         { _hydrationDomBuilderEnv_parent = p'
@@ -1334,48 +1352,50 @@ drawChildUpdate initialEnv markReady child = do
   u <- liftIO $ readIORef unreadyChildren
   when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyState_Ready
   return $ Compose
-    ( DOM_Replace (liftIO $ putStrLn "before") (liftIO $ putStrLn "after") $ pure finalState
+    ( DOM_Replace delayed (pure ()) (pure finalState)
     , either (const $ error "drawChildUpdate: Tried to use document fragment in hydration mode") id p
     , placeholder, childReadyState, result
     )
 
 {-# INLINABLE drawChildUpdateInt #-}
-drawChildUpdateInt :: (MonadIO m, MonadJSM m)
-  => IORef [DOM t m]
-  -> HydrationDomBuilderEnv
+drawChildUpdateInt :: (MonadIO m, MonadJSM m, Reflex t)
+  => HydrationDomBuilderEnv
   -> (IORef ChildReadyStateInt -> JSM ()) -- This will NOT be called if the child is ready at initialization time; instead, the ChildReadyState return value will be ChildReadyState_Ready
   -> HydrationDomBuilderT t m v'
-  -> DomRenderHookT t m (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')
-drawChildUpdateInt stateRef initialEnv markReady child = do
+  -> DomRenderHookT t m (DOM t m, DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')
+drawChildUpdateInt initialEnv markReady child = do
   childReadyState <- liftIO $ newIORef $ ChildReadyStateInt_Unready Nothing
   let doc = _hydrationDomBuilderEnv_document initialEnv
   unreadyChildren <- liftIO $ newIORef 0
   hydrationMode <- liftIO $ readIORef $ _hydrationDomBuilderEnv_hydrationMode initialEnv
-  initialState <- liftIO $ readIORef stateRef
   placeholder <- createTextNode doc ("" :: Text)
-  p <- case hydrationMode of
-    HydrationMode_Hydrating -> do
-      let p = _hydrationDomBuilderEnv_parent initialEnv
-      p' <- liftIO $ readIORef p
---      case _hydrationState_previousNode initialState of
---        Nothing -> Node.appendChild_ p' placeholder
---        Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ p' placeholder
-      pure (Left p)
+  (p, delayed) <- case hydrationMode of
+    HydrationMode_Hydrating -> pure
+      ( Left $ _hydrationDomBuilderEnv_parent initialEnv
+      , do
+        parent <- askParent
+        getPreviousNode >>= \case
+          Nothing -> Node.getFirstChild parent >>= Node.insertBefore_ parent placeholder
+          Just pn -> Node.getNextSibling pn >>= Node.insertBefore_ parent placeholder
+        setPreviousNode $ Just $ toNode placeholder
+      )
     HydrationMode_Immediate -> do
       df <- createDocumentFragment doc
       Node.appendChild_ df placeholder
-      pure (Right df)
+      pure (Right df, pure ())
   p' <- either pure (liftIO . newIORef . toNode) p
-  let env = initialEnv
+  (result, finalState) <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT child) initialEnv
         { _hydrationDomBuilderEnv_parent = p'
         , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
         , _hydrationDomBuilderEnv_commitAction = markReady childReadyState
         }
-  (result, finalState) <- runStateT (runReaderT (unHydrationDomBuilderT child) env) initialState --{ _hydrationState_previousNode = Just $ toNode placeholder })
-  liftIO $ writeIORef stateRef finalState
   u <- liftIO $ readIORef unreadyChildren
   when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyStateInt_Ready
-  return (either (const $ error "drawChildUpdateInt: Tried to use document fragment in hydration mode") id p, placeholder, childReadyState, result)
+  return
+    ( DOM_Replace delayed (pure ()) (pure finalState)
+    , either (const $ error "drawChildUpdateInt: Tried to use document fragment in hydration mode") id p
+    , placeholder, childReadyState, result
+    )
 
 mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
 mkHasFocus e = do
@@ -1393,9 +1413,7 @@ insertAfter new existing = do
 
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do
-  liftIO $ putStrLn "insertBefore"
   p <- getParentNodeUnchecked existing
-  liftIO $ putStrLn "insertBefore2"
   DOM.insertBefore_ p new (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
 instance PerformEvent t m => PerformEvent t (HydrationDomBuilderT t m) where
