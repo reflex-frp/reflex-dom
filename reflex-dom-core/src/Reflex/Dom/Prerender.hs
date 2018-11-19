@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
@@ -17,18 +18,23 @@ module Reflex.Dom.Prerender
        , PrerenderClientConstraint
        ) where
 
+import Control.Lens ((&), (.~))
 import Control.Monad.Reader
 import Control.Monad.Ref (Ref, MonadRef)
 import Data.Constraint
 import Data.Default
-import Data.IORef (modifyIORef')
+import Data.IORef (modifyIORef', readIORef, newIORef)
+import Data.String (IsString)
+import qualified GHCJS.DOM.Element as Element
+import qualified GHCJS.DOM.Types as DOM
+import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 import GHC.IORef (IORef)
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.InputDisabled
-import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Builder.Immediate (ImmediateDomBuilderT)
 import Reflex.Dom.Builder.Hydration
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
@@ -57,7 +63,9 @@ class Monad m => Prerender js m | m -> js where
 -- | Draw one widget when prerendering (e.g. server-side) and another when the
 -- widget is fully instantiated.  In a given execution of this function, there
 -- will be exactly one invocation of exactly one of the arguments.
-prerender :: forall js t m a. (Prerender js m, DomBuilder t m) => m a -> (PrerenderClientConstraint js m => m a) -> m a
+prerender
+  :: forall js t m a. (Prerender js m, DomBuilder t m)
+  => m a -> (PrerenderClientConstraint js m => m a) -> m a
 prerender server client = do
   startPrerenderBlock
   a <- case prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)) of
@@ -93,17 +101,50 @@ instance ( HasJS js m
   prerenderClientDict = Just Dict
   startPrerenderBlock = do
     depth <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_prerenderDepth
+    d <- liftIO $ readIORef depth
+    when (d == 0) $ do
+      -- Delete up to the end marker
+      hydrateDOM $ DOM_Node deleteToPrerenderEnd
     liftIO $ modifyIORef' depth succ
   endPrerenderBlock = do
     depth <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_prerenderDepth
     liftIO $ modifyIORef' depth pred
 
+startMarker, endMarker :: IsString s => s
+startMarker = "prerender/start"
+endMarker = "prerender/end"
+
+deleteToPrerenderEnd :: (MonadIO m, MonadJSM m) => HydrationRunnerT t m ()
+deleteToPrerenderEnd = do
+  depth <- liftIO $ newIORef 0
+  startNode <- hydrateNode (\e -> do
+    n :: DOM.JSString <- Element.getTagName e
+    mt :: Maybe DOM.JSString <- Element.getAttribute e ("type" :: DOM.JSString)
+    pure $ n == "SCRIPT" && mt == Just startMarker) DOM.Element
+  endNode <- hydrateNode (\e -> do
+    n :: DOM.JSString <- Element.getTagName e
+    attrCheck <- Element.getAttribute e ("type" :: DOM.JSString) >>= \case
+      Just (t :: DOM.JSString)
+        | t == startMarker -> do
+          liftIO $ modifyIORef' depth succ
+          pure False
+        | t == endMarker -> do
+          d <- liftIO $ readIORef depth
+          if d == 0
+          then pure True
+          else do
+            liftIO $ modifyIORef' depth pred
+            pure False
+      _ -> pure False
+    pure $ n == "SCRIPT" && attrCheck) DOM.Element
+  deleteBetweenExclusive startNode endNode
+
 data NoJavaScript -- This type should never have a HasJS instance
 
 instance (Monad m, js ~ NoJavaScript, Adjustable t m, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ IORef) => Prerender js (StaticDomBuilderT t m) where
   prerenderClientDict = Nothing
-  startPrerenderBlock = void $ commentNode $ def { _commentNodeConfig_initialContents = "prerender-start" }
-  endPrerenderBlock = void $ commentNode $ def { _commentNodeConfig_initialContents = "prerender-end" }
+  startPrerenderBlock = void $ element "script" (def & initialAttributes .~ Map.singleton "type" startMarker) $ pure ()
+  endPrerenderBlock = void $ element "script" (def & initialAttributes .~ Map.singleton "type" endMarker) $ pure ()
 
 
 instance (Prerender js m, ReflexHost t) => Prerender js (PostBuildT t m) where

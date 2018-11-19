@@ -38,6 +38,8 @@ module Reflex.Dom.Builder.Hydration
        , HydrationRunnerT (..)
        , runHydrationRunnerT
        , DOM(..), runDOMForest
+       , hydrateDOM
+       , hydrateNode
        , runHydrationDomBuilderT
        , askParent
        , askEvents
@@ -399,6 +401,10 @@ getPreviousNode = HydrationRunnerT get
 setPreviousNode :: Monad m => Maybe DOM.Node -> HydrationRunnerT t m ()
 setPreviousNode = HydrationRunnerT . put
 
+{-# INLINABLE getPrerenderDepth #-}
+getPrerenderDepth :: MonadIO m => HydrationDomBuilderT t m Word
+getPrerenderDepth = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_prerenderDepth)
+
 {-# INLINABLE getParent #-}
 getParent :: MonadIO m => HydrationDomBuilderT t m DOM.Node
 getParent = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_parent)
@@ -437,8 +443,8 @@ makeNodeInternal mkNode = do
 -- @check@. The previous node reference is also updated.
 hydrateNode
   :: (MonadJSM m, IsNode node, Typeable node)
-  => (node -> HydrationRunnerT t m Bool) -> HydrationRunnerT t m node -> (DOM.JSVal -> node) -> HydrationRunnerT t m node
-hydrateNode check mkNode constructor = do
+  => (node -> HydrationRunnerT t m Bool) -> (DOM.JSVal -> node) -> HydrationRunnerT t m node
+hydrateNode check constructor = do
   parent <- askParent
   liftIO $ putStr $ show (typeRep constructor) <> ": "
   lastHydrationNode <- getPreviousNode
@@ -587,7 +593,6 @@ makeElement elementTag cfg child = do
               writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
-      -- TODO: prerender needs completely replacing
       e <- makeNodeInternal buildElement
       p <- liftIO $ newIORef $ toNode e
       -- Run the child builder with updated parent and previous sibling references
@@ -603,8 +608,15 @@ makeElement elementTag cfg child = do
       let env' = env { _hydrationDomBuilderEnv_parent = parent}
       (result, childDom) <- HydrationDomBuilderT $ lift $ lift $ runStateT (runReaderT (unHydrationDomBuilderT child) env') []
       wrapResult <- liftIO newEmptyMVar
+      prerenderDepth <- getPrerenderDepth
       let activateElement = do
-            e <- hydrateNode hasSSRAttribute buildElement DOM.Element
+            e <- case prerenderDepth of
+              0 -> hydrateNode hasSSRAttribute DOM.Element
+              _ -> do
+                e <- buildElement
+                maybe (askParent >>= \p -> Node.appendChild_ p e) (insertAfter e) =<< getPreviousNode
+                setPreviousNode $ Just $ toNode e
+                pure e
             -- Update the parent node used by the children
             liftIO $ writeIORef parent $ toNode e
             -- Setup events, store the result so we can wait on it later
@@ -644,12 +656,16 @@ textNodeInternal !t mSetContents = getHydrationMode >>= \case
     pure n
   HydrationMode_Hydrating -> do
     doc <- askDocument
+    prerenderDepth <- getPrerenderDepth
     let activateText = do
           liftIO $ putStrLn $ "Action: Text: " <> show (DOM.toJSString t)
-          n <- hydrateNode (const $ pure True) (createTextNode doc t) DOM.Text
-          --case mSetContents of
-          --  Nothing -> liftIO $ putStrLn "No update events for text"
-          --  Just e -> requestDomAction_ $ setNodeValue n . Just <$> e
+          n <- case prerenderDepth of
+            0 -> hydrateNode (const $ pure True) DOM.Text
+            _ -> do
+              tn <- createTextNode doc t
+              maybe (askParent >>= \p -> Node.appendChild_ p tn) (insertAfter tn) =<< getPreviousNode
+              setPreviousNode $ Just $ toNode tn
+              pure tn
           mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     hydrateDOM $ DOM_Node activateText
     pure $ error "textNodeInternal: DOM.Text"
@@ -663,9 +679,16 @@ commentNodeInternal !t mSetContents = getHydrationMode >>= \case
     pure n
   HydrationMode_Hydrating -> do
     doc <- askDocument
+    prerenderDepth <- getPrerenderDepth
     let activateComment = do
           liftIO $ putStrLn $ "Action: Comment: " <> show (DOM.toJSString t)
-          n <- hydrateNode (const $ pure True) (createComment doc t) DOM.Comment
+          n <- case prerenderDepth of
+            0 -> hydrateNode (const $ pure True) DOM.Comment
+            _ -> do
+              tn <- createComment doc t
+              maybe (askParent >>= \p -> Node.appendChild_ p tn) (insertAfter tn) =<< getPreviousNode
+              setPreviousNode $ Just $ toNode tn
+              pure tn
           mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     hydrateDOM $ DOM_Node activateComment
     pure $ error "commentNodeInternal: DOM.Comment"
