@@ -153,6 +153,7 @@ import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.IORef (newIORef, atomicModifyIORef')
 #if MIN_VERSION_aeson(1,0,0)
 import Data.Aeson.Text
 #else
@@ -262,11 +263,16 @@ newXMLHttpRequestWithError req cb = do
     iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
     maybe (return ()) (xmlHttpRequestSetResponseType xhr . fromResponseType) rt
     xmlHttpRequestSetWithCredentials xhr creds
+    -- Avoid handler being called more than once.
+    -- This is needed until jsaddle/ghcjs-dom: https://github.com/ghcjs/ghcjs-dom/issues/89 is fixed.
+    alreadyHandled <- liftIO $ newIORef False
     _ <- xmlHttpRequestOnreadystatechange xhr $ do
       readyState <- xmlHttpRequestGetReadyState xhr
       status <- xmlHttpRequestGetStatus xhr
       statusText <- xmlHttpRequestGetStatusText xhr
-      when (readyState == 4) $ do
+      handled <- liftIO $ atomicModifyIORef' alreadyHandled $ \handled ->
+        if readyState == 4 then (True, handled) else (handled, handled)
+      when (readyState == 4 && not handled) $ do
         t <- if rt == Just XhrResponseType_Text || isNothing rt
              then xmlHttpRequestGetResponseText xhr
              else return Nothing
