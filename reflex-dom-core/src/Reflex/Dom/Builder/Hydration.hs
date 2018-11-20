@@ -973,11 +973,19 @@ instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimM
     parent <- getParent
     (hydrateEnd, after) <- skipToReplaceEnd beforeKey
     let drawInitialChild = do
-          p <- liftIO (readIORef hydrating) >>= \case
-            HydrationMode_Hydrating -> liftIO $ newIORef parent
-            HydrationMode_Immediate -> liftIO . newIORef . toNode =<< createDocumentFragment doc
+          h <- liftIO $ readIORef hydrating
+          p' <- case h of
+            HydrationMode_Hydrating -> pure parent
+            HydrationMode_Immediate -> toNode <$> createDocumentFragment doc
+          p <- liftIO $ newIORef p'
           unreadyChildren <- liftIO $ newIORef 0
-          (result, dom) <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT a0) initialEnv
+          let a0' = case h of
+                HydrationMode_Hydrating -> a0
+                HydrationMode_Immediate -> do
+                  a <- a0
+                  insertBefore p' =<< liftIO (readIORef after)
+                  pure a
+          (result, dom) <- flip runStateT [] $ runReaderT (unHydrationDomBuilderT a0') initialEnv
             { _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
             , _hydrationDomBuilderEnv_commitAction = myCommitAction
             , _hydrationDomBuilderEnv_parent = p
