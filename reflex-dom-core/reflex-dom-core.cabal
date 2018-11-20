@@ -64,6 +64,7 @@ library
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
     primitive >= 0.5 && < 0.7,
+    random,
     ref-tf == 0.4.*,
     reflex == 0.5.*,
     semigroups >= 0.16 && < 0.19,
@@ -144,31 +145,31 @@ library
     build-depends:
       dependent-sum == 0.4.*
 
-test-suite hlint
-  build-depends: base, hlint
-  hs-source-dirs: test
-  main-is: hlint.hs
-  type: exitcode-stdio-1.0
+--test-suite hlint
+--  build-depends: base, hlint
+--  hs-source-dirs: test
+--  main-is: hlint.hs
+--  type: exitcode-stdio-1.0
 
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats
-test-suite gc
-  build-depends: base
-               , reflex
-               , reflex-dom-core
-               , jsaddle
-               , jsaddle-warp
-               , linux-namespaces
-               , process
-               , temporary
-               , unix
-  hs-source-dirs: test
-  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
-  main-is: gc.hs
-  type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64) || impl(ghc >= 8.4.0)
-    buildable: False
+--test-suite gc
+--  build-depends: base
+--               , reflex
+--               , reflex-dom-core
+--               , jsaddle
+--               , jsaddle-warp
+--               , linux-namespaces
+--               , process
+--               , temporary
+--               , unix
+--  hs-source-dirs: test
+--  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+--  ghc-prof-options: -fprof-auto -optP-DPROFILING
+--  main-is: gc.hs
+--  type: exitcode-stdio-1.0
+--  if !os(linux) || !arch(x86_64) || impl(ghc >= 8.4.0)
+--    buildable: False
 
 source-repository head
   type: git

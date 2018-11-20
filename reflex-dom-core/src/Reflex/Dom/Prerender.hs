@@ -74,30 +74,12 @@ prerender server client = do
   endPrerenderBlock
   pure a
 
-instance ( HasJS js m
-         , HasJS js (Performable m)
-         , HasJSContext m
-         , HasJSContext (Performable m)
-         , MonadJSM m
-         , MonadJSM (Performable m)
-         , MonadFix m
-         , MonadFix (Performable m)
-         , ReflexHost t
-         ) => Prerender js (ImmediateDomBuilderT t m) where
+instance (PrerenderClientConstraint js m, ReflexHost t) => Prerender js (ImmediateDomBuilderT t m) where
   prerenderClientDict = Just Dict
   startPrerenderBlock = return ()
   endPrerenderBlock = return ()
 
-instance ( HasJS js m
-         , HasJS js (Performable m)
-         , HasJSContext m
-         , HasJSContext (Performable m)
-         , MonadJSM m
-         , MonadJSM (Performable m)
-         , MonadFix m
-         , MonadFix (Performable m)
-         , ReflexHost t
-         ) => Prerender js (HydrationDomBuilderT t m) where
+instance (PrerenderClientConstraint js m, ReflexHost t) => Prerender js (HydrationDomBuilderT t m) where
   prerenderClientDict = Just Dict
   startPrerenderBlock = do
     depth <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_prerenderDepth
@@ -132,10 +114,10 @@ deleteToPrerenderEnd = do
         | t == endMarker -> do
           d <- liftIO $ readIORef depth
           if d == 0
-          then pure True
-          else do
-            liftIO $ modifyIORef' depth pred
-            pure False
+            then pure True
+            else do
+              liftIO $ modifyIORef' depth pred
+              pure False
       _ -> pure False
     pure $ n == "SCRIPT" && attrCheck) DOM.Element
   deleteBetweenInclusive startNode endNode

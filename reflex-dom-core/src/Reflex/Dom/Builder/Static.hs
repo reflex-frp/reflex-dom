@@ -264,6 +264,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
     shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
     let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
+    modify ("<!--text-->" :) -- TODO FIXME
     modify . (:) =<< case mSetContents of
       Nothing -> return (pure (escape initialContents))
       Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
