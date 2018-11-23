@@ -53,6 +53,7 @@ import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
+import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
 import System.Random (randomRIO)
 
@@ -81,6 +82,10 @@ runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> Static
 runStaticDomBuilderT (StaticDomBuilderT a) e = do
   (result, a') <- runStateT (runReaderT a e) []
   return (result, mconcat $ reverse a')
+
+instance PostBuild t m => PostBuild t (StaticDomBuilderT t m) where
+  {-# INLINABLE getPostBuild #-}
+  getPostBuild = lift getPostBuild
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (StaticDomBuilderT t m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -356,7 +361,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
-type StaticWidget x = PostBuildT DomTimeline (StaticDomBuilderT DomTimeline (PerformEventT DomTimeline DomHost))
+type StaticWidget x = StaticDomBuilderT DomTimeline (PostBuildT DomTimeline (PerformEventT DomTimeline DomHost))
 
 {-# INLINE renderStatic #-}
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
@@ -364,7 +369,7 @@ renderStatic w = do
   runDomHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let env0 = StaticDomBuilderEnv True Nothing
-    ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
+    ((res, bs), FireCommand fire) <- hostPerformEventT $ runPostBuildT (runStaticDomBuilderT w env0) postBuild
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     bs' <- sample bs

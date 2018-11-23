@@ -46,46 +46,11 @@ module Reflex.Dom.Builder.Hydration
        , askEvents
        , append
        , textNodeInternal
-       , deleteBetweenExclusive
-       , extractBetweenExclusive
-       , deleteBetweenInclusive
-       , extractBetweenInclusive
-       , deleteUpTo
-       , extractUpTo
        , SupportsHydrationDomBuilder
-       , collectUpTo
-       , collectUpToGivenParent
        , EventFilterTriggerRef (..)
        , wrap
        , makeElement
-       , GhcjsDomHandler (..)
-       , GhcjsDomHandler1 (..)
-       , GhcjsDomEvent (..)
-       , GhcjsEventFilter (..)
-       , Pair1 (..)
-       , Maybe1 (..)
-       , GhcjsEventSpec (..)
-       , HasDocument (..)
-       , ghcjsEventSpec_filters
-       , ghcjsEventSpec_handler
-       , GhcjsEventHandler (..)
-#ifndef USE_TEMPLATE_HASKELL
-       , phantom2
-#endif
        , drawChildUpdate
-       , ChildReadyState (..)
-       , ChildReadyStateInt (..)
-       , mkHasFocus
-       , insertBefore
-       , EventType
-       , defaultDomEventHandler
-       , defaultDomWindowEventHandler
-       , withIsEvent
-       , showEventName
-       , elementOnEventName
-       , windowOnEventName
-       , wrapDomEvent
-       , subscribeDomEvent
        -- * Internal
        , traverseDMapWithKeyWithAdjust'
        , hoistTraverseWithKeyWithAdjust
@@ -98,7 +63,7 @@ import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import qualified Reflex.Spider.Internal as Spider
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate hiding (askParent, append, extractBetweenExclusive, extractUpTo, collectUpToGivenParent, askEvents, wrap, makeElement, textNodeInternal, commentNodeInternal, wrapDomEvent, mkHasFocus, insertBefore, deleteBetweenExclusive, traverseIntMapWithKeyWithAdjust', traverseDMapWithKeyWithAdjust', hoistTraverseWithKeyWithAdjust, deleteUpTo, collectUpTo, hoistTraverseIntMapWithKeyWithAdjust, drawChildUpdate, subscribeDomEvent)
+import Reflex.Dom.Builder.Immediate hiding (askEvents, askParent, append, wrap, makeElement, textNodeInternal, commentNodeInternal, traverseIntMapWithKeyWithAdjust', traverseDMapWithKeyWithAdjust', hoistTraverseWithKeyWithAdjust, hoistTraverseIntMapWithKeyWithAdjust, drawChildUpdate)
 import Reflex.Dynamic
 import Reflex.Host.Class
 import qualified Reflex.Patch.DMap as PatchDMap
@@ -232,8 +197,6 @@ data HydrationDomBuilderEnv = HydrationDomBuilderEnv
   -- ^ Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
   , _hydrationDomBuilderEnv_hydrationMode :: {-# UNPACK #-} !(IORef HydrationMode)
   -- ^ In hydration mode? Should be switched to `HydrationMode_Immediate` after hydration is finished
-  , _hydrationDomBuilderEnv_prerenderDepth :: {-# UNPACK #-} !(IORef Word)
-  -- ^ TODO
   }
 
 data DOM t m
@@ -264,7 +227,6 @@ runDOMTree = \case
 
 -- | The monad which performs the delayed actions to reuse prerendered nodes and set up events
 -- State contains reference to the previous node sibling, if any.
--- TODO: This probably doesn't need to be a full transformer of `m`, seems like we only need (Reflex t, MonadJSM m, MonadReflexCreateTrigger t m, DomRenderHook t m)
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT (Maybe Node) (ReaderT Node (DomRenderHookT t m)) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
@@ -273,12 +235,18 @@ newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT
            )
 
 localRunner :: Monad m => HydrationRunnerT t m a -> Maybe Node -> Node -> HydrationRunnerT t m a
-localRunner (HydrationRunnerT m) prev = HydrationRunnerT . lift . lift . runReaderT (evalStateT m prev)
+localRunner (HydrationRunnerT m) prev parent = HydrationRunnerT . lift $ local (\_ -> parent) (evalStateT m prev)
 
 runHydrationRunnerT
   :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
   => HydrationRunnerT t m a -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
 runHydrationRunnerT (HydrationRunnerT m) prev parent = runDomRenderHookT (runReaderT (evalStateT m prev) parent)
+
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationRunnerT t m) where
+  {-# INLINABLE newEventWithTrigger #-}
+  newEventWithTrigger = lift . newEventWithTrigger
+  {-# INLINABLE newFanEventWithTrigger #-}
+  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 instance MonadTrans (HydrationRunnerT t) where
   lift = HydrationRunnerT . lift . lift . lift
@@ -287,9 +255,6 @@ hydrateDOM :: MonadIO m => DOM t m -> HydrationDomBuilderT t m ()
 hydrateDOM dom = getHydrationMode >>= \case
   HydrationMode_Hydrating -> HydrationDomBuilderT $ modify (dom :)
   HydrationMode_Immediate -> pure ()
-
--- TODO probably can separate these two monads entirely, they have grown apart
--- over the course of refactoring
 
 -- | A monad for DomBuilder which just gets the results of children and pushes
 -- work into an action that is delayed until after postBuild (to match the
@@ -404,10 +369,6 @@ getPreviousNode = HydrationRunnerT get
 setPreviousNode :: Monad m => Maybe DOM.Node -> HydrationRunnerT t m ()
 setPreviousNode = HydrationRunnerT . put
 
-{-# INLINABLE getPrerenderDepth #-}
-getPrerenderDepth :: MonadIO m => HydrationDomBuilderT t m Word
-getPrerenderDepth = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_prerenderDepth)
-
 {-# INLINABLE getParent #-}
 getParent :: MonadIO m => HydrationDomBuilderT t m DOM.Node
 getParent = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_parent)
@@ -427,7 +388,6 @@ getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationD
 {-# INLINABLE askEvents #-}
 askEvents :: Monad m => HydrationDomBuilderT t m (Chan [DSum (EventTriggerRef t) TriggerInvocation])
 askEvents = HydrationDomBuilderT . lift . lift . DomRenderHookT . lift $ TriggerEventT.askEvents
-
 
 {-# INLINABLE makeNodeInternal #-}
 makeNodeInternal
@@ -469,73 +429,7 @@ hydrateNode check constructor = do
   setPreviousNode $ Just $ toNode n
   return n
 
-
--- | s and e must both be children of the same node and s must precede e;
---   all nodes between s and e will be removed, but s and e will not be removed
-deleteBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteBetweenExclusive s e = do
-  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
-  extractBetweenExclusive df s e -- In many places in HydrationDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
-
--- | s and e must both be children of the same node and s must precede e; all
---   nodes between s and e will be moved into the given DocumentFragment, but s
---   and e will not be moved
-extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
-extractBetweenExclusive df s e = liftJSM $ do
-  f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
-  void $ call f f (df, s, e)
-
--- | s and e must both be children of the same node and s must precede e;
---   all nodes between s and e will be removed, including s and e
-deleteBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteBetweenInclusive s e = do
-  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
-  extractBetweenInclusive df s e -- In many places in HydrationDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
-
--- | s and e must both be children of the same node and s must precede e; all
---   nodes between s and e will be moved into the given DocumentFragment,
---   including s and e
-extractBetweenInclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
-extractBetweenInclusive df s e = liftJSM $ do
-  f <- eval ("(function(df,s,e) { var x = s; var next; for(;;) { next = x['nextSibling']; df['appendChild'](x); if(e===x) { break; }; x = next; } })" :: Text)
-  void $ call f f (df, s, e)
-
--- | s and e must both be children of the same node and s must precede e;
---   s and all nodes between s and e will be removed, but e will not be removed
-{-# INLINABLE deleteUpTo #-}
-deleteUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m ()
-deleteUpTo s e = do
-  df <- createDocumentFragment =<< getOwnerDocumentUnchecked s
-  extractUpTo df s e -- In many places in HydrationDomBuilderT, we assume that things always have a parent; by adding them to this DocumentFragment, we maintain that invariant
-
-extractUpTo :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
-#ifdef ghcjs_HOST_OS
---NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2017-09-04)
-foreign import javascript unsafe
-  "(function() { var x = $2; while(x !== $3) { var y = x['nextSibling']; $1['appendChild'](x); x = y; } })()"
-  extractUpTo_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
-extractUpTo df s e = liftJSM $ extractUpTo_ df (toNode s) (toNode e)
-#else
-extractUpTo df s e = liftJSM $ do
-  f <- eval ("(function(df,s,e){ var x = s; var y; for(;;) { y = x['nextSibling']; df['appendChild'](x); if(e===y) { break; } x = y; } })" :: Text)
-  void $ call f f (df, s, e)
-#endif
-
 type SupportsHydrationDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m))
-
-{-# INLINABLE collectUpTo #-}
-collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
-collectUpTo s e = do
-  currentParent <- getParentNodeUnchecked e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
-  collectUpToGivenParent currentParent s e
-
-{-# INLINABLE collectUpToGivenParent #-}
-collectUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m DOM.DocumentFragment
-collectUpToGivenParent currentParent s e = do
-  doc <- getOwnerDocumentUnchecked currentParent
-  df <- createDocumentFragment doc
-  extractUpTo df s e
-  return df
 
 -- | This 'wrap' is only partial: it doesn't create the 'EventSelector' itself
 {-# INLINABLE wrap #-}
@@ -626,15 +520,8 @@ makeElement elementTag cfg child = do
       let env' = env { _hydrationDomBuilderEnv_parent = parent}
       (result, childDom) <- HydrationDomBuilderT $ lift $ lift $ runStateT (runReaderT (unHydrationDomBuilderT child) env') []
       wrapResult <- liftIO newEmptyMVar
-      prerenderDepth <- getPrerenderDepth
       let activateElement = do
-            e <- case prerenderDepth of
-              0 -> hydrateNode hasSSRAttribute DOM.Element
-              _ -> do
-                e <- buildElement
-                maybe (askParent >>= \p -> Node.appendChild_ p e) (insertAfter e) =<< getPreviousNode
-                setPreviousNode $ Just $ toNode e
-                pure e
+            e <- hydrateNode hasSSRAttribute DOM.Element
             -- Update the parent node used by the children
             liftIO $ writeIORef parent $ toNode e
             -- Setup events, store the result so we can wait on it later
@@ -674,16 +561,9 @@ textNodeInternal !t mSetContents = getHydrationMode >>= \case
     pure n
   HydrationMode_Hydrating -> do
     doc <- askDocument
-    prerenderDepth <- getPrerenderDepth
     let activateText = do
           liftIO $ putStrLn $ "Action: Text: " <> show (DOM.toJSString t)
-          n <- case prerenderDepth of
-            0 -> hydrateNode (const $ pure True) DOM.Text
-            _ -> do
-              tn <- createTextNode doc t
-              maybe (askParent >>= \p -> Node.appendChild_ p tn) (insertAfter tn) =<< getPreviousNode
-              setPreviousNode $ Just $ toNode tn
-              pure tn
+          n <- hydrateNode (const $ pure True) DOM.Text
           mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     hydrateDOM $ DOM_Node activateText
     pure $ error "textNodeInternal: DOM.Text"
@@ -697,16 +577,9 @@ commentNodeInternal !t mSetContents = getHydrationMode >>= \case
     pure n
   HydrationMode_Hydrating -> do
     doc <- askDocument
-    prerenderDepth <- getPrerenderDepth
     let activateComment = do
           liftIO $ putStrLn $ "Action: Comment: " <> show (DOM.toJSString t)
-          n <- case prerenderDepth of
-            0 -> hydrateNode (const $ pure True) DOM.Comment
-            _ -> do
-              tn <- createComment doc t
-              maybe (askParent >>= \p -> Node.appendChild_ p tn) (insertAfter tn) =<< getPreviousNode
-              setPreviousNode $ Just $ toNode tn
-              pure tn
+          n <- hydrateNode (const $ pure True) DOM.Comment
           mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     hydrateDOM $ DOM_Node activateComment
     pure $ error "commentNodeInternal: DOM.Comment"
@@ -1446,24 +1319,11 @@ drawChildUpdateInt initialEnv markReady child = do
     , placeholder, childReadyState, result
     )
 
-mkHasFocus :: (MonadHold t m, Reflex t) => Element er d t -> m (Dynamic t Bool)
-mkHasFocus e = do
-  let initialFocus = False --TODO: Actually get the initial focus of the element
-  holdDyn initialFocus $ leftmost
-    [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-    , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-    ]
-
 insertAfter :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertAfter new existing = do
   liftIO $ putStrLn "insertAfter"
   p <- getParentNodeUnchecked existing
   Node.getNextSibling existing >>= DOM.insertBefore_ p new
-
-insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
-insertBefore new existing = do
-  p <- getParentNodeUnchecked existing
-  DOM.insertBefore_ p new (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
 instance PerformEvent t m => PerformEvent t (HydrationDomBuilderT t m) where
   type Performable (HydrationDomBuilderT t m) = Performable m
@@ -1477,12 +1337,6 @@ instance PostBuild t m => PostBuild t (HydrationDomBuilderT t m) where
   getPostBuild = lift getPostBuild
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationDomBuilderT t m) where
-  {-# INLINABLE newEventWithTrigger #-}
-  newEventWithTrigger = lift . newEventWithTrigger
-  {-# INLINABLE newFanEventWithTrigger #-}
-  newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
-
-instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationRunnerT t m) where
   {-# INLINABLE newEventWithTrigger #-}
   newEventWithTrigger = lift . newEventWithTrigger
   {-# INLINABLE newFanEventWithTrigger #-}
@@ -1524,23 +1378,6 @@ instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT t m) where
 instance (HasJS x m, ReflexHost t) => HasJS x (HydrationDomBuilderT t m) where
   type JSX (HydrationDomBuilderT t m) = JSX m
   liftJS = lift . liftJS
-
-{-# INLINABLE wrapDomEvent #-}
-wrapDomEvent :: (TriggerEvent t m, MonadJSM m) => e -> (e -> EventM e event () -> JSM (JSM ())) -> EventM e event a -> m (Event t a)
-wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ fmap Just getValue
-
-{-# INLINABLE subscribeDomEvent #-}
-subscribeDomEvent :: (EventM e event () -> JSM (JSM ()))
-                  -> EventM e event (Maybe a)
-                  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
-                  -> EventTrigger t a
-                  -> JSM (JSM ())
-subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
-  mv <- getValue
-  forM_ mv $ \v -> liftIO $ do
-    --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
-    etr <- newIORef $ Just et
-    writeChan eventChan [EventTriggerRef etr :=> TriggerInvocation v (return ())]
 
 instance MonadSample t m => MonadSample t (HydrationDomBuilderT t m) where
   {-# INLINABLE sample #-}
