@@ -92,7 +92,7 @@ instance (PrerenderClientConstraint' js m, SupportsImmediateDomBuilder t m, Refl
           }
     events <- askEvents
     a <- lift $ runImmediateDomBuilderT client env events
-    hydrateDOM $ DOM_Node $ do
+    addHydrationStep $ do
       -- Delete up to the end marker
       after <- deleteToPrerenderEnd
       insertBefore df after
