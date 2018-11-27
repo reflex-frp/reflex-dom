@@ -15,6 +15,7 @@
 module Reflex.Dom.Prerender
        ( Prerender (..)
        , prerender
+       , PrerenderClientConstraint
        ) where
 
 import Control.Lens ((&), (.~))
@@ -23,7 +24,7 @@ import Control.Monad.Ref (Ref, MonadRef)
 import Data.Bifunctor (bimap)
 import Data.Constraint
 import Data.Default
-import Data.IORef (modifyIORef', readIORef, newIORef)
+import Data.IORef (modifyIORef', readIORef, newIORef, writeIORef)
 import Data.String (IsString)
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Types as DOM
@@ -57,46 +58,45 @@ type PrerenderClientConstraint js m =
   )
 
 class Prerender js m | m -> js where
-  type PrerenderServer m :: * -> *
-  type PrerenderClient m :: * -> *
-  prerenderClientDict :: Either (PrerenderServer m a -> m a) (Dict (PrerenderClientConstraint js (PrerenderClient m)), PrerenderClient m a -> m a)
-  default prerenderClientDict :: forall n t a. (Prerender js n, MonadTrans t, m ~ t n, Monad n, Prerender js n, PrerenderServer m ~ PrerenderServer n, PrerenderClient m ~ PrerenderClient n)
-                              => Either (PrerenderServer m a -> m a) (Dict (PrerenderClientConstraint js (PrerenderClient m)), PrerenderClient m a -> m a)
-  prerenderClientDict = bimap (lift .) (\(Dict, f) -> (Dict, lift . f)) (prerenderClientDict :: Either (PrerenderServer n a -> n a) (Dict (PrerenderClientConstraint js (PrerenderClient n)), PrerenderClient n a -> n a))
+  prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m))
+  prerenderWrapper :: m (m ())
+  default prerenderWrapper :: (MonadTrans t, Monad n, m ~ t n, Prerender js n) => m (m ())
+  prerenderWrapper = lift $ lift <$> prerenderWrapper
 
 -- | Draw one widget when prerendering (e.g. server-side) and another when the
 -- widget is fully instantiated.  In a given execution of this function, there
 -- will be exactly one invocation of exactly one of the arguments.
-prerender :: forall js m a. Prerender js m => PrerenderServer m a -> (PrerenderClientConstraint js (PrerenderClient m) => PrerenderClient m a) -> m a
-prerender server client = case prerenderClientDict of
-  Left f -> f server
-  Right (Dict, f) -> f client
+prerender :: forall js m a. (Prerender js m, Monad m) => m a -> (PrerenderClientConstraint js m => m a) -> m a
+prerender server client = do
+  finalize <- prerenderWrapper
+  a <- case prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)) of
+    Nothing -> server
+    Just Dict -> client
+  finalize
+  pure a
 
 instance (PrerenderClientConstraint' js m, ReflexHost t) => Prerender js (ImmediateDomBuilderT t m) where
-  type PrerenderServer (ImmediateDomBuilderT t m) = ImmediateDomBuilderT t m
-  type PrerenderClient (ImmediateDomBuilderT t m) = ImmediateDomBuilderT t m
-  prerenderClientDict = Right (Dict, id)
+  prerenderClientDict = Just Dict
+  prerenderWrapper = pure (pure ())
 
 instance (PrerenderClientConstraint' js m, SupportsImmediateDomBuilder t m, ReflexHost t, PerformEvent t m) => Prerender js (HydrationDomBuilderT t m) where
-  type PrerenderServer (HydrationDomBuilderT t m) = HydrationDomBuilderT t m
-  type PrerenderClient (HydrationDomBuilderT t m) = ImmediateDomBuilderT t m
-  prerenderClientDict = Right $ (,) Dict $ \client -> do
-    doc <- askDocument
-    unreadyChildren <- liftIO $ newIORef 0
-    df <- Document.createDocumentFragment doc
-    let env = ImmediateDomBuilderEnv
-          { _immediateDomBuilderEnv_document = doc
-          , _immediateDomBuilderEnv_parent = DOM.toNode df
-          , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
-          , _immediateDomBuilderEnv_commitAction = pure ()
-          }
-    events <- askEvents
-    a <- lift $ runImmediateDomBuilderT client env events
-    addHydrationStep $ do
-      -- Delete up to the end marker
-      after <- deleteToPrerenderEnd
-      insertBefore df after
-    pure a
+  prerenderClientDict = Just Dict
+  prerenderWrapper = do
+    parent <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_parent
+    hydrationMode <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationMode
+    df <- Document.createDocumentFragment =<< askDocument
+    initialParent <- liftIO $ readIORef parent
+    initialHydrationMode <- liftIO $ readIORef hydrationMode
+    liftIO $ writeIORef parent $ DOM.toNode df
+    liftIO $ writeIORef hydrationMode HydrationMode_Immediate
+    pure $ do
+      liftIO $ writeIORef parent initialParent
+      liftIO $ writeIORef hydrationMode initialHydrationMode
+      addHydrationStep $ do
+        liftIO $ putStrLn "Hydration step"
+        -- Delete up to the end marker
+        after <- deleteToPrerenderEnd
+        insertBefore df after
 
 startMarker, endMarker :: IsString s => s
 startMarker = "prerender/start"
@@ -133,43 +133,29 @@ deleteToPrerenderEnd = do
 data NoJavascript -- This type should never have a HasJS instance
 
 instance (js ~ NoJavascript, SupportsStaticDomBuilder t m) => Prerender js (StaticDomBuilderT t m) where
-  type PrerenderServer (StaticDomBuilderT t m) = StaticDomBuilderT t m
-  type PrerenderClient (StaticDomBuilderT t m) = StaticDomBuilderT t m
-  prerenderClientDict = Left $ \server -> do
-    -- We must put markers around the prerendered parts because we don't
-    -- run the 'server' widget on the frontend: thus we have no idea how many
-    -- nodes should be replaced when we are hydrating
+  prerenderClientDict = Nothing
+  prerenderWrapper = do
     _ <- element "script" (def & initialAttributes .~ Map.singleton "type" startMarker) $ pure ()
-    a <- server
-    _ <- element "script" (def & initialAttributes .~ Map.singleton "type" endMarker) $ pure ()
-    pure a
+    pure $ void $ element "script" (def & initialAttributes .~ Map.singleton "type" endMarker) $ pure ()
 
+instance (Prerender js m, Monad m, ReflexHost t) => Prerender js (PostBuildT t m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m, ReflexHost t) => Prerender js (PostBuildT t m) where
-  type PrerenderServer (PostBuildT t m) = PrerenderServer m
-  type PrerenderClient (PostBuildT t m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (DynamicWriterT t w m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m) => Prerender js (DynamicWriterT t w m) where
-  type PrerenderServer (DynamicWriterT t w m) = PrerenderServer m
-  type PrerenderClient (DynamicWriterT t w m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (EventWriterT t w m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m) => Prerender js (EventWriterT t w m) where
-  type PrerenderServer (EventWriterT t w m) = PrerenderServer m
-  type PrerenderClient (EventWriterT t w m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (ReaderT w m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m) => Prerender js (ReaderT w m) where
-  type PrerenderServer (ReaderT w m) = PrerenderServer m
-  type PrerenderClient (ReaderT w m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (RequesterT t request response m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m) => Prerender js (RequesterT t request response m) where
-  type PrerenderServer (RequesterT t request response m) = PrerenderServer m
-  type PrerenderClient (RequesterT t request response m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (QueryT t q m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
-instance (Monad m, Prerender js m) => Prerender js (QueryT t q m) where
-  type PrerenderServer (QueryT t q m) = PrerenderServer m
-  type PrerenderClient (QueryT t q m) = PrerenderClient m
-
-instance (Monad m, Prerender js m) => Prerender js (InputDisabledT m) where
-  type PrerenderServer (InputDisabledT m) = PrerenderServer m
-  type PrerenderClient (InputDisabledT m) = PrerenderClient m
+instance (Prerender js m, Monad m) => Prerender js (InputDisabledT m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
