@@ -360,7 +360,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
-type StaticWidget x = StaticDomBuilderT DomTimeline (PostBuildT DomTimeline (PerformEventT DomTimeline DomHost))
+type StaticWidget x = PostBuildT DomTimeline (StaticDomBuilderT DomTimeline (PerformEventT DomTimeline DomHost))
 
 {-# INLINE renderStatic #-}
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
@@ -368,7 +368,7 @@ renderStatic w = do
   runDomHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let env0 = StaticDomBuilderEnv True Nothing
-    ((res, bs), FireCommand fire) <- hostPerformEventT $ runPostBuildT (runStaticDomBuilderT w env0) postBuild
+    ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     bs' <- sample bs
