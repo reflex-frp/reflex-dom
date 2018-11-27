@@ -40,6 +40,7 @@ module Reflex.Dom.Builder.Hydration
        , localEnv
        , addHydrationStepWithSetup
        , addHydrationStep
+       , getHydrationMode
        , hydrateNode
        , getPreviousNode, setPreviousNode
        , runHydrationDomBuilderT

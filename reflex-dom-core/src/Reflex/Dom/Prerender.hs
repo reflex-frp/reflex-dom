@@ -81,22 +81,22 @@ instance (PrerenderClientConstraint' js m, ReflexHost t) => Prerender js (Immedi
 
 instance (PrerenderClientConstraint' js m, SupportsImmediateDomBuilder t m, ReflexHost t, PerformEvent t m) => Prerender js (HydrationDomBuilderT t m) where
   prerenderClientDict = Just Dict
-  prerenderWrapper = do
-    parent <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_parent
-    hydrationMode <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationMode
-    df <- Document.createDocumentFragment =<< askDocument
-    initialParent <- liftIO $ readIORef parent
-    initialHydrationMode <- liftIO $ readIORef hydrationMode
-    liftIO $ writeIORef parent $ DOM.toNode df
-    liftIO $ writeIORef hydrationMode HydrationMode_Immediate
-    pure $ do
-      liftIO $ writeIORef parent initialParent
-      liftIO $ writeIORef hydrationMode initialHydrationMode
-      addHydrationStep $ do
-        liftIO $ putStrLn "Hydration step"
-        -- Delete up to the end marker
-        after <- deleteToPrerenderEnd
-        insertBefore df after
+  prerenderWrapper = getHydrationMode >>= \case
+    HydrationMode_Immediate -> pure (pure ())
+    HydrationMode_Hydrating -> do
+      parent <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_parent
+      hydrationMode <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_hydrationMode
+      df <- Document.createDocumentFragment =<< askDocument
+      initialParent <- liftIO $ readIORef parent
+      liftIO $ writeIORef parent $ DOM.toNode df
+      liftIO $ writeIORef hydrationMode HydrationMode_Immediate
+      pure $ do
+        liftIO $ writeIORef parent initialParent
+        liftIO $ writeIORef hydrationMode HydrationMode_Hydrating
+        addHydrationStep $ do
+          -- Delete up to the end marker
+          after <- deleteToPrerenderEnd
+          insertBefore df after
 
 startMarker, endMarker :: IsString s => s
 startMarker = "prerender/start"
