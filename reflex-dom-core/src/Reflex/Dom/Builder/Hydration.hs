@@ -37,6 +37,7 @@ module Reflex.Dom.Builder.Hydration
        , HydrationMode (..)
        , HydrationRunnerT (..)
        , runHydrationRunnerT
+       , localEnv
        , addHydrationStepWithSetup
        , addHydrationStep
        , hydrateNode
@@ -158,32 +159,6 @@ instance MonadJSM m => MonadJSM (HydrationRunnerT t m) where
 instance MonadJSM m => MonadJSM (DomRenderHookT t m) where
     liftJSM' = lift . liftJSM'
 #endif
-
-data HydrationDomSpace
-
-instance DomSpace HydrationDomSpace where
-  type EventSpec HydrationDomSpace = GhcjsEventSpec
-  type RawDocument HydrationDomSpace = DOM.Document
-  type RawTextNode HydrationDomSpace = ()
-  type RawCommentNode HydrationDomSpace = ()
-  type RawElement HydrationDomSpace = ()
-  type RawFile HydrationDomSpace = DOM.File
-  type RawInputElement HydrationDomSpace = ()
-  type RawTextAreaElement HydrationDomSpace = ()
-  type RawSelectElement HydrationDomSpace = ()
-  addEventSpecFlags _ en f es = es
-    { _ghcjsEventSpec_filters =
-        let f' = Just . GhcjsEventFilter . \case
-              Nothing -> \evt -> do
-                mEventResult <- unGhcjsEventHandler (_ghcjsEventSpec_handler es) (en, evt)
-                return (f mEventResult, return mEventResult)
-              Just (GhcjsEventFilter oldFilter) -> \evt -> do
-                (oldFlags, oldContinuation) <- oldFilter evt
-                mEventResult <- oldContinuation
-                let newFlags = oldFlags <> f mEventResult
-                return (newFlags, return mEventResult)
-        in DMap.alter f' en $ _ghcjsEventSpec_filters es
-    }
 
 data HydrationDomBuilderEnv t = HydrationDomBuilderEnv
   { _hydrationDomBuilderEnv_document :: {-# UNPACK #-} !Document
@@ -426,7 +401,7 @@ wrap
   :: forall m er t. (Reflex t, MonadJSM m, MonadReflexCreateTrigger t m, DomRenderHook t m)
   => Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> RawElement GhcjsDomSpace
-  -> RawElementConfig er t HydrationDomSpace
+  -> RawElementConfig er t GhcjsDomSpace
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
@@ -451,9 +426,9 @@ wrap events e cfg = do
 makeElement
   :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m)
   => Text
-  -> ElementConfig er t HydrationDomSpace
+  -> ElementConfig er t GhcjsDomSpace
   -> HydrationDomBuilderT t m a
-  -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), DOM.Element)
+  -> HydrationDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   ctx <- askJSM
@@ -501,7 +476,7 @@ makeElement elementTag cfg child = do
       events <- askEvents
       eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
       es <- newFanEventWithTrigger $ triggerBody eventTriggerRefs e
-      return ((Element es (), result), e)
+      return ((Element es e, result), e)
     HydrationMode_Hydrating -> do
       -- Schedule everything for after postBuild, except for getting the result itself
       parent <- liftIO $ newIORef $ error "Parent not yet initialized"
@@ -539,7 +514,8 @@ makeElement elementTag cfg child = do
             Nothing -> killThread threadId
             Just c -> c
 
-      return ((Element es (), result), error "makeElement: DOM.Element")
+      let dummyElement = error "makeElement: DOM.Element"
+      return ((Element es dummyElement, result), dummyElement)
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (Adjustable t m, MonadHold t m, MonadJSM m, MonadFix m, Reflex t) => Text -> Maybe (Event t Text) -> HydrationDomBuilderT t m DOM.Text
@@ -674,17 +650,17 @@ instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT t m
     liftIO $ modifyIORef' unreadyChildren succ
 
 instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT t m) where
-  type DomBuilderSpace (HydrationDomBuilderT t m) = HydrationDomSpace
+  type DomBuilderSpace (HydrationDomBuilderT t m) = GhcjsDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     liftIO $ putStrLn $ "Text: " <> T.unpack initialContents
-    textNodeInternal initialContents mSetContents
-    return $ TextNode ()
+    t <- textNodeInternal initialContents mSetContents
+    return $ TextNode t
   {-# INLINABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = do
     liftIO $ putStrLn $ "Comment: " <> T.unpack initialContents
-    commentNodeInternal initialContents mSetContents
-    return $ CommentNode ()
+    c <- commentNodeInternal initialContents mSetContents
+    return $ CommentNode c
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     liftIO $ putStrLn $ "Element: " <> T.unpack elementTag
@@ -738,7 +714,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
-      , _inputElement_raw = ()--domInputElement
+      , _inputElement_raw = domInputElement
       , _inputElement_files = files
       }
   {-# INLINABLE textAreaElement #-}
@@ -764,7 +740,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _textAreaElement_input = valueChangedByUI
       , _textAreaElement_hasFocus = hasFocus
       , _textAreaElement_element = e
-      , _textAreaElement_raw = ()--domTextAreaElement
+      , _textAreaElement_raw = domTextAreaElement
       }
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
@@ -789,11 +765,11 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
           , _selectElement_change = valueChangedByUI
           , _selectElement_hasFocus = hasFocus
           , _selectElement_element = e
-          , _selectElement_raw = ()--domSelectElement
+          , _selectElement_raw = domSelectElement
           }
     return (wrapped, result)
   placeRawElement _ = return () -- append . toNode
-  wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
+  wrapRawElement e _ = return $ Element (EventSelector $ const never) e -- TODO
 
 data FragmentState
   = FragmentState_Unmounted
