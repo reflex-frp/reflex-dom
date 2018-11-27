@@ -145,11 +145,11 @@ library
     build-depends:
       dependent-sum == 0.4.*
 
---test-suite hlint
---  build-depends: base, hlint
---  hs-source-dirs: test
---  main-is: hlint.hs
---  type: exitcode-stdio-1.0
+test-suite hlint
+  build-depends: base, hlint
+  hs-source-dirs: test
+  main-is: hlint.hs
+  type: exitcode-stdio-1.0
 
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats

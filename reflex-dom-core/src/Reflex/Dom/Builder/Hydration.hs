@@ -2,12 +2,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -19,10 +15,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -301,7 +293,7 @@ runHydrationDomBuilderT
   -> HydrationDomBuilderEnv t
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m (a, HydrationRunnerT t m ())
-runHydrationDomBuilderT (HydrationDomBuilderT a) env events = runDomRenderHookT (runStateT (runReaderT a env) (pure ())) events
+runHydrationDomBuilderT (HydrationDomBuilderT a) env = runDomRenderHookT (runStateT (runReaderT a env) (pure ()))
 
 instance Monad m => HasDocument (HydrationDomBuilderT t m) where
   {-# INLINABLE askDocument #-}
@@ -507,9 +499,9 @@ makeElement elementTag cfg child = do
             -- Run the cleanup, if we have it - but only when an exception is
             -- raised (we might get killed between acquiring the cleanup action
             -- from 'triggerBody' and putting it in the MVar)
-            (\m -> m)
+            id
             -- Try to put this action into the cleanup MVar
-            (\m -> putMVar cleanup m)
+            (putMVar cleanup)
         pure $ do
           tryReadMVar cleanup >>= \case
             Nothing -> killThread threadId
@@ -1223,7 +1215,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
         insertAfterPreviousNode ph
         liftIO $ writeIORef lastPlaceholderRef ph
   addHydrationStepWithSetup (accumMaybeB (flip apply) delayed0 delayed') $ \delayed -> do
-    join $ sample (sequence . fmap (\(_ :=> Const d) -> d) . DMap.toList <$> delayed)
+    join $ sample (traverse (\(_ :=> Const d) -> d) . DMap.toList <$> delayed)
     setFinalPlaceholder
   liftIO $ writeIORef placeholders $! placeholders0
   getHydrationMode >>= \case
