@@ -657,6 +657,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
     (checkedChangedByUI, triggerCheckedChangedByUI) <- newTriggerEvent
     (checkedChangedBySetChecked, triggerCheckedChangedBySetChecked) <- newTriggerEvent
 
+    (fileChange, triggerFileChange) <- newTriggerEvent
+
     -- Expected initial value from config
     let v0 = _inputElementConfig_initialValue cfg
 
@@ -697,10 +699,12 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
           Input.setChecked domInputElement newChecked
           when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
 
---          files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Events.change) $ do
---            mfiles <- Input.getFiles domInputElement
---            let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
---            maybe (return []) getMyFiles mfiles
+      liftJSM $ domInputElement `on` Events.change $ do
+        mfiles <- Input.getFiles domInputElement
+        let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
+        liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
+
+      return ()
 
     checked' <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
       [ checkedChangedBySetChecked
@@ -716,6 +720,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , valueChangedByUI
       ]
 
+    files <- holdDyn mempty fileChange
+
     return $ InputElement
       { _inputElement_value = v
       , _inputElement_checked = checked
@@ -723,8 +729,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
-      , _inputElement_raw = undefined -- domInputElement
-      , _inputElement_files = undefined -- files
+      , _inputElement_raw = undefined -- TODO domInputElement
+      , _inputElement_files = files
       }
 
   {-# INLINABLE textAreaElement #-}

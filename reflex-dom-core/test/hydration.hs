@@ -19,7 +19,7 @@ import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Text (Text)
-import Language.Javascript.JSaddle (JSException(..), syncPoint)
+import Language.Javascript.JSaddle (JSException(..), syncPoint, liftJSM)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Wai
@@ -31,11 +31,13 @@ import System.Timeout
 import Test.Hspec
 import Test.HUnit
 import Test.WebDriver (WD)
+import qualified GHCJS.DOM.Types as DOM (File)
+import qualified GHCJS.DOM.File as File
 
 --import System.IO.Silently
 import System.IO.Temp
-import System.IO
-import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import System.Directory
+import qualified System.FilePath as FilePath
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
@@ -265,6 +267,22 @@ main = hspec $ parallel $ do
           & inputElementConfig_setChecked .~ setChecked
         performEvent_ $ liftIO . writeIORef checkedByUIRef <$> _inputElement_checkedChange e
         performEvent_ $ liftIO . writeIORef checkedRef <$> updated (_inputElement_checked e)
+    it "captures file uploads" $ do
+      filesRef :: IORef [Text] <- newIORef []
+      let uploadFile = do
+            e <- WD.findElem $ WD.ByTag "input"
+            path <- liftIO $ writeSystemTempFile "testFile" "file contents"
+            WD.sendKeys (T.pack path) e
+            WD.click <=< WD.findElem $ WD.ByTag "button"
+            liftIO $ removeFile path
+            input <- liftIO $ readIORef filesRef
+            liftIO $ input `shouldBe` [T.pack $ FilePath.takeFileName path]
+      testWidget (pure ()) uploadFile $ do
+        e <- inputElement $ def & initialAttributes .~ "type" =: "file"
+        click <- button "save"
+        prerender (pure ()) $ performEvent_ $ ffor (tag (current (_inputElement_files e)) click) $ \fs -> do
+          names <- liftJSM $ traverse File.getName fs
+          liftIO $ writeIORef filesRef names
 
   describe "prerender" $ parallel $ do
     it "works in simple case" $ do

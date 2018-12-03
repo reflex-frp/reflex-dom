@@ -156,6 +156,8 @@ test-suite hydration
                , aeson
                , bytestring
                , containers
+               , directory
+               , filepath
                , exceptions
                , ghcjs-dom
                , hspec
