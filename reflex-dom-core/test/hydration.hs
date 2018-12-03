@@ -258,15 +258,8 @@ main = hspec $ parallel $ do
               readIORef checkedRef >>= flip shouldBe False
       testWidget (pure ()) checkValue $ do
         (setChecked, triggerSetChecked) <- newTriggerEvent
-        liftIO $ triggerSetChecked False
-        liftIO $ forkIO $ forever $ do
-          liftIO $ putStrLn "before"
+        prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
           triggerSetChecked =<< readChan setCheckedChan
-          liftIO $ putStrLn "after"
-        performEvent_ $ ffor setChecked $ \c -> do
-          liftIO $ do
-            putStrLn "---------------setChecked"
-            print c
         e <- inputElement $ def
           & initialAttributes .~ "type" =: "checkbox"
           & inputElementConfig_setChecked .~ setChecked
@@ -296,7 +289,6 @@ main = hspec $ parallel $ do
     it "works inside other element" $ do
       testWidget (checkTextInTag "div" "One") (checkTextInTag "div" "Two") $ do
         el "div" $ prerender (text "One") (text "Two")
-
     it "places fences and removes them" $ do
       testWidget'
         (do
@@ -335,7 +327,7 @@ checkTextInId i expected = do
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
 
-type TestWidget js t m = (DomBuilder t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m, MonadIO m)
+type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m, MonadIO m)
 
 testWidgetStatic
   :: WD b
