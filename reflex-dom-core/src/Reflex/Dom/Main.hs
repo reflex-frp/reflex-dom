@@ -17,6 +17,8 @@ module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
+import Reflex.Adjustable.Class
+import Reflex.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.Hydration
 import Reflex.Dom.Class
@@ -25,6 +27,8 @@ import Reflex.PerformEvent.Base
 import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 import Reflex.TriggerEvent.Base
+import Reflex.TriggerEvent.Class
+import qualified Reflex.TriggerEvent.Base as TriggerEvent
 
 import Reflex.Dom.Specializations () -- For SPECIALIZATION pragmas, which are always re-exported
 
@@ -35,6 +39,7 @@ import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence
 import Control.Monad.Ref
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
+import Data.Foldable (for_)
 import Data.IORef
 import Data.Maybe
 import Data.Monoid ((<>))
@@ -52,6 +57,105 @@ import qualified GHCJS.DOM.Types as DOM
 #ifdef PROFILE_REFLEX
 import Reflex.Profiled
 #endif
+
+{-# INLINE mainHydrationWidget #-}
+mainHydrationWidget :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidget = mainHydrationWidget'
+
+{-# INLINABLE mainHydrationWidget' #-}
+-- | Warning: `mainHydrationWidget'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainHydrationWidget' :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidget' = mainHydrationWidgetWithSwitchoverAction' (pure ())
+
+{-# INLINE mainHydrationWidgetWithSwitchoverAction #-}
+mainHydrationWidgetWithSwitchoverAction :: IO () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverAction'
+
+{-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
+-- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainHydrationWidgetWithSwitchoverAction' :: IO () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithSwitchoverAction' switchoverAction head body = do
+  runHydrationWidgetWithHeadAndBody switchoverAction $ \appendHead appendBody -> do
+    appendHead head
+    appendBody body
+
+{-# INLINABLE attachHydrationWidget #-}
+attachHydrationWidget
+  :: IO ()
+  -> IORef HydrationMode
+  -> IORef [(Node, HydrationRunnerT DomTimeline (PostBuildT DomTimeline (WithJSContextSingleton () (PerformEventT DomTimeline DomHost))) ())]
+  -> JSContextSingleton ()
+  -> (EventChannel -> Event DomTimeline () -> PerformEventT DomTimeline DomHost (IORef (Maybe (EventTrigger DomTimeline ()))))
+  -> IO ()
+attachHydrationWidget switchoverAction hydrationMode rootNodesRef jsSing w = do
+  events <- newChan
+  runDomHost $ flip runTriggerEventT events $ mdo
+    (syncEvent, fireSync) <- newTriggerEvent
+    (postBuildTriggerRef, fc@(FireCommand fire)) <- lift $ hostPerformEventT $ do
+      a <- w events syncEvent
+      runWithReplace (return ()) $ delayedAction <$ syncEvent
+      pure a
+    mPostBuildTrigger <- readRef postBuildTriggerRef
+    lift $ forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+    liftIO $ fireSync ()
+    rootNodes <- liftIO $ readIORef rootNodesRef
+    -- TODO: DomHost is SpiderHost Global only if we're not in profiling mode
+    let delayedAction = do
+          for_ (reverse rootNodes) $ \(rootNode, runner) -> do
+            void $ runWithJSContextSingleton (runPostBuildT (runHydrationRunnerT runner Nothing rootNode events) never) jsSing
+          liftIO $ writeIORef hydrationMode HydrationMode_Immediate
+          liftIO $ switchoverAction
+    liftIO $ processAsyncEvents events fc
+
+type HydrationWidget x a = HydrationDomBuilderT DomTimeline (DomCoreWidget x) a
+
+-- | A widget that isn't attached to any particular part of the DOM hierarchy
+type FloatingWidget x = TriggerEventT DomTimeline (DomCoreWidget x)
+
+type DomCoreWidget x = PostBuildT DomTimeline (WithJSContextSingleton x (PerformEventT DomTimeline DomHost))
+
+runHydrationWidgetWithHeadAndBody
+  :: IO ()
+  -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head"
+      -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body"
+      -> FloatingWidget () ()
+     )
+  -> JSM ()
+runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
+  globalDoc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked globalDoc
+  bodyElement <- getBodyUnchecked globalDoc
+  unreadyChildren <- liftIO $ newIORef 0
+  hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
+  hydrationResult <- liftIO $ newIORef []
+  liftIO $ attachHydrationWidget switchoverAction hydrationMode hydrationResult jsSing $ \events switchover -> flip runWithJSContextSingleton jsSing $ do
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
+        hydrateDom n w = do
+          events' <- TriggerEvent.askEvents
+          parent <- liftIO $ newIORef $ toNode n
+          lift $ do
+            let builderEnv = HydrationDomBuilderEnv
+                  { _hydrationDomBuilderEnv_document = globalDoc
+                  , _hydrationDomBuilderEnv_parent = parent
+                  , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
+                  , _hydrationDomBuilderEnv_commitAction = pure ()
+                  , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
+                  , _hydrationDomBuilderEnv_switchover = switchover
+                  }
+            (a, res) <- runHydrationDomBuilderT w builderEnv events'
+            liftIO $ modifyIORef' hydrationResult ((n, res) :)
+            pure a
+    flip runPostBuildT postBuild $ flip runTriggerEventT events $ app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)
+--    liftIO (readIORef unreadyChildren) >>= \case
+--      0 -> DOM.liftJSM commit
+--      _ -> return ()
+    return postBuildTriggerRef
+
+
+
+
+
 
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()

@@ -2,7 +2,8 @@ module Reflex.Dom.Core (module X) where
 
 import Reflex as X hiding (askEvents)
 import Reflex.Dom.Builder.Class as X
-import Reflex.Dom.Builder.Immediate as X
+import Reflex.Dom.Builder.Hydration as X
+--import Reflex.Dom.Builder.Immediate as X
 import Reflex.Dom.Builder.InputDisabled as X
 import Reflex.Dom.Builder.Static as X
 import Reflex.Dom.Class as X

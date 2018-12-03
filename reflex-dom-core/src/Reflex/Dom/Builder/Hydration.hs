@@ -84,7 +84,7 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', for_)
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
@@ -204,8 +204,9 @@ addHydrationStepWithSetup :: (Adjustable t m, MonadIO m) => m a -> (a -> Hydrati
 addHydrationStepWithSetup setup f = getHydrationMode >>= \case
   HydrationMode_Immediate -> pure ()
   HydrationMode_Hydrating -> do
-    pb <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_switchover -- Use postBuild as a proxy for switchover to immediate mode TODO is this correct?
-    (s, _) <- lift $ runWithReplace setup $ return () <$ pb
+    switchover <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_switchover
+    --s <- lift setup
+    (s, _) <- lift $ runWithReplace setup $ return () <$ switchover -- 4% more memory than above
     HydrationDomBuilderT $ modify' (>> f s)
 
 -- | Add a hydration step
@@ -352,8 +353,6 @@ makeNodeInternal
   :: forall node t m. (MonadJSM m, IsNode node, Typeable node)
   => HydrationDomBuilderT t m node -> HydrationDomBuilderT t m node
 makeNodeInternal mkNode = do
-  liftIO $ putStr $ show (typeRep (Proxy :: Proxy node)) <> ": "
-  liftIO $ putStrLn $ "Not in hydration mode, creating node"
   n <- mkNode
   append $ toNode n
   return n
@@ -367,21 +366,14 @@ hydrateNode
   => (node -> HydrationRunnerT t m Bool) -> (DOM.JSVal -> node) -> HydrationRunnerT t m node
 hydrateNode check constructor = do
   parent <- askParent
-  liftIO $ putStr $ show (typeRep constructor) <> ": "
   lastHydrationNode <- getPreviousNode
   let go mLastNode = do
         node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
         DOM.castTo constructor node >>= \case
-          Nothing -> do
-            liftIO $ putStr $ "Wrong node type, skipping... "
-            go (Just node)
+          Nothing -> go (Just node)
           Just tn -> check tn >>= \case
-            True -> do
-              liftIO $ putStr $ "Using existing node... "
-              return tn
-            False -> do
-              liftIO $ putStr $ "Node failed check, skipping... "
-              go (Just node)
+            True -> return tn
+            False -> go (Just node)
   n <- go lastHydrationNode
   setPreviousNode $ Just $ toNode n
   return n
@@ -421,7 +413,7 @@ makeElement
   => Text
   -> ElementConfig er t GhcjsDomSpace
   -> HydrationDomBuilderT t m a
-  -> HydrationDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+  -> HydrationDomBuilderT t m ((Element er GhcjsDomSpace t, a), IORef DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   ctx <- askJSM
@@ -469,18 +461,21 @@ makeElement elementTag cfg child = do
       events <- askEvents
       eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
       es <- newFanEventWithTrigger $ triggerBody eventTriggerRefs e
-      return ((Element es e, result), e)
+      e' <- liftIO $ newIORef e
+      return ((Element es e, result), e')
     HydrationMode_Hydrating -> do
       -- Schedule everything for after postBuild, except for getting the result itself
       parent <- liftIO $ newIORef $ error "Parent not yet initialized"
+      e' <- liftIO $ newIORef $ error "makeElement: Element not yet initialized"
       env <- HydrationDomBuilderT ask
-      let env' = env { _hydrationDomBuilderEnv_parent = parent}
+      let env' = env { _hydrationDomBuilderEnv_parent = parent }
       (result, childDom) <- HydrationDomBuilderT $ lift $ lift $ runStateT (runReaderT (unHydrationDomBuilderT child) env') (pure ())
       wrapResult <- liftIO newEmptyMVar
       let activateElement = do
             e <- hydrateNode hasSSRAttribute DOM.Element
             -- Update the parent node used by the children
             liftIO $ writeIORef parent $ toNode e
+            liftIO $ writeIORef e' e
             -- Setup events, store the result so we can wait on it later
             refs <- wrap events e $ extractRawElementConfig cfg
             liftIO $ putMVar wrapResult (e, refs)
@@ -508,7 +503,7 @@ makeElement elementTag cfg child = do
             Just c -> c
 
       let dummyElement = error "makeElement: DOM.Element"
-      return ((Element es dummyElement, result), dummyElement)
+      return ((Element es dummyElement, result), e')
 
 {-# INLINABLE textNodeInternal #-}
 textNodeInternal :: (Adjustable t m, MonadHold t m, MonadJSM m, MonadFix m, Reflex t) => Text -> Maybe (Event t Text) -> HydrationDomBuilderT t m DOM.Text
@@ -566,7 +561,6 @@ commentNodeInternal !t mSetContents = getHydrationMode >>= \case
   HydrationMode_Hydrating -> do
     doc <- askDocument
     addHydrationStep $ do
-      liftIO $ putStrLn $ "Action: Comment: " <> show (DOM.toJSString t)
       n <- hydrateNode (const $ pure True) DOM.Comment
       mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     pure $ error "commentNodeInternal: DOM.Comment"
@@ -601,14 +595,11 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
                 Just key -> do
                   -- Replace the comment with an (invisible) text node
                   textNode <- createTextNode doc ("" :: Text)
-                  liftIO $ putStr "Replacing existing comment..."
                   Node.replaceChild_ parent textNode comment
                   pure (textNode, key)
                 Nothing -> do
-                  liftIO $ putStr "Bad key in comment, skipping... "
                   go key0 (Just node)
             Nothing -> do
-              liftIO $ putStr "Not a comment, skipping... "
               go key0 (Just node)
         switchComment = do
           key0 <- liftIO $ readIORef key0Ref
@@ -646,73 +637,100 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
   type DomBuilderSpace (HydrationDomBuilderT t m) = GhcjsDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
-    liftIO $ putStrLn $ "Text: " <> T.unpack initialContents
     t <- textNodeInternal initialContents mSetContents
     return $ TextNode t
   {-# INLINABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = do
-    liftIO $ putStrLn $ "Comment: " <> T.unpack initialContents
     c <- commentNodeInternal initialContents mSetContents
     return $ CommentNode c
   {-# INLINABLE element #-}
   element elementTag cfg child = do
-    liftIO $ putStrLn $ "Element: " <> T.unpack elementTag
     fst <$> makeElement elementTag cfg child
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
-    ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
-    let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
-    Input.setValue domInputElement $ cfg ^. inputElementConfig_initialValue
-    v0 <- Input.getValue domInputElement
-    let getMyValue = Input.getValue domInputElement
-    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
-      Nothing -> return never
-      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        Input.setValue domInputElement v'
-        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    ((e, _), domElementRef) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
+
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+    (checkedChangedByUI, triggerCheckedChangedByUI) <- newTriggerEvent
+    (checkedChangedBySetChecked, triggerCheckedChangedBySetChecked) <- newTriggerEvent
+
+    -- Expected initial value from config
+    let v0 = _inputElementConfig_initialValue cfg
+
+    addHydrationStep $ do
+      domElement <- liftIO $ readIORef domElementRef
+      let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
+          getValue = Input.getValue domInputElement
+
+      -- The browser might have messed with the value, or the user could have
+      -- altered it before activation, so we set it if it isn't what we expect
+      liftJSM getValue >>= \v0' -> do
+        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+
+      case _inputElementConfig_setValue cfg of
+        Nothing -> pure ()
+        Just eSetValue -> requestDomAction_ $ ffor eSetValue $ \v' -> do
+          Input.setValue domInputElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+
+      -- TODO look at initial focus at hydration time?
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+
+      Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
+      liftJSM $ domInputElement `on` Events.click $ do
+        liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
+
+      for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
+        requestDomAction $ ffor eNewchecked $ \newChecked -> do
+          oldChecked <- Input.getChecked domInputElement
+          Input.setChecked domInputElement newChecked
+          when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
+
+--          files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Events.change) $ do
+--            mfiles <- Input.getFiles domInputElement
+--            let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
+--            maybe (return []) getMyFiles mfiles
+
+    checked' <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
+      [ checkedChangedBySetChecked
+      , checkedChangedByUI
+      ]
+    checked <- holdUniqDyn checked'
+
+    let initialFocus = False --TODO: Is this correct?
+    hasFocus <- holdDyn initialFocus focusChange
+
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
-    Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
-    checkedChangedByUI <- wrapDomEvent domInputElement (`on` Events.click) $ do
-      Input.getChecked domInputElement
-    checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
-      Nothing -> return never
-      Just eNewchecked -> requestDomAction $ ffor eNewchecked $ \newChecked -> do
-        oldChecked <- Input.getChecked domInputElement
-        Input.setChecked domInputElement newChecked
-        return $ if newChecked /= oldChecked
-                    then Just newChecked
-                    else Nothing
-    c <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
-      [ fmapMaybe id checkedChangedBySetChecked
-      , checkedChangedByUI
-      ]
-    let initialFocus = False --TODO: Is this correct?
-    hasFocus <- holdDyn initialFocus $ leftmost
-      [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-      , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-      ]
-    files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Events.change) $ do
-      mfiles <- Input.getFiles domInputElement
-      let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
-      maybe (return []) getMyFiles mfiles
-    checked <- holdUniqDyn c
+
     return $ InputElement
       { _inputElement_value = v
       , _inputElement_checked = checked
-      , _inputElement_checkedChange =  checkedChangedByUI
+      , _inputElement_checkedChange = checkedChangedByUI
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
-      , _inputElement_raw = domInputElement
-      , _inputElement_files = files
+      , _inputElement_raw = undefined -- domInputElement
+      , _inputElement_files = undefined -- files
       }
+
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
-    ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    ((e, _), domElement') <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    let domElement = undefined :: DOM.HTMLTextAreaElement
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
     v0 <- TextArea.getValue domTextAreaElement
@@ -737,7 +755,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       }
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
-    ((e, result), domElement) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
+    ((e, result), domElement') <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
+    let domElement = undefined :: DOM.HTMLSelectElement
     let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
     Select.setValue domSelectElement $ cfg ^. selectElementConfig_initialValue
     v0 <- Select.getValue domSelectElement

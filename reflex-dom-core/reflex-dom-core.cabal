@@ -151,6 +151,37 @@ test-suite hlint
   main-is: hlint.hs
   type: exitcode-stdio-1.0
 
+test-suite hydration
+  build-depends: base
+               , aeson
+               , bytestring
+               , containers
+               , exceptions
+               , ghcjs-dom
+               , hspec
+               , http-types
+               , HUnit
+               , jsaddle
+               , jsaddle-warp
+               , random
+               , reflex == 0.5.*
+               , reflex-dom-core
+               , silently
+               , temporary
+               , text
+               , wai
+               , wai-websockets
+               , warp
+               , webdriver
+               , websockets
+  hs-source-dirs: test
+  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  main-is: hydration.hs
+  type: exitcode-stdio-1.0
+  if !os(linux) || !arch(x86_64)-- || impl(ghc >= 8.4.0)
+    buildable: False
+
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats
 test-suite gc
