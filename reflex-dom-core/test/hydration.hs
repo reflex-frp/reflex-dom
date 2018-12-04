@@ -27,6 +27,7 @@ import Network.Wai
 import Network.WebSockets
 import Reflex.Dom.Core
 import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
+import System.Process
 import System.Random
 import System.Timeout
 import Test.Hspec
@@ -59,7 +60,7 @@ chromeConfig = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/run/current-s
 -- parallel (requires port fix)
 
 main :: IO ()
-main = hspec $ parallel $ do
+main = hspec $ parallel $ beforeAll startSeleniumServer $ do
 
   describe "text" $ parallel $ do
     it "works" $ do
@@ -590,6 +591,15 @@ main = hspec $ parallel $ do
         )
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender (text "One") (text "Two"))
+
+startSeleniumServer :: IO ()
+startSeleniumServer = do
+  (_,_,_,ph) <- createProcess $ (proc "selenium-server" [])
+    { std_in = NoStream
+    , std_out = NoStream
+    }
+  _ <- forkIO $ print =<< waitForProcess ph
+  threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
 
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k

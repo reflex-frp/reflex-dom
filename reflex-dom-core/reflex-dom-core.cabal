@@ -168,6 +168,7 @@ test-suite hydration
                , random
                , reflex == 0.5.*
                , reflex-dom-core
+               , process
                , silently
                , temporary
                , text
@@ -177,7 +178,7 @@ test-suite hydration
                , webdriver
                , websockets
   hs-source-dirs: test
-  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -threaded -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
