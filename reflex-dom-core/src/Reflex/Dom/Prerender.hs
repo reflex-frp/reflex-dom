@@ -20,8 +20,6 @@ module Reflex.Dom.Prerender
 
 import Control.Lens ((&), (.~))
 import Control.Monad.Reader
-import Control.Monad.Ref (Ref, MonadRef)
-import Data.Bifunctor (bimap)
 import Data.Constraint
 import Data.Default
 import Data.IORef (modifyIORef', readIORef, newIORef, writeIORef)
@@ -31,12 +29,11 @@ import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.Document as Document
 import qualified Data.Map as Map
 import Foreign.JavaScript.TH
-import GHC.IORef (IORef)
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.InputDisabled
-import Reflex.Dom.Builder.Immediate (GhcjsDomSpace, ImmediateDomBuilderT, runImmediateDomBuilderT, ImmediateDomBuilderEnv(..), SupportsImmediateDomBuilder, insertBefore, deleteBetweenExclusive)
+import Reflex.Dom.Builder.Immediate (GhcjsDomSpace, ImmediateDomBuilderT, SupportsImmediateDomBuilder, insertBefore, deleteBetweenExclusive)
 import Reflex.Dom.Builder.Hydration
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
@@ -104,8 +101,7 @@ endMarker = "prerender/end"
 
 deleteToPrerenderEnd :: (MonadIO m, MonadJSM m) => HydrationRunnerT t m DOM.Element
 deleteToPrerenderEnd = do
-  depth <- liftIO $ newIORef 0
-  ref <- getPreviousNode
+  depth <- liftIO $ newIORef (0 :: Int)
   startNode <- hydrateNode (\e -> do
     n :: DOM.JSString <- Element.getTagName e
     mt :: Maybe DOM.JSString <- Element.getAttribute e ("type" :: DOM.JSString)

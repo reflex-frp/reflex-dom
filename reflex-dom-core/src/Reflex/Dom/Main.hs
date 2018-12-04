@@ -74,9 +74,9 @@ mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverActio
 {-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
 -- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
 mainHydrationWidgetWithSwitchoverAction' :: IO () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithSwitchoverAction' switchoverAction head body = do
+mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body = do
   runHydrationWidgetWithHeadAndBody switchoverAction $ \appendHead appendBody -> do
-    appendHead head
+    appendHead head'
     appendBody body
 
 {-# INLINABLE attachHydrationWidget #-}
@@ -93,7 +93,7 @@ attachHydrationWidget switchoverAction hydrationMode rootNodesRef jsSing w = do
     (syncEvent, fireSync) <- newTriggerEvent
     (postBuildTriggerRef, fc@(FireCommand fire)) <- lift $ hostPerformEventT $ do
       a <- w events syncEvent
-      runWithReplace (return ()) $ delayedAction <$ syncEvent
+      _ <- runWithReplace (return ()) $ delayedAction <$ syncEvent
       pure a
     mPostBuildTrigger <- readRef postBuildTriggerRef
     lift $ forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()

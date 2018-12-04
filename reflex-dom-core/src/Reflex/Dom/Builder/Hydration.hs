@@ -51,22 +51,6 @@ module Reflex.Dom.Builder.Hydration
        , hoistTraverseIntMapWithKeyWithAdjust
        ) where
 
-import Foreign.JavaScript.TH
-import Reflex.Adjustable.Class
-import Reflex.Class as Reflex
-import qualified Reflex.Spider.Internal as Spider
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate hiding (askEvents, askParent, append, wrap, makeElement, textNodeInternal, commentNodeInternal, traverseIntMapWithKeyWithAdjust', traverseDMapWithKeyWithAdjust', hoistTraverseWithKeyWithAdjust, hoistTraverseIntMapWithKeyWithAdjust, drawChildUpdate)
-import Reflex.Dynamic
-import Reflex.Host.Class
-import qualified Reflex.Patch.DMap as PatchDMap
-import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Base hiding (askEvents)
-import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
-import Reflex.TriggerEvent.Class
-
 import Control.Concurrent
 import Control.Exception (bracketOnError)
 import Control.Lens hiding (element, ix)
@@ -75,71 +59,64 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Control.Monad.Trans.Maybe
-#ifndef USE_TEMPLATE_HASKELL
-import Data.Functor.Contravariant (phantom)
-#endif
-import Data.Bitraversable
-import Data.Default
 import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
-import Data.Foldable (foldl', for_)
+import Data.FastMutableIntMap (PatchIntMap (..))
+import Data.Foldable (for_)
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
 import Data.Functor.Product
 import Data.IORef
-import qualified Data.Map as Map
+import Data.IntMap.Strict (IntMap)
 import Data.Maybe
-import Data.Monoid hiding (Product)
-import Data.Some (Some)
-import qualified Data.Some as Some
 import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Typeable (Typeable, typeRep, Proxy(..))
-import GHC.Generics (Generic)
-import qualified GHCJS.DOM as DOM
+import Data.Typeable (Typeable)
+import Foreign.JavaScript.Internal.Utils
+import Foreign.JavaScript.TH
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
-import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute, hasAttributeNS)
+import GHCJS.DOM.Element (removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute, hasAttributeNS)
+import GHCJS.DOM.EventM (on)
+import GHCJS.DOM.Node (appendChild_, setNodeValue, toNode)
+import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, IsNode, Node, ToDOMString, uncheckedCastTo)
+import Reflex.Adjustable.Class
+import Reflex.Class as Reflex
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Immediate hiding (askEvents, askParent, append, wrap, makeElement, textNodeInternal, traverseIntMapWithKeyWithAdjust', traverseDMapWithKeyWithAdjust', hoistTraverseWithKeyWithAdjust, hoistTraverseIntMapWithKeyWithAdjust, drawChildUpdate)
+import Reflex.Dynamic
+import Reflex.Host.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
+import Reflex.Requester.Base
+import Reflex.Requester.Class
+import Reflex.TriggerEvent.Base hiding (askEvents)
+import Reflex.TriggerEvent.Class
+
+import qualified Data.Dependent.Map as DMap
+import qualified Data.FastMutableIntMap as FastMutableIntMap
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Map as Map
+import qualified Data.Some as Some
+import qualified Data.Text as T
+import qualified GHCJS.DOM as DOM
+import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
 import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.Event as Event
-import qualified GHCJS.DOM.GlobalEventHandlers as Events
-import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
-import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.FileList as FileList
-import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
-import GHCJS.DOM.MouseEvent
-import qualified GHCJS.DOM.Touch as Touch
-import qualified GHCJS.DOM.TouchEvent as TouchEvent
-import qualified GHCJS.DOM.TouchList as TouchList
-import GHCJS.DOM.Node (appendChild_, getChildNodes, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
-import qualified GHCJS.DOM.Node as DOM (insertBefore_)
 import qualified GHCJS.DOM.Node as Node
-import qualified GHCJS.DOM.NodeList as NodeList
 import qualified GHCJS.DOM.Text as DOM
-import GHCJS.DOM.Types
-       (liftJSM, askJSM, runJSM, JSM, MonadJSM,
-        FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node,
-        ToDOMString, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import qualified GHCJS.DOM.Types as DOM
-import GHCJS.DOM.UIEvent
-import GHCJS.DOM.KeyboardEvent as KeyboardEvent
-import qualified GHCJS.DOM.Window as Window
-import Language.Javascript.JSaddle (call, eval, jsg, js1)
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
-import Data.FastMutableIntMap (PatchIntMap (..))
-import qualified Data.FastMutableIntMap as FastMutableIntMap
-import System.IO.Unsafe (unsafePerformIO)
+import qualified Reflex.Patch.DMap as PatchDMap
+import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
+import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
-import Reflex.Requester.Base
-import Reflex.Requester.Class
-import Foreign.JavaScript.Internal.Utils
+#ifndef USE_TEMPLATE_HASKELL
+import Data.Functor.Contravariant (phantom)
+#endif
 
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
@@ -166,7 +143,7 @@ data HydrationDomBuilderEnv t = HydrationDomBuilderEnv
   -- ^ Action to take when all children are ready --TODO: we should probably get rid of this once we invoke it
   , _hydrationDomBuilderEnv_hydrationMode :: {-# UNPACK #-} !(IORef HydrationMode)
   -- ^ In hydration mode? Should be switched to `HydrationMode_Immediate` after hydration is finished
-  , _hydrationDomBuilderEnv_switchover :: {-# UNPACK #-} !(Event t ())
+  , _hydrationDomBuilderEnv_switchover :: !(Event t ())
   }
 
 -- | The monad which performs the delayed actions to reuse prerendered nodes and set up events
@@ -461,7 +438,6 @@ makeElement elementTag cfg child = do
       p <- liftIO $ newIORef $ toNode e
       -- Run the child builder with updated parent and previous sibling references
       result <- localEnv (\env -> env { _hydrationDomBuilderEnv_parent = p }) child
-      events <- askEvents
       eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
       es <- newFanEventWithTrigger $ triggerBody eventTriggerRefs e
       e' <- liftIO $ newIORef e
@@ -516,7 +492,6 @@ textNodeInternal !t mSetContents = getHydrationMode >>= \case
     mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     pure n
   HydrationMode_Hydrating -> do
-    doc <- askDocument
     addHydrationStepWithSetup (maybe (pure $ pure t) (hold t) mSetContents) $ \currentText -> do
       n <- hydrateTextNode =<< sample currentText
       mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
@@ -530,9 +505,9 @@ textNodeInternal !t mSetContents = getHydrationMode >>= \case
 hydrateTextNode :: MonadJSM m => Text -> HydrationRunnerT t m DOM.Text
 hydrateTextNode t@"" = do
   doc <- Node.getOwnerDocumentUnchecked =<< askParent
-  textNode <- createTextNode doc t
-  insertAfterPreviousNode textNode
-  pure textNode
+  tn <- createTextNode doc t
+  insertAfterPreviousNode tn
+  pure tn
 hydrateTextNode t = do
   n <- join $ go <$> askParent <*> getPreviousNode
   setPreviousNode $ Just $ toNode n
@@ -562,7 +537,6 @@ commentNodeInternal !t mSetContents = getHydrationMode >>= \case
     mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
     pure n
   HydrationMode_Hydrating -> do
-    doc <- askDocument
     addHydrationStep $ do
       n <- hydrateNode (const $ pure True) DOM.Comment
       mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
@@ -597,19 +571,19 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
               case T.stripPrefix (prefix <> key0) commentText of
                 Just key -> do
                   -- Replace the comment with an (invisible) text node
-                  textNode <- createTextNode doc ("" :: Text)
-                  Node.replaceChild_ parent textNode comment
-                  pure (textNode, key)
+                  tn <- createTextNode doc ("" :: Text)
+                  Node.replaceChild_ parent tn comment
+                  pure (tn, key)
                 Nothing -> do
                   go key0 (Just node)
             Nothing -> do
               go key0 (Just node)
         switchComment = do
           key0 <- liftIO $ readIORef key0Ref
-          (textNode, key) <- go key0 =<< getPreviousNode
-          setPreviousNode $ Just $ toNode textNode
+          (tn, key) <- go key0 =<< getPreviousNode
+          setPreviousNode $ Just $ toNode tn
           liftIO $ do
-            writeIORef textNodeRef textNode
+            writeIORef textNodeRef tn
             writeIORef keyRef key
     pure (switchComment, textNodeRef, keyRef)
 
@@ -632,7 +606,6 @@ instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT t m
           when (new == 0) commitAction
     requestDomAction_ $ ready <$ eOnce
   notReady = do
-    env <- HydrationDomBuilderT ask
     unreadyChildren <- askUnreadyChildren
     liftIO $ modifyIORef' unreadyChildren succ
 
@@ -695,7 +668,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
 
       Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
-      liftJSM $ domInputElement `on` Events.click $ do
+      _ <- liftJSM $ domInputElement `on` Events.click $ do
         liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
 
       for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
@@ -704,7 +677,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
           Input.setChecked domInputElement newChecked
           when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
 
-      liftJSM $ domInputElement `on` Events.change $ do
+      _ <- liftJSM $ domInputElement `on` Events.change $ do
         mfiles <- Input.getFiles domInputElement
         let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
         liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
@@ -740,7 +713,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do --TODO
-    ((e, _), domElement') <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    ((e, _), _domElement') <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domElement = undefined :: DOM.HTMLTextAreaElement
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
@@ -764,9 +737,10 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _textAreaElement_element = e
       , _textAreaElement_raw = domTextAreaElement
       }
+
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
-    ((e, result), domElement') <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
+    ((e, result), _domElement') <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
     let domElement = undefined :: DOM.HTMLSelectElement
     let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
     Select.setValue domSelectElement $ cfg ^. selectElementConfig_initialValue
@@ -805,8 +779,8 @@ data HydrationDomFragment = HydrationDomFragment
 
 extractFragment :: MonadJSM m => HydrationDomFragment -> m ()
 extractFragment fragment = do
-  state <- liftIO $ readIORef $ _hydrationDomFragment_state fragment
-  case state of
+  s <- liftIO $ readIORef $ _hydrationDomFragment_state fragment
+  case s of
     FragmentState_Unmounted -> return ()
     FragmentState_Mounted (before, after) -> do
       extractBetweenExclusive (_hydrationDomFragment_document fragment) before after
@@ -818,8 +792,8 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
     df <- createDocumentFragment =<< askDocument
     p <- liftIO $ newIORef $ toNode df
     result <- localEnv (\env -> env { _hydrationDomBuilderEnv_parent = p }) w
-    state <- liftIO $ newIORef FragmentState_Unmounted
-    return (HydrationDomFragment df state, result)
+    s <- liftIO $ newIORef FragmentState_Unmounted
+    return (HydrationDomFragment df s, result)
   mountDomFragment fragment setFragment = do
     parent <- getParent
     extractFragment fragment
@@ -1070,7 +1044,7 @@ hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   -> Event t (p v)
   -> HydrationDomBuilderT t m (IntMap v', Event t (p v'))
 hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_ f dm0 dm' = do
-  (hydrateStart, _, key) <- skipToReplaceStart
+  (_hydrateStart, _, key) <- skipToReplaceStart
   initialEnv <- HydrationDomBuilderT ask
   let parentUnreadyChildren = _hydrationDomBuilderEnv_unreadyChildren initialEnv
   pendingChange :: IORef (IntMap (IORef ChildReadyStateInt), p (HydrationRunnerT t m (), DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')) <- liftIO $ newIORef mempty
@@ -1131,13 +1105,13 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
         insertAfterPreviousNode ph
         liftIO $ writeIORef lastPlaceholderRef ph
   addHydrationStepWithSetup (accumMaybeB (flip apply) delayed0 delayed') $ \delayed -> do
-    join $ sample (sequence . IntMap.elems <$> delayed)
+    _ <- join $ sample (sequence . IntMap.elems <$> delayed)
     setFinalPlaceholder
   liftIO $ writeIORef placeholders $! placeholders0
   getHydrationMode >>= \case
     HydrationMode_Immediate -> void $ IntMap.traverseWithKey (\_ (_, df, _, _, _) -> void $ append $ toNode df) children0
     _ -> pure ()
-  (hydrateEnd, lastPlaceholderRef) <- skipToReplaceEnd key
+  (_hydrateEnd, _lastPlaceholderRef) <- skipToReplaceEnd key
   requestDomAction_ $ ffor children' $ \p -> do
     (oldUnready, oldP) <- liftIO $ readIORef pendingChange
     newUnready <- liftIO $ updateChildUnreadiness p oldUnready
@@ -1245,7 +1219,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
         insertAfterPreviousNode ph
         liftIO $ writeIORef lastPlaceholderRef ph
   addHydrationStepWithSetup (accumMaybeB (flip apply) delayed0 delayed') $ \delayed -> do
-    join $ sample (traverse (\(_ :=> Const d) -> d) . DMap.toList <$> delayed)
+    _ <- join $ sample (traverse (\(_ :=> Const d) -> d) . DMap.toList <$> delayed)
     setFinalPlaceholder
   liftIO $ writeIORef placeholders $! placeholders0
   getHydrationMode >>= \case
