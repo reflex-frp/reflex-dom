@@ -35,7 +35,8 @@ import Test.WebDriver (WD)
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.File as File
 
---import System.IO.Silently
+import System.IO (stderr)
+import System.IO.Silently
 import System.IO.Temp
 import System.Directory
 import qualified System.FilePath as FilePath
@@ -668,7 +669,7 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
   let port = 3911 -- TODO
   let settings = Warp.setPort port Warp.defaultSettings
       -- hSilence to get rid of ConnectionClosed logs
-      jsaddleWarp = forkIO $ Warp.runSettings settings application
+      jsaddleWarp = forkIO $ hSilence [stderr] $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
     WD.runSession chromeConfig . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
