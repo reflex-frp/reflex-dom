@@ -7,7 +7,7 @@
 , process, random, ref-tf, reflex, semigroups, silently, stdenv
 , stm, template-haskell, temporary, text, these, transformers, unix
 , wai, wai-websockets, warp, webdriver, websockets, zenc
-, iproute, chromium, hashable
+, iproute, chromium, hashable, selenium-server-standalone
 }:
 let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
       testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
@@ -39,6 +39,7 @@ in mkDerivation (addGcTestDepends {
   # Show some output while running tests, so we might notice what's wrong
   testTarget = "--show-details=streaming";
 
+  testSystemDepends = [ selenium-server-standalone ];
   testHaskellDepends = [
     aeson base bytestring containers exceptions ghcjs-dom hlint hspec
     http-types HUnit jsaddle jsaddle-warp linux-namespaces process
