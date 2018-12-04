@@ -109,6 +109,7 @@ import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
 import GHCJS.DOM.EventM (EventM, event, on)
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.FileList as FileList
+import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
 import qualified GHCJS.DOM.HTMLInputElement as Input
 import qualified GHCJS.DOM.HTMLSelectElement as Select
 import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
@@ -210,9 +211,11 @@ addHydrationStepWithSetup setup f = getHydrationMode >>= \case
     HydrationDomBuilderT $ modify' (>> f s)
 
 -- | Add a hydration step
-addHydrationStep :: MonadIO m => HydrationRunnerT t m () -> HydrationDomBuilderT t m ()
+addHydrationStep :: (MonadIO m, Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m)) => HydrationRunnerT t m () -> HydrationDomBuilderT t m ()
 addHydrationStep m = getHydrationMode >>= \case
-  HydrationMode_Immediate -> pure ()
+  HydrationMode_Immediate -> do
+    events <- askEvents
+    lift $ runHydrationRunnerT m Nothing undefined events
   HydrationMode_Hydrating -> HydrationDomBuilderT $ modify' (>> m)
 
 -- | A monad for DomBuilder which just gets the results of children and pushes
@@ -552,7 +555,7 @@ hydrateTextNode t = do
 
 
 {-# INLINABLE commentNodeInternal #-}
-commentNodeInternal :: (MonadJSM m, MonadFix m, ToDOMString contents, Reflex t, Adjustable t m) => contents -> Maybe (Event t contents) -> HydrationDomBuilderT t m DOM.Comment
+commentNodeInternal :: (Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadJSM m, MonadFix m, ToDOMString contents, Reflex t, Adjustable t m) => contents -> Maybe (Event t contents) -> HydrationDomBuilderT t m DOM.Comment
 commentNodeInternal !t mSetContents = getHydrationMode >>= \case
   HydrationMode_Immediate -> do
     n <- makeNodeInternal (askDocument >>= \doc -> createComment doc t)
@@ -659,6 +662,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
     (fileChange, triggerFileChange) <- newTriggerEvent
 
+    doc <- askDocument
+
     -- Expected initial value from config
     let v0 = _inputElementConfig_initialValue cfg
 
@@ -682,11 +687,11 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
           v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
           liftIO $ triggerChangeBySetValue v
 
-      -- TODO look at initial focus at hydration time?
       let focusChange' = leftmost
             [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
             , True <$ Reflex.select (_element_events e) (WrapArg Focus)
             ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
       requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
 
       Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
@@ -712,7 +717,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       ]
     checked <- holdUniqDyn checked'
 
-    let initialFocus = False --TODO: Is this correct?
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
     hasFocus <- holdDyn initialFocus focusChange
 
     v <- holdDyn v0 $ leftmost
