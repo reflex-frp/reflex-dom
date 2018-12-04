@@ -438,7 +438,7 @@ main = hspec $ parallel $ do
         inputRef <- newIORef ""
         testWidget'
           (do
-            e <- WD.findElem $ WD.ByTag "input"
+            e <- WD.findElem $ WD.ByTag "textarea"
             WD.sendKeys "hello world" e
             pure e)
           (\e -> do
@@ -454,7 +454,7 @@ main = hspec $ parallel $ do
       it "captures user input after switchover" $ do
         inputRef <- newIORef ""
         let checkValue = do
-              WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "input"
+              WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "textarea"
               WD.click <=< WD.findElem $ WD.ByTag "button"
               input <- liftIO $ readIORef inputRef
               liftIO $ input `shouldBe` "hello world"
@@ -466,7 +466,7 @@ main = hspec $ parallel $ do
         focusRef <- newIORef False
         let checkValue = do
               liftIO $ readIORef focusRef >>= flip shouldBe False
-              e <- WD.findElem $ WD.ByTag "input"
+              e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               liftIO $ threadDelay 100000
               liftIO $ readIORef focusRef >>= flip shouldBe True
@@ -476,7 +476,7 @@ main = hspec $ parallel $ do
       it "sets focus when focus occurs before hydration" $ do
         focusRef <- newIORef False
         let setup = do
-              e <- WD.findElem $ WD.ByTag "input"
+              e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               hasFocus <- (== e) <$> WD.activeElem
               liftIO $ do
@@ -493,7 +493,7 @@ main = hspec $ parallel $ do
         let checkValue = do
               liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
               liftIO $ readIORef valueRef >>= flip shouldBe ""
-              e <- WD.findElem $ WD.ByTag "input"
+              e <- WD.findElem $ WD.ByTag "textarea"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000
@@ -515,7 +515,7 @@ main = hspec $ parallel $ do
       it "captures user input after switchover" $ do
         inputRef :: IORef Text <- newIORef ""
         let checkValue = do
-              WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "input"
+              WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "textarea"
               WD.click <=< WD.findElem $ WD.ByTag "button"
               input <- liftIO $ readIORef inputRef
               liftIO $ input `shouldBe` "hello world"
@@ -527,7 +527,7 @@ main = hspec $ parallel $ do
         focusRef <- newIORef False
         let checkValue = do
               liftIO $ readIORef focusRef >>= flip shouldBe False
-              e <- WD.findElem $ WD.ByTag "input"
+              e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               liftIO $ threadDelay 100000
               liftIO $ readIORef focusRef >>= flip shouldBe True
@@ -541,7 +541,7 @@ main = hspec $ parallel $ do
         let checkValue = do
               liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
               liftIO $ readIORef valueRef >>= flip shouldBe ""
-              e <- WD.findElem $ WD.ByTag "input"
+              e <- WD.findElem $ WD.ByTag "textarea"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000

@@ -653,9 +653,8 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       -- Watch for user interaction and trigger event accordingly
       requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
 
-      case _inputElementConfig_setValue cfg of
-        Nothing -> pure ()
-        Just eSetValue -> requestDomAction_ $ ffor eSetValue $ \v' -> do
+      for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
           Input.setValue domInputElement v'
           v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
           liftIO $ triggerChangeBySetValue v
@@ -691,7 +690,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
     checked <- holdUniqDyn checked'
 
     let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
-    hasFocus <- holdDyn initialFocus focusChange
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
 
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
@@ -712,30 +711,59 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       }
 
   {-# INLINABLE textAreaElement #-}
-  textAreaElement cfg = do --TODO
-    ((e, _), _domElement') <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
-    let domElement = undefined :: DOM.HTMLTextAreaElement
-    let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
-    TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
-    v0 <- TextArea.getValue domTextAreaElement
-    let getMyValue = TextArea.getValue domTextAreaElement
-    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
-    valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
-      Nothing -> return never
-      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        TextArea.setValue domTextAreaElement v'
-        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+  textAreaElement cfg = do
+    ((e, _), domElementRef) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+
+    doc <- askDocument
+
+    -- Expected initial value from config
+    let v0 = _textAreaElementConfig_initialValue cfg
+
+    addHydrationStep $ do
+      domElement <- liftIO $ readIORef domElementRef
+      let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
+          getValue = TextArea.getValue domTextAreaElement
+
+      -- The browser might have messed with the value, or the user could have
+      -- altered it before activation, so we set it if it isn't what we expect
+      liftJSM getValue >>= \v0' -> do
+        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+
+      for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
+          TextArea.setValue domTextAreaElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
+
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
-    hasFocus <- mkHasFocus e
+
     return $ TextAreaElement
       { _textAreaElement_value = v
       , _textAreaElement_input = valueChangedByUI
       , _textAreaElement_hasFocus = hasFocus
       , _textAreaElement_element = e
-      , _textAreaElement_raw = domTextAreaElement
+      , _textAreaElement_raw = undefined -- TODO domTextAreaElement
       }
 
   {-# INLINABLE selectElement #-}
