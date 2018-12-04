@@ -157,14 +157,15 @@ test-suite hydration
                , bytestring
                , containers
                , directory
-               , filepath
                , exceptions
+               , filepath
                , ghcjs-dom
                , hspec
                , http-types
                , HUnit
                , jsaddle
                , jsaddle-warp
+               , lens
                , random
                , reflex == 0.5.*
                , reflex-dom-core
