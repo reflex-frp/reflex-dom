@@ -60,9 +60,9 @@ chromeConfig = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/run/current-s
 -- parallel (requires port fix)
 
 main :: IO ()
-main = hspec $ parallel $ do
+main = hspec $ do
 
-  describe "text" $ parallel $ do
+  describe "text" $ do
     it "works" $ do
       testWidgetStatic (checkBodyText "hello world") $ do
         text "hello world"
@@ -129,7 +129,7 @@ main = hspec $ parallel $ do
         text =<< prerender (pure "One") (pure "Two")
 
 
-  describe "element" $ parallel $ do
+  describe "element" $ do
     it "works with domEvent Click" $ do
       clickedRef <- newIORef False
       testWidget' (WD.findElem $ WD.ByTag "div") WD.click $ do
@@ -220,7 +220,7 @@ main = hspec $ parallel $ do
             liftIO $ writeIORef clicked True
           pure ()
 
-  describe "inputElement" $ parallel $ do
+  describe "inputElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
         inputRef <- newIORef ""
@@ -433,7 +433,7 @@ main = hspec $ parallel $ do
             names <- liftJSM $ traverse File.getName fs
             liftIO $ writeIORef filesRef names
 
-  describe "textAreaElement" $ parallel $ do
+  describe "textAreaElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
         inputRef <- newIORef ""
@@ -560,7 +560,7 @@ main = hspec $ parallel $ do
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
 
-  describe "prerender" $ parallel $ do
+  describe "prerender" $ do
     it "works in simple case" $ do
       testWidget (checkBodyText "One") (checkBodyText "Two") $ do
         prerender (text "One") (text "Two")
