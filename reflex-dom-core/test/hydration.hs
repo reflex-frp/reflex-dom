@@ -560,6 +560,140 @@ main = hspec $ do
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
 
+  describe "selectElement" $ do
+    let options :: DomBuilder t m => m ()
+        options = do
+          elAttr "option" ("value" =: "one" <> "id" =: "one") $ text "one"
+          elAttr "option" ("value" =: "two" <> "id" =: "two") $ text "two"
+          elAttr "option" ("value" =: "three" <> "id" =: "three") $ text "three"
+    describe "hydration" $ do
+      it "sets initial value correctly" $ do
+        inputRef <- newIORef ""
+        let setup = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "three")
+              WD.click <=< WD.findElem $ WD.ById "two"
+              pure e
+            check e = do
+              assertAttr e "value" (Just "two")
+              liftIO $ readIORef inputRef >>= (`shouldBe` "three")
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              assertAttr e "value" (Just "two")
+              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+        testWidget' setup check $ do
+          (e, ()) <- selectElement (def { _selectElementConfig_initialValue = "three" }) options
+          click <- button "save"
+          liftIO . writeIORef inputRef <=< sample $ current $ _selectElement_value e
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "captures user input after switchover" $ do
+        inputRef <- newIORef ""
+        let checkValue = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "one")
+              WD.click <=< WD.findElem $ WD.ById "two"
+              assertAttr e "value" (Just "two")
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+        testWidget (pure ()) checkValue $ do
+          (e, ()) <- selectElement def options
+          click <- button "save"
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "sets focus appropriately" $ do
+        focusRef <- newIORef False
+        let checkValue = do
+              liftIO $ readIORef focusRef >>= flip shouldBe False
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              liftIO $ threadDelay 100000
+              liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget (pure ()) checkValue $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets focus when focus occurs before hydration" $ do
+        focusRef <- newIORef False
+        let setup = do
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              hasFocus <- (== e) <$> WD.activeElem
+              liftIO $ do
+                hasFocus `shouldBe` True
+                readIORef focusRef >>= flip shouldBe False
+            check = liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget setup check $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets value appropriately" $ do
+        valueByUIRef <- newIORef ("" :: Text)
+        valueRef <- newIORef ("" :: Text)
+        setValueChan :: Chan Text <- newChan
+        let checkValue = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "one")
+              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              WD.click <=< WD.findElem $ WD.ById "two"
+              liftIO $ do
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "two"
+                writeChan setValueChan "three"
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "three"
+        testWidget (pure ()) checkValue $ do
+          (setValue', triggerSetValue) <- newTriggerEvent
+          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
+            triggerSetValue =<< readChan setValueChan
+          (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
+          performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+
+    describe "hydration/immediate" $ do
+      it "captures user input after switchover" $ do
+        inputRef :: IORef Text <- newIORef ""
+        let checkValue = do
+              WD.click <=< WD.findElem $ WD.ById "two"
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              liftIO $ readIORef inputRef >>= flip shouldBe "two"
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          (e, ()) <- selectElement def options
+          click <- button "save"
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "sets focus appropriately" $ do
+        focusRef <- newIORef False
+        let checkValue = do
+              liftIO $ readIORef focusRef >>= flip shouldBe False
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              liftIO $ threadDelay 100000
+              liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets value appropriately" $ do
+        valueByUIRef :: IORef Text <- newIORef ""
+        valueRef :: IORef Text <- newIORef ""
+        setValueChan :: Chan Text <- newChan
+        let checkValue = do
+              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              WD.click <=< WD.findElem $ WD.ById "two"
+              liftIO $ do
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "two"
+                writeChan setValueChan "three"
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "three"
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          (setValue', triggerSetValue) <- newTriggerEvent
+          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
+            triggerSetValue =<< readChan setValueChan
+          (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
+          performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+
   describe "prerender" $ do
     it "works in simple case" $ do
       testWidget (checkBodyText "One") (checkBodyText "Two") $ do
