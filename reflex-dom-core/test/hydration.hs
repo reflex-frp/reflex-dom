@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 import Control.Concurrent
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Fix
@@ -19,7 +20,7 @@ import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Text (Text)
-import Language.Javascript.JSaddle (JSException(..), syncPoint, liftJSM)
+import Language.Javascript.JSaddle (JSException(..), syncPoint, liftJSM, jsg, js1)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Wai
@@ -31,7 +32,7 @@ import System.Timeout
 import Test.Hspec
 import Test.HUnit
 import Test.WebDriver (WD)
-import qualified GHCJS.DOM.Types as DOM (File)
+import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.File as File
 
 --import System.IO.Silently
@@ -39,6 +40,8 @@ import System.IO.Temp
 import System.Directory
 import qualified System.FilePath as FilePath
 
+import qualified GHCJS.DOM.EventM as EventM
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -199,6 +202,23 @@ main = hspec $ parallel $ do
             pure e
       testWidget' checkSSRAttr (\e -> assertAttr e "ssr" Nothing) $ el "div" $ text "hello world"
 
+    it "can't misuse raw elements" $ do
+      clicked <- newIORef False
+      let check = do
+            e <- WD.findElem $ WD.ByTag "div"
+            liftIO $ readIORef clicked >>= flip shouldBe True
+            WD.click e
+            liftIO $ do
+              threadDelay 100000
+              readIORef clicked >>= flip shouldBe False
+      testWidget (pure ()) check $ do
+        (e, _) <- el' "div" $ text "hello"
+        prerender (pure ()) $ do
+          let e' = DOM.uncheckedCastTo DOM.HTMLElement (_element_raw e)
+          liftJSM $ e' `EventM.on` Events.click $ do
+            liftIO $ writeIORef clicked True
+          pure ()
+
   describe "inputElement" $ parallel $ do
     it "doesn't wipe user input when switching over" $ do
       inputRef <- newIORef ""
@@ -240,6 +260,30 @@ main = hspec $ parallel $ do
       testWidget (pure ()) checkValue $ do
         e <- inputElement def
         performEvent_ $ liftIO . writeIORef focusRef <$> updated (_inputElement_hasFocus e)
+    it "sets value appropriately" $ do
+      valueByUIRef <- newIORef ""
+      valueRef <- newIORef ""
+      setValueChan :: Chan Text <- newChan
+      let checkValue = do
+            liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
+            liftIO $ readIORef valueRef >>= flip shouldBe ""
+            e <- WD.findElem $ WD.ByTag "input"
+            WD.sendKeys "hello" e
+            liftIO $ do
+              threadDelay 100000
+              readIORef valueByUIRef >>= flip shouldBe "hello"
+              readIORef valueRef >>= flip shouldBe "hello"
+              writeChan setValueChan "world"
+              threadDelay 100000
+              readIORef valueByUIRef >>= flip shouldBe "hello"
+              readIORef valueRef >>= flip shouldBe "world"
+      testWidget (pure ()) checkValue $ do
+        (setValue, triggerSetValue) <- newTriggerEvent
+        prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
+          triggerSetValue =<< readChan setValueChan
+        e <- inputElement $ def & inputElementConfig_setValue .~ setValue
+        performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
+        performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
     it "sets checked appropriately" $ do
       checkedByUIRef <- newIORef False
       checkedRef <- newIORef False
