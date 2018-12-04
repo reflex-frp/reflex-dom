@@ -768,31 +768,60 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
   {-# INLINABLE selectElement #-}
   selectElement cfg child = do
-    ((e, result), _domElement') <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
-    let domElement = undefined :: DOM.HTMLSelectElement
-    let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
-    Select.setValue domSelectElement $ cfg ^. selectElementConfig_initialValue
-    v0 <- Select.getValue domSelectElement
-    let getMyValue = Select.getValue domSelectElement
-    valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Change)
-    valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
-      Nothing -> return never
-      Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
-        Select.setValue domSelectElement v'
-        getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
+    ((e, result), domElementRef) <- makeElement "select" (cfg ^. selectElementConfig_elementConfig) child
+
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+
+    doc <- askDocument
+
+    -- Expected initial value from config
+    let v0 = _selectElementConfig_initialValue cfg
+
+    addHydrationStep $ do
+      domElement <- liftIO $ readIORef domElementRef
+      let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
+          getValue = Select.getValue domSelectElement
+
+      -- The browser might have messed with the value, or the user could have
+      -- altered it before activation, so we set it if it isn't what we expect
+      liftJSM getValue >>= \v0' -> do
+        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Change)
+
+      for_ (_selectElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
+          Select.setValue domSelectElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
+
     v <- holdDyn v0 $ leftmost
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
-    hasFocus <- mkHasFocus e
-    let wrapped = SelectElement
-          { _selectElement_value = v
-          , _selectElement_change = valueChangedByUI
-          , _selectElement_hasFocus = hasFocus
-          , _selectElement_element = e
-          , _selectElement_raw = domSelectElement
-          }
-    return (wrapped, result)
+
+    return $ flip (,) result $ SelectElement
+      { _selectElement_value = v
+      , _selectElement_change = valueChangedByUI
+      , _selectElement_hasFocus = hasFocus
+      , _selectElement_element = e
+      , _selectElement_raw = undefined -- TODO domSelectElement
+      }
+
   placeRawElement _ = return () -- append . toNode
   wrapRawElement e _ = return $ Element (EventSelector $ const never) e -- TODO
 
