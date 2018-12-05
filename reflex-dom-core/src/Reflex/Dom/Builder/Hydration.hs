@@ -833,7 +833,9 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _selectElement_raw = undefined -- TODO domSelectElement
       }
 
-  placeRawElement = append . toNode
+  placeRawElement e = getHydrationMode >>= \case
+    HydrationMode_Immediate -> append $ toNode e
+    HydrationMode_Hydrating -> addHydrationStep $ insertAfterPreviousNode e
   wrapRawElement e rawCfg = do
     ctx <- askJSM
     events <- askEvents

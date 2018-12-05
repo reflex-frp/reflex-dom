@@ -693,21 +693,24 @@ main = hspec $ beforeAll startSeleniumServer $ do
         Node.appendChild div text
         pure div
   describe "placeRawElement" $ do
+    let checkOrder = do
+          shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
+          shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
     it "is placed correctly in the DOM at switchover" $ do
-      let check = do
-            shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
-            shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
-      testWidget (pure ()) check $ do
+      testWidget (pure ()) checkOrder $ do
         text "one"
         prerender (pure ()) $ placeRawElement =<< createRawElement
         text "three"
     it "is placed correctly in the DOM in immediate mode" $ do
-      let check = do
-            shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
-            shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
-      testWidget (pure ()) check $ prerender (pure ()) $ do
+      testWidget (pure ()) checkOrder $ prerender (pure ()) $ do
         text "one"
         placeRawElement =<< createRawElement
+        text "three"
+    it "is placed correctly in the DOM in hydration mode" $ do
+      testWidget (pure ()) checkOrder $ do
+        text "one"
+        mElement <- prerender (pure Nothing) $ Just <$> createRawElement
+        traverse_ placeRawElement mElement
         text "three"
     it "can be clicked" $ do
       clickedRef <- newIORef False
