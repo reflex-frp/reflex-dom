@@ -59,6 +59,7 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State.Strict
+import Data.Default
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum
 import Data.FastMutableIntMap (PatchIntMap (..))
@@ -387,6 +388,35 @@ wrap events e cfg = do
     return $ en :=> EventFilterTriggerRef triggerRef
   return eventTriggerRefs
 
+triggerBody
+  :: forall er t x. DOM.JSContextRef
+  -> ElementConfig er t GhcjsDomSpace
+  -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
+  -> DMap EventName (EventFilterTriggerRef t er)
+  -> DOM.Element
+  -> WrapArg er EventName x
+  -> EventTrigger t x
+  -> IO (IO ())
+triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t = case DMap.lookup en eventTriggerRefs of
+  Just (EventFilterTriggerRef r) -> do
+    writeIORef r $ Just t
+    return $ do
+      writeIORef r Nothing
+  Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
+    evt <- DOM.event
+    mv <- lift $ unGhcjsEventHandler handler (en, GhcjsDomEvent evt)
+    case mv of
+      Nothing -> return ()
+      Just v -> liftIO $ do
+        --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
+        ref <- newIORef $ Just t
+        writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
+  where
+    -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't
+    -- retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
+    handler :: GhcjsEventHandler er
+    !handler = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec $ extractRawElementConfig cfg
+
 {-# INLINABLE makeElement #-}
 makeElement
   :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m)
@@ -413,25 +443,6 @@ makeElement elementTag cfg child = do
       hasSSRAttribute e = case cfg ^. namespace of
         Nothing -> hasAttribute e ssrAttr -- TODO: disabled for debugging <* removeAttribute e ssrAttr
         Just ns -> hasAttributeNS e (Just ns) ssrAttr -- TODO: disabled for debugging <* removeAttributeNS e (Just ns) ssrAttr
-      -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't
-      -- retain the entire cfg, which can cause a cyclic dependency that the GC won't be able to clean up
-      handler :: GhcjsEventHandler er
-      !handler = _ghcjsEventSpec_handler $ _rawElementConfig_eventSpec $ extractRawElementConfig cfg
-      triggerBody :: DMap EventName (EventFilterTriggerRef t er) -> DOM.Element -> WrapArg er EventName x -> EventTrigger t x -> IO (IO ())
-      triggerBody eventTriggerRefs e (WrapArg en) t = case DMap.lookup en eventTriggerRefs of
-        Just (EventFilterTriggerRef r) -> do
-          writeIORef r $ Just t
-          return $ do
-            writeIORef r Nothing
-        Nothing -> (`runJSM` ctx) <$> (`runJSM` ctx) (elementOnEventName en e $ do
-          evt <- DOM.event
-          mv <- lift $ unGhcjsEventHandler handler (en, GhcjsDomEvent evt)
-          case mv of
-            Nothing -> return ()
-            Just v -> liftIO $ do
-              --TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
-              ref <- newIORef $ Just t
-              writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())])
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
       e <- makeNodeInternal buildElement
@@ -439,7 +450,7 @@ makeElement elementTag cfg child = do
       -- Run the child builder with updated parent and previous sibling references
       result <- localEnv (\env -> env { _hydrationDomBuilderEnv_parent = p }) child
       eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
-      es <- newFanEventWithTrigger $ triggerBody eventTriggerRefs e
+      es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
       e' <- liftIO $ newIORef e
       return ((Element es e, result), e')
     HydrationMode_Hydrating -> do
@@ -469,7 +480,7 @@ makeElement elementTag cfg child = do
           (e, eventTriggerRefs) <- readMVar wrapResult
           bracketOnError
             -- Run the setup, acquiring the cleanup action
-            (triggerBody eventTriggerRefs e (WrapArg en) t)
+            (triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t)
             -- Run the cleanup, if we have it - but only when an exception is
             -- raised (we might get killed between acquiring the cleanup action
             -- from 'triggerBody' and putting it in the MVar)
@@ -822,8 +833,17 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _selectElement_raw = undefined -- TODO domSelectElement
       }
 
-  placeRawElement _ = return () -- append . toNode
-  wrapRawElement e _ = return $ Element (EventSelector $ const never) e -- TODO
+  placeRawElement = append . toNode
+  wrapRawElement e rawCfg = do
+    ctx <- askJSM
+    events <- askEvents
+    let cfg = (def :: ElementConfig EventResult t GhcjsDomSpace)
+          { _elementConfig_modifyAttributes = _rawElementConfig_modifyAttributes rawCfg
+          , _elementConfig_eventSpec = _rawElementConfig_eventSpec rawCfg
+          }
+    eventTriggerRefs <- wrap events e rawCfg
+    es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
+    return $ Element es e
 
 data FragmentState
   = FragmentState_Unmounted
