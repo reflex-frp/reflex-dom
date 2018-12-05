@@ -17,6 +17,7 @@ import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.Foldable (traverse_)
 import Data.IORef
+import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Text (Text)
@@ -42,8 +43,12 @@ import System.IO.Temp
 import System.Directory
 import qualified System.FilePath as FilePath
 
+import qualified GHCJS.DOM as DOM
+import qualified GHCJS.DOM.Document as Document
+import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.EventM as EventM
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
+import qualified GHCJS.DOM.Node as Node
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -293,9 +298,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
-          (setValue, triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ setValue
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -318,9 +321,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef checkedByUIRef >>= flip shouldBe True
                 readIORef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ do
-          (setChecked, triggerSetChecked) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetChecked =<< readChan setCheckedChan
+          setChecked <- triggerEventWithChan setCheckedChan
           e <- inputElement $ def
             & initialAttributes .~ "type" =: "checkbox"
             & inputElementConfig_setChecked .~ setChecked
@@ -384,9 +385,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setValue, triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ setValue
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -409,9 +408,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef checkedByUIRef >>= flip shouldBe True
                 readIORef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setChecked, triggerSetChecked) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetChecked =<< readChan setCheckedChan
+          setChecked <- triggerEventWithChan setCheckedChan
           e <- inputElement $ def
             & initialAttributes .~ "type" =: "checkbox"
             & inputElementConfig_setChecked .~ setChecked
@@ -506,9 +503,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -554,9 +549,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -642,9 +635,7 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "two"
                 readIORef valueRef >>= flip shouldBe "three"
         testWidget (pure ()) checkValue $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
@@ -688,12 +679,88 @@ main = hspec $ beforeAll startSeleniumServer $ do
                 readIORef valueByUIRef >>= flip shouldBe "two"
                 readIORef valueRef >>= flip shouldBe "three"
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+
+  let createRawElement :: DOM.MonadJSM m => m DOM.Element
+      createRawElement = do
+        doc <- DOM.currentDocumentUnchecked
+        div <- Document.createElement doc ("div" :: Text)
+        Element.setAttribute div ("id" :: Text) ("raw" :: Text)
+        text <- Document.createTextNode doc ("two" :: Text)
+        Node.appendChild div text
+        pure div
+  describe "placeRawElement" $ do
+    it "is placed correctly in the DOM at switchover" $ do
+      let check = do
+            shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
+            shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
+      testWidget (pure ()) check $ do
+        text "one"
+        prerender (pure ()) $ placeRawElement =<< createRawElement
+        text "three"
+    it "is placed correctly in the DOM in immediate mode" $ do
+      let check = do
+            shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
+            shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
+      testWidget (pure ()) check $ prerender (pure ()) $ do
+        text "one"
+        placeRawElement =<< createRawElement
+        text "three"
+    it "can be clicked" $ do
+      clickedRef <- newIORef False
+      let check = WD.click <=< WD.findElem $ WD.ByTag "div"
+      testWidget (pure ()) check $ prerender (pure ()) $ do
+        raw <- createRawElement
+        placeRawElement raw
+        let htmlElement = DOM.uncheckedCastTo DOM.HTMLElement raw
+        liftJSM $ htmlElement `EventM.on` Events.click $ do
+          liftIO $ writeIORef clickedRef True
+        return ()
+      clicked <- readIORef clickedRef
+      assertEqual "Not clicked" True clicked
+
+  describe "wrapRawElement" $ do
+    it "modifies attributes" $ do
+      modifyAttrsChan :: Chan (Map AttributeName (Maybe Text)) <- newChan
+      let check = do
+            div <- WD.findElem $ WD.ByTag "div"
+            assertAttr div "test" Nothing
+            liftIO $ writeChan modifyAttrsChan ("test" =: Just "test")
+            assertAttr div "test" (Just "test")
+      testWidget (pure ()) check $ prerender (pure ()) $ do
+        modifyAttrs <- triggerEventWithChan modifyAttrsChan
+        raw <- createRawElement
+        placeRawElement raw
+        wrapRawElement raw $ RawElementConfig
+          { _rawElementConfig_modifyAttributes = Just modifyAttrs
+          , _rawElementConfig_eventSpec = (def :: EventSpec GhcjsDomSpace EventResult)
+          }
+        return ()
+    it "works with eventFlags" $ do
+      clickedRef <- newIORef False
+      let clickBoth = do
+            liftIO $ readIORef clickedRef >>= flip shouldBe False
+            WD.findElem (WD.ById "normal") >>= WD.click
+            liftIO $ do
+              readIORef clickedRef >>= flip shouldBe True
+              writeIORef clickedRef False
+            WD.findElem (WD.ById "raw") >>= WD.click
+            liftIO $ do
+              threadDelay 100000
+              readIORef clickedRef >>= flip shouldBe False
+      testWidget (pure ()) clickBoth $ prerender (pure ()) $ do
+        (e, _) <- el' "div" $ do
+          raw <- createRawElement
+          placeRawElement raw
+          wrapRawElement raw $ RawElementConfig
+            { _rawElementConfig_modifyAttributes = Nothing
+            , _rawElementConfig_eventSpec = addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) (def :: EventSpec GhcjsDomSpace EventResult)
+            }
+          elAttr "div" ("id" =: "normal") $ text "normal"
+        performEvent_ $ liftIO (writeIORef clickedRef True) <$ domEvent Click e
 
   describe "prerender" $ do
     it "works in simple case" $ do
@@ -736,6 +803,12 @@ startSeleniumServer = do
   _ <- forkIO $ print =<< waitForProcess ph
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
 
+triggerEventWithChan :: (TriggerEvent t m, Prerender js m) => Chan a -> m (Event t a)
+triggerEventWithChan chan = do
+  (e, trigger) <- newTriggerEvent
+  prerender (pure ()) $ void $ liftIO $ forkIO $ forever $ trigger =<< readChan chan
+  pure e
+
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
 
@@ -746,21 +819,17 @@ elementShouldBeRemoved e = do
     Left e -> throwM e
     Right !_ -> liftIO $ assertFailure "Expected element to be removed, but it still exists"
 
-shouldContainText :: WD.Element -> Text -> WD ()
-shouldContainText e t = liftIO . flip shouldBe t =<< WD.getText e
+shouldContainText :: Text -> WD.Element -> WD ()
+shouldContainText t = liftIO . flip shouldBe t <=< WD.getText
 
 checkBodyText :: Text -> WD ()
 checkBodyText = checkTextInTag "body"
 
 checkTextInTag :: Text -> Text -> WD ()
-checkTextInTag tag expected = do
-  body <- WD.findElem $ WD.ByTag tag
-  body `shouldContainText` expected
+checkTextInTag tag expected = WD.findElem (WD.ByTag tag) >>= shouldContainText expected
 
 checkTextInId :: Text -> Text -> WD ()
-checkTextInId i expected = do
-  e <- WD.findElem $ WD.ById i
-  e `shouldContainText` expected
+checkTextInId i expected = WD.findElem (WD.ById i) >>= shouldContainText expected
 
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
