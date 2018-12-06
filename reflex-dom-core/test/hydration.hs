@@ -682,7 +682,7 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
       -- hSilence to get rid of ConnectionClosed logs
       jsaddleWarp = forkIO $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
-    browserPath <- T.strip . T.pack <$> readProcess "which" [ "chromiium" ] ""
+    browserPath <- T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
     when (T.null browserPath) $ fail "No browser was not found"
     WD.runSession (chromeConfig browserPath) . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
