@@ -15,6 +15,7 @@ import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import qualified Data.ByteString as BS
 import Data.Foldable (traverse_)
 import Data.IORef
 import Data.Maybe (fromMaybe)
@@ -39,6 +40,7 @@ import qualified GHCJS.DOM.File as File
 --import System.IO.Silently
 import System.IO.Temp
 import System.Directory
+import System.Process
 import qualified System.FilePath as FilePath
 
 import qualified GHCJS.DOM.EventM as EventM
@@ -52,8 +54,8 @@ import qualified Test.WebDriver as WD
 testTimeLimit :: Int
 testTimeLimit = 1 * 1000 * 1000
 
-chromeConfig :: WD.WDConfig
-chromeConfig = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/run/current-system/sw/bin/chromium", WD.chromeOptions = ["--headless"]}) WD.defaultConfig
+chromeConfig :: FilePath -> WD.WDConfig
+chromeConfig chromePath = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/nix/store/hf9r4nmjsz03mb73c11gn4prdcf47sxa-chromium-69.0.3497.81/bin/chromium", WD.chromeOptions = ["--headless"]}) WD.defaultConfig
 
 -- TODO list
 -- use only available ports
@@ -680,7 +682,12 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
       -- hSilence to get rid of ConnectionClosed logs
       jsaddleWarp = forkIO $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
-    WD.runSession chromeConfig . WD.finallyClose $ do
+    (_, Just out, Just err, _) <- createProcess $ (shell "whereis chromium") { std_out = CreatePipe }
+    whereisRes <- liftIO $ TE.decodeUtf8 <$> BS.hGetContents out
+    let chromePath = case T.words whereisRes of
+          _:path:_ -> path
+          _ -> "/run/current-system/sw/bin/chromium" -- TODO: Need proper error if chrome not found
+    WD.runSession (chromeConfig (T.unpack chromePath)) . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
       a <- beforeJS
       liftIO $ putMVar waitBeforeJS ()
