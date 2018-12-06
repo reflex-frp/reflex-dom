@@ -55,8 +55,8 @@ import qualified Test.WebDriver as WD
 testTimeLimit :: Int
 testTimeLimit = 1 * 1000 * 1000
 
-chromeConfig :: FilePath -> WD.WDConfig
-chromeConfig chromePath = WD.useBrowser (WD.chrome { WD.chromeBinary = Just chromePath, WD.chromeOptions = ["--headless"]}) WD.defaultConfig
+chromeConfig :: Text -> WD.WDConfig
+chromeConfig fp = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = ["--headless"] }) WD.defaultConfig
 
 -- TODO list
 -- use only available ports
@@ -682,12 +682,9 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
       -- hSilence to get rid of ConnectionClosed logs
       jsaddleWarp = forkIO $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
-    (_, Just out, Just err, _) <- createProcess $ (shell "whereis chromium") { std_out = CreatePipe }
-    whereisRes <- liftIO $ TE.decodeUtf8 <$> BS.hGetContents out
-    let chromePath = case T.words whereisRes of
-          _:path':_ -> path'
-          _ -> "/run/current-system/sw/bin/chromium" -- TODO: Need proper error if chrome not found
-    WD.runSession (chromeConfig (T.unpack chromePath)) . WD.finallyClose $ do
+    browserPath <- T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
+    when (T.null browserPath) $ fail "No browser was not found"
+    WD.runSession (chromeConfig browserPath) . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
       a <- beforeJS
       liftIO $ putMVar waitBeforeJS ()
