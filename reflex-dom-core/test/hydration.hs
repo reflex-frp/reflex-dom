@@ -48,6 +48,7 @@ import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Network.Socket
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Test.WebDriver as WD
 
@@ -55,7 +56,7 @@ testTimeLimit :: Int
 testTimeLimit = 1 * 1000 * 1000
 
 chromeConfig :: FilePath -> WD.WDConfig
-chromeConfig chromePath = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/nix/store/hf9r4nmjsz03mb73c11gn4prdcf47sxa-chromium-69.0.3497.81/bin/chromium", WD.chromeOptions = ["--headless"]}) WD.defaultConfig
+chromeConfig chromePath = WD.useBrowser (WD.chrome { WD.chromeBinary = Just chromePath, WD.chromeOptions = ["--headless"]}) WD.defaultConfig
 
 -- TODO list
 -- use only available ports
@@ -676,16 +677,15 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
         mainHydrationWidgetWithSwitchoverAction (putMVar waitUntilSwitchover ()) (pure ()) $ bodyWidget
         syncPoint
   application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
-  --port <- randomRIO (3000, 50000)
-  let port = 3911 -- TODO
-  let settings = Warp.setPort port Warp.defaultSettings
+  port <- getFreePort
+  let settings = Warp.setPort (fromIntegral $ toInteger port) Warp.defaultSettings
       -- hSilence to get rid of ConnectionClosed logs
       jsaddleWarp = forkIO $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
     (_, Just out, Just err, _) <- createProcess $ (shell "whereis chromium") { std_out = CreatePipe }
     whereisRes <- liftIO $ TE.decodeUtf8 <$> BS.hGetContents out
     let chromePath = case T.words whereisRes of
-          _:path:_ -> path
+          _:path':_ -> path'
           _ -> "/run/current-system/sw/bin/chromium" -- TODO: Need proper error if chrome not found
     WD.runSession (chromeConfig (T.unpack chromePath)) . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
@@ -694,3 +694,14 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
       liftIO $ takeMVar waitUntilSwitchover
       liftIO $ threadDelay 100000 -- wait a bit
       afterSwitchover a
+
+-- TODO: Should this be part of more widely used module?
+getFreePort :: MonadIO m => m PortNumber
+getFreePort = liftIO $ withSocketsDo $ do
+  addr:_ <- getAddrInfo (Just defaultHints) (Just "127.0.0.1") (Just "0")
+  bracket (open addr) close socketPort
+  where
+    open addr = do
+      sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+      bind sock (addrAddress addr)
+      return sock

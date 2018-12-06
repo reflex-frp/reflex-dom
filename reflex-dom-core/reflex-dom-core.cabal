@@ -166,6 +166,7 @@ test-suite hydration
                , jsaddle
                , jsaddle-warp
                , lens
+               , network
                , random
                , reflex == 0.5.*
                , reflex-dom-core
