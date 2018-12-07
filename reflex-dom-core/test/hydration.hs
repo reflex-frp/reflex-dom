@@ -63,8 +63,11 @@ chromeConfig fp = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack f
 -- parallel (requires port fix)
 
 main :: IO ()
-main = hspec $ parallel $ beforeAll startSeleniumServer $ do
+main = withSeleniumServer $ \stopServer ->
+  hspec (parallel tests) `finally` stopServer
 
+tests :: Spec
+tests = do
   describe "text" $ parallel $ do
     it "works" $ do
       testWidgetStatic (checkBodyText "hello world") $ do
@@ -595,14 +598,19 @@ main = hspec $ parallel $ beforeAll startSeleniumServer $ do
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender (text "One") (text "Two"))
 
-startSeleniumServer :: IO ()
+startSeleniumServer :: IO (IO ())
 startSeleniumServer = do
   (_,_,_,ph) <- createProcess $ (proc "selenium-server" [])
     { std_in = NoStream
     , std_out = NoStream
     }
-  _ <- forkIO $ print =<< waitForProcess ph
+  return $ terminateProcess ph
+
+withSeleniumServer :: (IO () -> IO ()) -> IO ()
+withSeleniumServer f = do
+  stopServer <- startSeleniumServer
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
+  f stopServer
 
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
