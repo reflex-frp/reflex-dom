@@ -63,11 +63,11 @@ chromeConfig fp = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack f
 -- parallel (requires port fix)
 
 main :: IO ()
-main = withSeleniumServer $ \stopServer ->
-  hspec (parallel tests) `finally` stopServer
+main = withSeleniumServer $ \selenium ->
+  hspec (parallel (tests selenium)) `finally` _selenium_stopServer selenium
 
-tests :: Spec
-tests = do
+tests :: Selenium -> Spec
+tests selenium = do
   describe "text" $ parallel $ do
     it "works" $ do
       testWidgetStatic (checkBodyText "hello world") $ do
@@ -598,19 +598,28 @@ tests = do
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender (text "One") (text "Two"))
 
-startSeleniumServer :: IO (IO ())
-startSeleniumServer = do
-  (_,_,_,ph) <- createProcess $ (proc "selenium-server" [])
+data Selenium = Selenium
+  { _selenium_portNumber :: PortNumber
+  , _selenium_stopServer :: IO ()
+  }
+
+startSeleniumServer :: PortNumber -> IO (IO ())
+startSeleniumServer port = do
+  (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
     { std_in = NoStream
     , std_out = NoStream
     }
   return $ terminateProcess ph
 
-withSeleniumServer :: (IO () -> IO ()) -> IO ()
+withSeleniumServer :: (Selenium -> IO ()) -> IO ()
 withSeleniumServer f = do
-  stopServer <- startSeleniumServer
+  let port = 4444 -- TODO port <- getFreePort
+  stopServer <- startSeleniumServer port
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
-  f stopServer
+  f $ Selenium
+    { _selenium_portNumber = port
+    , _selenium_stopServer = stopServer
+    }
 
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
