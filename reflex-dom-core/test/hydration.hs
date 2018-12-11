@@ -2,68 +2,113 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 import Control.Concurrent
-import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Constraint (Dict(..))
+import Data.Constraint.Extras
+import Data.Dependent.Map (DMap)
+import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
 import Data.Foldable (traverse_)
+import Data.Functor.Identity
+import Data.Functor.Misc
+import Data.GADT.Compare.TH
+import Data.GADT.Show.TH
 import Data.IORef
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust)
 import Data.Proxy
 import Data.Text (Text)
-import Language.Javascript.JSaddle (JSException(..), syncPoint, liftJSM, jsg, js1)
+import Language.Javascript.JSaddle (syncPoint, liftJSM)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Wai
 import Network.WebSockets
-import Reflex.Dom.Core
 import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
-import System.Process
-import System.Random
-import System.Timeout
-import Test.Hspec
-import Test.HUnit
-import Test.WebDriver (WD)
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.File as File
-
+import Reflex.Dom.Core
+import System.Directory
 import System.IO (stderr)
 import System.IO.Silently
 import System.IO.Temp
-import System.Directory
-import qualified System.FilePath as FilePath
+import System.Process
+import System.Timeout
+import Test.HUnit
+import Test.Hspec
+import Test.WebDriver (WD)
 
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Dependent.Map as DMap
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import qualified GHCJS.DOM as DOM
 import qualified GHCJS.DOM.Document as Document
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.EventM as EventM
+import qualified GHCJS.DOM.File as File
 import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import qualified GHCJS.DOM.Node as Node
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
+import qualified GHCJS.DOM.Types as DOM
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified System.FilePath as FilePath
 import qualified Test.WebDriver as WD
 
 testTimeLimit :: Int
-testTimeLimit = 1 * 1000 * 1000
+testTimeLimit = 3 * 1000 * 1000
 
 chromeConfig :: WD.WDConfig
 chromeConfig = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/run/current-system/sw/bin/chromium", WD.chromeOptions = ["--headless"]}) WD.defaultConfig
 
--- TODO list
--- use only available ports
--- parallel (requires port fix)
+keyMap :: DMap DKey Identity
+keyMap = DMap.fromList
+  [ Key_Int ==> 0
+  , Key_Char ==> 'A'
+  ]
+
+data DKey a where
+  Key_Int :: DKey Int
+  Key_Char :: DKey Char
+  Key_Bool :: DKey Bool
+
+instance ArgDict DKey where
+  type ConstraintsFor DKey c = (c Int, c Char, c Bool)
+  argDict = \case
+    Key_Int -> Dict
+    Key_Char -> Dict
+    Key_Bool -> Dict
+
+textKey :: DKey a -> Text
+textKey = \case
+  Key_Int -> "Key_Int"
+  Key_Char -> "Key_Char"
+  Key_Bool -> "Key_Bool"
+
+deriveGEq ''DKey
+deriveGCompare ''DKey
+deriveGShow ''DKey
+
+instance ShowTag DKey Identity where
+  showTaggedPrec = \case
+    Key_Int -> showsPrec
+    Key_Char -> showsPrec
+    Key_Bool -> showsPrec
+
+instance EqTag DKey Identity where
+  eqTagged Key_Int Key_Int = (==)
+  eqTagged Key_Char Key_Char = (==)
+  eqTagged Key_Bool Key_Bool = (==)
 
 main :: IO ()
 main = hspec $ beforeAll startSeleniumServer $ do
@@ -133,7 +178,6 @@ main = hspec $ beforeAll startSeleniumServer $ do
     it "works when given differing results of prerender" $ do
       testWidgetStatic (pure ()) $ do
         text =<< prerender (pure "One") (pure "Two")
-
 
   describe "element" $ do
     it "works with domEvent Click" $ do
@@ -796,12 +840,247 @@ main = hspec $ beforeAll startSeleniumServer $ do
         )
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender (text "One") (text "Two"))
+--    it "postBuild works on server side" $ do
+--      pbRef <- newIORef False
+--      testWidgetStatic (pure ()) $ do
+--        prerender (do
+--          pb <- getPostBuild
+--          performEvent_ $ liftIO (writeIORef pbRef True) <$ pb) blank
+--      readIORef pbRef >>= (`shouldBe` True)
+    it "postBuild works on client side" $ do
+      pbRef <- newIORef False
+      testWidgetStatic (pure ()) $ do
+        prerender blank $ do
+          pb <- getPostBuild
+          performEvent_ $ liftIO (writeIORef pbRef True) <$ pb
+      readIORef pbRef >>= (`shouldBe` True)
+
+  describe "runWithReplace" $ do
+    it "works" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ do
+        replace <- triggerEventWithChan replaceChan
+        pb <- getPostBuild
+        runWithReplace (el "div" $ text "one") $ leftmost
+          [ el "div" (text "two") <$ pb
+          , el "span" . text <$> replace
+          ]
+        return ()
+    it "can be nested in initial widget" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ void $ flip runWithReplace never $ do
+        replace <- triggerEventWithChan replaceChan
+        pb <- getPostBuild
+        runWithReplace (el "div" $ text "one") $ leftmost
+          [ el "div" (text "two") <$ pb
+          , el "span" . text <$> replace
+          ]
+        return ()
+    it "can be nested in postBuild widget" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ void $ do
+        pb <- getPostBuild
+        runWithReplace (pure ()) $ ffor pb $ \() -> do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          runWithReplace (el "div" $ text "one") $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
+          return ()
+    it "can be nested in event widget" $ do
+      replaceChan1 <- newChan
+      replaceChan2 <- newChan
+      let check = do
+            shouldContainText "" =<< WD.findElem (WD.ByTag "body")
+            liftIO $ do
+              writeChan replaceChan1 "one"
+              threadDelay 100000
+            one <- WD.findElem $ WD.ByTag "div"
+            WD.getText one >>= liftIO . flip shouldBe "pb"
+            liftIO $ do
+              writeChan replaceChan2 "two"
+              threadDelay 100000
+            elementShouldBeRemoved one
+            shouldContainText "two" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        replace1 <- triggerEventWithChan replaceChan1
+        runWithReplace (pure ()) $ ffor replace1 $ \r1 -> do
+          replace2 <- triggerEventWithChan replaceChan2
+          pb <- getPostBuild
+          runWithReplace (el "div" $ text r1) $ leftmost
+            [ el "span" . text <$> replace2
+            , el "div" (text "pb") <$ pb
+            ]
+          return ()
+    it "works in immediate mode (RHS of prerender)" $ do
+      replaceChan :: Chan Text <- newChan
+      let check = do
+            one <- WD.findElem $ WD.ByTag "div"
+            shouldContainText "one" =<< WD.findElem (WD.ByTag "body")
+            WD.getText one >>= liftIO . flip shouldBe "one"
+            liftIO $ do
+              writeChan replaceChan "pb"
+              threadDelay 100000
+            elementShouldBeRemoved one
+            shouldContainText "pb" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        prerender blank $ do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          void $ runWithReplace (el "div" $ text "one") $ el "span" . text <$> replace
+    it "works with postBuild in immediate mode (RHS of prerender)" $ do
+      replaceChan :: Chan Text <- newChan
+      let check = do
+            two <- WD.findElem $ WD.ByTag "div"
+            shouldContainText "two" =<< WD.findElem (WD.ByTag "body")
+            WD.getText two >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved two
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        prerender blank $ do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          void $ runWithReplace (el "div" $ text "one") $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
+
+  describe "traverseDMapWithKeyWithAdjust" $ do
+    let widget :: TestWidget js t m => DKey a -> Identity a -> m (Identity a)
+        widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
+          elClass "span" "key" $ text $ textKey k
+          elClass "span" "value" $ text $ T.pack $ has @Show k $ show v
+          pure (Identity v)
+        checkItem :: WD.Element -> Text -> Text -> WD ()
+        checkItem li k v = do
+          shouldContainText k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainText v =<< WD.findElemFrom li (WD.ByClass "value")
+        checkInitialItems dm xs = do
+          liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
+          forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey k) (T.pack $ has @Show k $ show v)
+        getAndCheckInitialItems dm = do
+          xs <- WD.findElems (WD.ByTag "li")
+          checkInitialItems dm xs
+          pure xs
+        checkRemoval chan k = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe Nothing)
+            threadDelay 100000
+          elementShouldBeRemoved e
+        checkReplace chan k v = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe $ Just $ Identity v)
+            threadDelay 100000
+          elementShouldBeRemoved e
+          e' <- WD.findElem (WD.ById $ textKey k)
+          checkItem e' (textKey k) (T.pack $ show v)
+        checkInsert chan k v = do
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe $ Just $ Identity v)
+            threadDelay 100000
+          e <- WD.findElem (WD.ById $ textKey k)
+          checkItem e (textKey k) (T.pack $ show v)
+        postBuildPatch = PatchDMap $ DMap.fromList [Key_Char :=> ComposeMaybe Nothing, Key_Bool :=> ComposeMaybe (Just $ Identity True)]
+    it "doesn't replace elements at switchover, can delete/update/insert" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems keyMap
+          check xs = do
+            checkInitialItems keyMap xs
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget' static check $ void $ do
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+        liftIO $ dmap `shouldBe` keyMap
+    it "handles postBuild correctly" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems (fromJust $ apply postBuildPatch keyMap)
+          check xs = do
+            checkInitialItems (fromMaybe undefined $ apply postBuildPatch keyMap) xs
+            checkRemoval chan Key_Int
+            checkInsert chan Key_Char 'B'
+            checkReplace chan Key_Bool True
+      testWidget' static check $ void $ do
+        pb <- getPostBuild
+        replace <- triggerEventWithChan chan
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
+        liftIO $ dmap `shouldBe` keyMap
+    it "can delete/update/insert when built in prerender" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems keyMap
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget (pure ()) check $ prerender (pure ()) $ void $ do
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+        liftIO $ dmap `shouldBe` keyMap
+    it "can delete/update/insert when built in immediate mode" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems keyMap
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget (pure ()) check $ void $ do
+        pb <- getPostBuild
+        runWithReplace (pure ()) $ ffor pb $ \() -> void $ do
+          (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+          liftIO $ dmap `shouldBe` keyMap
+    -- Should be fixed by prerender changes!
+    it "handles postBuild correctly in prerender" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems (fromJust $ apply postBuildPatch keyMap)
+            checkRemoval chan Key_Int
+            checkInsert chan Key_Char 'B'
+            checkReplace chan Key_Bool True
+      testWidget (pure ()) check $ do
+        replace <- triggerEventWithChan chan
+        prerender (pure ()) $ void $ do
+          pb <- getPostBuild
+          (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
+          liftIO $ dmap `shouldBe` keyMap
 
 startSeleniumServer :: IO ()
 startSeleniumServer = do
   (_,_,_,ph) <- createProcess $ (proc "selenium-server" [])
     { std_in = NoStream
     , std_out = NoStream
+    , std_err = NoStream
     }
   _ <- forkIO $ print =<< waitForProcess ph
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
@@ -837,7 +1116,7 @@ checkTextInId i expected = WD.findElem (WD.ById i) >>= shouldContainText expecte
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
 
-type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m, MonadIO m)
+type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadFix m, MonadIO m)
 
 testWidgetStatic
   :: WD b
@@ -894,3 +1173,17 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
       liftIO $ takeMVar waitUntilSwitchover
       liftIO $ threadDelay 100000 -- wait a bit
       afterSwitchover a
+
+testWidgetDebug :: (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> IO ()
+testWidgetDebug bodyWidget = do
+  let staticApp = do
+        el "head" $ pure ()
+        el "body" $ do
+          bodyWidget
+          el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
+  ((), html) <- renderStatic staticApp
+  let entryPoint = do
+        mainHydrationWidgetWithSwitchoverAction (pure ()) (pure ()) $ bodyWidget
+        syncPoint
+  application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
+  Warp.runSettings (Warp.setPort 3911 Warp.defaultSettings) application

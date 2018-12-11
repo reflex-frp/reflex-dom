@@ -155,7 +155,12 @@ test-suite hydration
   build-depends: base
                , aeson
                , bytestring
+               , constraints
+               , constraints-extras
                , containers
+               , dependent-map
+               , dependent-sum
+               , dependent-sum-template
                , directory
                , exceptions
                , filepath
