@@ -2,65 +2,114 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 import Control.Concurrent
-import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Fix
 import Control.Monad.IO.Class
-import qualified Data.ByteString as BS
+import Data.Constraint (Dict(..))
+import Data.Constraint.Extras
+import Data.Dependent.Map (DMap)
+import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
 import Data.Foldable (traverse_)
+import Data.Functor.Identity
+import Data.Functor.Misc
+import Data.GADT.Compare.TH
+import Data.GADT.Show.TH
 import Data.IORef
-import Data.Maybe (fromMaybe)
+import Data.Map (Map)
+import Data.Maybe (fromMaybe, fromJust)
 import Data.Proxy
 import Data.Text (Text)
-import Language.Javascript.JSaddle (JSException(..), syncPoint, liftJSM, jsg, js1)
+import Language.Javascript.JSaddle (syncPoint, liftJSM)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Wai
 import Network.WebSockets
-import Reflex.Dom.Core
 import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
-import System.Process
-import System.Random
-import System.Timeout
-import Test.Hspec
-import Test.HUnit
-import Test.WebDriver (WD)
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.File as File
-
---import System.IO.Silently
-import System.IO.Temp
+import Reflex.Dom.Core
 import System.Directory
+import System.IO (stderr)
+import System.IO.Silently
+import System.IO.Temp
 import System.Process
-import qualified System.FilePath as FilePath
+import System.Timeout
+import Test.HUnit
+import Test.Hspec
+import Test.WebDriver (WD)
 
-import qualified GHCJS.DOM.EventM as EventM
-import qualified GHCJS.DOM.GlobalEventHandlers as Events
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Dependent.Map as DMap
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Network.Socket
+import qualified GHCJS.DOM as DOM
+import qualified GHCJS.DOM.Document as Document
+import qualified GHCJS.DOM.Element as Element
+import qualified GHCJS.DOM.EventM as EventM
+import qualified GHCJS.DOM.File as File
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
+import qualified GHCJS.DOM.Node as Node
+import qualified GHCJS.DOM.Types as DOM
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified System.FilePath as FilePath
 import qualified Test.WebDriver as WD
 
 testTimeLimit :: Int
-testTimeLimit = 1 * 1000 * 1000
+testTimeLimit = 3 * 1000 * 1000
 
 chromeConfig :: Text -> WD.WDConfig
 chromeConfig fp = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = ["--headless"] }) WD.defaultConfig
 
--- TODO list
--- use only available ports
--- parallel (requires port fix)
+keyMap :: DMap DKey Identity
+keyMap = DMap.fromList
+  [ Key_Int ==> 0
+  , Key_Char ==> 'A'
+  ]
+
+data DKey a where
+  Key_Int :: DKey Int
+  Key_Char :: DKey Char
+  Key_Bool :: DKey Bool
+
+instance ArgDict DKey where
+  type ConstraintsFor DKey c = (c Int, c Char, c Bool)
+  argDict = \case
+    Key_Int -> Dict
+    Key_Char -> Dict
+    Key_Bool -> Dict
+
+textKey :: DKey a -> Text
+textKey = \case
+  Key_Int -> "Key_Int"
+  Key_Char -> "Key_Char"
+  Key_Bool -> "Key_Bool"
+
+deriveGEq ''DKey
+deriveGCompare ''DKey
+deriveGShow ''DKey
+
+instance ShowTag DKey Identity where
+  showTaggedPrec = \case
+    Key_Int -> showsPrec
+    Key_Char -> showsPrec
+    Key_Bool -> showsPrec
+
+instance EqTag DKey Identity where
+  eqTagged Key_Int Key_Int = (==)
+  eqTagged Key_Char Key_Char = (==)
+  eqTagged Key_Bool Key_Bool = (==)
 
 main :: IO ()
 main = withSeleniumServer $ \selenium ->
@@ -68,7 +117,7 @@ main = withSeleniumServer $ \selenium ->
 
 tests :: Selenium -> Spec
 tests selenium = do
-  describe "text" $ parallel $ do
+  describe "text" $ do
     it "works" $ do
       testWidgetStatic (checkBodyText "hello world") $ do
         text "hello world"
@@ -134,8 +183,7 @@ tests selenium = do
       testWidgetStatic (pure ()) $ do
         text =<< prerender (pure "One") (pure "Two")
 
-
-  describe "element" $ parallel $ do
+  describe "element" $ do
     it "works with domEvent Click" $ do
       clickedRef <- newIORef False
       testWidget' (WD.findElem $ WD.ByTag "div") WD.click $ do
@@ -226,7 +274,7 @@ tests selenium = do
             liftIO $ writeIORef clicked True
           pure ()
 
-  describe "inputElement" $ parallel $ do
+  describe "inputElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
         inputRef <- newIORef ""
@@ -298,9 +346,7 @@ tests selenium = do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
-          (setValue, triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ setValue
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -323,9 +369,7 @@ tests selenium = do
                 readIORef checkedByUIRef >>= flip shouldBe True
                 readIORef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ do
-          (setChecked, triggerSetChecked) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetChecked =<< readChan setCheckedChan
+          setChecked <- triggerEventWithChan setCheckedChan
           e <- inputElement $ def
             & initialAttributes .~ "type" =: "checkbox"
             & inputElementConfig_setChecked .~ setChecked
@@ -389,9 +433,7 @@ tests selenium = do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setValue, triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ setValue
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -414,9 +456,7 @@ tests selenium = do
                 readIORef checkedByUIRef >>= flip shouldBe True
                 readIORef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setChecked, triggerSetChecked) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetChecked =<< readChan setCheckedChan
+          setChecked <- triggerEventWithChan setCheckedChan
           e <- inputElement $ def
             & initialAttributes .~ "type" =: "checkbox"
             & inputElementConfig_setChecked .~ setChecked
@@ -439,7 +479,7 @@ tests selenium = do
             names <- liftJSM $ traverse File.getName fs
             liftIO $ writeIORef filesRef names
 
-  describe "textAreaElement" $ parallel $ do
+  describe "textAreaElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
         inputRef <- newIORef ""
@@ -511,9 +551,7 @@ tests selenium = do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
@@ -559,14 +597,223 @@ tests selenium = do
                 readIORef valueByUIRef >>= flip shouldBe "hello"
                 readIORef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ prerender (pure ()) $ do
-          (setValue', triggerSetValue) <- newTriggerEvent
-          prerender (pure ()) $ liftIO $ void $ forkIO $ forever $ do
-            triggerSetValue =<< readChan setValueChan
+          setValue' <- triggerEventWithChan setValueChan
           e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
           performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
 
-  describe "prerender" $ parallel $ do
+  describe "selectElement" $ do
+    let options :: DomBuilder t m => m ()
+        options = do
+          elAttr "option" ("value" =: "one" <> "id" =: "one") $ text "one"
+          elAttr "option" ("value" =: "two" <> "id" =: "two") $ text "two"
+          elAttr "option" ("value" =: "three" <> "id" =: "three") $ text "three"
+    describe "hydration" $ do
+      it "sets initial value correctly" $ do
+        inputRef <- newIORef ""
+        let setup = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "three")
+              WD.click <=< WD.findElem $ WD.ById "two"
+              pure e
+            check e = do
+              assertAttr e "value" (Just "two")
+              liftIO $ readIORef inputRef >>= (`shouldBe` "three")
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              assertAttr e "value" (Just "two")
+              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+        testWidget' setup check $ do
+          (e, ()) <- selectElement (def { _selectElementConfig_initialValue = "three" }) options
+          click <- button "save"
+          liftIO . writeIORef inputRef <=< sample $ current $ _selectElement_value e
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "captures user input after switchover" $ do
+        inputRef <- newIORef ""
+        let checkValue = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "one")
+              WD.click <=< WD.findElem $ WD.ById "two"
+              assertAttr e "value" (Just "two")
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+        testWidget (pure ()) checkValue $ do
+          (e, ()) <- selectElement def options
+          click <- button "save"
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "sets focus appropriately" $ do
+        focusRef <- newIORef False
+        let checkValue = do
+              liftIO $ readIORef focusRef >>= flip shouldBe False
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              liftIO $ threadDelay 100000
+              liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget (pure ()) checkValue $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets focus when focus occurs before hydration" $ do
+        focusRef <- newIORef False
+        let setup = do
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              hasFocus <- (== e) <$> WD.activeElem
+              liftIO $ do
+                hasFocus `shouldBe` True
+                readIORef focusRef >>= flip shouldBe False
+            check = liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget setup check $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets value appropriately" $ do
+        valueByUIRef <- newIORef ("" :: Text)
+        valueRef <- newIORef ("" :: Text)
+        setValueChan :: Chan Text <- newChan
+        let checkValue = do
+              e <- WD.findElem $ WD.ByTag "select"
+              assertAttr e "value" (Just "one")
+              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              WD.click <=< WD.findElem $ WD.ById "two"
+              liftIO $ do
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "two"
+                writeChan setValueChan "three"
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "three"
+        testWidget (pure ()) checkValue $ do
+          setValue' <- triggerEventWithChan setValueChan
+          (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
+          performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+
+    describe "hydration/immediate" $ do
+      it "captures user input after switchover" $ do
+        inputRef :: IORef Text <- newIORef ""
+        let checkValue = do
+              WD.click <=< WD.findElem $ WD.ById "two"
+              WD.click <=< WD.findElem $ WD.ByTag "button"
+              liftIO $ readIORef inputRef >>= flip shouldBe "two"
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          (e, ()) <- selectElement def options
+          click <- button "save"
+          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+      it "sets focus appropriately" $ do
+        focusRef <- newIORef False
+        let checkValue = do
+              liftIO $ readIORef focusRef >>= flip shouldBe False
+              e <- WD.findElem $ WD.ByTag "select"
+              WD.click e
+              liftIO $ threadDelay 100000
+              liftIO $ readIORef focusRef >>= flip shouldBe True
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          (e, ()) <- selectElement def options
+          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+      it "sets value appropriately" $ do
+        valueByUIRef :: IORef Text <- newIORef ""
+        valueRef :: IORef Text <- newIORef ""
+        setValueChan :: Chan Text <- newChan
+        let checkValue = do
+              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              WD.click <=< WD.findElem $ WD.ById "two"
+              liftIO $ do
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "two"
+                writeChan setValueChan "three"
+                threadDelay 100000
+                readIORef valueByUIRef >>= flip shouldBe "two"
+                readIORef valueRef >>= flip shouldBe "three"
+        testWidget (pure ()) checkValue $ prerender (pure ()) $ do
+          setValue' <- triggerEventWithChan setValueChan
+          (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
+          performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+
+  let createRawElement :: DOM.MonadJSM m => m DOM.Element
+      createRawElement = do
+        doc <- DOM.currentDocumentUnchecked
+        div <- Document.createElement doc ("div" :: Text)
+        Element.setAttribute div ("id" :: Text) ("raw" :: Text)
+        text <- Document.createTextNode doc ("two" :: Text)
+        Node.appendChild div text
+        pure div
+  describe "placeRawElement" $ do
+    let checkOrder = do
+          shouldContainText "two" <=< WD.findElem $ WD.ByTag "div"
+          shouldContainText "one\ntwo\nthree" <=< WD.findElem $ WD.ByTag "body"
+    it "is placed correctly in the DOM at switchover" $ do
+      testWidget (pure ()) checkOrder $ do
+        text "one"
+        prerender (pure ()) $ placeRawElement =<< createRawElement
+        text "three"
+    it "is placed correctly in the DOM in immediate mode" $ do
+      testWidget (pure ()) checkOrder $ prerender (pure ()) $ do
+        text "one"
+        placeRawElement =<< createRawElement
+        text "three"
+    it "is placed correctly in the DOM in hydration mode" $ do
+      testWidget (pure ()) checkOrder $ do
+        text "one"
+        mElement <- prerender (pure Nothing) $ Just <$> createRawElement
+        traverse_ placeRawElement mElement
+        text "three"
+    it "can be clicked" $ do
+      clickedRef <- newIORef False
+      let check = WD.click <=< WD.findElem $ WD.ByTag "div"
+      testWidget (pure ()) check $ prerender (pure ()) $ do
+        raw <- createRawElement
+        placeRawElement raw
+        let htmlElement = DOM.uncheckedCastTo DOM.HTMLElement raw
+        liftJSM $ htmlElement `EventM.on` Events.click $ do
+          liftIO $ writeIORef clickedRef True
+        return ()
+      clicked <- readIORef clickedRef
+      assertEqual "Not clicked" True clicked
+
+  describe "wrapRawElement" $ do
+    it "modifies attributes" $ do
+      modifyAttrsChan :: Chan (Map AttributeName (Maybe Text)) <- newChan
+      let check = do
+            div <- WD.findElem $ WD.ByTag "div"
+            assertAttr div "test" Nothing
+            liftIO $ writeChan modifyAttrsChan ("test" =: Just "test")
+            assertAttr div "test" (Just "test")
+      testWidget (pure ()) check $ prerender (pure ()) $ do
+        modifyAttrs <- triggerEventWithChan modifyAttrsChan
+        raw <- createRawElement
+        placeRawElement raw
+        wrapRawElement raw $ RawElementConfig
+          { _rawElementConfig_modifyAttributes = Just modifyAttrs
+          , _rawElementConfig_eventSpec = (def :: EventSpec GhcjsDomSpace EventResult)
+          }
+        return ()
+    it "works with eventFlags" $ do
+      clickedRef <- newIORef False
+      let clickBoth = do
+            liftIO $ readIORef clickedRef >>= flip shouldBe False
+            WD.findElem (WD.ById "normal") >>= WD.click
+            liftIO $ do
+              readIORef clickedRef >>= flip shouldBe True
+              writeIORef clickedRef False
+            WD.findElem (WD.ById "raw") >>= WD.click
+            liftIO $ do
+              threadDelay 100000
+              readIORef clickedRef >>= flip shouldBe False
+      testWidget (pure ()) clickBoth $ prerender (pure ()) $ do
+        (e, _) <- el' "div" $ do
+          raw <- createRawElement
+          placeRawElement raw
+          wrapRawElement raw $ RawElementConfig
+            { _rawElementConfig_modifyAttributes = Nothing
+            , _rawElementConfig_eventSpec = addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) (def :: EventSpec GhcjsDomSpace EventResult)
+            }
+          elAttr "div" ("id" =: "normal") $ text "normal"
+        performEvent_ $ liftIO (writeIORef clickedRef True) <$ domEvent Click e
+
+  describe "prerender" $ do
     it "works in simple case" $ do
       testWidget (checkBodyText "One") (checkBodyText "Two") $ do
         prerender (text "One") (text "Two")
@@ -597,6 +844,240 @@ tests selenium = do
         )
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender (text "One") (text "Two"))
+--    it "postBuild works on server side" $ do
+--      pbRef <- newIORef False
+--      testWidgetStatic (pure ()) $ do
+--        prerender (do
+--          pb <- getPostBuild
+--          performEvent_ $ liftIO (writeIORef pbRef True) <$ pb) blank
+--      readIORef pbRef >>= (`shouldBe` True)
+    it "postBuild works on client side" $ do
+      pbRef <- newIORef False
+      testWidgetStatic (pure ()) $ do
+        prerender blank $ do
+          pb <- getPostBuild
+          performEvent_ $ liftIO (writeIORef pbRef True) <$ pb
+      readIORef pbRef >>= (`shouldBe` True)
+
+  describe "runWithReplace" $ do
+    it "works" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ do
+        replace <- triggerEventWithChan replaceChan
+        pb <- getPostBuild
+        runWithReplace (el "div" $ text "one") $ leftmost
+          [ el "div" (text "two") <$ pb
+          , el "span" . text <$> replace
+          ]
+        return ()
+    it "can be nested in initial widget" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ void $ flip runWithReplace never $ do
+        replace <- triggerEventWithChan replaceChan
+        pb <- getPostBuild
+        runWithReplace (el "div" $ text "one") $ leftmost
+          [ el "div" (text "two") <$ pb
+          , el "span" . text <$> replace
+          ]
+        return ()
+    it "can be nested in postBuild widget" $ do
+      replaceChan <- newChan
+      let setup = WD.findElem $ WD.ByTag "div"
+          check ssr = do
+            -- Check that the original element still exists and has the correct text
+            WD.getText ssr >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved ssr
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget' setup check $ void $ do
+        pb <- getPostBuild
+        runWithReplace (pure ()) $ ffor pb $ \() -> do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          runWithReplace (el "div" $ text "one") $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
+          return ()
+    it "can be nested in event widget" $ do
+      replaceChan1 <- newChan
+      replaceChan2 <- newChan
+      let check = do
+            shouldContainText "" =<< WD.findElem (WD.ByTag "body")
+            liftIO $ do
+              writeChan replaceChan1 "one"
+              threadDelay 100000
+            one <- WD.findElem $ WD.ByTag "div"
+            WD.getText one >>= liftIO . flip shouldBe "pb"
+            liftIO $ do
+              writeChan replaceChan2 "two"
+              threadDelay 100000
+            elementShouldBeRemoved one
+            shouldContainText "two" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        replace1 <- triggerEventWithChan replaceChan1
+        runWithReplace (pure ()) $ ffor replace1 $ \r1 -> do
+          replace2 <- triggerEventWithChan replaceChan2
+          pb <- getPostBuild
+          runWithReplace (el "div" $ text r1) $ leftmost
+            [ el "span" . text <$> replace2
+            , el "div" (text "pb") <$ pb
+            ]
+          return ()
+    it "works in immediate mode (RHS of prerender)" $ do
+      replaceChan :: Chan Text <- newChan
+      let check = do
+            one <- WD.findElem $ WD.ByTag "div"
+            shouldContainText "one" =<< WD.findElem (WD.ByTag "body")
+            WD.getText one >>= liftIO . flip shouldBe "one"
+            liftIO $ do
+              writeChan replaceChan "pb"
+              threadDelay 100000
+            elementShouldBeRemoved one
+            shouldContainText "pb" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        prerender blank $ do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          void $ runWithReplace (el "div" $ text "one") $ el "span" . text <$> replace
+    it "works with postBuild in immediate mode (RHS of prerender)" $ do
+      replaceChan :: Chan Text <- newChan
+      let check = do
+            two <- WD.findElem $ WD.ByTag "div"
+            shouldContainText "two" =<< WD.findElem (WD.ByTag "body")
+            WD.getText two >>= liftIO . flip shouldBe "two"
+            liftIO $ do
+              writeChan replaceChan "three"
+              threadDelay 100000
+            elementShouldBeRemoved two
+            shouldContainText "three" =<< WD.findElem (WD.ByTag "span")
+      testWidget (pure ()) check $ void $ do
+        prerender blank $ do
+          replace <- triggerEventWithChan replaceChan
+          pb <- getPostBuild
+          void $ runWithReplace (el "div" $ text "one") $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
+
+  describe "traverseDMapWithKeyWithAdjust" $ do
+    let widget :: TestWidget js t m => DKey a -> Identity a -> m (Identity a)
+        widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
+          elClass "span" "key" $ text $ textKey k
+          elClass "span" "value" $ text $ T.pack $ has @Show k $ show v
+          pure (Identity v)
+        checkItem :: WD.Element -> Text -> Text -> WD ()
+        checkItem li k v = do
+          shouldContainText k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainText v =<< WD.findElemFrom li (WD.ByClass "value")
+        checkInitialItems dm xs = do
+          liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
+          forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey k) (T.pack $ has @Show k $ show v)
+        getAndCheckInitialItems dm = do
+          xs <- WD.findElems (WD.ByTag "li")
+          checkInitialItems dm xs
+          pure xs
+        checkRemoval chan k = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe Nothing)
+            threadDelay 100000
+          elementShouldBeRemoved e
+        checkReplace chan k v = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe $ Just $ Identity v)
+            threadDelay 100000
+          elementShouldBeRemoved e
+          e' <- WD.findElem (WD.ById $ textKey k)
+          checkItem e' (textKey k) (T.pack $ show v)
+        checkInsert chan k v = do
+          liftIO $ do
+            writeChan chan $ PatchDMap $ DMap.singleton k (ComposeMaybe $ Just $ Identity v)
+            threadDelay 100000
+          e <- WD.findElem (WD.ById $ textKey k)
+          checkItem e (textKey k) (T.pack $ show v)
+        postBuildPatch = PatchDMap $ DMap.fromList [Key_Char :=> ComposeMaybe Nothing, Key_Bool :=> ComposeMaybe (Just $ Identity True)]
+    it "doesn't replace elements at switchover, can delete/update/insert" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems keyMap
+          check xs = do
+            checkInitialItems keyMap xs
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget' static check $ void $ do
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+        liftIO $ dmap `shouldBe` keyMap
+    it "handles postBuild correctly" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems (fromJust $ apply postBuildPatch keyMap)
+          check xs = do
+            checkInitialItems (fromMaybe undefined $ apply postBuildPatch keyMap) xs
+            checkRemoval chan Key_Int
+            checkInsert chan Key_Char 'B'
+            checkReplace chan Key_Bool True
+      testWidget' static check $ void $ do
+        pb <- getPostBuild
+        replace <- triggerEventWithChan chan
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
+        liftIO $ dmap `shouldBe` keyMap
+    it "can delete/update/insert when built in prerender" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems keyMap
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget (pure ()) check $ prerender (pure ()) $ void $ do
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+        liftIO $ dmap `shouldBe` keyMap
+    it "can delete/update/insert when built in immediate mode" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems keyMap
+            checkRemoval chan Key_Int
+            checkReplace chan Key_Char 'B'
+            checkInsert chan Key_Bool True
+      testWidget (pure ()) check $ void $ do
+        pb <- getPostBuild
+        runWithReplace (pure ()) $ ffor pb $ \() -> void $ do
+          (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
+          liftIO $ dmap `shouldBe` keyMap
+    -- Should be fixed by prerender changes!
+    it "handles postBuild correctly in prerender" $ do
+      chan <- newChan
+      let check = do
+            getAndCheckInitialItems (fromJust $ apply postBuildPatch keyMap)
+            checkRemoval chan Key_Int
+            checkInsert chan Key_Char 'B'
+            checkReplace chan Key_Bool True
+      testWidget (pure ()) check $ do
+        replace <- triggerEventWithChan chan
+        prerender (pure ()) $ void $ do
+          pb <- getPostBuild
+          (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
+          liftIO $ dmap `shouldBe` keyMap
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
@@ -608,6 +1089,7 @@ startSeleniumServer port = do
   (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
     { std_in = NoStream
     , std_out = NoStream
+    , std_err = NoStream
     }
   return $ terminateProcess ph
 
@@ -621,6 +1103,12 @@ withSeleniumServer f = do
     , _selenium_stopServer = stopServer
     }
 
+triggerEventWithChan :: (TriggerEvent t m, Prerender js m) => Chan a -> m (Event t a)
+triggerEventWithChan chan = do
+  (e, trigger) <- newTriggerEvent
+  prerender (pure ()) $ void $ liftIO $ forkIO $ forever $ trigger =<< readChan chan
+  pure e
+
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
 
@@ -631,26 +1119,22 @@ elementShouldBeRemoved e = do
     Left e -> throwM e
     Right !_ -> liftIO $ assertFailure "Expected element to be removed, but it still exists"
 
-shouldContainText :: WD.Element -> Text -> WD ()
-shouldContainText e t = liftIO . flip shouldBe t =<< WD.getText e
+shouldContainText :: Text -> WD.Element -> WD ()
+shouldContainText t = liftIO . flip shouldBe t <=< WD.getText
 
 checkBodyText :: Text -> WD ()
 checkBodyText = checkTextInTag "body"
 
 checkTextInTag :: Text -> Text -> WD ()
-checkTextInTag tag expected = do
-  body <- WD.findElem $ WD.ByTag tag
-  body `shouldContainText` expected
+checkTextInTag tag expected = WD.findElem (WD.ByTag tag) >>= shouldContainText expected
 
 checkTextInId :: Text -> Text -> WD ()
-checkTextInId i expected = do
-  e <- WD.findElem $ WD.ById i
-  e `shouldContainText` expected
+checkTextInId i expected = WD.findElem (WD.ById i) >>= shouldContainText expected
 
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
 
-type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m), MonadFix m, MonadIO m)
+type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadFix m, MonadIO m)
 
 testWidgetStatic
   :: WD b
@@ -697,7 +1181,7 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
   port <- getFreePort
   let settings = Warp.setPort (fromIntegral $ toInteger port) Warp.defaultSettings
       -- hSilence to get rid of ConnectionClosed logs
-      jsaddleWarp = forkIO $ Warp.runSettings settings application
+      jsaddleWarp = forkIO $ hSilence [stderr] $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
     browserPath <- T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
     when (T.null browserPath) $ fail "No browser was found"
@@ -719,3 +1203,17 @@ getFreePort = liftIO $ withSocketsDo $ do
       sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
       bind sock (addrAddress addr)
       return sock
+
+testWidgetDebug :: (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> IO ()
+testWidgetDebug bodyWidget = do
+  let staticApp = do
+        el "head" $ pure ()
+        el "body" $ do
+          bodyWidget
+          el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
+  ((), html) <- renderStatic staticApp
+  let entryPoint = do
+        mainHydrationWidgetWithSwitchoverAction (pure ()) (pure ()) $ bodyWidget
+        syncPoint
+  application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
+  Warp.runSettings (Warp.setPort 3911 Warp.defaultSettings) application
