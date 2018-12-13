@@ -394,7 +394,6 @@ instance DomSpace GhcjsDomSpace where
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawCommentNode GhcjsDomSpace = DOM.Comment
   type RawElement GhcjsDomSpace = DOM.Element
-  type RawFile GhcjsDomSpace = DOM.File
   type RawInputElement GhcjsDomSpace = DOM.HTMLInputElement
   type RawTextAreaElement GhcjsDomSpace = DOM.HTMLTextAreaElement
   type RawSelectElement GhcjsDomSpace = DOM.HTMLSelectElement

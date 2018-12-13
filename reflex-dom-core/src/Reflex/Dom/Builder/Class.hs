@@ -61,6 +61,7 @@ import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
+import qualified GHCJS.DOM.Types as DOM
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
@@ -68,7 +69,6 @@ class Default (EventSpec d EventResult) => DomSpace d where
   type RawTextNode d :: *
   type RawCommentNode d :: *
   type RawElement d :: *
-  type RawFile d :: *
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
   type RawSelectElement d :: *
@@ -323,7 +323,7 @@ data InputElement er d t
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
-                  , _inputElement_files :: Dynamic t [RawFile d]
+                  , _inputElement_files :: Dynamic t [DOM.File]
                   }
 
 data TextAreaElementConfig er t m

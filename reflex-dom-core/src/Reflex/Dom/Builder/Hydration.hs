@@ -4,6 +4,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -59,7 +60,6 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State.Strict
-import Data.Default
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum
 import Data.FastMutableIntMap (PatchIntMap (..))
@@ -122,10 +122,10 @@ import Data.Functor.Contravariant (phantom)
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 
-instance MonadJSM m => MonadJSM (HydrationDomBuilderT t m) where
+instance MonadJSM m => MonadJSM (HydrationRunnerT t m) where
     liftJSM' = lift . liftJSM'
 
-instance MonadJSM m => MonadJSM (HydrationRunnerT t m) where
+instance MonadJSM m => MonadJSM (HydrationDomBuilderT t m) where
     liftJSM' = lift . liftJSM'
 
 instance MonadJSM m => MonadJSM (DomRenderHookT t m) where
@@ -366,8 +366,8 @@ type SupportsHydrationDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, Mon
 wrap
   :: forall m er t. (Reflex t, MonadJSM m, MonadReflexCreateTrigger t m, DomRenderHook t m)
   => Chan [DSum (EventTriggerRef t) TriggerInvocation]
-  -> RawElement GhcjsDomSpace
-  -> RawElementConfig er t GhcjsDomSpace
+  -> DOM.Element
+  -> RawElementConfig er t HydrationDomSpace
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
@@ -390,7 +390,7 @@ wrap events e cfg = do
 
 triggerBody
   :: forall er t x. DOM.JSContextRef
-  -> ElementConfig er t GhcjsDomSpace
+  -> ElementConfig er t HydrationDomSpace
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> DMap EventName (EventFilterTriggerRef t er)
   -> DOM.Element
@@ -421,9 +421,9 @@ triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t = case DMap.lookup 
 makeElement
   :: forall er t m a. (MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m, Ref m ~ IORef, PerformEvent t m, MonadJSM (Performable m), MonadRef m)
   => Text
-  -> ElementConfig er t GhcjsDomSpace
+  -> ElementConfig er t HydrationDomSpace
   -> HydrationDomBuilderT t m a
-  -> HydrationDomBuilderT t m ((Element er GhcjsDomSpace t, a), IORef DOM.Element)
+  -> HydrationDomBuilderT t m ((Element er HydrationDomSpace t, a), IORef DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   ctx <- askJSM
@@ -452,7 +452,7 @@ makeElement elementTag cfg child = do
       eventTriggerRefs <- wrap events e $ extractRawElementConfig cfg
       es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
       e' <- liftIO $ newIORef e
-      return ((Element es e, result), e')
+      return ((Element es (), result), e')
     HydrationMode_Hydrating -> do
       -- Schedule everything for after postBuild, except for getting the result itself
       parent <- liftIO $ newIORef $ error "Parent not yet initialized"
@@ -620,16 +620,41 @@ instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT t m
     unreadyChildren <- askUnreadyChildren
     liftIO $ modifyIORef' unreadyChildren succ
 
+data HydrationDomSpace
+
+instance DomSpace HydrationDomSpace where
+  type EventSpec HydrationDomSpace = GhcjsEventSpec
+  type RawDocument HydrationDomSpace = DOM.Document
+  type RawTextNode HydrationDomSpace = ()
+  type RawCommentNode HydrationDomSpace = ()
+  type RawElement HydrationDomSpace = ()
+  type RawInputElement HydrationDomSpace = ()
+  type RawTextAreaElement HydrationDomSpace = ()
+  type RawSelectElement HydrationDomSpace = ()
+  addEventSpecFlags _ en f es = es
+    { _ghcjsEventSpec_filters =
+        let f' = Just . GhcjsEventFilter . \case
+              Nothing -> \evt -> do
+                mEventResult <- unGhcjsEventHandler (_ghcjsEventSpec_handler es) (en, evt)
+                return (f mEventResult, return mEventResult)
+              Just (GhcjsEventFilter oldFilter) -> \evt -> do
+                (oldFlags, oldContinuation) <- oldFilter evt
+                mEventResult <- oldContinuation
+                let newFlags = oldFlags <> f mEventResult
+                return (newFlags, return mEventResult)
+        in DMap.alter f' en $ _ghcjsEventSpec_filters es
+    }
+
 instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT t m) where
-  type DomBuilderSpace (HydrationDomBuilderT t m) = GhcjsDomSpace
+  type DomBuilderSpace (HydrationDomBuilderT t m) = HydrationDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
     t <- textNodeInternal initialContents mSetContents
-    return $ TextNode t
+    return $ TextNode ()
   {-# INLINABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = do
     c <- commentNodeInternal initialContents mSetContents
-    return $ CommentNode c
+    return $ CommentNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     fst <$> makeElement elementTag cfg child
@@ -833,19 +858,21 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _selectElement_raw = undefined -- TODO domSelectElement
       }
 
-  placeRawElement e = getHydrationMode >>= \case
-    HydrationMode_Immediate -> append $ toNode e
-    HydrationMode_Hydrating -> addHydrationStep $ insertAfterPreviousNode e
-  wrapRawElement e rawCfg = do
-    ctx <- askJSM
-    events <- askEvents
-    let cfg = (def :: ElementConfig EventResult t GhcjsDomSpace)
-          { _elementConfig_modifyAttributes = _rawElementConfig_modifyAttributes rawCfg
-          , _elementConfig_eventSpec = _rawElementConfig_eventSpec rawCfg
-          }
-    eventTriggerRefs <- wrap events e rawCfg
-    es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
-    return $ Element es e
+  placeRawElement () = pure () -- TODO
+--  placeRawElement e = getHydrationMode >>= \case
+--    HydrationMode_Immediate -> append $ toNode e
+--    HydrationMode_Hydrating -> addHydrationStep $ insertAfterPreviousNode e
+  wrapRawElement () _cfg = pure $ Element (EventSelector $ const never) () -- TODO
+--  wrapRawElement e rawCfg = do
+--    ctx <- askJSM
+--    events <- askEvents
+--    let cfg = (def :: ElementConfig EventResult t HydrationDomSpace)
+--          { _elementConfig_modifyAttributes = _rawElementConfig_modifyAttributes rawCfg
+--          , _elementConfig_eventSpec = _rawElementConfig_eventSpec rawCfg
+--          }
+--    eventTriggerRefs <- wrap events e rawCfg
+--    es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
+--    return $ Element es e
 
 data FragmentState
   = FragmentState_Unmounted

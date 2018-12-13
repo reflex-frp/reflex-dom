@@ -56,6 +56,8 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
 import System.Random (randomRIO)
 
+import qualified GHCJS.DOM.Types as DOM
+
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
   , _staticDomBuilderEnv_selectValue :: Maybe (Behavior t Text)
@@ -152,7 +154,6 @@ instance DomSpace StaticDomSpace where
   type RawTextNode StaticDomSpace = ()
   type RawCommentNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
-  type RawFile StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
