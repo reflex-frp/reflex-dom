@@ -34,6 +34,7 @@ import Data.Text (Text)
 import Language.Javascript.JSaddle (syncPoint, liftJSM)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
+import Network.Socket
 import Network.Wai
 import Network.WebSockets
 import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
@@ -45,7 +46,7 @@ import System.IO.Temp
 import System.Process
 import System.Timeout
 import Test.HUnit (assertEqual, assertFailure)
-import Test.Hspec (hspec, it, describe, beforeAll, shouldBe)
+import Test.Hspec (Spec, parallel, hspec, it, describe, shouldBe)
 import Test.WebDriver (WD)
 
 import qualified Data.ByteString.Lazy as LBS
@@ -60,8 +61,8 @@ import qualified Test.WebDriver as WD
 testTimeLimit :: Int
 testTimeLimit = 5 * 1000 * 1000
 
-chromeConfig :: WD.WDConfig
-chromeConfig = WD.useBrowser (WD.chrome { WD.chromeBinary = Just "/run/current-system/sw/bin/chromium", WD.chromeOptions = ["--headless"]}) WD.defaultConfig
+chromeConfig :: Text -> WD.WDConfig
+chromeConfig fp = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = ["--headless"] }) WD.defaultConfig
 
 keyMap :: DMap DKey Identity
 keyMap = DMap.fromList
@@ -105,8 +106,11 @@ instance EqTag DKey Identity where
   eqTagged Key_Bool Key_Bool = (==)
 
 main :: IO ()
-main = hspec $ beforeAll startSeleniumServer $ do
+main = withSeleniumServer $ \selenium ->
+  hspec (parallel (tests selenium)) `finally` _selenium_stopServer selenium
 
+tests :: Selenium -> Spec
+tests _selenium = do
   describe "text" $ do
     it "works" $ do
       testWidgetStatic (checkBodyText "hello world") $ do
@@ -1003,15 +1007,29 @@ main = hspec $ beforeAll startSeleniumServer $ do
           (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `shouldBe` keyMap
 
-startSeleniumServer :: IO ()
-startSeleniumServer = do
-  (_,_,_,ph) <- createProcess $ (proc "selenium-server" [])
+data Selenium = Selenium
+  { _selenium_portNumber :: PortNumber
+  , _selenium_stopServer :: IO ()
+  }
+
+startSeleniumServer :: PortNumber -> IO (IO ())
+startSeleniumServer port = do
+  (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
     { std_in = NoStream
     , std_out = NoStream
     , std_err = NoStream
     }
-  _ <- forkIO $ print =<< waitForProcess ph
+  return $ terminateProcess ph
+
+withSeleniumServer :: (Selenium -> IO ()) -> IO ()
+withSeleniumServer f = do
+  let port = 4444 -- TODO port <- getFreePort
+  stopServer <- startSeleniumServer port
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
+  f $ Selenium
+    { _selenium_portNumber = port
+    , _selenium_stopServer = stopServer
+    }
 
 triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender t m) => Chan a -> m (Event t a)
 triggerEventWithChan chan = do
@@ -1088,19 +1106,31 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
         mainHydrationWidgetWithSwitchoverAction (putMVar waitUntilSwitchover ()) (pure ()) $ bodyWidget
         syncPoint
   application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
-  --port <- randomRIO (3000, 50000)
-  let port = 3911 -- TODO
-  let settings = Warp.setPort port Warp.defaultSettings
+  port <- getFreePort
+  let settings = Warp.setPort (fromIntegral $ toInteger port) Warp.defaultSettings
       -- hSilence to get rid of ConnectionClosed logs
       jsaddleWarp = forkIO $ hSilence [stderr] $ Warp.runSettings settings application
   bracket jsaddleWarp killThread $ \_ -> do
-    WD.runSession chromeConfig . WD.finallyClose $ do
+    browserPath <- T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
+    when (T.null browserPath) $ fail "No browser was found"
+    WD.runSession (chromeConfig browserPath) . WD.finallyClose $ do
       WD.openPage $ "http://localhost:" <> show port
       a <- beforeJS
       liftIO $ putMVar waitBeforeJS ()
       liftIO $ takeMVar waitUntilSwitchover
       liftIO $ threadDelay 100000 -- wait a bit
       afterSwitchover a
+
+-- TODO: Should this be part of more widely used module?
+getFreePort :: MonadIO m => m PortNumber
+getFreePort = liftIO $ withSocketsDo $ do
+  addr:_ <- getAddrInfo (Just defaultHints) (Just "127.0.0.1") (Just "0")
+  bracket (open addr) close socketPort
+  where
+    open addr = do
+      sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+      bind sock (addrAddress addr)
+      return sock
 
 testWidgetDebug :: (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> IO ()
 testWidgetDebug bodyWidget = do
