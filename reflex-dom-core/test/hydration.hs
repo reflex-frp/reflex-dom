@@ -51,6 +51,7 @@ import Test.WebDriver (WD)
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
+import qualified Data.IntMap as IntMap
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified GHCJS.DOM.File as File
@@ -1006,6 +1007,113 @@ tests _selenium = do
           pb <- getPostBuild
           (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `shouldBe` keyMap
+
+  describe "traverseIntMapWithKeyWithAdjust" $ do
+    let textKeyInt k = "key" <> T.pack (show k)
+        intMap = IntMap.fromList
+          [ (1, "one")
+          , (2, "two")
+          , (3, "three")
+          ]
+    let widget :: DomBuilder t m => IntMap.Key -> Text -> m Text
+        widget k v = elAttr "li" ("id" =: textKeyInt k) $ do
+          elClass "span" "key" $ text $ textKeyInt k
+          elClass "span" "value" $ text v
+          pure v
+        checkItem :: WD.Element -> Text -> Text -> WD ()
+        checkItem li k v = do
+          shouldContainText k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainText v =<< WD.findElemFrom li (WD.ByClass "value")
+        checkInitialItems dm xs = do
+          liftIO $ assertEqual "Wrong amount of items in DOM" (IntMap.size dm) (length xs)
+          forM_ (zip xs (IntMap.toList dm)) $ \(e, (k, v)) -> checkItem e (textKeyInt k) v
+        getAndCheckInitialItems dm = do
+          xs <- WD.findElems (WD.ByTag "li")
+          checkInitialItems dm xs
+          pure xs
+        checkRemoval chan k = do
+          e <- WD.findElem (WD.ById $ textKeyInt k)
+          liftIO $ do
+            writeChan chan $ PatchIntMap $ IntMap.singleton k Nothing
+            threadDelay 100000
+          elementShouldBeRemoved e
+        checkReplace chan k v = do
+          e <- WD.findElem (WD.ById $ textKeyInt k)
+          liftIO $ do
+            writeChan chan $ PatchIntMap $ IntMap.singleton k $ Just v
+            threadDelay 100000
+          elementShouldBeRemoved e
+          e' <- WD.findElem (WD.ById $ textKeyInt k)
+          checkItem e' (textKeyInt k) v
+        checkInsert chan k v = do
+          liftIO $ do
+            writeChan chan $ PatchIntMap $ IntMap.singleton k $ Just v
+            threadDelay 100000
+          e <- WD.findElem (WD.ById $ textKeyInt k)
+          checkItem e (textKeyInt k) v
+        postBuildPatch = PatchIntMap $ IntMap.fromList [(2, Nothing), (3, Just "trois"), (4, Just "four")]
+    it "doesn't replace elements at switchover, can delete/update/insert" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems intMap
+          check xs = do
+            checkInitialItems intMap xs
+            checkRemoval chan 1
+            checkReplace chan 2 "deux"
+            checkInsert chan 4 "four"
+      testWidget' static check $ void $ do
+        (im, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap =<< triggerEventWithChan chan
+        liftIO $ im `shouldBe` intMap
+    it "handles postBuild correctly" $ do
+      chan <- newChan
+      let static = getAndCheckInitialItems (fromJust $ apply postBuildPatch intMap)
+          check xs = do
+            checkInitialItems (fromMaybe undefined $ apply postBuildPatch intMap) xs
+            checkRemoval chan 1
+            checkInsert chan 2 "deux"
+            checkReplace chan 3 "trois"
+      testWidget' static check $ void $ do
+        pb <- getPostBuild
+        replace <- triggerEventWithChan chan
+        (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
+        liftIO $ dmap `shouldBe` intMap
+    it "can delete/update/insert when built in prerender" $ do
+      chan <- newChan
+      let check = do
+            _ <- getAndCheckInitialItems intMap
+            checkRemoval chan 1
+            checkReplace chan 2 "deux"
+            checkInsert chan 3 "trois"
+      testWidget (pure ()) check $ do
+        replace <- triggerEventWithChan chan
+        prerender_ (pure ()) $ do
+          (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap replace
+          liftIO $ dmap `shouldBe` intMap
+    it "can delete/update/insert when built in immediate mode" $ do
+      chan <- newChan
+      let check = do
+            _ <- getAndCheckInitialItems intMap
+            checkRemoval chan 1
+            checkReplace chan 2 "deux"
+            checkInsert chan 3 "trois"
+      testWidget (pure ()) check $ void $ do
+        pb <- getPostBuild
+        runWithReplace (pure ()) $ ffor pb $ \() -> void $ do
+          (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap =<< triggerEventWithChan chan
+          liftIO $ dmap `shouldBe` intMap
+    -- Should be fixed by prerender changes!
+    it "handles postBuild correctly in prerender" $ do
+      chan <- newChan
+      let check = do
+            _ <- getAndCheckInitialItems (fromJust $ apply postBuildPatch intMap)
+            checkRemoval chan 1
+            checkInsert chan 2 "deux"
+            checkReplace chan 3 "trois"
+      testWidget (pure ()) check $ do
+        replace <- triggerEventWithChan chan
+        prerender_ (pure ()) $ void $ do
+          pb <- getPostBuild
+          (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
+          liftIO $ dmap `shouldBe` intMap
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
