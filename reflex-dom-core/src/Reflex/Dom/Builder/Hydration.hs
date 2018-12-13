@@ -742,7 +742,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _inputElement_input = valueChangedByUI
       , _inputElement_hasFocus = hasFocus
       , _inputElement_element = e
-      , _inputElement_raw = undefined -- TODO domInputElement
+      , _inputElement_raw = ()
       , _inputElement_files = files
       }
 
@@ -799,7 +799,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _textAreaElement_input = valueChangedByUI
       , _textAreaElement_hasFocus = hasFocus
       , _textAreaElement_element = e
-      , _textAreaElement_raw = undefined -- TODO domTextAreaElement
+      , _textAreaElement_raw = ()
       }
 
   {-# INLINABLE selectElement #-}
@@ -855,24 +855,11 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , _selectElement_change = valueChangedByUI
       , _selectElement_hasFocus = hasFocus
       , _selectElement_element = e
-      , _selectElement_raw = undefined -- TODO domSelectElement
+      , _selectElement_raw = ()
       }
 
-  placeRawElement () = pure () -- TODO
---  placeRawElement e = getHydrationMode >>= \case
---    HydrationMode_Immediate -> append $ toNode e
---    HydrationMode_Hydrating -> addHydrationStep $ insertAfterPreviousNode e
-  wrapRawElement () _cfg = pure $ Element (EventSelector $ const never) () -- TODO
---  wrapRawElement e rawCfg = do
---    ctx <- askJSM
---    events <- askEvents
---    let cfg = (def :: ElementConfig EventResult t HydrationDomSpace)
---          { _elementConfig_modifyAttributes = _rawElementConfig_modifyAttributes rawCfg
---          , _elementConfig_eventSpec = _rawElementConfig_eventSpec rawCfg
---          }
---    eventTriggerRefs <- wrap events e rawCfg
---    es <- newFanEventWithTrigger $ triggerBody ctx cfg events eventTriggerRefs e
---    return $ Element es e
+  placeRawElement () = pure ()
+  wrapRawElement () _cfg = pure $ Element (EventSelector $ const never) ()
 
 data FragmentState
   = FragmentState_Unmounted
