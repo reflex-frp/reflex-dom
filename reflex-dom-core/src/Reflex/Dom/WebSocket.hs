@@ -55,6 +55,7 @@ import Data.Text
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (jsonDecode)
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
@@ -127,9 +128,11 @@ webSocket' url config onRawMessage = do
     mws <- liftIO $ readIORef currentSocketRef
     success <- case mws of
       Nothing -> return False
-      Just ws -> runJSM ((webSocketSend ws payload >> return True)
-                         `JS.catch`
-                         (\(_ :: SomeException) -> return False)) ctx
+      Just ws -> flip runJSM ctx $ do
+        rs <- getReadyState $ unWebSocket ws
+        if rs == 1
+          then (webSocketSend ws payload >> return True) `JS.catch` (\(_ :: SomeException) -> return False)
+          else return False
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
