@@ -18,6 +18,7 @@ import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Control.Monad.Ref
 import Data.Constraint (Dict(..))
 import Data.Constraint.Extras
 import Data.Dependent.Map (DMap)
@@ -27,7 +28,7 @@ import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
-import Data.IORef
+import Data.IORef (IORef)
 import Data.Maybe (fromMaybe, fromJust)
 import Data.Proxy
 import Data.Text (Text)
@@ -175,31 +176,31 @@ tests _selenium = do
 
   describe "element" $ do
     it "works with domEvent Click" $ do
-      clickedRef <- newIORef False
+      clickedRef <- newRef False
       testWidget' (WD.findElem $ WD.ByTag "div") WD.click $ do
         (e, _) <- el' "div" $ text "hello world"
-        performEvent_ $ liftIO (writeIORef clickedRef True) <$ domEvent Click e
-      clicked <- readIORef clickedRef
+        performEvent_ $ liftIO (writeRef clickedRef True) <$ domEvent Click e
+      clicked <- readRef clickedRef
       assertEqual "Not clicked" True clicked
     it "works with eventFlags stopPropagation" $ do
-      firstClickedRef <- newIORef False
-      secondClickedRef <- newIORef False
+      firstClickedRef <- newRef False
+      secondClickedRef <- newRef False
       let clickBoth = do
             WD.findElem (WD.ById "first") >>= WD.click
             WD.findElem (WD.ById "second") >>= WD.click
       testWidget (pure ()) clickBoth $ do
         (firstDivEl, _) <- el' "div" $ prerender_ (pure ()) $ do
           void $ elAttr "span" ("id" =: "first") $ text "hello world"
-        performEvent_ $ liftIO (writeIORef firstClickedRef True) <$ domEvent Click firstDivEl
+        performEvent_ $ liftIO (writeRef firstClickedRef True) <$ domEvent Click firstDivEl
         (secondDivEl, _) <- el' "div" $ prerender_ (pure ()) $ do
           let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
               conf = (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
                 & initialAttributes .~ "id" =: "second"
                 & elementConfig_eventSpec .~ (addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def)
           void $ element "span" conf $ text "hello world"
-        performEvent_ $ liftIO (writeIORef secondClickedRef True) <$ domEvent Click secondDivEl
-      firstClicked <- readIORef firstClickedRef
-      secondClicked <- readIORef secondClickedRef
+        performEvent_ $ liftIO (writeRef secondClickedRef True) <$ domEvent Click secondDivEl
+      firstClicked <- readRef firstClickedRef
+      secondClicked <- readRef secondClickedRef
       assertEqual "Click propagated when it should have stopped" (True, False) (firstClicked, secondClicked)
     it "works with eventFlags preventDefault" $ do
       let click = do
@@ -248,7 +249,7 @@ tests _selenium = do
   describe "inputElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         testWidget'
           (do
             e <- WD.findElem $ WD.ByTag "input"
@@ -258,204 +259,204 @@ tests _selenium = do
             t <- WD.attr e "value"
             liftIO $ t `shouldBe` Just "hello world"
             WD.click <=< WD.findElem $ WD.ByTag "button"
-            input <- liftIO $ readIORef inputRef
+            input <- liftIO $ readRef inputRef
             liftIO $ input `shouldBe` "hello world"
           ) $ do
           e <- inputElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "captures user input after switchover" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         let checkValue = do
               WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "input"
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              input <- liftIO $ readIORef inputRef
+              input <- liftIO $ readRef inputRef
               liftIO $ input `shouldBe` "hello world"
         testWidget (pure ()) checkValue $ do
           e <- inputElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "input"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ do
           e <- inputElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_inputElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_inputElement_hasFocus e)
       it "sets focus when focus occurs before hydration" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let setup = do
               e <- WD.findElem $ WD.ByTag "input"
               WD.click e
               hasFocus <- (== e) <$> WD.activeElem
               liftIO $ do
                 hasFocus `shouldBe` True
-                readIORef focusRef >>= flip shouldBe False
-            check = liftIO $ readIORef focusRef >>= flip shouldBe True
+                readRef focusRef >>= flip shouldBe False
+            check = liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget setup check $ do
           e <- inputElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_inputElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_inputElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef <- newIORef ("" :: Text)
-        valueRef <- newIORef ("" :: Text)
+        valueByUIRef <- newRef ("" :: Text)
+        valueRef <- newRef ("" :: Text)
         setValueChan :: Chan Text <- newChan
         let checkValue = do
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
-              liftIO $ readIORef valueRef >>= flip shouldBe ""
+              liftIO $ readRef valueByUIRef >>= flip shouldBe ""
+              liftIO $ readRef valueRef >>= flip shouldBe ""
               e <- WD.findElem $ WD.ByTag "input"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "hello"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "hello"
                 writeChan setValueChan "world"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "world"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
           update <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ update
-          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
-          performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
+          performEvent_ $ liftIO . writeRef valueByUIRef <$> _inputElement_input e
+          performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
       it "sets checked appropriately" $ do
-        checkedByUIRef <- newIORef False
-        checkedRef <- newIORef False
+        checkedByUIRef <- newRef False
+        checkedRef <- newRef False
         setCheckedChan <- newChan
         let checkValue = do
-              liftIO $ readIORef checkedByUIRef >>= flip shouldBe False
-              liftIO $ readIORef checkedRef >>= flip shouldBe False
+              liftIO $ readRef checkedByUIRef >>= flip shouldBe False
+              liftIO $ readRef checkedRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "input"
               WD.moveToCenter e
               WD.click e
               liftIO $ do
                 threadDelay 100000
-                readIORef checkedByUIRef >>= flip shouldBe True
-                readIORef checkedRef >>= flip shouldBe True
+                readRef checkedByUIRef >>= flip shouldBe True
+                readRef checkedRef >>= flip shouldBe True
                 writeChan setCheckedChan False
                 threadDelay 100000
-                readIORef checkedByUIRef >>= flip shouldBe True
-                readIORef checkedRef >>= flip shouldBe False
+                readRef checkedByUIRef >>= flip shouldBe True
+                readRef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ do
           setChecked <- triggerEventWithChan setCheckedChan
           e <- inputElement $ def
             & initialAttributes .~ "type" =: "checkbox"
             & inputElementConfig_setChecked .~ setChecked
-          performEvent_ $ liftIO . writeIORef checkedByUIRef <$> _inputElement_checkedChange e
-          performEvent_ $ liftIO . writeIORef checkedRef <$> updated (_inputElement_checked e)
+          performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
+          performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
       it "captures file uploads" $ do
-        filesRef :: IORef [Text] <- newIORef []
+        filesRef :: IORef [Text] <- newRef []
         let uploadFile = do
               e <- WD.findElem $ WD.ByTag "input"
               path <- liftIO $ writeSystemTempFile "testFile" "file contents"
               WD.sendKeys (T.pack path) e
               WD.click <=< WD.findElem $ WD.ByTag "button"
               liftIO $ removeFile path
-              input <- liftIO $ readIORef filesRef
+              input <- liftIO $ readRef filesRef
               liftIO $ input `shouldBe` [T.pack $ FilePath.takeFileName path]
         testWidget (pure ()) uploadFile $ do
           e <- inputElement $ def & initialAttributes .~ "type" =: "file"
           click <- button "save"
           prerender_ (pure ()) $ performEvent_ $ ffor (tag (current (_inputElement_files e)) click) $ \fs -> do
             names <- liftJSM $ traverse File.getName fs
-            liftIO $ writeIORef filesRef names
+            liftIO $ writeRef filesRef names
 
     describe "hydration/immediate" $ do
       it "captures user input after switchover" $ do
-        inputRef :: IORef Text <- newIORef ""
+        inputRef :: IORef Text <- newRef ""
         let checkValue = do
               WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "input"
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              input <- liftIO $ readIORef inputRef
+              input <- liftIO $ readRef inputRef
               liftIO $ input `shouldBe` "hello world"
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           e <- inputElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "input"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           e <- inputElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_inputElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_inputElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef :: IORef Text <- newIORef ""
-        valueRef :: IORef Text <- newIORef ""
+        valueByUIRef :: IORef Text <- newRef ""
+        valueRef :: IORef Text <- newRef ""
         setValueChan :: Chan Text <- newChan
         let checkValue = do
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
-              liftIO $ readIORef valueRef >>= flip shouldBe ""
+              liftIO $ readRef valueByUIRef >>= flip shouldBe ""
+              liftIO $ readRef valueRef >>= flip shouldBe ""
               e <- WD.findElem $ WD.ByTag "input"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "hello"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "hello"
                 writeChan setValueChan "world"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "world"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
           update <- triggerEventWithChan setValueChan
           prerender_ (pure ()) $ do
             e <- inputElement $ def & inputElementConfig_setValue .~ update
-            performEvent_ $ liftIO . writeIORef valueByUIRef <$> _inputElement_input e
-            performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
+            performEvent_ $ liftIO . writeRef valueByUIRef <$> _inputElement_input e
+            performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
       it "sets checked appropriately" $ do
-        checkedByUIRef <- newIORef False
-        checkedRef <- newIORef False
+        checkedByUIRef <- newRef False
+        checkedRef <- newRef False
         setCheckedChan <- newChan
         let checkValue = do
-              liftIO $ readIORef checkedByUIRef >>= flip shouldBe False
-              liftIO $ readIORef checkedRef >>= flip shouldBe False
+              liftIO $ readRef checkedByUIRef >>= flip shouldBe False
+              liftIO $ readRef checkedRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "input"
               WD.moveToCenter e
               WD.click e
               liftIO $ do
                 threadDelay 100000
-                readIORef checkedByUIRef >>= flip shouldBe True
-                readIORef checkedRef >>= flip shouldBe True
+                readRef checkedByUIRef >>= flip shouldBe True
+                readRef checkedRef >>= flip shouldBe True
                 writeChan setCheckedChan False
                 threadDelay 100000
-                readIORef checkedByUIRef >>= flip shouldBe True
-                readIORef checkedRef >>= flip shouldBe False
+                readRef checkedByUIRef >>= flip shouldBe True
+                readRef checkedRef >>= flip shouldBe False
         testWidget (pure ()) checkValue $ do
           setChecked <- triggerEventWithChan setCheckedChan
           prerender_ (pure ()) $ do
             e <- inputElement $ def
               & initialAttributes .~ "type" =: "checkbox"
               & inputElementConfig_setChecked .~ setChecked
-            performEvent_ $ liftIO . writeIORef checkedByUIRef <$> _inputElement_checkedChange e
-            performEvent_ $ liftIO . writeIORef checkedRef <$> updated (_inputElement_checked e)
+            performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
+            performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
       it "captures file uploads" $ do
-        filesRef :: IORef [Text] <- newIORef []
+        filesRef :: IORef [Text] <- newRef []
         let uploadFile = do
               e <- WD.findElem $ WD.ByTag "input"
               path <- liftIO $ writeSystemTempFile "testFile" "file contents"
               WD.sendKeys (T.pack path) e
               WD.click <=< WD.findElem $ WD.ByTag "button"
               liftIO $ removeFile path
-              input <- liftIO $ readIORef filesRef
+              input <- liftIO $ readRef filesRef
               liftIO $ input `shouldBe` [T.pack $ FilePath.takeFileName path]
         testWidget (pure ()) uploadFile $ prerender_ (pure ()) $ do
           e <- inputElement $ def & initialAttributes .~ "type" =: "file"
           click <- button "save"
           performEvent_ $ ffor (tag (current (_inputElement_files e)) click) $ \fs -> do
             names <- liftJSM $ traverse File.getName fs
-            liftIO $ writeIORef filesRef names
+            liftIO $ writeRef filesRef names
 
   describe "textAreaElement" $ do
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         testWidget'
           (do
             e <- WD.findElem $ WD.ByTag "textarea"
@@ -465,116 +466,116 @@ tests _selenium = do
             t <- WD.attr e "value"
             liftIO $ t `shouldBe` Just "hello world"
             WD.click <=< WD.findElem $ WD.ByTag "button"
-            input <- liftIO $ readIORef inputRef
+            input <- liftIO $ readRef inputRef
             liftIO $ input `shouldBe` "hello world"
           ) $ do
           e <- textAreaElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "captures user input after switchover" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         let checkValue = do
               WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "textarea"
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              input <- liftIO $ readIORef inputRef
+              input <- liftIO $ readRef inputRef
               liftIO $ input `shouldBe` "hello world"
         testWidget (pure ()) checkValue $ do
           e <- textAreaElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ do
           e <- textAreaElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_textAreaElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_textAreaElement_hasFocus e)
       it "sets focus when focus occurs before hydration" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let setup = do
               e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               hasFocus <- (== e) <$> WD.activeElem
               liftIO $ do
                 hasFocus `shouldBe` True
-                readIORef focusRef >>= flip shouldBe False
-            check = liftIO $ readIORef focusRef >>= flip shouldBe True
+                readRef focusRef >>= flip shouldBe False
+            check = liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget setup check $ do
           e <- textAreaElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_textAreaElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_textAreaElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef <- newIORef ("" :: Text)
-        valueRef <- newIORef ("" :: Text)
+        valueByUIRef <- newRef ("" :: Text)
+        valueRef <- newRef ("" :: Text)
         setValueChan :: Chan Text <- newChan
         let checkValue = do
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
-              liftIO $ readIORef valueRef >>= flip shouldBe ""
+              liftIO $ readRef valueByUIRef >>= flip shouldBe ""
+              liftIO $ readRef valueRef >>= flip shouldBe ""
               e <- WD.findElem $ WD.ByTag "textarea"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "hello"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "hello"
                 writeChan setValueChan "world"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "world"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
-          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
-          performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
+          performEvent_ $ liftIO . writeRef valueByUIRef <$> _textAreaElement_input e
+          performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
 
     describe "hydration/immediate" $ do
       it "captures user input after switchover" $ do
-        inputRef :: IORef Text <- newIORef ""
+        inputRef :: IORef Text <- newRef ""
         let checkValue = do
               WD.sendKeys "hello world" <=< WD.findElem $ WD.ByTag "textarea"
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              input <- liftIO $ readIORef inputRef
+              input <- liftIO $ readRef inputRef
               liftIO $ input `shouldBe` "hello world"
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           e <- textAreaElement def
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "textarea"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           e <- textAreaElement def
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_textAreaElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_textAreaElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef :: IORef Text <- newIORef ""
-        valueRef :: IORef Text <- newIORef ""
+        valueByUIRef :: IORef Text <- newRef ""
+        valueRef :: IORef Text <- newRef ""
         setValueChan :: Chan Text <- newChan
         let checkValue = do
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe ""
-              liftIO $ readIORef valueRef >>= flip shouldBe ""
+              liftIO $ readRef valueByUIRef >>= flip shouldBe ""
+              liftIO $ readRef valueRef >>= flip shouldBe ""
               e <- WD.findElem $ WD.ByTag "textarea"
               WD.sendKeys "hello" e
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "hello"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "hello"
                 writeChan setValueChan "world"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "hello"
-                readIORef valueRef >>= flip shouldBe "world"
+                readRef valueByUIRef >>= flip shouldBe "hello"
+                readRef valueRef >>= flip shouldBe "world"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           prerender_ (pure ()) $ do
             e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
-            performEvent_ $ liftIO . writeIORef valueByUIRef <$> _textAreaElement_input e
-            performEvent_ $ liftIO . writeIORef valueRef <$> updated (value e)
+            performEvent_ $ liftIO . writeRef valueByUIRef <$> _textAreaElement_input e
+            performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
 
   describe "selectElement" $ do
     let options :: DomBuilder t m => m ()
@@ -584,7 +585,7 @@ tests _selenium = do
           elAttr "option" ("value" =: "three" <> "id" =: "three") $ text "three"
     describe "hydration" $ do
       it "sets initial value correctly" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         let setup = do
               e <- WD.findElem $ WD.ByTag "select"
               assertAttr e "value" (Just "three")
@@ -592,120 +593,120 @@ tests _selenium = do
               pure e
             check e = do
               assertAttr e "value" (Just "two")
-              liftIO $ readIORef inputRef >>= (`shouldBe` "three")
+              liftIO $ readRef inputRef >>= (`shouldBe` "three")
               WD.click <=< WD.findElem $ WD.ByTag "button"
               assertAttr e "value" (Just "two")
-              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+              liftIO $ readRef inputRef >>= (`shouldBe` "two")
         testWidget' setup check $ do
           (e, ()) <- selectElement (def { _selectElementConfig_initialValue = "three" }) options
           click <- button "save"
-          liftIO . writeIORef inputRef <=< sample $ current $ _selectElement_value e
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+          liftIO . writeRef inputRef <=< sample $ current $ _selectElement_value e
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (_selectElement_value e)) click
       it "captures user input after switchover" $ do
-        inputRef <- newIORef ("" :: Text)
+        inputRef <- newRef ("" :: Text)
         let checkValue = do
               e <- WD.findElem $ WD.ByTag "select"
               assertAttr e "value" (Just "one")
               WD.click <=< WD.findElem $ WD.ById "two"
               assertAttr e "value" (Just "two")
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              liftIO $ readIORef inputRef >>= (`shouldBe` "two")
+              liftIO $ readRef inputRef >>= (`shouldBe` "two")
         testWidget (pure ()) checkValue $ do
           (e, ()) <- selectElement def options
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (_selectElement_value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "select"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ do
           (e, ()) <- selectElement def options
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_selectElement_hasFocus e)
       it "sets focus when focus occurs before hydration" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let setup = do
               e <- WD.findElem $ WD.ByTag "select"
               WD.click e
               hasFocus <- (== e) <$> WD.activeElem
               liftIO $ do
                 hasFocus `shouldBe` True
-                readIORef focusRef >>= flip shouldBe False
-            check = liftIO $ readIORef focusRef >>= flip shouldBe True
+                readRef focusRef >>= flip shouldBe False
+            check = liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget setup check $ do
           (e, ()) <- selectElement def options
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_selectElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef <- newIORef ("" :: Text)
-        valueRef <- newIORef ("" :: Text)
+        valueByUIRef <- newRef ("" :: Text)
+        valueRef <- newRef ("" :: Text)
         setValueChan :: Chan Text <- newChan
         let checkValue = do
               e <- WD.findElem $ WD.ByTag "select"
               assertAttr e "value" (Just "one")
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
-              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              liftIO $ readRef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readRef valueRef >>= flip shouldBe "one"
               WD.click <=< WD.findElem $ WD.ById "two"
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "two"
-                readIORef valueRef >>= flip shouldBe "two"
+                readRef valueByUIRef >>= flip shouldBe "two"
+                readRef valueRef >>= flip shouldBe "two"
                 writeChan setValueChan "three"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "two"
-                readIORef valueRef >>= flip shouldBe "three"
+                readRef valueByUIRef >>= flip shouldBe "two"
+                readRef valueRef >>= flip shouldBe "three"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
-          performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
-          performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+          performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
+          performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
     describe "hydration/immediate" $ do
       it "captures user input after switchover" $ do
-        inputRef :: IORef Text <- newIORef ""
+        inputRef :: IORef Text <- newRef ""
         let checkValue = do
               WD.click <=< WD.findElem $ WD.ById "two"
               WD.click <=< WD.findElem $ WD.ByTag "button"
-              liftIO $ readIORef inputRef >>= flip shouldBe "two"
+              liftIO $ readRef inputRef >>= flip shouldBe "two"
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           (e, ()) <- selectElement def options
           click <- button "save"
-          performEvent_ $ liftIO . writeIORef inputRef <$> tag (current (_selectElement_value e)) click
+          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (_selectElement_value e)) click
       it "sets focus appropriately" $ do
-        focusRef <- newIORef False
+        focusRef <- newRef False
         let checkValue = do
-              liftIO $ readIORef focusRef >>= flip shouldBe False
+              liftIO $ readRef focusRef >>= flip shouldBe False
               e <- WD.findElem $ WD.ByTag "select"
               WD.click e
               liftIO $ threadDelay 100000
-              liftIO $ readIORef focusRef >>= flip shouldBe True
+              liftIO $ readRef focusRef >>= flip shouldBe True
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           (e, ()) <- selectElement def options
-          performEvent_ $ liftIO . writeIORef focusRef <$> updated (_selectElement_hasFocus e)
+          performEvent_ $ liftIO . writeRef focusRef <$> updated (_selectElement_hasFocus e)
       it "sets value appropriately" $ do
-        valueByUIRef :: IORef Text <- newIORef ""
-        valueRef :: IORef Text <- newIORef ""
+        valueByUIRef :: IORef Text <- newRef ""
+        valueRef :: IORef Text <- newRef ""
         setValueChan :: Chan Text <- newChan
         let checkValue = do
-              liftIO $ readIORef valueByUIRef >>= flip shouldBe "one"
-              liftIO $ readIORef valueRef >>= flip shouldBe "one"
+              liftIO $ readRef valueByUIRef >>= flip shouldBe "one"
+              liftIO $ readRef valueRef >>= flip shouldBe "one"
               WD.click <=< WD.findElem $ WD.ById "two"
               liftIO $ do
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "two"
-                readIORef valueRef >>= flip shouldBe "two"
+                readRef valueByUIRef >>= flip shouldBe "two"
+                readRef valueRef >>= flip shouldBe "two"
                 writeChan setValueChan "three"
                 threadDelay 100000
-                readIORef valueByUIRef >>= flip shouldBe "two"
-                readIORef valueRef >>= flip shouldBe "three"
+                readRef valueByUIRef >>= flip shouldBe "two"
+                readRef valueRef >>= flip shouldBe "three"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           prerender_ (pure ()) $ do
             (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
-            performEvent_ $ liftIO . writeIORef valueByUIRef <$> _selectElement_change e
-            performEvent_ $ liftIO . writeIORef valueRef <$> updated (_selectElement_value e)
+            performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
+            performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
   describe "prerender" $ do
     it "works in simple case" $ do
@@ -763,9 +764,9 @@ tests _selenium = do
     it "can't exploit IO to break hydration" $ do
       let static = shouldContainText "Initial" =<< WD.findElem (WD.ByTag "body")
       testWidgetStatic static $ void $ do
-        ref <- liftIO $ newIORef "Initial"
-        prerender_ (pure ()) (liftIO $ writeIORef ref "Client")
-        text <=< liftIO $ readIORef ref
+        ref <- liftIO $ newRef "Initial"
+        prerender_ (pure ()) (liftIO $ writeRef ref "Client")
+        text <=< liftIO $ readRef ref
     -- As above, so below
     it "can't exploit triggerEvent to break hydration" $ do
       let static = shouldContainText "Initial" =<< WD.findElem (WD.ByTag "body")

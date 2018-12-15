@@ -173,6 +173,7 @@ test-suite hydration
                , lens
                , network
                , random
+               , ref-tf
                , reflex
                , reflex-dom-core
                , process
