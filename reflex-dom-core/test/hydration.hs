@@ -697,13 +697,18 @@ tests wdConfig caps _selenium = do
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           (e, ()) <- selectElement def options
           performEvent_ $ liftIO . writeRef focusRef <$> updated (_selectElement_hasFocus e)
+      it "has correct initial value" $ runWD $ do
+        valueRef :: IORef Text <- newRef ""
+        let checkValue = readRef valueRef >>= flip shouldBe "one"
+        testWidget (pure ()) checkValue $ do
+          prerender_ (pure ()) $ do
+            (e, ()) <- selectElement def { _selectElementConfig_initialValue = "one" } options
+            liftIO . writeRef valueRef <=< sample $ current $ _selectElement_value e
       it "sets value appropriately" $ runWD $ do
         valueByUIRef :: IORef Text <- newRef ""
         valueRef :: IORef Text <- newRef ""
         setValueChan :: Chan Text <- liftIO newChan
         let checkValue = do
-              readRef valueByUIRef >>= flip shouldBe "one"
-              readRef valueRef >>= flip shouldBe "one"
               WD.click <=< WD.findElem $ WD.ById "two"
               liftIO $ threadDelay 100000
               readRef valueByUIRef >>= flip shouldBe "two"
@@ -1357,8 +1362,8 @@ getFreePort = liftIO $ withSocketsDo $ do
       bind sock (addrAddress addr)
       return sock
 
-testWidgetDebug :: (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> IO ()
-testWidgetDebug bodyWidget = do
+testWidgetDebug :: MonadIO n => (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> n ()
+testWidgetDebug bodyWidget = liftIO $ do
   let staticApp = do
         el "head" $ pure ()
         el "body" $ do
