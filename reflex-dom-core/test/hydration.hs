@@ -39,6 +39,7 @@ import Network.Wai
 import Network.WebSockets
 import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
 import Reflex.Dom.Core
+import Reflex.Patch.DMapWithMove
 import System.Directory
 import System.IO (stderr)
 import System.IO.Silently
@@ -838,7 +839,6 @@ tests _selenium = do
       let check = do
             liftIO $ do
               writeChan replaceChan ()
-              threadDelay 100000
               takeMVar pbLock
       testWidget (pure ()) check $ void $ do
         replace <- triggerEventWithChan replaceChan
@@ -853,7 +853,6 @@ tests _selenium = do
             shouldContainText "" =<< WD.findElem (WD.ByTag "body")
             liftIO $ do
               writeChan replaceChan1 "one"
-              threadDelay 100000
               takeMVar lock
             one <- WD.findElem $ WD.ByTag "div"
             WD.getText one >>= liftIO . flip shouldBe "pb"
@@ -1115,6 +1114,102 @@ tests _selenium = do
           (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `shouldBe` intMap
 
+  describe "traverseDMapWithKeyWithAdjustWithMove" $ do
+    let widget :: DomBuilder t m => Key2 a -> Identity a -> m (Identity a)
+        widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
+          elClass "span" "key" $ text $ textKey k
+          elClass "span" "value" $ text $ T.pack $ has @Show k $ show v
+          pure (Identity v)
+        textKey :: Key2 a -> Text
+        textKey = \case
+          Key2_Int i -> "i" <> T.pack (show i)
+          Key2_Char c -> "c" <> T.pack [c]
+        checkItem :: WD.Element -> Text -> Text -> WD ()
+        checkItem li k v = do
+          shouldContainText k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainText v =<< WD.findElemFrom li (WD.ByClass "value")
+        checkInitialItems dm xs = do
+          liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
+          forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey k) (T.pack $ has @Show k $ show v)
+        getAndCheckInitialItems dm = do
+          xs <- WD.findElems (WD.ByTag "li")
+          checkInitialItems dm xs
+          pure xs
+        checkRemoval chan k = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ deleteDMapKey k
+            threadDelay 100000
+          elementShouldBeRemoved e
+        checkReplace chan k v = do
+          e <- WD.findElem (WD.ById $ textKey k)
+          liftIO $ do
+            writeChan chan $ insertDMapKey k (Identity v)
+            threadDelay 100000
+          elementShouldBeRemoved e
+          e' <- WD.findElem (WD.ById $ textKey k)
+          checkItem e' (textKey k) (T.pack $ show v)
+        checkInsert chan k v = do
+          liftIO $ do
+            writeChan chan $ insertDMapKey k (Identity v)
+            threadDelay 100000
+          e <- WD.findElem (WD.ById $ textKey k)
+          checkItem e (textKey k) (T.pack $ show v)
+        moveSpec testMove = do
+          it "can insert an item" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
+            shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
+            liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2)
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
+          it "can delete an item" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3]) $ \body chan -> do
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
+            liftIO $ writeChan chan (deleteDMapKey (Key2_Int 2))
+            shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
+          it "can swap items" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i33","i44"]) body
+            liftIO $ writeChan chan (swapDMapKey (Key2_Int 2) (Key2_Int 3))
+            shouldContainText (T.strip $ T.unlines ["i11","i33","i22","i44"]) body
+          it "can move items" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i33", "i44"]) body
+            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3))
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
+            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- attempt a move to nonexistent key should delete
+            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
+            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- this causes a JSException in immediate builder too
+            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
+            liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2) -- this step will fail if the above caused an exception, thus works as a proxy for detecting the exception given we can't catch it
+            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
+
+    describe "hydration" $ moveSpec $ \initMap test -> do
+      chan <- newChan
+      let static = getAndCheckInitialItems initMap
+          check xs = do
+            checkInitialItems initMap xs
+            body <- WD.findElem (WD.ByTag "body")
+            test body chan
+      testWidget' static check $ void $ do
+        (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
+        liftIO $ dmap `shouldBe` initMap
+
+    describe "hydration/immediate" $ moveSpec $ \initMap test -> do
+      chan <- newChan
+      replace <- newChan
+      lock <- newEmptyMVar
+      let check = do
+            liftIO $ do
+              writeChan replace ()
+              takeMVar lock
+            xs <- getAndCheckInitialItems initMap
+            checkInitialItems initMap xs
+            body <- WD.findElem (WD.ByTag "body")
+            test body chan
+      testWidget (pure ()) check $ void $ do
+        e <- triggerEventWithChan replace
+        runWithReplace (pure ()) $ ffor e $ \() -> void $ do
+          pb <- getPostBuild
+          performEvent_ $ liftIO (putMVar lock ()) <$ pb
+          (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
+          liftIO $ dmap `shouldBe` initMap
+
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
   , _selenium_stopServer :: IO ()
@@ -1253,3 +1348,26 @@ testWidgetDebug bodyWidget = do
         syncPoint
   application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
   Warp.runSettings (Warp.setPort 3911 Warp.defaultSettings) application
+
+data Key2 a where
+  Key2_Int :: Int -> Key2 Int
+  Key2_Char :: Char -> Key2 Char
+
+deriveGEq ''Key2
+deriveGCompare ''Key2
+deriveGShow ''Key2
+
+instance ShowTag Key2 Identity where
+  showTaggedPrec = \case
+    Key2_Int _ -> showsPrec
+    Key2_Char _ -> showsPrec
+
+instance EqTag Key2 Identity where
+  eqTagged (Key2_Int _) (Key2_Int _) = (==)
+  eqTagged (Key2_Char _) (Key2_Char _) = (==)
+
+instance ArgDict Key2 where
+  type ConstraintsFor Key2 c = (c Int, c Char)
+  argDict = \case
+    Key2_Int _ -> Dict
+    Key2_Char _ -> Dict
