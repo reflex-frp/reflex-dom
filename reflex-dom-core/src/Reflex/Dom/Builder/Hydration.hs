@@ -12,6 +12,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
@@ -54,7 +55,7 @@ module Reflex.Dom.Builder.Hydration
 
 import Control.Concurrent
 import Control.Exception (bracketOnError)
-import Control.Lens hiding (element, ix)
+import Control.Lens (Identity(..), imapM_, iforM_, (^.))
 import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
@@ -652,11 +653,11 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
   type DomBuilderSpace (HydrationDomBuilderT t m) = HydrationDomSpace
   {-# INLINABLE textNode #-}
   textNode (TextNodeConfig initialContents mSetContents) = do
-    t <- textNodeInternal initialContents mSetContents
+    _ <- textNodeInternal initialContents mSetContents
     return $ TextNode ()
   {-# INLINABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = do
-    c <- commentNodeInternal initialContents mSetContents
+    _ <- commentNodeInternal initialContents mSetContents
     return $ CommentNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
@@ -1003,12 +1004,13 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) =>
     let updateChildUnreadiness (p :: PatchDMapWithMove k (Compose (TraverseChild t m (Some k)) v')) old = do
           let new :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> IO (PatchDMapWithMove.NodeInfo k (Constant (IORef (ChildReadyState (Some k)))) a)
               new k = PatchDMapWithMove.nodeInfoMapFromM $ \case
-                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Right myTypeImmediate) _)) -> do
-                  readIORef (_traverseChildImmediate_childReadyState myTypeImmediate) >>= \case
+                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Left _hydration) _)) -> return PatchDMapWithMove.From_Delete
+                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Right immediate) _)) -> do
+                  readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
                     ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
                     ChildReadyState_Unready _ -> do
-                      writeIORef (_traverseChildImmediate_childReadyState myTypeImmediate) $ ChildReadyState_Unready $ Just $ This k
-                      return $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState myTypeImmediate)
+                      writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ This k
+                      return $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState immediate)
                 PatchDMapWithMove.From_Delete -> return PatchDMapWithMove.From_Delete
                 PatchDMapWithMove.From_Move fromKey -> return $ PatchDMapWithMove.From_Move fromKey
               deleteOrMove :: forall a. k a -> Product (Constant (IORef (ChildReadyState (Some k)))) (ComposeMaybe k) a -> IO (Constant () a)
@@ -1069,7 +1071,7 @@ traverseDMapWithKeyWithAdjust' = do
         let new :: forall a. k a -> ComposeMaybe (Compose (TraverseChild t m (Some k)) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState (Some k)))) a)
             new k (ComposeMaybe m) = ComposeMaybe <$> case m of
               Nothing -> return Nothing
-              Just (Compose (TraverseChild (Left hydration) _)) -> pure Nothing
+              Just (Compose (TraverseChild (Left _hydration) _)) -> pure Nothing
               Just (Compose (TraverseChild (Right immediate) _)) -> do
                 readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
                   ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
@@ -1143,8 +1145,9 @@ traverseIntMapWithKeyWithAdjust' = do
     let filtered :: PatchIntMap DOM.Text
         filtered = PatchIntMap $ flip IntMap.mapMaybe p $ \case
           Nothing -> Just Nothing -- deletion
-          Just tc | Left _ <- _traverseChild_mode tc -> Nothing
-          Just tc | Right immediate <- _traverseChild_mode tc -> Just $ Just $ _traverseChildImmediate_placeholder immediate
+          Just tc
+            | Right immediate <- _traverseChild_mode tc -> Just $ Just $ _traverseChildImmediate_placeholder immediate
+            | otherwise -> Nothing
     liftIO $ writeIORef placeholders $! fromMaybe phs $ apply filtered phs
 
 data ChildReadyState a

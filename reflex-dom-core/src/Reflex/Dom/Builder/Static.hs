@@ -56,8 +56,6 @@ import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
 import System.Random (randomRIO)
 
-import qualified GHCJS.DOM.Types as DOM
-
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
   , _staticDomBuilderEnv_selectValue :: Maybe (Behavior t Text)

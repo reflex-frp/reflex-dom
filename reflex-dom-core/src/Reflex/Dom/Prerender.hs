@@ -37,7 +37,7 @@ import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.InputDisabled
-import Reflex.Dom.Builder.Immediate (ImmediateDomBuilderT, SupportsImmediateDomBuilder, insertBefore, deleteBetweenExclusive, runImmediateDomBuilderT, ImmediateDomBuilderEnv(..), GhcjsDomSpace)
+import Reflex.Dom.Builder.Immediate (ImmediateDomBuilderT, insertBefore, deleteBetweenExclusive, runImmediateDomBuilderT, ImmediateDomBuilderEnv(..), GhcjsDomSpace)
 import Reflex.Dom.Builder.Hydration
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
