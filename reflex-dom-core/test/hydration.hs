@@ -852,17 +852,15 @@ tests wdConfig caps _selenium = do
     it "postBuild works in replaced widget" $ runWD $ do
       replaceChan <- liftIO newChan
       pbLock <- liftIO newEmptyMVar
-      let check = do
-            liftIO $ do
-              writeChan replaceChan ()
-              takeMVar pbLock
+      let check = liftIO $ do
+            writeChan replaceChan ()
+            takeMVar pbLock
       testWidget (pure ()) check $ void $ do
         replace <- triggerEventWithChan replaceChan
         runWithReplace (pure ()) $ ffor replace $ \() -> do
           pb <- getPostBuild
           performEvent_ $ liftIO (putMVar pbLock ()) <$ pb
-
-    it "can be nested in event widget" $ runWD $ do -- Test is broken, I think
+    it "can be nested in event widget" $ runWD $ do
       replaceChan1 :: Chan Text <- liftIO newChan
       replaceChan2 :: Chan Text <- liftIO newChan
       lock :: MVar () <- liftIO newEmptyMVar
@@ -888,7 +886,33 @@ tests wdConfig caps _selenium = do
             [ el "span" . text <$> replace2
             , el "div" (text "pb") <$ pb
             ]
-
+    it "prerender works in replaced widget" $ runWD $ do
+      replaceChan <- liftIO newChan
+      lock :: MVar () <- liftIO newEmptyMVar
+      pbLock :: MVar () <- liftIO newEmptyMVar
+      let check = do
+            liftIO $ do
+              writeChan replaceChan ()
+              takeMVar lock
+              takeMVar pbLock
+      testWidget (pure ()) check $ void $ do
+        replace <- triggerEventWithChan replaceChan
+        runWithReplace (pure ()) $ ffor replace $ \() -> do
+          prerender_ (pure ()) $ do
+            liftIO $ putMVar lock ()
+            pb <- getPostBuild
+            performEvent_ $ liftIO (putMVar pbLock ()) <$ pb
+    it "prerender returns in immediate mode" $ runWD $ do
+      replaceChan <- liftIO newChan
+      pbLock <- liftIO newEmptyMVar
+      let check = liftIO $ do
+            writeChan replaceChan ()
+            takeMVar pbLock
+      testWidget (pure ()) check $ void $ do
+        replace <- triggerEventWithChan replaceChan
+        runWithReplace (pure ()) $ ffor replace $ \() -> do
+          prerender_ (pure ()) (pure ())
+          liftIO $ putMVar pbLock ()
     it "works in immediate mode (RHS of prerender)" $ runWD $ do
       replaceChan :: Chan Text <- liftIO newChan
       let check = do
@@ -1257,6 +1281,7 @@ withSeleniumServer f = do
 triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender t m) => Chan a -> m (Event t a)
 triggerEventWithChan chan = do
   (e, trigger) <- newTriggerEvent
+  -- In prerender because we only want to do this on the client
   prerender_ (pure ()) $ void $ liftIO $ forkIO $ forever $ trigger =<< readChan chan
   pure e
 

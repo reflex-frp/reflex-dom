@@ -117,11 +117,14 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = pure ()
           }
-    (b', trigger) <- newTriggerEvent
-    addHydrationStep $ do
-      liftIO . trigger <=< lift $ runImmediateDomBuilderT (runPostBuildT client $ void b') immediateEnv events
-      insertBefore df =<< deleteToPrerenderEnd
     ((a, b0), _) <- lift $ runHydrationDomBuilderT server env events
+    (b', trigger) <- newTriggerEvent
+    getHydrationMode >>= \case
+      HydrationMode_Immediate -> do
+        liftIO . trigger <=< lift $ runImmediateDomBuilderT (runPostBuildT client $ void b') immediateEnv events
+      HydrationMode_Hydrating -> addHydrationStep $ do
+        liftIO . trigger <=< lift $ runImmediateDomBuilderT (runPostBuildT client $ void b') immediateEnv events
+        insertBefore df =<< deleteToPrerenderEnd
     (,) (Just a) <$> holdDyn b0 b'
 
 instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
