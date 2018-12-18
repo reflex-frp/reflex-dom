@@ -16,6 +16,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -852,7 +853,7 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
       , valueChangedByUI
       ]
 
-    return $ flip (,) result $ SelectElement
+    return $ (,result) $ SelectElement
       { _selectElement_value = v
       , _selectElement_change = valueChangedByUI
       , _selectElement_hasFocus = hasFocus
@@ -1253,7 +1254,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
             pure $ _traverseChildImmediate_placeholder i
-      phs <- traverse id $ weakenDMapWith ((either (error "delayed") activate) . _traverseChild_mode . getCompose) children0
+      phs <- traverse id $ weakenDMapWith (either (error "impossible") activate . _traverseChild_mode . getCompose) children0
       liftIO $ writeIORef placeholders $! phs
       append $ toNode lastPlaceholder
   requestDomAction_ $ ffor children' $ \p -> do
@@ -1361,7 +1362,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
             pure $ _traverseChildImmediate_placeholder i
-      phs <- traverse ((either (error "delayed") activate) . _traverseChild_mode) children0
+      phs <- traverse (either (error "impossible") activate . _traverseChild_mode) children0
       liftIO $ writeIORef placeholders $! phs
       append $ toNode lastPlaceholder
   requestDomAction_ $ ffor children' $ \p -> do
@@ -1371,7 +1372,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
     liftIO $ writeIORef pendingChange (newUnready, newP)
     when (IntMap.null newUnready) $ do
       applyDomUpdate newP
-  let result0 = IntMap.map (_traverseChild_result) children0
+  let result0 = IntMap.map _traverseChild_result children0
       result' = ffor children' $ fmap $ _traverseChild_result
   return (result0, result')
 

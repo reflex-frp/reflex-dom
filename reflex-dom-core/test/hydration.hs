@@ -13,6 +13,7 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -133,7 +134,7 @@ main = withSeleniumServer $ \selenium -> do
 
 tests :: WD.WDConfig -> [Capabilities] -> Selenium -> Spec
 tests wdConfig caps _selenium = do
-  let session' = sessionWith wdConfig "" . using (map (flip (,) "") caps)
+  let session' = sessionWith wdConfig "" . using (map (,"") caps)
       runWD = runWDOptions (WdOptions False)
   describe "text" $ session' $ do
     it "works" $ runWD $ do
@@ -218,7 +219,7 @@ tests wdConfig caps _selenium = do
           let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
               conf = (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
                 & initialAttributes .~ "id" =: "second"
-                & elementConfig_eventSpec .~ (addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def)
+                & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def
           void $ element "span" conf $ text "hello world"
         performEvent_ $ liftIO (writeRef secondClickedRef True) <$ domEvent Click secondDivEl
       firstClicked <- readRef firstClickedRef
@@ -234,7 +235,7 @@ tests wdConfig caps _selenium = do
       clicked <- testWidget (pure ()) click $ prerender_ (pure ()) $ do
         let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
             conf = (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
-              & elementConfig_eventSpec .~ (addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> preventDefault) def)
+              & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> preventDefault) def
               & initialAttributes .~ "type" =: "checkbox"
         void $ element "input" conf $ text "hello world"
       assertEqual "Click not prevented" (False, False) clicked
@@ -340,8 +341,8 @@ tests wdConfig caps _selenium = do
         testWidget (pure ()) checkValue $ do
           update <- triggerEventWithChan setValueChan
           e <- inputElement $ def & inputElementConfig_setValue .~ update
-          performEvent_ $ liftIO . (writeRef valueByUIRef) <$> _inputElement_input e
-          performEvent_ $ liftIO . (writeRef valueRef) <$> updated (value e)
+          performEvent_ $ liftIO . writeRef valueByUIRef <$> _inputElement_input e
+          performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
       it "sets checked appropriately" $ runWD $ do
         checkedByUIRef <- newRef False
         checkedRef <- newRef False
