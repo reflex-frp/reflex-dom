@@ -1129,7 +1129,7 @@ tests wdConfig caps _selenium = do
           (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `H.shouldBe` intMap
 
-  describe "traverseDMapWithKeyWithAdjustWithMove" $ do
+  describe "traverseDMapWithKeyWithAdjustWithMove" $ session' $ do
     let widget :: DomBuilder t m => Key2 a -> Identity a -> m (Identity a)
         widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
           elClass "span" "key" $ text $ textKey k
@@ -1171,19 +1171,19 @@ tests wdConfig caps _selenium = do
           e <- WD.findElem (WD.ById $ textKey k)
           checkItem e (textKey k) (T.pack $ show v)
         moveSpec testMove = do
-          it "can insert an item" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
+          it "can insert an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
             liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2)
             shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
-          it "can delete an item" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3]) $ \body chan -> do
+          it "can delete an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
             liftIO $ writeChan chan (deleteDMapKey (Key2_Int 2))
             shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
-          it "can swap items" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
+          it "can swap items" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i22","i33","i44"]) body
             liftIO $ writeChan chan (swapDMapKey (Key2_Int 2) (Key2_Int 3))
             shouldContainText (T.strip $ T.unlines ["i11","i33","i22","i44"]) body
-          it "can move items" $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
+          it "can move items" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i22","i33", "i44"]) body
             liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3))
             shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
@@ -1195,7 +1195,7 @@ tests wdConfig caps _selenium = do
             shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
 
     describe "hydration" $ moveSpec $ \initMap test -> do
-      chan <- newChan
+      chan <- liftIO newChan
       let static = getAndCheckInitialItems initMap
           check xs = do
             checkInitialItems initMap xs
@@ -1203,12 +1203,12 @@ tests wdConfig caps _selenium = do
             test body chan
       testWidget' static check $ void $ do
         (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
-        liftIO $ dmap `shouldBe` initMap
+        liftIO $ assertEqual "DMap" initMap dmap
 
     describe "hydration/immediate" $ moveSpec $ \initMap test -> do
-      chan <- newChan
-      replace <- newChan
-      lock <- newEmptyMVar
+      chan <- liftIO newChan
+      replace <- liftIO newChan
+      lock <- liftIO newEmptyMVar
       let check = do
             liftIO $ do
               writeChan replace ()
@@ -1223,7 +1223,7 @@ tests wdConfig caps _selenium = do
           pb <- getPostBuild
           performEvent_ $ liftIO (putMVar lock ()) <$ pb
           (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
-          liftIO $ dmap `shouldBe` initMap
+          liftIO $ assertEqual "DMap" initMap dmap
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
