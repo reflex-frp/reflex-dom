@@ -86,6 +86,8 @@ import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate hiding (askEvents, askParent, append, wrap, makeElement, textNodeInternal, traverseIntMapWithKeyWithAdjust', traverseDMapWithKeyWithAdjust', hoistTraverseWithKeyWithAdjust, hoistTraverseIntMapWithKeyWithAdjust, drawChildUpdate, ChildReadyState(..))
 import Reflex.Dynamic
 import Reflex.Host.Class
+import Reflex.Patch.DMapWithMove (PatchDMapWithMove(..))
+import Reflex.Patch.MapWithMove (PatchMapWithMove(..))
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.Requester.Base
@@ -112,6 +114,7 @@ import qualified GHCJS.DOM.Text as DOM
 import qualified GHCJS.DOM.Types as DOM
 import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
+import qualified Reflex.Patch.MapWithMove as PatchMapWithMove
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
 #ifndef USE_TEMPLATE_HASKELL
@@ -1028,7 +1031,15 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m) =>
               True -> do
                 Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
       collected <- DMap.traverseWithKey collectIfMoved p
-      let !phsAfter = fromMaybe phsBefore $ apply (weakenPatchDMapWithMoveWith (_traverseChildImmediate_placeholder . error "FIXME" . _traverseChild_mode . getCompose) p_) phsBefore --TODO: Don't recompute this
+      let !phsAfter = fromMaybe phsBefore $ apply filtered phsBefore
+          weakened :: PatchMapWithMove (Some k) (Either (TraverseChildHydration t m) (TraverseChildImmediate (Some k)))
+          weakened = weakenPatchDMapWithMoveWith (_traverseChild_mode . getCompose) p_
+          filtered :: PatchMapWithMove (Some k) DOM.Text
+          filtered = PatchMapWithMove $ flip Map.mapMaybe (unPatchMapWithMove weakened) $ \(PatchMapWithMove.NodeInfo from to) -> flip PatchMapWithMove.NodeInfo to <$> case from of
+            PatchMapWithMove.From_Insert (Left _hydration) -> Nothing
+            PatchMapWithMove.From_Insert (Right immediate) -> Just $ PatchMapWithMove.From_Insert $ _traverseChildImmediate_placeholder immediate
+            PatchMapWithMove.From_Delete -> Just $ PatchMapWithMove.From_Delete
+            PatchMapWithMove.From_Move k -> Just $ PatchMapWithMove.From_Move k
       let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> JSM (Constant () a)
           placeFragment k e = do
             let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (This k) phsAfter
