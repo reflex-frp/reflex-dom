@@ -2,8 +2,8 @@
 , bytestring, constraints, constraints-extras, containers
 , contravariant, data-default, dependent-map, dependent-sum
 , dependent-sum-template, directory, exception-transformers
-, exceptions, filepath, ghcjs-dom, hlint, hspec, http-types, HUnit
-, jsaddle, jsaddle-warp, keycode, lens, linux-namespaces
+, exceptions, filepath, ghcjs-dom, hlint, hspec, hspec-webdriver, http-types, HUnit
+, jsaddle, jsaddle-warp, keycode, lens, lifted-base, linux-namespaces
 , monad-control, mtl, network, network-uri, primitive, process
 , random, ref-tf, reflex, semigroups, silently, stdenv, stm
 , template-haskell, temporary, text, these, transformers, unix, wai
@@ -44,8 +44,8 @@ in mkDerivation (addGcTestDepends {
   testHaskellDepends = [
     aeson base bytestring constraints constraints-extras containers
     dependent-map dependent-sum dependent-sum-template directory
-    exceptions filepath ghcjs-dom hlint hspec http-types HUnit jsaddle
-    jsaddle-warp lens linux-namespaces network process random reflex
+    exceptions filepath ghcjs-dom hlint hspec hspec-webdriver http-types HUnit jsaddle
+    jsaddle-warp lens lifted-base linux-namespaces network process random reflex
     silently temporary text unix wai wai-websockets warp webdriver
     websockets
   ];

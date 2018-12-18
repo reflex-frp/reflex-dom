@@ -166,13 +166,16 @@ test-suite hydration
                , filepath
                , ghcjs-dom
                , hspec
+               , hspec-webdriver
                , http-types
                , HUnit
                , jsaddle
                , jsaddle-warp
                , lens
+               , lifted-base
                , network
                , random
+               , ref-tf
                , reflex
                , reflex-dom-core
                , process
