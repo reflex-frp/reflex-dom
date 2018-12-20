@@ -193,12 +193,8 @@ addHydrationStepWithSetup setup f = getHydrationMode >>= \case
     HydrationDomBuilderT $ modify' (>> f s)
 
 -- | Add a hydration step
-addHydrationStep
-  :: (MonadIO m, Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
-  => HydrationRunnerT t m () -> HydrationDomBuilderT t m ()
-addHydrationStep m = getHydrationMode >>= \case
-  HydrationMode_Immediate -> lift . runHydrationRunnerT m Nothing undefined =<< askEvents
-  HydrationMode_Hydrating -> HydrationDomBuilderT $ modify' (>> m)
+addHydrationStep :: Monad m => HydrationRunnerT t m () -> HydrationDomBuilderT t m ()
+addHydrationStep m = HydrationDomBuilderT $ modify' (>> m)
 
 -- | A monad for DomBuilder which just gets the results of children and pushes
 -- work into an action that is delayed until after postBuild (to match the
@@ -679,49 +675,53 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
     -- Expected initial value from config
     let v0 = _inputElementConfig_initialValue cfg
+        impl :: (DomRenderHook t n, MonadJSM n) => n ()
+        impl = do
+          domElement <- liftIO $ readIORef domElementRef
+          let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
+              getValue = Input.getValue domInputElement
 
-    addHydrationStep $ do
-      domElement <- liftIO $ readIORef domElementRef
-      let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
-          getValue = Input.getValue domInputElement
+          -- The browser might have messed with the value, or the user could have
+          -- altered it before activation, so we set it if it isn't what we expect
+          liftJSM getValue >>= \v0' -> do
+            when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
 
-      -- The browser might have messed with the value, or the user could have
-      -- altered it before activation, so we set it if it isn't what we expect
-      liftJSM getValue >>= \v0' -> do
-        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+          -- Watch for user interaction and trigger event accordingly
+          requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
 
-      -- Watch for user interaction and trigger event accordingly
-      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+          for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
+            requestDomAction_ $ ffor eSetValue $ \v' -> do
+              Input.setValue domInputElement v'
+              v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+              liftIO $ triggerChangeBySetValue v
 
-      for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
-        requestDomAction_ $ ffor eSetValue $ \v' -> do
-          Input.setValue domInputElement v'
-          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-          liftIO $ triggerChangeBySetValue v
+          let focusChange' = leftmost
+                [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+                , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+                ]
+          liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+          requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
 
-      let focusChange' = leftmost
-            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-            ]
-      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+          Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
+          _ <- liftJSM $ domInputElement `on` Events.click $ do
+            liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
 
-      Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
-      _ <- liftJSM $ domInputElement `on` Events.click $ do
-        liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
+          for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
+            requestDomAction $ ffor eNewchecked $ \newChecked -> do
+              oldChecked <- Input.getChecked domInputElement
+              Input.setChecked domInputElement newChecked
+              when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
 
-      for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
-        requestDomAction $ ffor eNewchecked $ \newChecked -> do
-          oldChecked <- Input.getChecked domInputElement
-          Input.setChecked domInputElement newChecked
-          when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
+          _ <- liftJSM $ domInputElement `on` Events.change $ do
+            mfiles <- Input.getFiles domInputElement
+            let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
+            liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
 
-      _ <- liftJSM $ domInputElement `on` Events.change $ do
-        mfiles <- Input.getFiles domInputElement
-        let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
-        liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
+          return ()
 
-      return ()
+    getHydrationMode >>= \case
+      HydrationMode_Hydrating -> addHydrationStep impl
+      HydrationMode_Immediate -> impl
 
     checked' <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
       [ checkedChangedBySetChecked
@@ -763,32 +763,36 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
     -- Expected initial value from config
     let v0 = _textAreaElementConfig_initialValue cfg
+        impl :: (DomRenderHook t n, MonadJSM n) => n ()
+        impl = do
+          domElement <- liftIO $ readIORef domElementRef
+          let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
+              getValue = TextArea.getValue domTextAreaElement
 
-    addHydrationStep $ do
-      domElement <- liftIO $ readIORef domElementRef
-      let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
-          getValue = TextArea.getValue domTextAreaElement
+          -- The browser might have messed with the value, or the user could have
+          -- altered it before activation, so we set it if it isn't what we expect
+          liftJSM getValue >>= \v0' -> do
+            when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
 
-      -- The browser might have messed with the value, or the user could have
-      -- altered it before activation, so we set it if it isn't what we expect
-      liftJSM getValue >>= \v0' -> do
-        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+          -- Watch for user interaction and trigger event accordingly
+          requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
 
-      -- Watch for user interaction and trigger event accordingly
-      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+          for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
+            requestDomAction_ $ ffor eSetValue $ \v' -> do
+              TextArea.setValue domTextAreaElement v'
+              v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+              liftIO $ triggerChangeBySetValue v
 
-      for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
-        requestDomAction_ $ ffor eSetValue $ \v' -> do
-          TextArea.setValue domTextAreaElement v'
-          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-          liftIO $ triggerChangeBySetValue v
+          let focusChange' = leftmost
+                [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+                , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+                ]
+          liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+          requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
 
-      let focusChange' = leftmost
-            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-            ]
-      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+    getHydrationMode >>= \case
+      HydrationMode_Hydrating -> addHydrationStep impl
+      HydrationMode_Immediate -> impl
 
     let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
     hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
@@ -819,32 +823,36 @@ instance (SupportsHydrationDomBuilder t m) => DomBuilder t (HydrationDomBuilderT
 
     -- Expected initial value from config
     let v0 = _selectElementConfig_initialValue cfg
+        impl :: (DomRenderHook t n, MonadJSM n) => n ()
+        impl = do
+          domElement <- liftIO $ readIORef domElementRef
+          let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
+              getValue = Select.getValue domSelectElement
 
-    addHydrationStep $ do
-      domElement <- liftIO $ readIORef domElementRef
-      let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
-          getValue = Select.getValue domSelectElement
+          -- The browser might have messed with the value, or the user could have
+          -- altered it before activation, so we set it if it isn't what we expect
+          liftJSM getValue >>= \v0' -> do
+            when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
 
-      -- The browser might have messed with the value, or the user could have
-      -- altered it before activation, so we set it if it isn't what we expect
-      liftJSM getValue >>= \v0' -> do
-        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+          -- Watch for user interaction and trigger event accordingly
+          requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Change)
 
-      -- Watch for user interaction and trigger event accordingly
-      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Change)
+          for_ (_selectElementConfig_setValue cfg) $ \eSetValue ->
+            requestDomAction_ $ ffor eSetValue $ \v' -> do
+              Select.setValue domSelectElement v'
+              v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+              liftIO $ triggerChangeBySetValue v
 
-      for_ (_selectElementConfig_setValue cfg) $ \eSetValue ->
-        requestDomAction_ $ ffor eSetValue $ \v' -> do
-          Select.setValue domSelectElement v'
-          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-          liftIO $ triggerChangeBySetValue v
+          let focusChange' = leftmost
+                [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+                , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+                ]
+          liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+          requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
 
-      let focusChange' = leftmost
-            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-            ]
-      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+    getHydrationMode >>= \case
+      HydrationMode_Hydrating -> addHydrationStep impl
+      HydrationMode_Immediate -> impl
 
     let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
     hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
