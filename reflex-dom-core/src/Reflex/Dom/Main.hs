@@ -147,15 +147,7 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
             liftIO $ modifyIORef' hydrationResult ((n, res) :)
             pure a
     flip runPostBuildT postBuild $ flip runTriggerEventT events $ app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)
---    liftIO (readIORef unreadyChildren) >>= \case
---      0 -> DOM.liftJSM commit
---      _ -> return ()
     return postBuildTriggerRef
-
-
-
-
-
 
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
