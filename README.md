@@ -15,3 +15,8 @@ A summary of Reflex-DOM functions is available in the [quick reference](Quickref
 [hackage](https://hackage.haskell.org/package/reflex)
 
 [irc.freenode.net #reflex-frp](http://webchat.freenode.net?channels=%23reflex-frp&uio=d4)
+
+### Hacking
+
+Use the `./scripts/hackon reflex-dom` script in [Reflex Platform](https://github.com/reflex-frp/reflex-platform) to checkout the source code of `reflex-dom` locally in `reflex-platform/reflex-dom` directory.
+Then do modifications to the source in place, and use the `./tryreflex` or `./scripts/workon` scripts to create the shell to test your changes.
