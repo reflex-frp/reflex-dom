@@ -388,6 +388,7 @@ wrap events e cfg = do
     return $ en :=> EventFilterTriggerRef triggerRef
   return eventTriggerRefs
 
+{-# INLINABLE triggerBody #-}
 triggerBody
   :: forall er t x. DOM.JSContextRef
   -> ElementConfig er t HydrationDomSpace
