@@ -265,9 +265,9 @@ tests wdConfig caps _selenium = do
     it "has ssr attribute, removes ssr attribute" $ runWD $ do
       let checkSSRAttr = do
             e <- WD.findElem $ WD.ByTag "div"
-            assertAttr e "ssr" (Just "")
+            assertAttr e "data-ssr" (Just "")
             pure e
-      testWidget' checkSSRAttr (\e -> assertAttr e "ssr" Nothing) $ el "div" $ text "hello world"
+      testWidget' checkSSRAttr (\e -> assertAttr e "data-ssr" Nothing) $ el "div" $ text "hello world"
 
   describe "inputElement" $ do
     describe "hydration" $ session' $ do

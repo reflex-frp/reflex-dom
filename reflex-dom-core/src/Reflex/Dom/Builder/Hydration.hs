@@ -439,7 +439,7 @@ makeElement elementTag cfg child = do
           Nothing -> setAttribute e n v
           Just ans -> setAttributeNS e (Just ans) n v
         pure e
-      ssrAttr = "ssr" :: DOM.JSString
+      ssrAttr = "data-ssr" :: DOM.JSString
       hasSSRAttribute :: DOM.Element -> HydrationRunnerT t m Bool
       hasSSRAttribute e = case cfg ^. namespace of
         Nothing -> hasAttribute e ssrAttr <* removeAttribute e ssrAttr
