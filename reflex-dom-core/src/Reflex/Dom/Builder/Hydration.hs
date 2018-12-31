@@ -442,8 +442,8 @@ makeElement elementTag cfg child = do
       ssrAttr = "ssr" :: DOM.JSString
       hasSSRAttribute :: DOM.Element -> HydrationRunnerT t m Bool
       hasSSRAttribute e = case cfg ^. namespace of
-        Nothing -> hasAttribute e ssrAttr -- TODO: disabled for debugging <* removeAttribute e ssrAttr
-        Just ns -> hasAttributeNS e (Just ns) ssrAttr -- TODO: disabled for debugging <* removeAttributeNS e (Just ns) ssrAttr
+        Nothing -> hasAttribute e ssrAttr <* removeAttribute e ssrAttr
+        Just ns -> hasAttributeNS e (Just ns) ssrAttr <* removeAttributeNS e (Just ns) ssrAttr
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
       e <- makeNodeInternal buildElement
