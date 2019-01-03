@@ -442,7 +442,7 @@ textNodeConfig_setContents =
       setter t e = t { _textNodeConfig_setContents = Just e }
   in lens getter setter
 
--- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+-- | This lens is technically illegal. The implementation of 'CommentNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'CommentNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 commentNodeConfig_setContents :: Reflex t => Lens (CommentNodeConfig t) (CommentNodeConfig t) (Event t Text) (Event t Text)
 commentNodeConfig_setContents =
   let getter = fromMaybe never . _commentNodeConfig_setContents
