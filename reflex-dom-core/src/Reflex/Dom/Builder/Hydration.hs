@@ -25,6 +25,22 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
+-- | This is a builder to be used on the client side. It can be run in two modes:
+--
+--  1. in "hydration mode", reusing DOM nodes already in the page (as produced
+--  by 'Reflex.Dom.Builder.Static.renderStatic')
+--  2. in "immediate mode", creating and appending DOM nodes as required
+--
+-- In "hydration mode", the preexisting DOM __must contain__ what the builder
+-- will expect at switchover time (the time at which parity with the static
+-- renderer is reached, and the time after which the page is "live").
+-- There can be extra nodes, but no missing or incorrect nodes.
+--
+-- For example, displaying the current time as text should be done inside
+-- 'Reflex.Dom.Prerender.prerender' to ensure that we don't attempt to hydrate the incorrect text.
+-- The server will prerender a text node with time A, and the client will expect
+-- a text node with time B. Barring a miracle, time A and time B will not match,
+-- and hydration will fail.
 module Reflex.Dom.Builder.Hydration
        ( EventTriggerRef (..)
        , HydrationDomBuilderEnv (..)
@@ -151,8 +167,8 @@ data HydrationDomBuilderEnv t = HydrationDomBuilderEnv
   , _hydrationDomBuilderEnv_switchover :: !(Event t ())
   }
 
--- | The monad which performs the delayed actions to reuse prerendered nodes and set up events
--- State contains reference to the previous node sibling, if any.
+-- | The monad which performs the delayed actions to reuse prerendered nodes and set up events.
+-- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT (Maybe Node) (ReaderT Node (DomRenderHookT t m)) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
