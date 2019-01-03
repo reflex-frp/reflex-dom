@@ -1,3 +1,4 @@
+{-# OPTIONS_HADDOCK hide, prune, ignore-exports #-}
 module Reflex.Dom.Core (module X) where
 
 import Reflex as X hiding (askEvents)
