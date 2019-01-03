@@ -17,6 +17,11 @@ extra-source-files: src/Reflex/Dom/Xhr/Foreign.hs
                     src/Reflex/Dom/Xhr/Exception.hs
                     java/org/reflexfrp/reflexdom/MainWidget.java
 
+flag use-warp
+  description: Use jsaddle-warp server
+  default: False
+  manual: True
+
 flag webkit2gtk
   description: Use WebKit2 version of WebKitGTK.
   default: True
@@ -56,7 +61,7 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.11,
+    base >= 4.7 && < 4.12,
     bytestring == 0.10.*,
     reflex == 0.5.*,
     reflex-dom-core >=0.4 && <0.5,
@@ -64,15 +69,22 @@ library
   if !impl(ghcjs)
     if os(osx) || os(ios)
       build-depends:
+        data-default == 0.7.*,
+        jsaddle,
         jsaddle-wkwebview
     else
-      if flag(webkit2gtk)
+      if flag(use-warp)
         build-depends:
-          jsaddle-webkit2gtk
+          jsaddle,
+          jsaddle-warp
       else
-        if !flag(android)
+        if flag(webkit2gtk)
           build-depends:
-            jsaddle-webkitgtk
+            jsaddle-webkit2gtk
+        else
+          if !flag(android)
+            build-depends:
+              jsaddle-webkit2gtk
 
   exposed-modules:
     Reflex.Dom
@@ -90,7 +102,6 @@ library
     , Reflex.Dom.Location
     , Reflex.Dom.Main
     , Reflex.Dom.Old
-    , Reflex.Dom.Time
     , Reflex.Dom.WebSocket
     , Reflex.Dom.Widget
     , Reflex.Dom.Widget.Basic
@@ -135,13 +146,16 @@ executable benchmark
   if !impl(ghcjs)
     buildable: False
 
-benchmark krausest
+executable krausest
   build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
-  ghc-options: -O2 -fspecialise-aggressively -DGHCJS_GC_INTERVAL=60000
+  ghc-options: -O2 -fspecialise-aggressively
   if impl(ghcjs)
     ghc-options: -dedupe
+    cpp-options: -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=60000
+  else
+    buildable: False
   type: exitcode-stdio-1.0
 
 source-repository head

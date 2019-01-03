@@ -106,7 +106,7 @@ instance MonadAtomicRef m => MonadAtomicRef (ModalsT t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
-instance (MonadAdjust t m, MonadHold t m, MonadFix m) => MonadAdjust t (ModalsT t m) where
+instance (Adjustable t m, MonadHold t m, MonadFix m) => Adjustable t (ModalsT t m) where
   runWithReplace a0 a' = ModalsT $ runWithReplace (unModalsT a0) (fmapCheap unModalsT a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjust (coerce f) dm0 dm'
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = ModalsT $ traverseDMapWithKeyWithAdjustWithMove (coerce f) dm0 dm'

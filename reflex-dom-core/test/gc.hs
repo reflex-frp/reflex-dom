@@ -11,12 +11,22 @@ import Data.Int
 import GHC.Stats
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
+import Reflex.Time
 import System.Exit
 import System.IO.Temp
 import System.Linux.Namespaces
 import System.Mem
 import System.Posix
 import System.Process
+
+#if MIN_VERSION_base(4,11,0)
+import GHC.Stats (getRTSStatsEnabled, getRTSStats, RTSStats(..), gcdetails_live_bytes, gc)
+currentBytesUsed :: RTSStats -> Int64
+currentBytesUsed = fromIntegral . gcdetails_live_bytes . gc
+#else
+import GHC.Stats (getGCStats, GCStats(..))
+getRTSStats = getGCStats
+#endif
 
 -- In initial testing, the minimum live bytes count was 233128 and maximum was
 -- 363712.  Going over the maximum means the test has actually failed - we
@@ -62,7 +72,7 @@ main = do
         let f (!failures, !n) = liftIO $ if n < 3000
               then do performMajorGC
                       threadDelay 5000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
-                      gcStats <- getGCStats
+                      gcStats <- getRTSStats
                       print $ currentBytesUsed gcStats
                       when (currentBytesUsed gcStats < minBytesAllowed) $ do
                         putStrLn "FAILED: currentBytesUsed < minBytesAllowed"

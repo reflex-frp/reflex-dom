@@ -16,6 +16,8 @@ main = do
     , "--ignore=Use unless"
     , "--ignore=Use if"
     , "--ignore=Use fewer imports"
+    , "--ignore=Unnecessary hiding" -- Interferes with cross-version compatibility
+    , "--ignore=Use <$>"
     , "--ignore=Reduce duplication" --TODO: Re-enable this test
     , "--cpp-define=USE_TEMPLATE_HASKELL"
     ]

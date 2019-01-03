@@ -1,7 +1,13 @@
-{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, reflex
+{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, reflex
 , reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
+, ghcBackend ? if hostPlatform.isDarwin then "warp" else "webkit2gtk"
 }:
+assert (builtins.elem ghcBackend [ "warp" "webkit2gtk" ]);
 let isAndroid = hostPlatform.libc == "bionic";
+    ghcBackendPackage = {
+      webkit2gtk = jsaddle-webkit2gtk;
+      warp = jsaddle-warp;
+    }.${ghcBackend};
 in mkDerivation {
   pname = "reflex-dom";
   version = "0.4";
@@ -9,15 +15,23 @@ in mkDerivation {
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
   ] ++ (if ghc.isGhcjs or false then [
-  ] else if hostPlatform.isDarwin then [
+  ] else if hostPlatform.isiOS then [
     jsaddle-wkwebview
   ] else if isAndroid then [
     jsaddle-clib
     android-activity
+  ] else if hostPlatform.isMacOS then [
+    jsaddle-wkwebview
+    ghcBackendPackage
   ] else [
-    jsaddle-webkit2gtk
+    ghcBackendPackage
   ]);
-  configureFlags = if isAndroid then [ "-fandroid" ] else [];
+  configureFlags = if isAndroid then [
+    "-fandroid"
+  ] else if ghcBackend == "warp" then [
+    "-fuse-warp"
+  ] else [
+  ];
   description = "Functional Reactive Web Apps with Reflex";
   license = stdenv.lib.licenses.bsd3;
 }

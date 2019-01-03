@@ -46,7 +46,7 @@ bodyW seed = divClass "main" $ divClass "container" $ mdo
       , buttonW "add"      "Append 1,000 rows"     $ appendRows 1000
       , buttonW "update"   "Update every 10th row" $ updateRows (\i -> mod i 10 == 0) (<> " !!!")
       , buttonW "clear"    "Clear"                 $ clearRows
-      , buttonW "swaprows" "Swap Rows"             $ swapRows (4, 9)
+      , buttonW "swaprows" "Swap Rows"             $ swapRows (1, 998)
       ]
 
   let initial = Model { rng = mkStdGen seed, nextNum = 1, selection = Nothing }
@@ -120,8 +120,9 @@ filterByIndex :: (Int -> Bool) -> [a] -> [a]
 filterByIndex p = map snd . filter (\(i, _) -> p i) . zip [0..]
 
 swapRows :: (RowIndex, RowIndex) -> (Model, Table) -> (Model, TableDiff)
-swapRows (a, b) (m, t) = (m, PatchIntMap $ point a b <> point b a)
+swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else empty)
   where
+    swap = point a b <> point b a
     point x y = singleton (fst (val x)) $ Just $ snd $ val y
     val = (assocs t !!)
 

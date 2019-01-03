@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -12,7 +11,6 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Widget.Basic
   ( partitionMapBySetLT
-  , listHoldWithKey
   , ChildResult (..)
 
   -- * Displaying Values
@@ -21,23 +19,9 @@ module Reflex.Dom.Widget.Basic
   , display
   , button
   , dyn
+  , dyn_
   , widgetHold
-  , untilReady
-
-  -- * Working with Maps
-  , diffMapNoEq
-  , diffMap
-  , applyMap
-  , mapPartitionEithers
-  , applyMapKeysSet
-
-  -- * Widgets on Collections
-  , listWithKey
-  , listWithKey'
-  , listWithKeyShallowDiff
-  , listViewWithKey
-  , selectViewListWithKey
-  , selectViewListWithKey_
+  , widgetHold_
 
   -- * Creating DOM Elements
   , el
@@ -45,6 +29,7 @@ module Reflex.Dom.Widget.Basic
   , elClass
   , elDynAttr
   , elDynClass
+  , elDynAttrNS
 
   -- ** With Element Results
   , el'
@@ -56,10 +41,6 @@ module Reflex.Dom.Widget.Basic
   , dynamicAttributesToModifyAttributes
   , dynamicAttributesToModifyAttributesWithInitial
 
-  -- * List Utils
-  , list
-  , simpleList
-
   -- * Specific DOM Elements
   , Link (..)
   , linkClass
@@ -68,25 +49,24 @@ module Reflex.Dom.Widget.Basic
   , dtdd
   , blank
 
-  -- * Workflows
-  , Workflow (..)
-  , workflow
-  , workflowView
-  , mapWorkflow
-  , mapWorkflowCheap
-
   -- * Tables and Lists
   , tableDynAttr
   , tabDisplay
 
   , HasAttributes (..)
+  , module Data.Map.Misc
+  , module Reflex.Collection
+  , module Reflex.Workflow
   ) where
 
 import Reflex.Class
+import Reflex.Collection
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Class
 import Reflex.Dynamic
+import Reflex.Network
 import Reflex.PostBuild.Class
+import Reflex.Workflow
 
 import Control.Arrow
 import Control.Lens hiding (children, element)
@@ -95,9 +75,10 @@ import Data.Align
 import Data.Default
 import Data.Either
 import Data.Foldable
-import Data.Functor.Misc
+import Data.Functor (void)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Map.Misc
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -106,9 +87,6 @@ import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
-
-widgetHoldInternal :: forall t m a b. DomBuilder t m => m a -> Event t (m b) -> m (a, Event t b)
-widgetHoldInternal = runWithReplace
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.
@@ -128,13 +106,6 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
                         else (Left h, lt) : go t geq
 
 newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (Maybe (ChildResult t k a)))) }
-
-listHoldWithKey :: forall t m k v a. (Ord k, DomBuilder t m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> m a) -> m (Dynamic t (Map k a))
-listHoldWithKey m0 m' f = do
-  let dm0 = mapWithFunctorToDMap $ Map.mapWithKey f m0
-      dm' = fmap (PatchDMap . mapWithFunctorToDMap . Map.mapWithKey (\k v -> ComposeMaybe $ fmap (f k) v)) m'
-  (a0, a') <- sequenceDMapWithAdjust dm0 dm'
-  fmap dmapToMap . incrementalToDynamic <$> holdIncremental a0 a' --TODO: Move the dmapToMap to the righthand side so it doesn't get fully redone every time
 
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
@@ -162,126 +133,21 @@ button t = do
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is an Event-of-Events that would typically be flattened (via 'switchPromptly').
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
-dyn child = do
-  postBuild <- getPostBuild
-  let newChild = leftmost [updated child, tagCheap (current child) postBuild]
-  snd <$> widgetHoldInternal notReady newChild
+dyn = networkView
+
+-- | Like 'dyn' but discards result.
+dyn_ :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m ()
+dyn_ = void . dyn
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened.
 widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
-widgetHold child0 newChild = do
-  (result0, newResult) <- widgetHoldInternal child0 newChild
-  holdDyn result0 newResult
+widgetHold = networkHold
 
--- | Render a placeholder widget to be shown while another widget is not yet
--- done rendering
-untilReady :: (DomBuilder t m, PostBuild t m) => m a -> m b -> m (a, Event t b)
-untilReady a b = do
-  postBuild <- getPostBuild
-  runWithReplace a $ b <$ postBuild
-
-diffMapNoEq :: (Ord k) => Map k v -> Map k v -> Map k (Maybe v)
-diffMapNoEq olds news = flip Map.mapMaybe (align olds news) $ \case
-  This _ -> Just Nothing
-  These _ new -> Just $ Just new
-  That new -> Just $ Just new
-
-diffMap :: (Ord k, Eq v) => Map k v -> Map k v -> Map k (Maybe v)
-diffMap olds news = flip Map.mapMaybe (align olds news) $ \case
-  This _ -> Just Nothing
-  These old new
-    | old == new -> Nothing
-    | otherwise -> Just $ Just new
-  That new -> Just $ Just new
-
-applyMap :: Ord k => Map k (Maybe v) -> Map k v -> Map k v
-applyMap patch old = insertions `Map.union` (old `Map.difference` deletions)
-  where (deletions, insertions) = mapPartitionEithers $ maybeToEither <$> patch
-        maybeToEither = \case
-          Nothing -> Left ()
-          Just r -> Right r
-
-mapPartitionEithers :: Map k (Either a b) -> (Map k a, Map k b)
-mapPartitionEithers m = (fromLeft <$> ls, fromRight <$> rs)
-  where (ls, rs) = Map.partition isLeft m
-        fromLeft (Left l) = l
-        fromLeft _ = error "mapPartitionEithers: fromLeft received a Right value; this should be impossible"
-        fromRight (Right r) = r
-        fromRight _ = error "mapPartitionEithers: fromRight received a Left value; this should be impossible"
-
--- | Apply a map patch to a set
--- > applyMapKeysSet patch (Map.keysSet m) == Map.keysSet (applyMap patch m)
-applyMapKeysSet :: Ord k => Map k (Maybe v) -> Set k -> Set k
-applyMapKeysSet patch old = Map.keysSet insertions `Set.union` (old `Set.difference` Map.keysSet deletions)
-  where (insertions, deletions) = Map.partition isJust patch
-
---TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
-listWithKey :: forall t k v m a. (Ord k, DomBuilder t m, PostBuild t m, MonadFix m, MonadHold t m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
-listWithKey vals mkChild = do
-  postBuild <- getPostBuild
-  let childValChangedSelector = fanMap $ updated vals
-      -- We keep track of changes to children values in the mkChild function we pass to listHoldWithKey
-      -- The other changes we need to keep track of are child insertions and deletions. diffOnlyKeyChanges
-      -- keeps track of insertions and deletions but ignores value changes, since they're already accounted for.
-      diffOnlyKeyChanges olds news = flip Map.mapMaybe (align olds news) $ \case
-        This _ -> Just Nothing
-        These _ _ -> Nothing
-        That new -> Just $ Just new
-  rec sentVals :: Dynamic t (Map k v) <- foldDyn applyMap Map.empty changeVals
-      let changeVals :: Event t (Map k (Maybe v))
-          changeVals = attachWith diffOnlyKeyChanges (current sentVals) $ leftmost
-                         [ updated vals
-                         , tag (current vals) postBuild --TODO: This should probably be added to the attachWith, not to the updated; if we were using diffMap instead of diffMapNoEq, I think it might not work
-                         ]
-  listHoldWithKey Map.empty changeVals $ \k v ->
-    mkChild k =<< holdDyn v (select childValChangedSelector $ Const2 k)
-
-{-# DEPRECATED listWithKey' "listWithKey' has been renamed to listWithKeyShallowDiff; also, its behavior has changed to fix a bug where children were always rebuilt (never updated)" #-}
-listWithKey' :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
-listWithKey' = listWithKeyShallowDiff
-
--- | Display the given map of items (in key order) using the builder function provided, and update it with the given event.  'Nothing' update entries will delete the corresponding children, and 'Just' entries will create them if they do not exist or send an update event to them if they do.
-listWithKeyShallowDiff :: (Ord k, DomBuilder t m, MonadFix m, MonadHold t m) => Map k v -> Event t (Map k (Maybe v)) -> (k -> v -> Event t v -> m a) -> m (Dynamic t (Map k a))
-listWithKeyShallowDiff initialVals valsChanged mkChild = do
-  let childValChangedSelector = fanMap $ fmap (Map.mapMaybe id) valsChanged
-  sentVals <- foldDyn applyMap Map.empty $ fmap (fmap void) valsChanged
-  let relevantPatch patch _ = case patch of
-        Nothing -> Just Nothing -- Even if we let a Nothing through when the element doesn't already exist, this doesn't cause a problem because it is ignored
-        Just _ -> Nothing -- We don't want to let spurious re-creations of items through
-  listHoldWithKey initialVals (attachWith (flip (Map.differenceWith relevantPatch)) (current sentVals) valsChanged) $ \k v ->
-    mkChild k v $ select childValChangedSelector $ Const2 k
-
---TODO: Something better than Dynamic t (Map k v) - we want something where the Events carry diffs, not the whole value
--- | Create a dynamically-changing set of Event-valued widgets.
---   This is like listWithKey, specialized for widgets returning (Event t a).  listWithKey would return 'Dynamic t (Map k (Event t a))' in this scenario, but listViewWithKey flattens this to 'Event t (Map k a)' via 'switch'.
-listViewWithKey :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m (Event t a)) -> m (Event t (Map k a))
-listViewWithKey vals mkChild = switch . fmap mergeMap <$> listViewWithKey' vals mkChild
-
-listViewWithKey' :: (Ord k, DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Behavior t (Map k a))
-listViewWithKey' vals mkChild = current <$> listWithKey vals mkChild
-
--- | Create a dynamically-changing set of widgets, one of which is selected at any time.
-selectViewListWithKey :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
-  => Dynamic t k          -- ^ Current selection key
-  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
-  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
-  -> m (Event t (k, a))        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
-selectViewListWithKey selection vals mkChild = do
-  let selectionDemux = demux selection -- For good performance, this value must be shared across all children
-  selectChild <- listWithKey vals $ \k v -> do
-    let selected = demuxed selectionDemux k
-    selectSelf <- mkChild k v selected
-    return $ fmap ((,) k) selectSelf
-  return $ switchPromptlyDyn $ leftmost . Map.elems <$> selectChild
-
-selectViewListWithKey_ :: forall t m k v a. (DomBuilder t m, Ord k, PostBuild t m, MonadHold t m, MonadFix m)
-  => Dynamic t k          -- ^ Current selection key
-  -> Dynamic t (Map k v)  -- ^ Dynamic key/value map
-  -> (k -> Dynamic t v -> Dynamic t Bool -> m (Event t a)) -- ^ Function to create a widget for a given key from Dynamic value and Dynamic Bool indicating if this widget is currently selected
-  -> m (Event t k)        -- ^ Event that fires when any child's return Event fires.  Contains key of an arbitrary firing widget.
-selectViewListWithKey_ selection vals mkChild = fmap fst <$> selectViewListWithKey selection vals mkChild
+-- | Like 'widgetHold' but discards result.
+widgetHold_ :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m ()
+widgetHold_ z = void . widgetHold z
 
 -- | Create a DOM element
 -- > el "div" (text "Hello World")
@@ -358,6 +224,10 @@ elDynAttrNS' mns elementTag attrs child = do
   notReadyUntil postBuild
   return result
 
+{-# INLINABLE elDynAttrNS #-}
+elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m a
+elDynAttrNS mns elementTag attrs child = fmap snd $ elDynAttrNS' mns elementTag attrs child
+
 dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty
 
@@ -379,15 +249,6 @@ dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
 --------------------------------------------------------------------------------
 -- Copied and pasted from Reflex.Widget.Class
 --------------------------------------------------------------------------------
-
--- | Create a dynamically-changing set of widgets from a Dynamic key/value map.
---   Unlike the 'withKey' variants, the child widgets are insensitive to which key they're associated with.
-list :: (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Dynamic t (Map k v) -> (Dynamic t v -> m a) -> m (Dynamic t (Map k a))
-list dm mkChild = listWithKey dm (\_ dv -> mkChild dv)
-
--- | Create a dynamically-changing set of widgets from a Dynamic list.
-simpleList :: (DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m) => Dynamic t [v] -> (Dynamic t v -> m a) -> m (Dynamic t [a])
-simpleList xs mkChild = fmap (fmap (map snd . Map.toList)) $ flip list mkChild $ fmap (Map.fromList . zip [(1::Int)..]) xs
 
 {-
 schedulePostBuild x = performEvent_ . (x <$) =<< getPostBuild
@@ -429,25 +290,6 @@ dtdd h w = do
 
 blank :: forall m. Monad m => m ()
 blank = return ()
-
-newtype Workflow t m a = Workflow { unWorkflow :: m (a, Event t (Workflow t m a)) }
-
-workflow :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m) => Workflow t m a -> m (Dynamic t a)
-workflow w0 = do
-  rec eResult <- widgetHold (unWorkflow w0) $ fmap unWorkflow $ switch $ snd <$> current eResult
-  return $ fmap fst eResult
-
-workflowView :: forall t m a. (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m) => Workflow t m a -> m (Event t a)
-workflowView w0 = do
-  rec eResult <- dyn . fmap unWorkflow =<< holdDyn w0 eReplace
-      eReplace <- fmap switch $ hold never $ fmap snd eResult
-  return $ fmap fst eResult
-
-mapWorkflow :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
-mapWorkflow f (Workflow x) = Workflow (fmap (f *** fmap (mapWorkflow f)) x)
-
-mapWorkflowCheap :: (DomBuilder t m) => (a -> b) -> Workflow t m a -> Workflow t m b
-mapWorkflowCheap f (Workflow x) = Workflow (fmap (f *** fmapCheap (mapWorkflowCheap f)) x)
 
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)

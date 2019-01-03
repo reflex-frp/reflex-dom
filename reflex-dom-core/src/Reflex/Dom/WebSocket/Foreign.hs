@@ -15,6 +15,7 @@ import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 import Control.Monad.Reader
 import Data.Bifoldable
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
@@ -43,6 +44,9 @@ instance IsWebSocketMessage ByteString where
     ab <- bsToArrayBuffer bs
     DOM.send ws ab
 
+instance IsWebSocketMessage LBS.ByteString where
+  webSocketSend ws = webSocketSend ws . LBS.toStrict
+
 -- Use plaintext websocket communication for Text, and String
 instance IsWebSocketMessage Text where
   webSocketSend (JSWebSocket ws) = DOM.sendString ws
@@ -53,13 +57,14 @@ closeWebSocket (JSWebSocket ws) code reason = DOM.close ws (Just code) (Just rea
 newWebSocket
   :: a
   -> Text -- url
+  -> [Text] -- protocols
   -> (Either ByteString JSVal -> JSM ()) -- onmessage
   -> JSM () -- onopen
   -> JSM () -- onerror
   -> ((Bool, Word, Text) -> JSM ()) -- onclose
   -> JSM JSWebSocket
-newWebSocket _ url onMessage onOpen onError onClose = do
-  ws <- DOM.newWebSocket url ([] :: [Text])
+newWebSocket _ url protocols onMessage onOpen onError onClose = do
+  ws <- DOM.newWebSocket url protocols
   DOM.setBinaryType ws "arraybuffer"
   _ <- on ws DOM.open $ liftJSM onOpen
   _ <- on ws DOM.error $ liftJSM onError

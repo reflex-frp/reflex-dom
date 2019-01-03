@@ -92,21 +92,18 @@ module Reflex.Dom.Builder.Immediate
        ) where
 
 import Foreign.JavaScript.TH
+import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
-import Reflex.DynamicWriter (DynamicWriterT)
-import Reflex.EventWriter (EventWriterT)
 import Reflex.Host.Class
 import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Base
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Base hiding (askEvents)
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
-import Reflex.Query.Base (QueryT)
 
 import Control.Concurrent
 import Control.Lens hiding (element, ix)
@@ -114,8 +111,6 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.State.Strict (StateT)
-import qualified Control.Monad.State as Lazy (StateT)
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
 #endif
@@ -138,7 +133,6 @@ import qualified Data.Some as Some
 import Data.Text (Text)
 import Data.Traversable (for)
 import qualified GHCJS.DOM as DOM
-import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
 import qualified GHCJS.DOM.Element as Element
@@ -235,41 +229,16 @@ runImmediateDomBuilderT
   -> ImmediateDomBuilderEnv t
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
-runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan = do
-  handlersMVar <- liftIO $ newMVar []
+runImmediateDomBuilderT (ImmediateDomBuilderT a) env eventChan =
   flip runTriggerEventT eventChan $ do
-    win <- DOM.currentWindowUnchecked
     rec (x, req) <- runRequesterT (runReaderT a env) rsp
-        rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame handlersMVar win f $
+        rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
           traverseRequesterData (\r -> Identity <$> r) rm
     return x
   where
-    runInAnimationFrame handlersMVar win f x = do
-      handlers <- liftIO $ takeMVar handlersMVar
-      when (null handlers) $ do
-        rec cb <- newRequestAnimationFrameCallbackSync $ \_ -> do
-              freeRequestAnimationFrameCallback cb
-              handlersToRun <- liftIO $ takeMVar handlersMVar
-              liftIO $ putMVar handlersMVar []
-              sequence_ (reverse handlersToRun)
-        void $ Window.requestAnimationFrame win cb
-      liftIO $ putMVar handlersMVar ((do
+    runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
         v <- synchronously x
-        void . liftIO $ f v) : handlers)
-
-class Monad m => HasDocument m where
-  askDocument :: m Document
-  default askDocument :: (m ~ f m', MonadTrans f, Monad m', HasDocument m') => m Document
-  askDocument = lift askDocument
-
-instance HasDocument m => HasDocument (ReaderT r m)
-instance HasDocument m => HasDocument (StateT s m)
-instance HasDocument m => HasDocument (Lazy.StateT s m)
-instance HasDocument m => HasDocument (EventWriterT t w m)
-instance HasDocument m => HasDocument (DynamicWriterT t w m)
-instance HasDocument m => HasDocument (PostBuildT t m)
-instance HasDocument m => HasDocument (RequesterT t request response m)
-instance HasDocument m => HasDocument (QueryT t q m)
+        void . liftIO $ f v
 
 instance Monad m => HasDocument (ImmediateDomBuilderT t m) where
   {-# INLINABLE askDocument #-}
@@ -337,7 +306,7 @@ extractUpTo df s e = liftJSM $ do
   void $ call f f (df, s, e)
 #endif
 
-type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, MonadAdjust t m, PrimMonad m)
+type SupportsImmediateDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -400,7 +369,7 @@ wrap e cfg = do
     }
 
 {-# INLINABLE makeElement #-}
-makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, MonadAdjust t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
+makeElement :: forall er t m a. (MonadJSM m, MonadFix m, MonadReflexCreateTrigger t m, Adjustable t m) => Text -> ElementConfig er t GhcjsDomSpace -> ImmediateDomBuilderT t m a -> ImmediateDomBuilderT t m ((Element er GhcjsDomSpace t, a), DOM.Element)
 makeElement elementTag cfg child = do
   doc <- askDocument
   e <- liftJSM $ uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
@@ -427,6 +396,7 @@ data GhcjsDomSpace
 
 instance DomSpace GhcjsDomSpace where
   type EventSpec GhcjsDomSpace = GhcjsEventSpec
+  type RawDocument GhcjsDomSpace = DOM.Document
   type RawTextNode GhcjsDomSpace = DOM.Text
   type RawElement GhcjsDomSpace = DOM.Element
   type RawFile GhcjsDomSpace = DOM.File
@@ -481,6 +451,23 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
         let e = uncheckedCastTo DOM.Element t
         runReaderT (defaultDomEventHandler e en) evt
     }
+
+instance SupportsImmediateDomBuilder t m => NotReady t (ImmediateDomBuilderT t m) where
+  notReadyUntil e = do
+    eOnce <- headE e
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
+    let ready = do
+          old <- liftIO $ readIORef unreadyChildren
+          let new = pred old
+          liftIO $ writeIORef unreadyChildren $! new
+          when (new == 0) $ _immediateDomBuilderEnv_commitAction env
+    requestDomAction_ $ ready <$ eOnce
+  notReady = do
+    env <- ImmediateDomBuilderT ask
+    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
+    liftIO $ modifyIORef' unreadyChildren succ
 
 instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t m) where
   type DomBuilderSpace (ImmediateDomBuilderT t m) = GhcjsDomSpace
@@ -596,21 +583,6 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return (wrapped, result)
   placeRawElement = append . toNode
   wrapRawElement = wrap
-  notReadyUntil e = do
-    eOnce <- headE e
-    env <- ImmediateDomBuilderT ask
-    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
-    liftIO $ modifyIORef' unreadyChildren succ
-    let ready = do
-          old <- liftIO $ readIORef unreadyChildren
-          let new = pred old
-          liftIO $ writeIORef unreadyChildren $! new
-          when (new == 0) $ _immediateDomBuilderEnv_commitAction env
-    requestDomAction_ $ ready <$ eOnce
-  notReady = do
-    env <- ImmediateDomBuilderT ask
-    let unreadyChildren = _immediateDomBuilderEnv_unreadyChildren env
-    liftIO $ modifyIORef' unreadyChildren succ
 
 
 {- 2017-05-19 dridus: Commented out per Ryan Trinkle. Note that this does not support mount state and possibly has issues with unready child handling.
@@ -710,7 +682,7 @@ data ChildReadyStateInt
   -- ^The child is not yet installed in the DOM and if it has unready children then the key into the unready count tracking 'DMap' is given.
    deriving (Show, Read, Eq, Ord)
 
-instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, PrimMonad m) => MonadAdjust t (ImmediateDomBuilderT t m) where
+instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, PrimMonad m) => Adjustable t (ImmediateDomBuilderT t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     initialEnv <- ImmediateDomBuilderT ask
@@ -843,9 +815,8 @@ instance (Reflex t, MonadAdjust t m, MonadJSM m, MonadHold t m, MonadFix m, Mona
         mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
         liftIO $ writeIORef currentChildInstallations $! childInstallationsAfter
 
-
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
-traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
+traverseDMapWithKeyWithAdjust' :: forall t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, DMap.GCompare k) => (forall a. k a -> v a -> ImmediateDomBuilderT t m (v' a)) -> DMap k v -> Event t (PatchDMap k v) -> ImmediateDomBuilderT t m (DMap k v', Event t (PatchDMap k v'))
 traverseDMapWithKeyWithAdjust' =
   hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness applyDomUpdate_
   where
@@ -879,7 +850,7 @@ traverseDMapWithKeyWithAdjust' =
       liftIO $ writeIORef currentChildInstallations $! applyAlways (weakenPatchDMapWith (_child_installation . getCompose) $ PatchDMap p) childInstallations
 
 {-# INLINABLE traverseIntMapWithKeyWithAdjust' #-}
-traverseIntMapWithKeyWithAdjust' :: forall t m v v'. (MonadAdjust t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m) => (IntMap.Key -> v -> ImmediateDomBuilderT t m v') -> IntMap v -> Event t (PatchIntMap v) -> ImmediateDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
+traverseIntMapWithKeyWithAdjust' :: forall t m v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadIO m, MonadJSM m, PrimMonad m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m) => (IntMap.Key -> v -> ImmediateDomBuilderT t m v') -> IntMap v -> Event t (PatchIntMap v) -> ImmediateDomBuilderT t m (IntMap v', Event t (PatchIntMap v'))
 traverseIntMapWithKeyWithAdjust' =
   hoistTraverseIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust updateChildUnreadiness applyDomUpdate_
   where
@@ -920,7 +891,7 @@ traverseIntMapWithKeyWithAdjust' =
 -- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
 {-# INLINABLE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
-  ( MonadAdjust t m
+  ( Adjustable t m
   , MonadHold t m
   , MonadIO m
   , MonadJSM m
@@ -1023,7 +994,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
 -- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
 {-# INLINABLE hoistTraverseWithKeyWithAdjust #-}
 hoistTraverseWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
-  ( MonadAdjust t m
+  ( Adjustable t m
   , MonadHold t m
   , DMap.GCompare k
   , MonadIO m

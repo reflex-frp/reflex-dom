@@ -9,6 +9,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PolyKinds #-}
@@ -22,7 +23,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Reflex.Dom.WebSocket where
+module Reflex.Dom.WebSocket
+  ( module Reflex.Dom.WebSocket
+  , jsonDecode
+  ) where
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
@@ -35,27 +39,34 @@ import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception (SomeException)
+import Control.Exception
 import Control.Lens
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import Data.IORef
+import Data.JSString.Text
 import Data.Maybe (isJust)
 import Data.Text
+import Data.Text.Encoding
+import Foreign.JavaScript.Utils (jsonDecode)
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
                      , _webSocketConfig_close :: Event t (Word, Text)
                      , _webSocketConfig_reconnect :: Bool
+                     , _webSocketConfig_protocols :: [Text]
                      }
 
 instance Reflex t => Default (WebSocketConfig t a) where
-  def = WebSocketConfig never never True
+  def = WebSocketConfig never never True []
 
 type WebSocket t = RawWebSocket t ByteString
 
@@ -94,7 +105,7 @@ webSocket' url config onRawMessage = do
           liftIO $ threadDelay 1000000
           start
       start = do
-        ws <- newWebSocket wv url (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
+        ws <- newWebSocket wv url (_webSocketConfig_protocols config) (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
         return ()
   performEvent_ . (liftJSM start <$) =<< getPostBuild
@@ -122,22 +133,34 @@ webSocket' url config onRawMessage = do
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
+textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
+textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
+
+jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
+jsonWebSocket url cfg = do
+  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg }
+  return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }
+
 #ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig
 makeLensesWith (lensRules & simpleLenses .~ True) ''RawWebSocket
 #else
 
 webSocketConfig_send :: Lens' (WebSocketConfig t a) (Event t [a])
-webSocketConfig_send f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig y x2 x3) <$> f x1
+webSocketConfig_send f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig y x2 x3 x4) <$> f x1
 {-# INLINE webSocketConfig_send #-}
 
 webSocketConfig_close :: Lens' (WebSocketConfig t a) (Event t (Word, Text))
-webSocketConfig_close f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 y x3) <$> f x2
+webSocketConfig_close f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 y x3 x4) <$> f x2
 {-# INLINE webSocketConfig_close #-}
 
 webSocketConfig_reconnect :: Lens' (WebSocketConfig t a) Bool
-webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3) = (\y -> WebSocketConfig x1 x2 y) <$> f x3
+webSocketConfig_reconnect f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 x2 y x4) <$> f x3
 {-# INLINE webSocketConfig_reconnect #-}
+
+webSocketConfig_protocols :: Lens' (WebSocketConfig t a) [Text]
+webSocketConfig_protocols f (WebSocketConfig x1 x2 x3 x4) = (\y -> WebSocketConfig x1 x2 x3 y) <$> f x4
+{-# INLINE webSocketConfig_protocols #-}
 
 webSocket_recv :: Lens' (RawWebSocket t a) (Event t a)
 webSocket_recv f (RawWebSocket x1 x2 x3 x4) = (\y -> RawWebSocket y x2 x3 x4) <$> f x1

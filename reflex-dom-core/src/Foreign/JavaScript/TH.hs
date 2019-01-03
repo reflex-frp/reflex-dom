@@ -28,8 +28,9 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 import Foreign.JavaScript.Orphans ()
 import Prelude hiding ((!!))
 import Reflex.Class
-import Reflex.DynamicWriter
-import Reflex.EventWriter
+import Reflex.Adjustable.Class
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -136,7 +137,7 @@ instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
   type PrimState (WithJSContextSingleton x m) = PrimState m
   primitive = lift . primitive
 
-instance MonadAdjust t m => MonadAdjust t (WithJSContextSingleton x m) where
+instance Adjustable t m => Adjustable t (WithJSContextSingleton x m) where
   runWithReplace a0 a' = WithJSContextSingleton $ runWithReplace (coerce a0) (coerceEvent a')
   traverseIntMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseIntMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjust f dm0 dm' = WithJSContextSingleton $ traverseDMapWithKeyWithAdjust (\k v -> unWithJSContextSingleton $ f k v) (coerce dm0) (coerceEvent dm')
@@ -242,7 +243,7 @@ instance HasJS x m => HasJS x (ReaderT r m) where
   type JSX (ReaderT r m) = JSX m
   liftJS = lift . liftJS
 
-instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
+instance HasJS x m => HasJS x (PostBuildT t m) where
   type JSX (PostBuildT t m) = JSX m
   liftJS = lift . liftJS
 
@@ -252,6 +253,10 @@ instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) wh
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
+  liftJS = lift . liftJS
+
+instance HasJS x m => HasJS x (EventWriterT t w m) where
+  type JSX (EventWriterT t w m) = JSX m
   liftJS = lift . liftJS
 
 instance HasJS x m => HasJS x (RequesterT t request response m) where

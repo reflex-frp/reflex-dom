@@ -26,15 +26,18 @@
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
+       , module Reflex.NotReady.Class
        ) where
 
+import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
-import Reflex.DynamicWriter
-import Reflex.EventWriter
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
+import Reflex.NotReady.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.Query.Base
@@ -44,6 +47,7 @@ import Reflex.Requester.Base
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
+import qualified Control.Monad.State as Lazy
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
@@ -60,6 +64,7 @@ import GHCJS.DOM.Types (JSM)
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
+  type RawDocument d :: *
   type RawTextNode d :: *
   type RawElement d :: *
   type RawFile d :: *
@@ -70,7 +75,7 @@ class Default (EventSpec d EventResult) => DomSpace d where
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
 -- dynamic DOM in the 'Reflex' timeline @t@
-class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomBuilder t m | m -> t where
+class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: *
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f
@@ -140,20 +145,6 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), MonadAdjust t m) => DomB
     { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
     }
   {-# INLINABLE wrapRawElement #-}
-  notReadyUntil :: Event t a -> m ()
-  default notReadyUntil :: ( MonadTrans f
-                           , m ~ f m'
-                           , DomBuilder t m'
-                           )
-                        => Event t a -> m ()
-  notReadyUntil = lift . notReadyUntil
-  notReady :: m ()
-  default notReady :: ( MonadTrans f
-                      , m ~ f m'
-                      , DomBuilder t m'
-                      )
-                   => m ()
-  notReady = lift notReady
 
 {- 2017-05-19 dridus: Commented out per Ryan Trinkle. Note that this does not support mount state and possibly has issues with unready child handling.
 
@@ -706,6 +697,11 @@ instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   requestDomAction = lift . requestDomAction
   requestDomAction_ = lift . requestDomAction_
 
+instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
+  withRenderHook hook (Lazy.StateT a) = Lazy.StateT $ \s -> withRenderHook hook $ a s
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
+
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
@@ -714,3 +710,22 @@ deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
 liftElementConfig = id
+
+class Monad m => HasDocument m where
+  askDocument :: m (RawDocument (DomBuilderSpace m))
+  default askDocument
+    :: ( m ~ f m'
+       , RawDocument (DomBuilderSpace m) ~ RawDocument (DomBuilderSpace m')
+       , MonadTrans f
+       , Monad m'
+       , HasDocument m'
+       )
+    => m (RawDocument (DomBuilderSpace m))
+  askDocument = lift askDocument
+
+instance HasDocument m => HasDocument (ReaderT r m)
+instance HasDocument m => HasDocument (EventWriterT t w m)
+instance HasDocument m => HasDocument (DynamicWriterT t w m)
+instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)

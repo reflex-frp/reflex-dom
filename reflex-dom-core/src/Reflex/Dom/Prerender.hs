@@ -12,6 +12,7 @@
 module Reflex.Dom.Prerender
        ( Prerender (..)
        , prerender
+       , PrerenderClientConstraint
        ) where
 
 import Control.Monad.Reader
@@ -19,6 +20,7 @@ import Data.Constraint
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex
+import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.Static
@@ -33,6 +35,7 @@ type PrerenderClientConstraint js m =
   , HasJSContext (Performable m)
   , MonadFix m
   , MonadFix (Performable m)
+  , DomBuilderSpace m ~ GhcjsDomSpace
   )
 
 class Prerender js m | m -> js where
@@ -67,6 +70,9 @@ instance (Prerender js m, ReflexHost t) => Prerender js (PostBuildT t m) where
   prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (DynamicWriterT t w m) where
+  prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
+
+instance Prerender js m => Prerender js (EventWriterT t w m) where
   prerenderClientDict = fmap (\Dict -> Dict) (prerenderClientDict :: Maybe (Dict (PrerenderClientConstraint js m)))
 
 instance Prerender js m => Prerender js (ReaderT w m) where
