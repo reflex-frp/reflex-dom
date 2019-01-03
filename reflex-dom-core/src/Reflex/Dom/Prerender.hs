@@ -17,6 +17,7 @@ module Reflex.Dom.Prerender
        , prerender
        , prerender_
        , PrerenderClientConstraint
+       , PrerenderBaseConstraints
        ) where
 
 import Control.Lens ((&), (.~))
