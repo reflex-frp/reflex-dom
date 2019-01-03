@@ -155,7 +155,7 @@ executable krausest
     ghc-options: -dedupe
     cpp-options: -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=60000
   else
-    buildable: False
+    --buildable: False
   type: exitcode-stdio-1.0
 
 source-repository head

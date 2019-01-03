@@ -149,6 +149,61 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
     flip runPostBuildT postBuild $ flip runTriggerEventT events $ app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)
     return postBuildTriggerRef
 
+{-# INLINABLE mainHydrationWidgetWithHeadImmediate #-}
+-- | Warning: `mainHydrationWidgetWithHeadImmediate` is provided only as performance tweak. It is expected to disappear in future releases.
+mainHydrationWidgetWithHeadImmediate :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithHeadImmediate head' body = do
+  runHydrationWidgetWithHeadAndBodyImmediate (pure ()) $ \appendHead appendBody -> do
+    appendHead head'
+    appendBody body
+
+{-# INLINABLE attachHydrationWidgetImmediate #-}
+attachHydrationWidgetImmediate
+  :: JSContextSingleton ()
+  -> (EventChannel -> PerformEventT DomTimeline DomHost (IORef (Maybe (EventTrigger DomTimeline ()))))
+  -> IO ()
+attachHydrationWidgetImmediate jsSing w = do
+  events <- newChan
+  runDomHost $ flip runTriggerEventT events $ mdo
+    (postBuildTriggerRef, fc@(FireCommand fire)) <- lift $ hostPerformEventT $ w events
+    mPostBuildTrigger <- readRef postBuildTriggerRef
+    lift $ forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+    liftIO $ processAsyncEvents events fc
+
+{-# INLINABLE runHydrationWidgetWithHeadAndBodyImmediate #-}
+runHydrationWidgetWithHeadAndBodyImmediate
+  :: IO ()
+  -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head"
+      -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body"
+      -> FloatingWidget () ()
+     )
+  -> JSM ()
+runHydrationWidgetWithHeadAndBodyImmediate switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
+  globalDoc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked globalDoc
+  bodyElement <- getBodyUnchecked globalDoc
+  unreadyChildren <- liftIO $ newIORef 0
+  hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
+  liftIO $ attachHydrationWidgetImmediate jsSing $ \events -> flip runWithJSContextSingleton jsSing $ do
+    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+    let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
+        hydrateDom n w = do
+          events' <- TriggerEvent.askEvents
+          parent <- liftIO $ newIORef $ toNode n
+          lift $ do
+            let builderEnv = HydrationDomBuilderEnv
+                  { _hydrationDomBuilderEnv_document = globalDoc
+                  , _hydrationDomBuilderEnv_parent = parent
+                  , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
+                  , _hydrationDomBuilderEnv_commitAction = pure ()
+                  , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
+                  , _hydrationDomBuilderEnv_switchover = never
+                  }
+            (a, _res) <- runHydrationDomBuilderT w builderEnv events'
+            pure a
+    flip runPostBuildT postBuild $ flip runTriggerEventT events $ app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)
+    return postBuildTriggerRef
+
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
 mainWidget = mainWidget'
@@ -282,7 +337,6 @@ processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
     _ <- fire (catMaybes mes) $ return ()
     liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
   return ()
-
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
