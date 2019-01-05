@@ -5,7 +5,7 @@
 , monad-control, mtl, primitive, ref-tf, reflex, semigroups, stdenv
 , stm, template-haskell, temporary, text, these, transformers
 , unix, zenc, hashable, chromium, process, jsaddle-warp
-, linux-namespaces, iproute, network-uri
+, linux-namespaces, iproute, network-uri, fontconfig
 }:
 let addGcTestDepends = drv: if stdenv.system != "x86_64-linux" then drv else drv // {
       testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
@@ -32,6 +32,11 @@ in mkDerivation (addGcTestDepends {
   # The headless browser run as part of the tests will exit without this
   preBuild = ''
     export HOME="$PWD"
+  '';
+
+  # The headless browser run as part of gc tests would hang/crash without this
+  preCheck = ''
+    export FONTCONFIG_PATH=${fontconfig.out}/etc/fonts
   '';
 
   # Show some output while running tests, so we might notice what's wrong
