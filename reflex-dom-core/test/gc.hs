@@ -8,7 +8,6 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
-import GHC.Stats
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import Reflex.Time
