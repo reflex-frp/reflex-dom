@@ -42,18 +42,18 @@ import qualified GHCJS.DOM.Types as DOM
 
 {-# SPECIALIZE append :: DOM.Node -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) () #-}
 
-{-# SPECIALIZE drawChildUpdate :: forall k v' a. ImmediateDomBuilderEnv (SpiderTimeline Global) -> (IORef (ChildReadyState k) -> JSM ()) -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) (v' a) -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (Compose ((,,,) DOM.DocumentFragment DOM.Text (IORef (ChildReadyState k))) v' a) #-}
+{-# SPECIALIZE drawChildUpdate :: forall k v' a. ImmediateDomBuilderEnv (SpiderTimeline Global) -> (IORef (ChildReadyState k) -> JSM ()) -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) (v' a) -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (Compose (Child (ChildReadyState k)) v' a) #-}
 
 {-# SPECIALIZE traverseIntMapWithKeyWithAdjust' :: forall v v'. (IntMap.Key -> v -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) v') -> IntMap v -> Event (SpiderTimeline Global) (PatchIntMap v) -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) (IntMap v', Event (SpiderTimeline Global) (PatchIntMap v')) #-}
 
 {-# SPECIALIZE hoistTraverseIntMapWithKeyWithAdjust :: forall v v'.
-     (   (IntMap.Key -> v -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'))
+     (   (IntMap.Key -> v -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (Child ChildReadyStateInt v'))
       -> IntMap v
       -> Event (SpiderTimeline Global) (PatchIntMap v)
-      -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (IntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v'), Event (SpiderTimeline Global) (PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v')))
+      -> RequesterT (SpiderTimeline Global) JSM Identity (TriggerEventT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global)))) (IntMap (Child ChildReadyStateInt v'), Event (SpiderTimeline Global) (PatchIntMap (Child ChildReadyStateInt v')))
      )
-  -> (PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> IntMap (IORef ChildReadyStateInt) -> IO (IntMap (IORef ChildReadyStateInt)))
-  -> (IORef (IntMap DOM.Text) -> IORef DOM.Text -> PatchIntMap (DOM.DocumentFragment, DOM.Text, IORef ChildReadyStateInt, v') -> JSM ())
+  -> (PatchIntMap (Child ChildReadyStateInt v') -> IntMap (IORef ChildReadyStateInt) -> IO (IntMap (IORef ChildReadyStateInt)))
+  -> (IORef (IntMap ChildInstallation) -> IORef DOM.Text -> PatchIntMap (Child ChildReadyStateInt v') -> JSM ())
   -> (IntMap.Key -> v -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) v')
   -> IntMap v
   -> Event (SpiderTimeline Global) (PatchIntMap v)
