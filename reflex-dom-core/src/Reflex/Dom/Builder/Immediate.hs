@@ -846,7 +846,7 @@ data ChildReadyStateInt
 --
 -- This is the core work which manages setting up the DOM structure and updating it over time on incoming patch events (@p v@), deferring the specifics of
 -- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
-{-# INLINABLE hoistTraverseIntMapWithKeyWithAdjust #-}
+{-# INLINE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   ( Adjustable t m
   , MonadIO m
