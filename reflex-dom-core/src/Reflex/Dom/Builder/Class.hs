@@ -151,6 +151,18 @@ class DomBuilder t m => MountableDomBuilder t m where
   buildDomFragment :: m a -> m (DomFragment m, a)
   mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
 
+-- |'HasMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
+-- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
+class Monad m => HasMountStatus t m | m -> t where
+  -- | Get a 'Event' which will fire only after the DOM elements are installed in the document
+  -- Note when this event fires, it is not guranteed that the DOM is still in the document, it could have been removed.
+  getMounted :: m (Event t ())
+
+instance HasMountStatus t m => HasMountStatus t (ReaderT r m) where
+  getMounted = lift getMounted
+instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
+  getMounted = lift getMounted
+
 type Namespace = Text
 
 data TextNodeConfig t
