@@ -185,7 +185,7 @@ data ImmediateDomBuilderEnv t = ImmediateDomBuilderEnv
   , _immediateDomBuilderEnv_unreadyChildren :: {-# UNPACK #-} !(IORef Word)
   -- ^Number of children who still aren't fully rendered. While a DOM builder action has unready children, the parent being built into will typically be an
   -- unmounted document fragment. As each child becomes ready, this count is decremented until finally it reaches zero and the commit action is triggered.
-  , _immediateDomBuilderEnv_commitAction :: JSM ()
+  , _immediateDomBuilderEnv_commitAction :: !(JSM ())
   -- ^Action to take when the unready children all become ready, usually to install the document fragment.
   , _immediateDomBuilderEnv_mountState :: Dynamic t MountState
   -- ^'Dynamic' representing the current state of DOM nodes within the parent node with respect to the document as a whole. See 'MountState' for more.
@@ -889,7 +889,7 @@ traverseIntMapWithKeyWithAdjust' =
 --
 -- This is the core work which manages setting up the DOM structure and updating it over time on incoming patch events (@p v@), deferring the specifics of
 -- adjust only versus adjust and move to the caller by way of its @applyDomUpdate_@ parameter.
-{-# INLINABLE hoistTraverseIntMapWithKeyWithAdjust #-}
+{-# INLINE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust :: forall v v' t m p.
   ( Adjustable t m
   , MonadHold t m
