@@ -1352,7 +1352,7 @@ testWidget' beforeJS afterSwitchover bodyWidget = maybe (error "test timed out")
   waitUntilSwitchover <- liftIO newEmptyMVar -- Empty until switchover
   let entryPoint = do
         liftIO $ takeMVar waitBeforeJS
-        mainHydrationWidgetWithSwitchoverAction (putMVar waitUntilSwitchover ()) (pure ()) $ bodyWidget
+        mainHydrationWidgetWithSwitchoverAction (putMVar waitUntilSwitchover ()) (pure ()) bodyWidget
         syncPoint
   application <- liftIO $ jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse ->
     sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
@@ -1397,7 +1397,7 @@ testWidgetDebug bodyWidget = liftIO $ do
           el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
   ((), html) <- renderStatic staticApp
   let entryPoint = do
-        mainHydrationWidgetWithSwitchoverAction (pure ()) (pure ()) $ bodyWidget
+        mainHydrationWidgetWithSwitchoverAction (pure ()) (pure ()) bodyWidget
         syncPoint
   application <- jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
   Warp.runSettings (Warp.setPort 3911 Warp.defaultSettings) application

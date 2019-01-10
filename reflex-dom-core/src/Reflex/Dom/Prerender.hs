@@ -115,7 +115,8 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = pure ()
           }
-    ((a, b0), _) <- lift $ runHydrationDomBuilderT server env events
+    delayed <- liftIO $ newIORef $ pure ()
+    (a, b0) <- lift $ runHydrationDomBuilderT server (env { _hydrationDomBuilderEnv_delayed = delayed }) events
     (b', trigger) <- newTriggerEvent
     getHydrationMode >>= \case
       HydrationMode_Immediate -> do

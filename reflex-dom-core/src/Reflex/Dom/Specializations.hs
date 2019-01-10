@@ -1,9 +1,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Reflex.Dom.Specializations where
+module Reflex.Dom.Specializations () where
 
+import Control.Concurrent.Chan (Chan)
+import Data.Dependent.Sum (DSum)
+import Data.Dependent.Map (DMap)
+import Data.Some (Some)
 import Data.Text (Text)
 import Reflex.Spider
 import Reflex.Class
@@ -14,6 +19,7 @@ import Reflex.Requester.Base
 import Reflex.TriggerEvent.Base
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
+import qualified Reflex.Dom.Builder.Hydration as H
 import Data.Functor.Identity
 import Data.Functor.Compose
 import Data.IORef
@@ -58,4 +64,112 @@ import qualified GHCJS.DOM.Types as DOM
   -> IntMap v
   -> Event (SpiderTimeline Global) (PatchIntMap v)
   -> ImmediateDomBuilderT (SpiderTimeline Global) (WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))) (IntMap v', Event (SpiderTimeline Global) (PatchIntMap v'))
+  #-}
+
+-- Hydration stuff
+
+type HydrationM = WithJSContextSingleton () (PerformEventT Spider (SpiderHost Global))
+
+{-# SPECIALIZE H.makeElement
+  :: Text
+  -> ElementConfig er Spider H.HydrationDomSpace
+  -> H.HydrationDomBuilderT Spider HydrationM a
+  -> H.HydrationDomBuilderT Spider HydrationM
+    ((Element er H.HydrationDomSpace Spider, a), Either DOM.Element (IORef DOM.Element))
+  #-}
+
+{-# SPECIALIZE H.makeNodeInternal
+  :: H.HydrationDomBuilderT Spider HydrationM DOM.Element
+  -> H.HydrationDomBuilderT Spider HydrationM DOM.Element
+  #-}
+{-# SPECIALIZE H.makeNodeInternal
+  :: H.HydrationDomBuilderT Spider HydrationM DOM.Text
+  -> H.HydrationDomBuilderT Spider HydrationM DOM.Text
+  #-}
+
+{-# SPECIALIZE H.makeNodeInternal
+  :: H.HydrationDomBuilderT Spider HydrationM DOM.Comment
+  -> H.HydrationDomBuilderT Spider HydrationM DOM.Comment
+  #-}
+
+{-# SPECIALIZE H.drawChildUpdate
+  :: H.HydrationDomBuilderEnv Spider HydrationM
+  -> (IORef (H.ChildReadyState Int) -> JSM ())
+  -> H.HydrationDomBuilderT Spider HydrationM (Identity a)
+  -> H.DomRenderHookT Spider HydrationM (Compose (H.TraverseChild Spider HydrationM Int) Identity a)
+  #-}
+
+{-# SPECIALIZE H.drawChildUpdate
+  :: H.HydrationDomBuilderEnv Spider HydrationM
+  -> (IORef (H.ChildReadyState (Some k)) -> JSM ())
+  -> H.HydrationDomBuilderT Spider HydrationM (f a)
+  -> H.DomRenderHookT Spider HydrationM (Compose (H.TraverseChild Spider HydrationM (Some k)) f a)
+  #-}
+
+{-# SPECIALIZE H.drawChildUpdateInt
+  :: H.HydrationDomBuilderEnv Spider HydrationM
+  -> (IORef (H.ChildReadyState k) -> JSM ())
+  -> H.HydrationDomBuilderT Spider HydrationM v
+  -> H.DomRenderHookT Spider HydrationM (H.TraverseChild Spider HydrationM k v)
+  #-}
+
+{-# SPECIALIZE H.append
+  :: DOM.Node
+  -> H.HydrationDomBuilderT Spider HydrationM ()
+  #-}
+
+{-# SPECIALIZE H.wrap
+  :: Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  -> DOM.Element
+  -> RawElementConfig er Spider H.HydrationDomSpace
+  -> H.HydrationDomBuilderT Spider HydrationM (DMap EventName (EventFilterTriggerRef Spider er))
+  #-}
+
+{-# SPECIALIZE H.triggerBody
+  :: DOM.JSContextRef
+  -> ElementConfig er Spider H.HydrationDomSpace
+  -> Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  -> DMap EventName (EventFilterTriggerRef Spider er)
+  -> DOM.Element
+  -> H.WrapArg er EventName x
+  -> H.EventTrigger Spider x
+  -> IO (IO ())
+  #-}
+
+{-# SPECIALIZE H.traverseIntMapWithKeyWithAdjust'
+  :: (IntMap.Key -> v -> H.HydrationDomBuilderT Spider HydrationM v')
+  -> IntMap v
+  -> Event Spider (PatchIntMap v)
+  -> H.HydrationDomBuilderT Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  #-}
+
+{-# SPECIALIZE H.hoistTraverseIntMapWithKeyWithAdjust
+  :: ((IntMap.Key -> v -> H.DomRenderHookT Spider HydrationM (H.TraverseChild Spider HydrationM Int v'))
+    -> IntMap v
+    -> Event Spider (PatchIntMap v)
+    -> H.DomRenderHookT Spider HydrationM (IntMap (H.TraverseChild Spider HydrationM Int v'), Event Spider (PatchIntMap (H.TraverseChild Spider HydrationM Int v'))))
+  -> (PatchIntMap (H.TraverseChild Spider HydrationM Int v')
+    -> IntMap (IORef (H.ChildReadyState Int))
+    -> IO (IntMap (IORef (H.ChildReadyState Int))))
+  -> (IORef (IntMap DOM.Text)
+    -> DOM.Text
+    -> PatchIntMap (H.TraverseChild Spider HydrationM Int v')
+    -> JSM ())
+  -> (IntMap.Key -> v -> H.HydrationDomBuilderT Spider HydrationM v')
+  -> IntMap v
+  -> Event Spider (PatchIntMap v)
+  -> H.HydrationDomBuilderT Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  #-}
+
+{-# SPECIALIZE H.runHydrationDomBuilderT
+  :: H.HydrationDomBuilderT Spider HydrationM a
+  -> H.HydrationDomBuilderEnv Spider HydrationM
+  -> Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  -> HydrationM a
+  #-}
+
+{-# SPECIALIZE H.runDomRenderHookT
+  :: H.DomRenderHookT Spider HydrationM a
+  -> Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  -> HydrationM a
   #-}
