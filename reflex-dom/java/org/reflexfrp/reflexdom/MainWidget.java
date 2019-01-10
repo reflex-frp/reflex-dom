@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import java.io.IOException;
 import java.io.InputStream;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 
 import java.nio.charset.StandardCharsets;
 
@@ -79,7 +80,12 @@ public class MainWidget {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
             if( url != null && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                try {
+                    view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                }
+                catch(ActivityNotFoundException  e) {
+                    Log.e("reflex", "Starting activity for intent '" + url + "' failed!");
+                }
                 return true;
             } else {
                 return false;
