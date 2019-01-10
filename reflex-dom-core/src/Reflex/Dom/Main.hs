@@ -153,9 +153,13 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
   liftIO $ processAsyncEvents events fc
 
 {-# INLINABLE mainHydrationWidgetWithHeadImmediate #-}
--- | Warning: `mainHydrationWidgetWithHeadImmediate` is provided only as performance tweak. It is expected to disappear in future releases.
-mainHydrationWidgetWithHeadImmediate :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithHeadImmediate head' body = do
+mainHydrationWidgetWithHeadImmediate :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidgetWithHeadImmediate  = mainHydrationWidgetWithHeadImmediate'
+
+{-# INLINABLE mainHydrationWidgetWithHeadImmediate' #-}
+-- | Warning: `mainHydrationWidgetWithHeadImmediate'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainHydrationWidgetWithHeadImmediate' :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithHeadImmediate' head' body = do
   runHydrationWidgetWithHeadAndBodyImmediate $ \appendHead appendBody -> do
     appendHead head'
     appendBody body

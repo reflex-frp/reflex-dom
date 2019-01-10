@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
        (module Main, run, mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp', mainHydrationWidgetWithHead, mainHydrationWidgetWithHeadImmediate) where
+        mainWidgetWithHead', mainWidgetInElementById, runApp', mainHydrationWidgetWithHead, mainHydrationWidgetWithHead', mainHydrationWidgetWithHeadImmediate, mainHydrationWidgetWithHeadImmediate') where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
@@ -106,7 +106,14 @@ mainHydrationWidgetWithHead :: (forall x. HydrationWidget x ()) -> (forall x. Hy
 mainHydrationWidgetWithHead h b = run $ Main.mainHydrationWidget h b
 {-# INLINE mainHydrationWidgetWithHead #-}
 
+mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -> IO ()
+mainHydrationWidgetWithHead' h b = run $ Main.mainHydrationWidget' h b
+{-# INLINE mainHydrationWidgetWithHead' #-}
+
 mainHydrationWidgetWithHeadImmediate :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> IO ()
 mainHydrationWidgetWithHeadImmediate h b = run $ Main.mainHydrationWidgetWithHeadImmediate h b
 {-# INLINE mainHydrationWidgetWithHeadImmediate #-}
 
+mainHydrationWidgetWithHeadImmediate' :: HydrationWidget () () -> HydrationWidget () () -> IO ()
+mainHydrationWidgetWithHeadImmediate' h b = run $ Main.mainHydrationWidgetWithHeadImmediate' h b
+{-# INLINE mainHydrationWidgetWithHeadImmediate' #-}
