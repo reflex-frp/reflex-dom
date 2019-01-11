@@ -41,15 +41,15 @@ flag profile-reflex
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 1.4,
-    base >= 4.7 && < 4.12,
+    aeson >= 0.8 && < 1.5,
+    base >= 4.7 && < 4.13,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     blaze-builder,
     bytestring == 0.10.*,
-    containers == 0.5.*,
+    containers >= 0.5 && < 0.7,
     constraints >= 0.9 && < 0.11,
-    contravariant >= 1.4 && < 1.5,
+    contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
     dependent-map == 0.2.*,
     dependent-sum >= 0.3 && < 0.5,
@@ -67,7 +67,7 @@ library
     ref-tf == 0.4.*,
     reflex == 0.5.*,
     semigroups >= 0.16 && < 0.19,
-    stm == 2.4.*,
+    stm >= 2.4 && < 2.6,
     text == 1.2.*,
     these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,

@@ -108,7 +108,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
   uniqWindow <- holdUniqDyn window
   return (uniqWindow, result)
   where
-    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     mkContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
