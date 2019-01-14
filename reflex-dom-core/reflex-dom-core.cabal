@@ -91,7 +91,6 @@ library
     Foreign.JavaScript.Utils
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
-    Reflex.Dom.Builder.Hydration
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
@@ -103,7 +102,6 @@ library
     Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
-    Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query

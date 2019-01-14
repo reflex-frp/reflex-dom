@@ -26,8 +26,7 @@ type TableDiff = PatchIntMap Row
 main :: IO ()
 main = do
   seed <- randomIO
---  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed) -- Immediate builder
-  mainHydrationWidgetWithHeadImmediate' headW (bodyW seed) -- Hydration builder
+  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed)
 
 titleW :: DomBuilder t m => m ()
 titleW = text "Reflex-dom keyed"

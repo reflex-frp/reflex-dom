@@ -38,8 +38,7 @@ import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.InputDisabled
-import Reflex.Dom.Builder.Immediate (ImmediateDomBuilderT, insertBefore, deleteBetweenExclusive, runImmediateDomBuilderT, ImmediateDomBuilderEnv(..), GhcjsDomSpace)
-import Reflex.Dom.Builder.Hydration
+import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
 
@@ -93,14 +92,14 @@ class Prerender t m | m -> t where
   -- hydration will fail.
   prerenderImpl :: m (a, b) -> ((PrerenderClientConstraint t (Client m)) => Client m b) -> m (Maybe a, Dynamic t b)
 
-instance (Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (ImmediateDomBuilderT t m) where
-  type Client (ImmediateDomBuilderT t m) = ImmediateDomBuilderT t m
+instance (Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where
+  type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerenderImpl _ client = (,) Nothing . pure <$> client
 
-instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT t m) where
-  -- | PostBuildT is needed here because we delay running the immediate builder
+instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
+  -- | PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
-  type Client (HydrationDomBuilderT t m) = PostBuildT t (ImmediateDomBuilderT t m)
+  type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m) -- PostBuildT t (ImmediateDomBuilderT t m)
   -- | Runs the server widget up until switchover, then replaces it with the
   -- client widget.
   prerenderImpl server client = do
@@ -109,25 +108,30 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
     doc <- askDocument
     df <- Document.createDocumentFragment doc
     unreadyChildren <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_unreadyChildren
-    let immediateEnv = ImmediateDomBuilderEnv
-          { _immediateDomBuilderEnv_document = doc
-          , _immediateDomBuilderEnv_parent = DOM.toNode df
-          , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
-          , _immediateDomBuilderEnv_commitAction = pure ()
-          }
+    hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
     delayed <- liftIO $ newIORef $ pure ()
+    let env' = HydrationDomBuilderEnv
+          { _hydrationDomBuilderEnv_document = doc
+          , _hydrationDomBuilderEnv_parent = Left $ DOM.toNode df
+          , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
+          , _hydrationDomBuilderEnv_commitAction = pure ()
+          , _hydrationDomBuilderEnv_delayed = delayed
+          , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
+          , _hydrationDomBuilderEnv_switchover = never
+          }
     (a, b0) <- lift $ runHydrationDomBuilderT server (env { _hydrationDomBuilderEnv_delayed = delayed }) events
     (b', trigger) <- newTriggerEvent
     getHydrationMode >>= \case
       HydrationMode_Immediate -> do
-        liftIO . trigger <=< lift $ runImmediateDomBuilderT (runPostBuildT client $ void b') immediateEnv events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void b') env' events
+        append $ DOM.toNode df
       HydrationMode_Hydrating -> addHydrationStep $ do
-        liftIO . trigger <=< lift $ runImmediateDomBuilderT (runPostBuildT client $ void b') immediateEnv events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void b') env' events
         insertBefore df =<< deleteToPrerenderEnd
     (,) (Just a) <$> holdDyn b0 b'
 
 instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
-  type Client (StaticDomBuilderT t m) = ImmediateDomBuilderT t m
+  type Client (StaticDomBuilderT t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerenderImpl server _ = do
     _ <- element "script" (def & initialAttributes .~ Map.singleton "type" startMarker) $ pure ()
     (a, b) <- server

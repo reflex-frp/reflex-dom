@@ -2,7 +2,6 @@ module Reflex.Dom.Core (module X) where
 
 import Reflex as X hiding (askEvents)
 import Reflex.Dom.Builder.Class as X
-import Reflex.Dom.Builder.Hydration as X hiding (askEvents, makeElement, ChildReadyState, drawChildUpdate, append, wrap, traverseIntMapWithKeyWithAdjust', hoistTraverseIntMapWithKeyWithAdjust)
 import Reflex.Dom.Builder.Immediate as X
 import Reflex.Dom.Builder.InputDisabled as X
 import Reflex.Dom.Builder.Static as X

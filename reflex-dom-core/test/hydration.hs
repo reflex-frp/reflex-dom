@@ -42,7 +42,6 @@ import Network.HTTP.Types (status200)
 import Network.Socket
 import Network.Wai
 import Network.WebSockets
-import Reflex.Dom.Builder.Immediate (GhcjsDomSpace)
 import Reflex.Dom.Core
 import Reflex.Patch.DMapWithMove
 import System.Directory
