@@ -210,7 +210,7 @@ test-suite gc
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64) || impl(ghc >= 8.4.0)
+  if !os(linux) || !arch(x86_64)
     buildable: False
 
 source-repository head
