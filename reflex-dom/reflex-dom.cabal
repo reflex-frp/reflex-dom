@@ -61,7 +61,7 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.12,
+    base >= 4.7 && < 4.13,
     bytestring == 0.10.*,
     reflex == 0.5.*,
     reflex-dom-core >=0.4 && <0.5,
@@ -82,9 +82,14 @@ library
           build-depends:
             jsaddle-webkit2gtk
         else
-          if !flag(android)
+          if arch(wasm32)
             build-depends:
-              jsaddle-webkit2gtk
+              jsaddle,
+              jsaddle-wasm
+          else
+            if !flag(android)
+              build-depends:
+                jsaddle-webkit2gtk
 
   exposed-modules:
     Reflex.Dom

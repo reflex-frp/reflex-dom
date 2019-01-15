@@ -1,4 +1,4 @@
-{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, reflex
+{ mkDerivation, base, bytestring, jsaddle-webkit2gtk, jsaddle-wkwebview, jsaddle-warp, jsaddle-wasm, reflex
 , reflex-dom-core, stdenv, text, ghc, hostPlatform, jsaddle-clib, android-activity ? null
 , ghcBackend ? if hostPlatform.isDarwin then "warp" else "webkit2gtk"
 }:
@@ -23,6 +23,8 @@ in mkDerivation {
   ] else if hostPlatform.isMacOS then [
     jsaddle-wkwebview
     ghcBackendPackage
+  ] else if hostPlatform.isWasm then [
+    jsaddle-wasm
   ] else [
     ghcBackendPackage
   ]);
