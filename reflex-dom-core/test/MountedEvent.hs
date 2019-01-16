@@ -147,18 +147,185 @@ tests wdConfig caps _selenium = do
       testWidget (checkTextInId "id1" "hello world") $ do
         divId "id1" $ text "hello world"
 
-  describe "getMounted" $ session' $ do
+  describe "getMounted basic tests" $ session' $ do
+    let
+      idTop = "idTop"
+      txtTop = "txt_top"
+      id1 = "id1"
+      id2 = "id2"
+      divId1Dom = "<div id=\"id1\">txt_string_1</div>"
+      txtString1 = "txt_string_1"
+      txtString2 = "txt_string_2"
     it "works for simple static widget" $ runWD $ do
       let
-        id1 = "id1"
-        txtString = "hello world"
-        expected :: [[DomMountSnapshot]]
-        expected = [[(id1, 0, Mounted, txtString)]]
+        expected = [[DomMountSnapshot id1 0 Mounted (Just txtString1)]]
       testWidget (checkDomSnapshots expected) $ do
         divId id1 $ do
-          captureDomMountSnapshot id1
-          text txtString
+          captureDomMountSnapshot id1 True
+          text txtString1
 
+    it "works for initial widget" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot id1 0 Mounted (Just txtString1)]]
+      testWidget (checkDomSnapshots expected) $ do
+        let
+          initWidget = divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+        void $ widgetHold initWidget (return () <$ never)
+
+    it "works for replaced widget" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot id1 0 Mounted (Just txtString1)]]
+      testWidget (checkDomSnapshots expected) $ do
+        let
+          initWidget = el "div" $ text "initWidget text"
+          replacedWidget = divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+        pb <- getPostBuild
+        void $ widgetHold initWidget (replacedWidget <$ pb)
+
+    it "works for replaced widget, replaced with getPostBuild" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot id2 0 Mounted (Just txtString2)]]
+      testWidget (checkDomSnapshots expected) $ do
+        let
+          initWidget = divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+          replacedWidget = divId id2 $ do
+            captureDomMountSnapshot id2 True
+            text txtString2
+        pb <- getPostBuild
+        void $ widgetHold initWidget (replacedWidget <$ pb)
+
+    it "works for replaced widget, replaced with getMounted" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot id2 0 Mounted (Just txtString2)]]
+      testWidget (checkDomSnapshots expected) $ do
+        let
+          initWidget = divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+            -- delay 1 =<< getMounted
+            -- delay 0 =<< getMounted
+            getMounted
+            -- return never
+          replacedWidget = divId id2 $ do
+            captureDomMountSnapshot id2 True
+            text txtString2
+            return never
+        rec
+          let ev = switch (current evDyn)
+          evDyn <- widgetHold initWidget (replacedWidget <$ ev)
+        return ()
+
+    it "Fires once for parent widget" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted Nothing]
+          , [DomMountSnapshot id2 0 Mounted (Just txtString2)]
+          ]
+      testWidget (checkDomSnapshots expected) $ do
+        let
+          initWidget = divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+          replacedWidget = divId id2 $ do
+            captureDomMountSnapshot id2 True
+            text txtString2
+
+        divId idTop $ do
+          captureDomMountSnapshot idTop False
+          pb <- getPostBuild
+          void $ widgetHold initWidget (replacedWidget <$ pb)
+        return ()
+
+    it "test notReady" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just "")]
+          , [DomMountSnapshot id1 0 Mounted (Just txtString1)]
+          ]
+      testWidget (checkDomSnapshots expected) $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          pb <- getPostBuild
+          pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+          void $ dyn pbDyn
+
+    it "test notReady delayed" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just "")]
+          , [DomMountSnapshot id1 0 Mounted (Just txtString1)]
+          ]
+      testWidget (checkDomSnapshots expected) $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          pb <- delay 0.1 =<< getPostBuild
+          pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId id1 $ do
+            captureDomMountSnapshot id1 True
+            text txtString1
+          void $ dyn pbDyn
+
+    it "test notReady delayed" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just divId1Dom)]
+          , [DomMountSnapshot id1 0 Mounted (Just txtString1)]
+          ]
+      testWidget (checkDomSnapshots expected) $ do
+        pb <- getPostBuild
+        void $ widgetHold blank $ ffor pb $ \_ -> do
+          divId idTop $ do
+            captureDomMountSnapshot idTop True
+            pb <- getPostBuild
+            pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId id1 $ do
+              captureDomMountSnapshot id1 True
+              text txtString1
+            void $ dyn pbDyn
+
+    it "test notReady delayed" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just divId1Dom)]
+          , [DomMountSnapshot id1 0 Mounted (Just txtString1)]
+          ]
+      testWidget (checkDomSnapshots expected) $ do
+        pb <- getPostBuild
+        void $ widgetHold blank $ ffor pb $ \_ -> do
+          divId idTop $ do
+            captureDomMountSnapshot idTop True
+            pb <- delay 0.1 =<< getPostBuild
+            pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId id1 $ do
+              captureDomMountSnapshot id1 True
+              text txtString1
+            void $ dyn pbDyn
+
+-- delayedWidget wName = do
+--   dumpMount wName
+--   pb <- getPostBuild
+--   mev <- getMounted
+--   ms <- holdDyn Mounting (Mounted <$ mev)
+--   performEvent_ $ logIt (wName <> ": postBuild dyn ") <$> tag (current ms) pb
+--   performEvent_ $ logIt (wName <> ": getMounted") <$> updated ms
+--   pbDyn <- holdDyn notReady . ffor pb $ \ _ -> do
+--     text $ wName <> ": postBuild"
+--     dumpMount $ wName <> ": pb block"
+--   void $ dyn pbDyn
+--   delayedPb <- delay 5 pb
+--   delayDyn <- holdDyn notReady . ffor delayedPb $ \ _ -> do
+--     text $ wName <> ": delayed"
+--     dumpMount $ wName <> ": delay block"
+--   void $ dyn delayDyn
+--   return ms
+
+----------------------------------------------------------------------------------------------------------
+-- Other APIs
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
@@ -174,23 +341,37 @@ data MountState
   -- ^DOM structures are now in the document.
   deriving (Eq, Ord, Show)
 
-type DomMountSnapshot = (Text, Int, MountState, Text)
+data DomMountSnapshot = DomMountSnapshot
+  { _domMountSnapshot_idTag :: Text
+  , _domMountSnapshot_count :: Int
+  , _domMountSnapshot_state :: MountState
+  , _domMountSnapshot_contents :: Maybe Text
+  }
+  deriving (Show, Eq)
 
-checkDomSnapshots expected = checkTextInId domSnapshotResultsDivId (tshow expected)
+domMountSnapshotShowResult :: DomMountSnapshot -> Text
+-- domMountSnapshotShowResult (DomMountSnapshot t c s) = tshow (t, c, s)
+domMountSnapshotShowResult = tshow
+
+checkDomSnapshots expected = checkTextInId domSnapshotResultsDivId (tshow (fmap (fmap domMountSnapshotShowResult) expected))
 
 domSnapshotResultsDivId = "domSnapshotResultsDivId"
 
 captureDomMountSnapshot
   :: ( HasMountStatus t m, PerformEvent t m, MonadJSM (Performable m)
      , EventWriter t [DomMountSnapshot] m, MonadHold t m,
-       MonadFix m) => Text -> m ()
-captureDomMountSnapshot tag = do
+       MonadFix m) => Text -> Bool -> m ()
+captureDomMountSnapshot tag captureInnerHtml = do
   mEv <- numberOccurrences =<< getMounted
   ms <- holdDyn (0, Mounting) ((\(i,_) -> (i, Mounted)) <$> mEv)
   snapshotEv <- performEvent $ ffor (updated ms) $ \(i,m) -> liftJSM $ do
-    doc <- currentDocumentUnchecked
-    html <- getInnerHTML =<< getElementByIdUnchecked doc tag
-    return [(tag, i, m, textFromJSString html)]
+    contents <- if captureInnerHtml
+      then do
+        doc <- currentDocumentUnchecked
+        html <- getInnerHTML =<< getElementByIdUnchecked doc tag
+        return (Just $ textFromJSString html)
+      else return Nothing
+    return [DomMountSnapshot tag i m contents]
   tellEvent snapshotEv
 
 data Selenium = Selenium
@@ -263,8 +444,9 @@ testWidget testCheck bodyWidget = maybe (error "test timed out") pure <=< timeou
   let entryPoint = do
         Reflex.Dom.Core.mainWidget $ do
           (_, snapshotEvs) <- divId "test-body" $ runEventWriterT bodyWidget
-          snapshots <- foldDyn (:) [] snapshotEvs
-          divId domSnapshotResultsDivId $ display snapshots
+          -- performEvent $ ffor snapshotEvs $ liftIO . print
+          snapshots <- foldDyn (\a b -> b ++ [a]) [] snapshotEvs
+          divId domSnapshotResultsDivId $ display $ fmap (fmap (fmap domMountSnapshotShowResult)) snapshots
         syncPoint
   application <- liftIO $ jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse ->
     sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
