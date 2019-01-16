@@ -323,7 +323,7 @@ tests wdConfig caps _selenium = do
   describe "getMounted in traverseDMapWithKeyWithAdjust" $ session' $ do
     let
       idTop = "idTop"
-      initDom = "<button>new thing!</button><div></div>"
+      initDom = "<button id=\"add-thing\">new thing!</button><div></div>"
     it "check initital dom" $ runWD $ do
       let
         expected = [[DomMountSnapshot idTop 0 Mounted (Just initDom)]]
@@ -336,10 +336,10 @@ tests wdConfig caps _selenium = do
       let
         expected =
           [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
-          , [DomMountSnapshot (dmapItemId 0) 0 Mounted Nothing]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
           ]
         check = do
-          WD.click =<< WD.findElem (WD.ByTag "button")
+          WD.click =<< WD.findElem (WD.ById "add-thing")
           liftIO $ threadDelay 100000
           (checkDomSnapshots expected)
       testWidget check $ do
@@ -347,23 +347,77 @@ tests wdConfig caps _selenium = do
           captureDomMountSnapshot idTop True
           dmapWithAdjust
 
--- delayedWidget wName = do
---   dumpMount wName
---   pb <- getPostBuild
---   mev <- getMounted
---   ms <- holdDyn Mounting (Mounted <$ mev)
---   performEvent_ $ logIt (wName <> ": postBuild dyn ") <$> tag (current ms) pb
---   performEvent_ $ logIt (wName <> ": getMounted") <$> updated ms
---   pbDyn <- holdDyn notReady . ffor pb $ \ _ -> do
---     text $ wName <> ": postBuild"
---     dumpMount $ wName <> ": pb block"
---   void $ dyn pbDyn
---   delayedPb <- delay 5 pb
---   delayDyn <- holdDyn notReady . ffor delayedPb $ \ _ -> do
---     text $ wName <> ": delayed"
---     dumpMount $ wName <> ": delay block"
---   void $ dyn delayDyn
---   return ms
+    it "Add two things" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjust
+
+    it "Add two things, and update first" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          WD.click =<< WD.findElem (WD.ById "update-thing0")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjust
+
+    it "Add two things, and update second" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          liftIO $ threadDelay 100000
+          WD.click =<< WD.findElem (WD.ById "update-thing1")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjust
 
 type DMK = Const2 Int Text
 type DMP = PatchDMap DMK Identity
@@ -372,12 +426,19 @@ type DMPM = PatchDMapWithMove DMK Identity
 dmapItemId :: Int -> Text
 dmapItemId i = "thingId" <> (tshow i)
 
+dmapItemIdPB :: Int -> Text
+dmapItemIdPB i = "thingId" <> (tshow i) <> "PB"
+
 dmapConstToList :: DMap k (Const a) -> [a]
 dmapConstToList = map (\ (_ :=> Const v) -> v) . DMap.toList
 
+buttonId i t = do
+  (e, _) <- elAttr' "button" ("id" =: i) $ text t
+  return $ domEvent Click e
+
 dmapWithAdjust :: forall js t m. (TestWidget js t m, HasMountStatus t m) => m ()
 dmapWithAdjust = do
-  newThing <- button "new thing!"
+  newThing <- buttonId "add-thing" "new thing!"
   index :: Dynamic t Int <- count newThing
   let newThings :: Event t DMP
       newThings =
@@ -386,14 +447,20 @@ dmapWithAdjust = do
   let renderThing :: Const2 Int Text a -> Identity a -> m (Const (Event t DMP) a)
       renderThing k@(Const2 i) (Identity t) = do
         let myId = dmapItemId i
-        captureDomMountSnapshot myId False
+        captureDomMountSnapshot myId True
         divId myId $ case even i of
-          False -> text $ "thing odd " <> (T.pack $ show i)
-          _ -> void $ text $ "thing even " <> (T.pack $ show i)
+          True -> text $ "thing even " <> (tshow i)
+          _ -> void $ do
+            text $ "thing odd " <> (tshow i)
+            pb <- getPostBuild
+            pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId (dmapItemIdPB i) $ do
+              captureDomMountSnapshot (dmapItemIdPB i) True
+              text (dmapItemIdPB i)
+            void $ dyn pbDyn
         el "div" $ do
           text $ "I'm thing " <> t
-          delete <- button "delete!"
-          update <- button "update!"
+          delete <- buttonId ("delete-thing" <> (tshow i)) "delete!"
+          update <- buttonId ("update-thing" <> (tshow i)) "update!"
           pure . Const $ PatchDMap . DMap.singleton (Const2 i) . ComposeMaybe
             <$> leftmost [ delete $> Nothing
                          , update $> (Just . Identity $ t <> "z")
@@ -412,10 +479,7 @@ dmapWithAdjust = do
   pure ()
 
 ----------------------------------------------------------------------------------------------------------
--- Other APIs
-tshow :: (Show a) => a -> Text
-tshow = T.pack . show
-
+-- Mounted event check APIs
 -- |Type representing the current mount status of a DOM structure. Mount status refers to whether the DOM structure is currently within the document tree, not
 -- in the document tree, or transitioning.
 data MountState
@@ -460,6 +524,11 @@ captureDomMountSnapshot tag captureInnerHtml = do
       else return Nothing
     return [DomMountSnapshot tag i m contents]
   tellEvent snapshotEv
+
+------------------------------------------------------------------------------------------
+-- Common APIs for testing
+tshow :: (Show a) => a -> Text
+tshow = T.pack . show
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
