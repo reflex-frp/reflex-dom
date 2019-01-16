@@ -160,7 +160,17 @@ class Monad m => HasMountStatus t m | m -> t where
 
 instance HasMountStatus t m => HasMountStatus t (ReaderT r m) where
   getMounted = lift getMounted
+
 instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m, Semigroup w) => HasMountStatus t (EventWriterT t w m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m, Monoid w) => HasMountStatus t (DynamicWriterT t w m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m) => HasMountStatus t (RequesterT t request response m) where
   getMounted = lift getMounted
 
 type Namespace = Text
