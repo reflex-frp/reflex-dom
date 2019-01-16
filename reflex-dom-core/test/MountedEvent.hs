@@ -63,6 +63,20 @@ import GHCJS.DOM.Element
 import GHCJS.DOM.Node
 import GHCJS.DOM.NonElementParentNode
 
+import Control.Arrow (first, second)
+import Control.Lens ((^.), preview, _Left, _Right)
+import Control.Monad (join, void)
+import Data.Bifunctor (bimap)
+import Data.Dependent.Map (DMap)
+import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Sum (DSum((:=>)))
+import Data.Functor (($>))
+import Data.Functor.Const (Const(Const))
+import Data.Functor.Identity (Identity(Identity))
+import Data.Functor.Misc (ComposeMaybe(ComposeMaybe), Const2(Const2))
+import Data.Monoid ((<>))
+import Data.Some (Some(This))
+
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
 import qualified Data.IntMap as IntMap
@@ -272,7 +286,7 @@ tests wdConfig caps _selenium = do
             text txtString1
           void $ dyn pbDyn
 
-    it "test notReady delayed" $ runWD $ do
+    it "test notReady in replaced widget" $ runWD $ do
       let
         expected =
           [ [DomMountSnapshot idTop 0 Mounted (Just divId1Dom)]
@@ -289,7 +303,7 @@ tests wdConfig caps _selenium = do
               text txtString1
             void $ dyn pbDyn
 
-    it "test notReady delayed" $ runWD $ do
+    it "test notReady delayed in replaced widget" $ runWD $ do
       let
         expected =
           [ [DomMountSnapshot idTop 0 Mounted (Just divId1Dom)]
@@ -305,6 +319,33 @@ tests wdConfig caps _selenium = do
               captureDomMountSnapshot id1 True
               text txtString1
             void $ dyn pbDyn
+
+  describe "getMounted in traverseDMapWithKeyWithAdjust" $ session' $ do
+    let
+      idTop = "idTop"
+      initDom = "<button>new thing!</button><div></div>"
+    it "check initital dom" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot idTop 0 Mounted (Just initDom)]]
+      testWidget (checkDomSnapshots expected) $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjust
+
+    it "Add one thing" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted Nothing]
+          ]
+        check = do
+          WD.click =<< WD.findElem (WD.ByTag "button")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjust
 
 -- delayedWidget wName = do
 --   dumpMount wName
@@ -323,6 +364,52 @@ tests wdConfig caps _selenium = do
 --     dumpMount $ wName <> ": delay block"
 --   void $ dyn delayDyn
 --   return ms
+
+type DMK = Const2 Int Text
+type DMP = PatchDMap DMK Identity
+type DMPM = PatchDMapWithMove DMK Identity
+
+dmapItemId :: Int -> Text
+dmapItemId i = "thingId" <> (tshow i)
+
+dmapConstToList :: DMap k (Const a) -> [a]
+dmapConstToList = map (\ (_ :=> Const v) -> v) . DMap.toList
+
+dmapWithAdjust :: forall js t m. (TestWidget js t m, HasMountStatus t m) => m ()
+dmapWithAdjust = do
+  newThing <- button "new thing!"
+  index :: Dynamic t Int <- count newThing
+  let newThings :: Event t DMP
+      newThings =
+        ffor (tag (current index) newThing) $ \ i ->
+          PatchDMap $ DMap.singleton (Const2 i) (ComposeMaybe (Just (Identity (T.pack $ show i))))
+  let renderThing :: Const2 Int Text a -> Identity a -> m (Const (Event t DMP) a)
+      renderThing k@(Const2 i) (Identity t) = do
+        let myId = dmapItemId i
+        captureDomMountSnapshot myId False
+        divId myId $ case even i of
+          False -> text $ "thing odd " <> (T.pack $ show i)
+          _ -> void $ text $ "thing even " <> (T.pack $ show i)
+        el "div" $ do
+          text $ "I'm thing " <> t
+          delete <- button "delete!"
+          update <- button "update!"
+          pure . Const $ PatchDMap . DMap.singleton (Const2 i) . ComposeMaybe
+            <$> leftmost [ delete $> Nothing
+                         , update $> (Just . Identity $ t <> "z")
+                         ]
+
+  rec
+    (_, permuteThingsPatches :: Event t (PatchDMap DMK (Const (Event t DMP)))) <- el "div" $
+      traverseDMapWithKeyWithAdjust renderThing DMap.empty (newThings <> permuteThings)
+    permuteThingsDMap :: Dynamic t (DMap DMK (Const (Event t DMP))) <-
+      foldDyn applyAlways DMap.empty permuteThingsPatches
+    let activePermutations :: Behavior t (Event t DMP)
+        activePermutations = leftmost . dmapConstToList <$> current permuteThingsDMap
+        permuteThings :: Event t DMP
+        permuteThings = switch activePermutations
+
+  pure ()
 
 ----------------------------------------------------------------------------------------------------------
 -- Other APIs
@@ -461,7 +548,7 @@ testWidget testCheck bodyWidget = maybe (error "test timed out") pure <=< timeou
   jsaddleTid <- liftIO jsaddleWarp
   liftIO $ takeMVar waitJSaddle
   WD.openPage $ "http://localhost:" <> show port
-  liftIO $ threadDelay 100000 --wait a bit
+  liftIO $ threadDelay 500000 --wait a bit
   b <- testCheck
   liftIO $ killThread jsaddleTid
   return b
