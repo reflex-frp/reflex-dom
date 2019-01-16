@@ -142,7 +142,7 @@ virtualListBuffered buffer heightPx rowPx maxIndex i0 setI keyToIndex items0 ite
     (win, m) <- virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBuilder
     pb <- getPostBuild
     let extendWin o l = (max 0 (o - l * (buffer-1) `div` 2), l * buffer)
-    rec let winHitEdge = fmapMaybe id $ attachWith (\(oldOffset, oldLimit) (winOffset, winLimit) ->
+    rec let winHitEdge = attachWithMaybe (\(oldOffset, oldLimit) (winOffset, winLimit) ->
               if winOffset > oldOffset && winOffset + winLimit < oldOffset + oldLimit
                  then Nothing
                  else Just (extendWin winOffset winLimit)) (current winBuffered) (updated win)
