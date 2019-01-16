@@ -167,6 +167,51 @@ test-suite gc
   if !os(linux) || !arch(x86_64)
     buildable: False
 
+test-suite mountedEvent
+  build-depends: base
+               , aeson
+               , bytestring
+               , constraints
+               , constraints-extras
+               , containers
+               , dependent-map
+               , dependent-sum
+               , dependent-sum-template
+               , directory
+               , exceptions
+               , filepath
+               , ghcjs-dom
+               , hspec
+               , hspec-webdriver
+               , http-types
+               , HUnit
+               , jsaddle
+               , jsaddle-warp
+               , lens
+               , lifted-base
+               , network
+               , random
+               , ref-tf
+               , reflex
+               , reflex-dom-core
+               , process
+               , silently
+               , temporary
+               , text
+               , wai
+               , wai-websockets
+               , warp
+               , webdriver
+               , websockets
+  hs-source-dirs: test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  main-is: MountedEvent.hs
+  type: exitcode-stdio-1.0
+  if !os(linux) || !arch(x86_64)-- || impl(ghc >= 8.4.0)
+    buildable: False
+
+
 source-repository head
   type: git
   location: https://github.com/reflex-frp/reflex-dom
