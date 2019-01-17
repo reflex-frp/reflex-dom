@@ -152,6 +152,21 @@ main = withSeleniumServer $ \selenium -> do
       chromeCaps' = WD.getCaps $ chromeConfig browserPath
   hspec (tests wdConfig [chromeCaps'] selenium) `finally` _selenium_stopServer selenium
 
+-----------------------------
+-- Testing `getMounted` Event
+-----------------------------
+-- In the tests we want to make sure that the DOM node, for which the
+-- getMounted event has fired, is already present in the DOM.
+-- To do this we need to sample the DOM node using performEvent.
+-- This cannot be directly tested with webdriver functionality.
+--
+-- The other important factor in design of this testing functionality is that
+-- the webdriver cannot communicate with the widget/performEvent with any kind
+-- of IORef.
+-- The only way webdriver can extract information is by reading the DOM.
+-- So we do this by placing the result of our tests in a special div
+-- (domSnapshotResultsDivId) and then comparing it with the expected values.
+--------------------------------------------------------------------------------
 tests :: WD.WDConfig -> [Capabilities] -> Selenium -> Spec
 tests wdConfig caps _selenium = do
   let session' = sessionWith wdConfig "" . using (map (,"") caps)
@@ -161,7 +176,7 @@ tests wdConfig caps _selenium = do
       testWidget (checkTextInId "id1" "hello world") $ do
         divId "id1" $ text "hello world"
 
-  describe "getMounted basic tests" $ session' $ do
+  describe "getMounted basic tests (runWithReplace)" $ session' $ do
     let
       idTop = "idTop"
       txtTop = "txt_top"
@@ -216,16 +231,16 @@ tests wdConfig caps _selenium = do
 
     it "works for replaced widget, replaced with getMounted" $ runWD $ do
       let
-        expected = [[DomMountSnapshot id2 0 Mounted (Just txtString2)]]
+        expected =
+          [ [DomMountSnapshot id1 0 Mounted (Just txtString1)]
+          , [DomMountSnapshot id2 0 Mounted (Just txtString2)]
+          ]
       testWidget (checkDomSnapshots expected) $ do
         let
           initWidget = divId id1 $ do
-            captureDomMountSnapshot id1 True
             text txtString1
-            -- delay 1 =<< getMounted
-            -- delay 0 =<< getMounted
-            getMounted
-            -- return never
+            -- This returns the getMounted after taking the snapshot
+            captureDomMountSnapshot id1 True
           replacedWidget = divId id2 $ do
             captureDomMountSnapshot id2 True
             text txtString2
@@ -237,8 +252,10 @@ tests wdConfig caps _selenium = do
 
     it "Fires once for parent widget" $ runWD $ do
       let
+        -- The getMounted fires together for idTop and id1
         expected =
-          [ [DomMountSnapshot idTop 0 Mounted Nothing]
+          [ [DomMountSnapshot idTop 0 Mounted Nothing
+             , DomMountSnapshot id1 0 Mounted (Just txtString1)]
           , [DomMountSnapshot id2 0 Mounted (Just txtString2)]
           ]
       testWidget (checkDomSnapshots expected) $ do
@@ -251,9 +268,9 @@ tests wdConfig caps _selenium = do
             text txtString2
 
         divId idTop $ do
-          captureDomMountSnapshot idTop False
-          pb <- getPostBuild
-          void $ widgetHold initWidget (replacedWidget <$ pb)
+          -- After mount the getMount should not fire again for the parent
+          postMount <- captureDomMountSnapshot idTop False
+          void $ widgetHold initWidget (replacedWidget <$ postMount)
         return ()
 
     it "test notReady" $ runWD $ do
@@ -324,7 +341,7 @@ tests wdConfig caps _selenium = do
     let
       idTop = "idTop"
       initDom = "<button id=\"add-thing\">new thing!</button><div></div>"
-    it "check initital dom" $ runWD $ do
+    it "check initial dom" $ runWD $ do
       let
         expected = [[DomMountSnapshot idTop 0 Mounted (Just initDom)]]
       testWidget (checkDomSnapshots expected) $ do
@@ -419,6 +436,131 @@ tests wdConfig caps _selenium = do
           captureDomMountSnapshot idTop True
           dmapWithAdjust
 
+  describe "getMounted in traverseDMapWithKeyWithAdjustWithMove" $ session' $ do
+    let
+      idTop = "idTop"
+      initDom = "<button id=\"add-thing\">new thing!</button>"
+        <> "<button id=\"reverse-items\">backwards!</button><div></div>"
+    it "check initial dom" $ runWD $ do
+      let
+        expected = [[DomMountSnapshot idTop 0 Mounted (Just initDom)]]
+      testWidget (checkDomSnapshots expected) $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+    it "Add one thing" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          ]
+        check = do
+          WD.click =<< WD.findElem (WD.ById "add-thing")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+    it "Add two things" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+    it "Add two things, and update first" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          WD.click =<< WD.findElem (WD.ById "update-thing0")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+    it "Add two things, and update second" $ runWD $ do
+      let
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          liftIO $ threadDelay 100000
+          WD.click =<< WD.findElem (WD.ById "update-thing1")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+    it "Add two things and move" $ runWD $ do
+      let
+        -- move should not trigger getMounted
+        expected =
+          [ [DomMountSnapshot idTop 0 Mounted (Just initDom)]
+          , [DomMountSnapshot (dmapItemId 0) 0 Mounted (Just "thing even 0")]
+          , [DomMountSnapshot (dmapItemId 1) 0 Mounted (Just thingOdd1Dom)]
+          , [DomMountSnapshot (dmapItemIdPB 1) 0 Mounted (Just $ dmapItemIdPB 1)]
+          ]
+        -- The odd node should mount only after its child node is ready (rendered with getPostBuild)
+        thingOdd1Dom = "thing odd 1<div id=\"" <> dmapItemIdPB 1 <> "\">"
+          <> dmapItemIdPB 1 <> "</div>"
+        check = do
+          b <- WD.findElem (WD.ById "add-thing")
+          WD.click b
+          WD.click b
+          WD.click =<< WD.findElem (WD.ById "reverse-items")
+          liftIO $ threadDelay 100000
+          (checkDomSnapshots expected)
+      testWidget check $ do
+        divId idTop $ do
+          captureDomMountSnapshot idTop True
+          dmapWithAdjustWithMove
+
+-- Widgets used in tests
 type DMK = Const2 Int Text
 type DMP = PatchDMap DMK Identity
 type DMPM = PatchDMapWithMove DMK Identity
@@ -478,6 +620,58 @@ dmapWithAdjust = do
 
   pure ()
 
+dmapWithAdjustWithMove :: forall js t m. (TestWidget js t m, HasMountStatus t m) => m ()
+dmapWithAdjustWithMove = do
+  newThing <- buttonId "add-thing" "new thing!"
+  backwards <- buttonId "reverse-items" "backwards!"
+  index :: Dynamic t Int <- count newThing
+  let newThings :: Event t DMPM
+      newThings =
+        ffor (tag (current index) newThing) $ \ i ->
+          PatchDMapWithMove . DMap.singleton (Const2 i) $
+            NodeInfo (From_Insert . Identity . tshow $ i) (ComposeMaybe Nothing)
+  let renderThing :: Const2 Int Text a -> Identity a -> m (Const (Event t DMPM) a)
+      renderThing k@(Const2 i) (Identity t) = do
+        let myId = dmapItemId i
+        captureDomMountSnapshot myId True
+        divId myId $ case even i of
+          True -> text $ "thing even " <> (tshow i)
+          _ -> void $ do
+            text $ "thing odd " <> (tshow i)
+            pb <- getPostBuild
+            pbDyn <- holdDyn notReady . ffor pb $ \ _ -> divId (dmapItemIdPB i) $ do
+              captureDomMountSnapshot (dmapItemIdPB i) True
+              text (dmapItemIdPB i)
+            void $ dyn pbDyn
+        el "div" $ do
+          text $ "I'm thing " <> t
+          delete <- buttonId ("delete-thing" <> (tshow i)) "delete!"
+          update <- buttonId ("update-thing" <> (tshow i)) "update!"
+          pure . Const $ leftmost
+            [ delete $> deleteDMapKey k
+            , update $> (PatchDMapWithMove . DMap.singleton (Const2 i) $ NodeInfo (From_Insert . Identity $ t <> "z") (ComposeMaybe Nothing))
+            ]
+
+  rec
+    let reverseThings :: Event t DMPM
+        reverseThings =
+          ffor (tag (DMap.keys <$> current rowDMap) backwards) $ \ ks ->
+            PatchDMapWithMove . DMap.fromList . concat $ ffor (ks `zip` reverse ks) $ \ (This (Const2 kf), This (Const2 kt)) ->
+              if kf == kt then [] else
+                [ Const2 kt :=> NodeInfo (From_Move $ Const2 kf) (ComposeMaybe . Just $ Const2 kt)
+                ]
+
+    (_, rowPatches :: Event t (PatchDMapWithMove DMK (Const (Event t DMPM)))) <- el "div" $
+      traverseDMapWithKeyWithAdjustWithMove renderThing DMap.empty (newThings <> permuteThings <> reverseThings)
+    rowDMap :: Dynamic t (DMap DMK (Const (Event t DMPM))) <-
+      foldDyn applyAlways DMap.empty rowPatches
+    let activePermutations :: Behavior t (Event t DMPM)
+        activePermutations = leftmost . dmapConstToList <$> current rowDMap
+        permuteThings :: Event t DMPM
+        permuteThings = switch activePermutations
+
+  pure ()
+
 ----------------------------------------------------------------------------------------------------------
 -- Mounted event check APIs
 -- |Type representing the current mount status of a DOM structure. Mount status refers to whether the DOM structure is currently within the document tree, not
@@ -504,14 +698,15 @@ domMountSnapshotShowResult :: DomMountSnapshot -> Text
 -- domMountSnapshotShowResult (DomMountSnapshot t c s) = tshow (t, c, s)
 domMountSnapshotShowResult = tshow
 
-checkDomSnapshots expected = checkTextInId domSnapshotResultsDivId (tshow (fmap (fmap domMountSnapshotShowResult) expected))
+checkDomSnapshots expected = checkTextInId domSnapshotResultsDivId
+  (tshow (fmap (fmap domMountSnapshotShowResult) expected))
 
 domSnapshotResultsDivId = "domSnapshotResultsDivId"
 
 captureDomMountSnapshot
   :: ( HasMountStatus t m, PerformEvent t m, MonadJSM (Performable m)
      , EventWriter t [DomMountSnapshot] m, MonadHold t m,
-       MonadFix m) => Text -> Bool -> m ()
+       MonadFix m) => Text -> Bool -> m (Event t ())
 captureDomMountSnapshot tag captureInnerHtml = do
   mEv <- numberOccurrences =<< getMounted
   ms <- holdDyn (0, Mounting) ((\(i,_) -> (i, Mounted)) <$> mEv)
@@ -524,6 +719,7 @@ captureDomMountSnapshot tag captureInnerHtml = do
       else return Nothing
     return [DomMountSnapshot tag i m contents]
   tellEvent snapshotEv
+  return (() <$ snapshotEv)
 
 ------------------------------------------------------------------------------------------
 -- Common APIs for testing
@@ -602,7 +798,8 @@ testWidget testCheck bodyWidget = maybe (error "test timed out") pure <=< timeou
           (_, snapshotEvs) <- divId "test-body" $ runEventWriterT bodyWidget
           -- performEvent $ ffor snapshotEvs $ liftIO . print
           snapshots <- foldDyn (\a b -> b ++ [a]) [] snapshotEvs
-          divId domSnapshotResultsDivId $ display $ fmap (fmap (fmap domMountSnapshotShowResult)) snapshots
+          divId domSnapshotResultsDivId $ display $
+            fmap (fmap (fmap domMountSnapshotShowResult)) snapshots
         syncPoint
   application <- liftIO $ jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse ->
     sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
