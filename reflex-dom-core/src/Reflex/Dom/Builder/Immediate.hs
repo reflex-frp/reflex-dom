@@ -276,6 +276,7 @@ localRunner (HydrationRunnerT m) s parent = do
   s0 <- HydrationRunnerT get
   (a, s') <- HydrationRunnerT $ lift $ local (\_ -> parent) $ runStateT m (s0 { _hydrationState_previousNode = s })
   traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
+  HydrationRunnerT $ modify' $ \hs -> hs { _hydrationState_failed = _hydrationState_failed s' }
   pure a
 
 {-# INLINABLE runHydrationRunnerT #-}
@@ -1195,6 +1196,7 @@ hydrateTextNode doc t = do
   where
     go parent mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
       Nothing -> do
+        HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
         n <- createTextNode doc t
         insertAfterPreviousNode n
         pure n
@@ -1210,6 +1212,7 @@ hydrateTextNode doc t = do
               DOM.splitText_ originalNode $ fromIntegral $ T.length t
               return originalNode
             Nothing -> do
+              HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
               n <- createTextNode doc t
               insertAfterPreviousNode n
               pure n
