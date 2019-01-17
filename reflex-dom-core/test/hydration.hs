@@ -1257,6 +1257,31 @@ tests wdConfig caps _selenium = do
           (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
           liftIO $ assertEqual "DMap" initMap dmap
 
+  describe "hydrating invalid HTML" $ session' $ do
+    it "can hydrate list in paragraph" $ runWD $ do
+      let static = do
+            body <- WD.findElem (WD.ByTag "body")
+            shouldContainText "before\ninner\nafter" body
+            -- Two <p> tags should be present
+            [p1, p2] <- WD.findElems (WD.ByTag "p")
+            ol <- WD.findElem (WD.ByTag "ol")
+            shouldContainText "before" p1
+            shouldContainText "inner" ol
+            shouldContainText "" p2
+            pure (body, p1, ol, p2)
+          check (body, p1, ol, p2) = do
+            shouldContainText "before\ninner\nafter" body
+            shouldContainText "before\ninner\nafter" p1
+            elementShouldBeRemoved ol
+            elementShouldBeRemoved p2
+      testWidget' static check $ do
+        -- This is deliberately invalid HTML, the browser will interpret it as
+        -- <p>before</p><ol>inner</ol>after<p></p>
+        el "p" $ do
+          text "before"
+          el "ol" $ text "inner"
+          text "after"
+
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
   , _selenium_stopServer :: IO ()

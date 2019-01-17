@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -27,7 +28,6 @@ import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 import Reflex.TriggerEvent.Base
 import Reflex.TriggerEvent.Class
-import qualified Reflex.TriggerEvent.Base as TriggerEvent
 
 import Control.Concurrent
 import Control.Lens
@@ -79,17 +79,22 @@ mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body = do
 {-# INLINABLE attachHydrationWidget #-}
 attachHydrationWidget
   :: IO ()
-  -> IORef HydrationMode
-  -> IORef [(Node, HydrationRunnerT DomTimeline (DomCoreWidget ()) ())]
   -> JSContextSingleton ()
-  -> (EventChannel -> Event DomTimeline () -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ()))))
+  -> ( Event DomTimeline ()
+    -> IORef HydrationMode
+    -> Maybe (IORef [(Node, HydrationRunnerT DomTimeline (DomCoreWidget ()) ())])
+    -> EventChannel
+    -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
+     )
   -> IO (a, FireCommand DomTimeline DomHost)
-attachHydrationWidget switchoverAction hydrationMode rootNodesRef jsSing w = do
+attachHydrationWidget switchoverAction jsSing w = do
+  hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
+  rootNodesRef <- liftIO $ newIORef []
   events <- newChan
   runDomHost $ flip runTriggerEventT events $ mdo
     (syncEvent, fireSync) <- newTriggerEvent
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- lift $ hostPerformEventT $ do
-      a <- w events syncEvent
+      a <- w syncEvent hydrationMode (Just rootNodesRef) events
       _ <- runWithReplace (return ()) $ delayedAction <$ syncEvent
       pure a
     mPostBuildTrigger <- readRef postBuildTriggerRef
@@ -98,7 +103,8 @@ attachHydrationWidget switchoverAction hydrationMode rootNodesRef jsSing w = do
     rootNodes <- liftIO $ readIORef rootNodesRef
     let delayedAction = do
           for_ (reverse rootNodes) $ \(rootNode, runner) -> do
-            void $ runWithJSContextSingleton (runPostBuildT (runHydrationRunnerT runner Nothing rootNode events) never) jsSing
+            let hydrate = runHydrationRunnerT runner Nothing rootNode events
+            void $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
           liftIO $ writeIORef hydrationMode HydrationMode_Immediate
           liftIO $ switchoverAction
     pure (result, fc)
@@ -122,15 +128,12 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
   globalDoc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked globalDoc
   bodyElement <- getBodyUnchecked globalDoc
-  unreadyChildren <- liftIO $ newIORef 0
-  hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
-  hydrationResult <- liftIO $ newIORef []
-  (events, fc) <- liftIO . attachHydrationWidget switchoverAction hydrationMode hydrationResult jsSing $ \events switchover -> do
+  (events, fc) <- liftIO . attachHydrationWidget switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
         hydrateDom n w = do
-          events' <- TriggerEvent.askEvents
           delayed <- liftIO $ newIORef $ pure ()
+          unreadyChildren <- liftIO $ newIORef 0
           lift $ do
             let builderEnv = HydrationDomBuilderEnv
                   { _hydrationDomBuilderEnv_document = globalDoc
@@ -141,9 +144,10 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
                   , _hydrationDomBuilderEnv_switchover = switchover
                   , _hydrationDomBuilderEnv_delayed = delayed
                   }
-            a <- runHydrationDomBuilderT w builderEnv events'
-            res <- liftIO $ readIORef delayed
-            liftIO $ modifyIORef' hydrationResult ((n, res) :)
+            a <- runHydrationDomBuilderT w builderEnv events
+            forM_ hydrationResult $ \hr -> do
+              res <- liftIO $ readIORef delayed
+              liftIO $ modifyIORef' hr ((n, res) :)
             pure a
     runWithJSContextSingleton (runPostBuildT (runTriggerEventT (app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)) events) postBuild) jsSing
     return (events, postBuildTriggerRef)

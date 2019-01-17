@@ -20,27 +20,25 @@ module Reflex.Dom.Prerender
        , PrerenderBaseConstraints
        ) where
 
-import Control.Lens ((&), (.~))
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..))
 import Control.Monad.State.Strict
-import Data.Default
 import Data.Foldable (traverse_)
-import Data.IORef (IORef, modifyIORef', readIORef, newIORef)
-import Data.String (IsString)
-import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.Document as Document
-import qualified Data.Map as Map
+import Data.IORef (IORef, newIORef)
+import Data.Text (Text)
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
+
+import qualified GHCJS.DOM.Document as Document
+import qualified GHCJS.DOM.Node as Node
+import qualified GHCJS.DOM.Types as DOM
 
 type PrerenderClientConstraint t m =
   ( DomBuilder t m
@@ -127,15 +125,15 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
         append $ DOM.toNode df
       HydrationMode_Hydrating -> addHydrationStep $ do
         liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void b') env' events
-        insertBefore df =<< deleteToPrerenderEnd
+        insertBefore df =<< deleteToPrerenderEnd doc
     (,) (Just a) <$> holdDyn b0 b'
 
 instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
   type Client (StaticDomBuilderT t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerenderImpl server _ = do
-    _ <- element "script" (def & initialAttributes .~ Map.singleton "type" startMarker) $ pure ()
+    _ <- commentNode $ CommentNodeConfig startMarker Nothing
     (a, b) <- server
-    _ <- element "script" (def & initialAttributes .~ Map.singleton "type" endMarker) $ pure ()
+    _ <- commentNode $ CommentNodeConfig endMarker Nothing
     pure (Just a, pure b)
 
 instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
@@ -178,33 +176,27 @@ instance (Prerender t m, Monad m) => Prerender t (PostBuildT t m) where
   type Client (PostBuildT t m) = Client m
   prerenderImpl (PostBuildT server) client = PostBuildT $ prerenderImpl server client
 
-startMarker, endMarker :: IsString s => s
+startMarker, endMarker :: Text
 startMarker = "prerender/start"
 endMarker = "prerender/end"
 
-deleteToPrerenderEnd :: (MonadIO m, MonadJSM m) => HydrationRunnerT t m DOM.Element
-deleteToPrerenderEnd = do
-  depth <- liftIO $ newIORef (0 :: Int)
-  startNode <- hydrateNode (\e -> do
-    n :: DOM.JSString <- Element.getTagName e
-    mt :: Maybe DOM.JSString <- Element.getAttribute e ("type" :: DOM.JSString)
-    pure $ n == "SCRIPT" && mt == Just startMarker) DOM.Element
-  endNode <- hydrateNode (\e -> do
-    n :: DOM.JSString <- Element.getTagName e
-    attrCheck <- Element.getAttribute e ("type" :: DOM.JSString) >>= \case
-      Just (t :: DOM.JSString)
-        | t == startMarker -> do
-          liftIO $ modifyIORef' depth succ
-          pure False
-        | t == endMarker -> do
-          d <- liftIO $ readIORef depth
-          if d == 0
-            then pure True
-            else do
-              liftIO $ modifyIORef' depth pred
-              pure False
-      _ -> pure False
-    pure $ n == "SCRIPT" && attrCheck) DOM.Element
+deleteToPrerenderEnd :: (MonadIO m, MonadJSM m, Reflex t, MonadFix m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
+deleteToPrerenderEnd doc = do
+  startNode <- hydrateComment doc startMarker Nothing
+  let go (n :: Int) lastNode = Node.getNextSibling lastNode >>= \case
+        Nothing -> do
+          c <- Document.createComment doc endMarker
+          insertAfterPreviousNode c
+          pure c
+        Just node -> DOM.castTo DOM.Comment node >>= \case
+          Nothing -> go n node
+          Just c -> Node.getTextContentUnchecked c >>= \case
+            t | t == startMarker -> go (succ n) node
+              | t == endMarker -> case n of
+                0 -> pure c
+                _ -> go (pred n) node
+              | otherwise -> go n node
+  endNode <- go 0 $ DOM.toNode startNode
   deleteBetweenExclusive startNode endNode
-  setPreviousNode $ Just $ DOM.toNode endNode -- TODO probably not necessary
+  setPreviousNode $ Just $ DOM.toNode endNode
   pure endNode

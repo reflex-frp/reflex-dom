@@ -37,7 +37,6 @@
 -- In "hydration mode", the preexisting DOM __must contain__ what the builder
 -- will expect at switchover time (the time at which parity with the static
 -- renderer is reached, and the time after which the page is "live").
--- There can be extra nodes, but no missing or incorrect nodes.
 --
 -- For example, displaying the current time as text should be done inside
 -- 'Reflex.Dom.Prerender.prerender' to ensure that we don't attempt to hydrate the incorrect text.
@@ -52,16 +51,17 @@ module Reflex.Dom.Builder.Immediate
   , runHydrationRunnerT
   , ImmediateDomBuilderT
   , runHydrationDomBuilderT
-
   , getHydrationMode
   , addHydrationStep
   , addHydrationStepWithSetup
   , setPreviousNode
-
+  , insertAfterPreviousNode
+  , hydrateComment
   , askParent
   , askEvents
   , append
   , textNodeInternal
+  , removeSubsequentNodes
   , deleteBetweenExclusive
   , extractBetweenExclusive
   , deleteUpTo
@@ -73,7 +73,6 @@ module Reflex.Dom.Builder.Immediate
   , EventFilterTriggerRef (..)
   , wrap
   , elementInternal
-  , hydrateNode
   , HydrationDomSpace
   , GhcjsDomSpace
   , GhcjsDomHandler (..)
@@ -125,13 +124,13 @@ import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
-import Control.Monad.State.Strict (StateT, evalStateT, mapStateT, get, put)
+import Control.Monad.State.Strict (StateT, mapStateT, get, modify', gets, runStateT)
 import Data.Bitraversable
 import Data.Default
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum
 import Data.FastMutableIntMap (PatchIntMap (..))
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
@@ -141,7 +140,6 @@ import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Some (Some(..))
 import Data.Text (Text)
-import Data.Typeable (Typeable)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
@@ -260,22 +258,35 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT s t m) 
 
 -- | The monad which performs the delayed actions to reuse prerendered nodes and set up events.
 -- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
-newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT (Maybe Node) (ReaderT Node (DomRenderHookT t m)) a }
+newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT HydrationState (ReaderT Node (DomRenderHookT t m)) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
 #endif
            )
 
+data HydrationState = HydrationState
+  { _hydrationState_previousNode :: Maybe Node
+  , _hydrationState_failed :: Bool
+  }
+
 {-# INLINABLE localRunner #-}
 localRunner :: (MonadJSM m, Monad m) => HydrationRunnerT t m a -> Maybe Node -> Node -> HydrationRunnerT t m a
-localRunner (HydrationRunnerT m) s parent = HydrationRunnerT . lift $ local (\_ -> parent) (evalStateT m s)
+localRunner (HydrationRunnerT m) s parent = do
+  s0 <- HydrationRunnerT get
+  (a, s') <- HydrationRunnerT $ lift $ local (\_ -> parent) $ runStateT m (s0 { _hydrationState_previousNode = s })
+  traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
+  pure a
 
 {-# INLINABLE runHydrationRunnerT #-}
 runHydrationRunnerT
   :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
   => HydrationRunnerT t m a -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
-runHydrationRunnerT (HydrationRunnerT m) s parent = runDomRenderHookT (runReaderT (evalStateT m s) parent)
+runHydrationRunnerT (HydrationRunnerT m) s parent events = flip runDomRenderHookT events $ flip runReaderT parent $ do
+  (a, s') <- runStateT m (HydrationState s False)
+  traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
+  when (_hydrationState_failed s') $ liftIO $ putStrLn "reflex-dom warning: hydration failed: the DOM was not as expected at switchover time. This may be due to invalid HTML which the browser has altered upon parsing, some external JS altering the DOM, or the page being served from an outdated cache."
+  pure a
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationRunnerT t m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -305,7 +316,7 @@ addHydrationStepWithSetup setup f = getHydrationMode >>= \case
   HydrationMode_Immediate -> pure ()
   HydrationMode_Hydrating -> do
     switchover <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_switchover
-    (s, _) <- lift $ runWithReplace setup $ return () <$ switchover -- 4% more memory than above
+    (s, _) <- lift $ runWithReplace setup $ return () <$ switchover
     addHydrationStep (f s)
 
 -- | Add a hydration step
@@ -409,11 +420,11 @@ data HydrationMode
 
 {-# INLINABLE getPreviousNode #-}
 getPreviousNode :: Monad m => HydrationRunnerT t m (Maybe DOM.Node)
-getPreviousNode = HydrationRunnerT get
+getPreviousNode = HydrationRunnerT $ gets _hydrationState_previousNode
 
 {-# INLINABLE setPreviousNode #-}
 setPreviousNode :: Monad m => Maybe DOM.Node -> HydrationRunnerT t m ()
-setPreviousNode = HydrationRunnerT . put
+setPreviousNode n = HydrationRunnerT $ modify' (\hs -> hs { _hydrationState_previousNode = n })
 
 {-# INLINABLE askUnreadyChildren #-}
 askUnreadyChildren :: Monad m => HydrationDomBuilderT s t m (IORef Word)
@@ -427,35 +438,11 @@ askCommitAction = HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_commitActi
 getHydrationMode :: MonadIO m => HydrationDomBuilderT s t m HydrationMode
 getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationDomBuilderEnv_hydrationMode)
 
-{-# INLINE makeNodeInternal #-}
-makeNodeInternal
-  :: forall node s t m. (MonadJSM m, IsNode node, Typeable node)
-  => HydrationDomBuilderT s t m node -> HydrationDomBuilderT s t m node
-makeNodeInternal mkNode = do
-  n <- mkNode
-  append $ toNode n
-  return n
-
-{-# INLINE hydrateNode #-}
--- | This function expects the existing DOM at the current hydration node to be
--- correct. It skips any nodes that are the wrong type, or that fail the
--- @check@. The previous node reference is also updated.
-hydrateNode
-  :: (MonadJSM m, IsNode node, Typeable node)
-  => (node -> HydrationRunnerT t m Bool) -> (DOM.JSVal -> node) -> HydrationRunnerT t m node
-hydrateNode check constructor = do
-  parent <- askParent
-  lastHydrationNode <- getPreviousNode
-  let go mLastNode = do
-        node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
-        DOM.castTo constructor node >>= \case
-          Nothing -> go (Just node)
-          Just tn -> check tn >>= \case
-            True -> return tn
-            False -> go (Just node)
-  n <- go lastHydrationNode
-  setPreviousNode $ Just $ toNode n
-  return n
+-- | Remove all nodes after given node
+removeSubsequentNodes :: (MonadJSM m, IsNode n) => n -> m ()
+removeSubsequentNodes n = liftJSM $ do
+  f <- eval ("(function(n) { while (n.nextSibling) { (n.parentNode).removeChild(n.nextSibling); }; })" :: Text)
+  void $ call f f [n]
 
 -- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
@@ -671,6 +658,16 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
         runReaderT (defaultDomEventHandler e en) evt
     }
 
+makeElement :: MonadJSM m => Document -> Text -> ElementConfig er t s -> m DOM.Element
+makeElement doc elementTag cfg = do
+  e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
+    Nothing -> createElement doc elementTag
+    Just ens -> createElementNS doc (Just ens) elementTag
+  iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
+    Nothing -> setAttribute e n v
+    Just ans -> setAttributeNS e (Just ans) n v
+  pure e
+
 {-# INLINE elementImmediate #-}
 elementImmediate
   :: ( RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, EventSpec s ~ GhcjsEventSpec
@@ -683,14 +680,9 @@ elementImmediate elementTag cfg child = do
   doc <- askDocument
   ctx <- askJSM
   events <- askEvents
-  e <- makeNodeInternal . liftJSM $ do
-    e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
-      Nothing -> createElement doc elementTag
-      Just ens -> createElementNS doc (Just ens) elementTag
-    iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
-      Nothing -> setAttribute e n v
-      Just ans -> setAttributeNS e (Just ans) n v
-    pure e
+  parent <- getParent
+  e <- makeElement doc elementTag cfg
+  appendChild_ parent e
   -- Run the child builder with updated parent and previous sibling references
   result <- localEnv (\env -> env { _hydrationDomBuilderEnv_parent = Left $ toNode e }) child
   let rawCfg = extractRawElementConfig cfg
@@ -758,16 +750,16 @@ hydrateElement
   -> ElementConfig er t HydrationDomSpace
   -> HydrationDomBuilderT HydrationDomSpace t m a
   -> HydrationDomBuilderT HydrationDomSpace t m ((Element er HydrationDomSpace t, a), IORef DOM.Element)
-hydrateElement _elementTag cfg child = do
+hydrateElement elementTag cfg child = do
   ctx <- askJSM
   events <- askEvents
   -- Schedule everything for after postBuild, except for getting the result itself
-  parent <- liftIO $ newIORef $ error "Parent not yet initialized"
+  parentRef <- liftIO $ newIORef $ error "Parent not yet initialized"
   e' <- liftIO $ newIORef $ error "hydrateElement: Element not yet initialized"
   env <- HydrationDomBuilderT ask
   childDelayedRef <- liftIO $ newIORef $ pure ()
   let env' = env
-        { _hydrationDomBuilderEnv_parent = Right parent
+        { _hydrationDomBuilderEnv_parent = Right parentRef
         , _hydrationDomBuilderEnv_delayed = childDelayedRef
         }
   result <- HydrationDomBuilderT $ lift $ runReaderT (unHydrationDomBuilderT child) env'
@@ -779,10 +771,35 @@ hydrateElement _elementTag cfg child = do
         Just ns -> hasAttributeNS e (Just ns) ssrAttr <* removeAttributeNS e (Just ns) ssrAttr
   childDom <- liftIO $ readIORef childDelayedRef
   let rawCfg = extractRawElementConfig cfg
+  doc <- askDocument
   addHydrationStep $ do
-    e <- hydrateNode hasSSRAttribute DOM.Element
+    parent <- askParent
+    lastHydrationNode <- getPreviousNode
+    let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+          Nothing -> do -- ran out of nodes, create the element
+            HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
+            e <- makeElement doc elementTag cfg
+            insertAfterPreviousNode e
+            pure e
+          Just node -> DOM.castTo DOM.Element node >>= \case
+            Nothing -> go (Just node) -- this node is not an element, skip
+            Just e -> hasSSRAttribute e >>= \case
+              False -> go (Just node) -- this element was not added by the static renderer, skip
+              True -> do
+                t <- Element.getTagName e
+                -- TODO: check attributes?
+                if T.toCaseFold elementTag == T.toCaseFold t
+                  then pure e
+                  -- we came to some other statically rendered element, so something has gone wrong
+                  else do
+                    HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
+                    n <- makeElement doc elementTag cfg
+                    insertAfterPreviousNode n
+                    pure n
+    e <- go lastHydrationNode
+    setPreviousNode $ Just $ toNode e
     -- Update the parent node used by the children
-    liftIO $ writeIORef parent $ toNode e
+    liftIO $ writeIORef parentRef $ toNode e
     liftIO $ writeIORef e' e
     -- Setup events, store the result so we can wait on it later
     refs <- wrap events e rawCfg
@@ -1125,7 +1142,10 @@ textNodeImmediate
   :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m)
   => TextNodeConfig t -> HydrationDomBuilderT s t m DOM.Text
 textNodeImmediate (TextNodeConfig !t mSetContents) = do
-  n <- makeNodeInternal (askDocument >>= \doc -> createTextNode doc t)
+  p <- getParent
+  doc <- askDocument
+  n <- createTextNode doc t
+  appendChild_ p n
   mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure n
 
@@ -1144,10 +1164,11 @@ textNodeInternal
   :: (Adjustable t m, MonadHold t m, MonadJSM m, MonadFix m, Reflex t)
   => TextNodeConfig t -> HydrationDomBuilderT HydrationDomSpace t m (TextNode HydrationDomSpace t)
 textNodeInternal tc@(TextNodeConfig !t mSetContents) = do
+  doc <- askDocument
   getHydrationMode >>= \case
     HydrationMode_Immediate -> void $ textNodeImmediate tc
     HydrationMode_Hydrating -> addHydrationStepWithSetup (maybe (pure $ pure t) (hold t) mSetContents) $ \currentText -> do
-      n <- hydrateTextNode =<< sample currentText
+      n <- hydrateTextNode doc =<< sample currentText
       mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure $ TextNode ()
 
@@ -1161,20 +1182,22 @@ textNodeInternal tc@(TextNodeConfig !t mSetContents) = do
 -- expect. We also have a special case for empty text nodes - we always create
 -- the and add them after the previous node reference.
 {-# INLINE hydrateTextNode #-}
-hydrateTextNode :: MonadJSM m => Text -> HydrationRunnerT t m DOM.Text
-hydrateTextNode t@"" = do
-  doc <- Node.getOwnerDocumentUnchecked =<< askParent
+hydrateTextNode :: MonadJSM m => Document -> Text -> HydrationRunnerT t m DOM.Text
+hydrateTextNode doc t@"" = do
   tn <- createTextNode doc t
   insertAfterPreviousNode tn
   pure tn
-hydrateTextNode t = do
+hydrateTextNode doc t = do
   n <- join $ go <$> askParent <*> getPreviousNode
   setPreviousNode $ Just $ toNode n
   return n
   where
-    go parent mLastNode = do
-      node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
-      DOM.castTo DOM.Text node >>= \case
+    go parent mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+      Nothing -> do
+        n <- createTextNode doc t
+        insertAfterPreviousNode n
+        pure n
+      Just node -> DOM.castTo DOM.Text node >>= \case
         Nothing -> go parent $ Just node
         Just originalNode -> do
           originalText <- Node.getTextContentUnchecked originalNode
@@ -1185,29 +1208,59 @@ hydrateTextNode t = do
               -- required text and a subsequent sibling node containing the rest of the text.
               DOM.splitText_ originalNode $ fromIntegral $ T.length t
               return originalNode
-            Nothing -> go parent $ Just $ toNode originalNode
+            Nothing -> do
+              n <- createTextNode doc t
+              insertAfterPreviousNode n
+              pure n
 
 {-# INLINE commentNodeImmediate #-}
 commentNodeImmediate
   :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m)
   => CommentNodeConfig t -> HydrationDomBuilderT s t m DOM.Comment
 commentNodeImmediate (CommentNodeConfig !t mSetContents) = do
-  n <- makeNodeInternal (askDocument >>= \doc -> createComment doc t)
+  p <- getParent
+  doc <- askDocument
+  n <- createComment doc t
+  appendChild_ p n
   mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure n
 
 {-# INLINE commentNodeInternal #-}
 commentNodeInternal
-  :: (Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadJSM m, MonadFix m, Reflex t, Adjustable t m)
+  :: (Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadJSM m, MonadFix m, Reflex t, Adjustable t m, MonadHold t m, MonadSample t m)
   => CommentNodeConfig t -> HydrationDomBuilderT HydrationDomSpace t m (CommentNode HydrationDomSpace t)
-commentNodeInternal tc@(CommentNodeConfig _t mSetContents) = do
+commentNodeInternal tc@(CommentNodeConfig t0 mSetContents) = do
+  doc <- askDocument
   getHydrationMode >>= \case
     HydrationMode_Immediate -> void $ commentNodeInternal tc
-    HydrationMode_Hydrating -> addHydrationStep $ do
-      n <- hydrateNode (const $ pure True) DOM.Comment
-      mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+    HydrationMode_Hydrating -> addHydrationStepWithSetup (maybe (pure $ pure t0) (hold t0) mSetContents) $ \bt -> do
+      t <- sample bt
+      void $ hydrateComment doc t mSetContents
   pure $ CommentNode ()
 
+{-# INLINE hydrateComment #-}
+hydrateComment :: (MonadJSM m, Reflex t, MonadFix m) => Document -> Text -> Maybe (Event t Text) -> HydrationRunnerT t m DOM.Comment
+hydrateComment doc t mSetContents = do
+  parent <- askParent
+  let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+        Nothing -> do
+          c <- createComment doc t
+          insertAfterPreviousNode c
+          pure c
+        Just node -> DOM.castTo DOM.Comment node >>= \case
+          Nothing -> go (Just node)
+          Just c -> do
+            t' <- Node.getTextContentUnchecked c
+            if t == t'
+              then pure c
+              else do
+                c' <- createComment doc t
+                insertAfterPreviousNode c'
+                pure c'
+  n <- go =<< getPreviousNode
+  setPreviousNode $ Just $ toNode n
+  mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+  pure n
 
 -- | We leave markers in the static builder as comments, and rip these comments
 -- out at hydration time, replacing them with empty text nodes.
