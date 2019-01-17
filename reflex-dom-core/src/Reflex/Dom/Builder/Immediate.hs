@@ -266,8 +266,8 @@ newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT
            )
 
 data HydrationState = HydrationState
-  { _hydrationState_previousNode :: Maybe Node
-  , _hydrationState_failed :: Bool
+  { _hydrationState_previousNode :: !(Maybe Node)
+  , _hydrationState_failed :: !Bool
   }
 
 {-# INLINABLE localRunner #-}
@@ -658,6 +658,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
         runReaderT (defaultDomEventHandler e en) evt
     }
 
+{-# INLINE makeElement #-}
 makeElement :: MonadJSM m => Document -> Text -> ElementConfig er t s -> m DOM.Element
 makeElement doc elementTag cfg = do
   e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
