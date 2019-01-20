@@ -56,7 +56,6 @@ module Reflex.Dom.Widget.Basic
   , module Reflex.Collection
   , module Reflex.Workflow
   , partitionMapBySetLT
-  , ChildResult (..)
   ) where
 
 import Reflex.Class
@@ -105,8 +104,7 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
                         then go t geq
                         else (Left h, lt) : go t geq
 
-newtype ChildResult t k a = ChildResult { unChildResult :: (a, Event t (Map k (Maybe (ChildResult t k a)))) }
-
+{-# INLINABLE text #-}
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
