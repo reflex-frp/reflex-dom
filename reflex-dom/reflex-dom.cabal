@@ -53,6 +53,7 @@ library
       jsaddle
     c-sources: cbits/MainWidget.c
     include-dirs: cbits/include
+    install-includes: MainWidget.h
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
