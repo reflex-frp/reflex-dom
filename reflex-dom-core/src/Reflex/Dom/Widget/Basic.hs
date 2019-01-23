@@ -92,6 +92,7 @@ import Prelude hiding (mapM, mapM_, sequence, sequence_)
 -- No empty pieces will be included in the output.
 
 --TODO: This can probably be done more efficiently by dividing and conquering, re-using the structure of the Set instead of going through the Set linearally
+{-# DEPRECATED partitionMapBySetLT "This will be removed in future releases." #-}
 partitionMapBySetLT :: forall k v. Ord k => Set k -> Map k v -> Map (Either k ()) (Map k v)
 partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
   where go :: [k] -> Map k v -> [(Either k (), Map k v)]
