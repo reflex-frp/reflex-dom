@@ -346,16 +346,10 @@ fileInput config = do
         & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
         & elementConfig_eventSpec . ghcjsEventSpec_filters .~ filters
       cfg = (def :: InputElementConfig EventResult t (DomBuilderSpace m)) & inputElementConfig_elementConfig .~ elCfg
-  eRaw <- inputElement cfg
-  let e = _inputElement_raw eRaw
-  eChange <- wrapDomEvent e (`on` Events.change) $ do
-      files <- Input.getFilesUnchecked e
-      len <- FileList.getLength files
-      mapM (fmap (fromMaybe (error "fileInput: fileList.item returned null")) . FileList.item files) [0 .. len-1]
-  dValue <- holdDyn [] eChange
+  input <- inputElement cfg
   return $ FileInput
-    { _fileInput_value = dValue
-    , _fileInput_element = e
+    { _fileInput_value = _inputElement_files input
+    , _fileInput_element = _inputElement_raw input
     }
 
 data Dropdown t k
