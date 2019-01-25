@@ -275,6 +275,7 @@ elDynHtmlAttr' elementTag attrs html = do
   wrapElement defaultDomEventHandler e
 -}
 
+{-# DEPRECATED Link, linkClass, link "Use domEvent directly" #-}
 newtype Link t
   = Link { _link_clicked :: Event t ()
          }
