@@ -54,7 +54,7 @@ import qualified Text.Read as T
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
 
-{-# DEPRECATED TextInput "Use 'inputElement' directly" #-}
+{-# DEPRECATED TextInput, _textInput_element, TextInputConfig, textInput, textInputGetEnter "Use 'inputElement' directly" #-}
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text
                , _textInput_input :: Event t Text
@@ -65,7 +65,6 @@ data TextInput t
                , _textInput_builderElement :: InputElement EventResult GhcjsDomSpace t
                }
 
-{-# DEPRECATED _textInput_element "Use 'inputElement' directly" #-}
 _textInput_element :: TextInput t -> HTMLInputElement
 _textInput_element = _inputElement_raw . _textInput_builderElement
 
@@ -73,7 +72,6 @@ instance Reflex t => HasDomEvent t (TextInput t) en where
   type DomEventType (TextInput t) en = DomEventType (InputElement EventResult GhcjsDomSpace t) en
   domEvent en = domEvent en . _textInput_builderElement
 
-{-# DEPRECATED TextInputConfig "Use 'inputElement' directly" #-}
 data TextInputConfig t
    = TextInputConfig { _textInputConfig_inputType :: Text
                      , _textInputConfig_initialValue :: Text
@@ -89,7 +87,6 @@ instance Reflex t => Default (TextInputConfig t) where
                         , _textInputConfig_attributes = constDyn mempty
                         }
 
-{-# DEPRECATED textInput "Use 'inputElement' directly" #-}
 -- | Create an input whose value is a string.  By default, the "type" attribute is set to "text", but it can be changed using the _textInputConfig_inputType field.  Note that only types for which the value is always a string will work - types whose value may be null will not work properly with this widget.
 {-# INLINABLE textInput #-}
 textInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextInputConfig t -> m (TextInput t)
@@ -110,7 +107,6 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     }
 
 {-# INLINE textInputGetEnter #-}
-{-# DEPRECATED textInputGetEnter "Use 'keypress Enter' instead" #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter = keypress Enter
 
@@ -165,7 +161,7 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
     , _rangeInput_element = _inputElement_raw i
     }
 
-{-# DEPRECATED TextAreaConfig "Use 'textAreaElement' directly" #-}
+{-# DEPRECATED TextAreaConfig, TextArea, textArea "Use 'textAreaElement' directly" #-}
 data TextAreaConfig t
    = TextAreaConfig { _textAreaConfig_initialValue :: Text
                     , _textAreaConfig_setValue :: Event t Text
@@ -179,7 +175,6 @@ instance Reflex t => Default (TextAreaConfig t) where
                        , _textAreaConfig_attributes = constDyn mempty
                        }
 
-{-# DEPRECATED TextArea "Use 'textAreaElement' directly" #-}
 data TextArea t
    = TextArea { _textArea_value :: Dynamic t Text
               , _textArea_input :: Event t Text
@@ -188,7 +183,6 @@ data TextArea t
               , _textArea_element :: HTMLTextAreaElement
               }
 
-{-# DEPRECATED textArea "Use 'textAreaElement' directly" #-}
 {-# INLINABLE textArea #-}
 textArea :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextAreaConfig t -> m (TextArea t)
 textArea (TextAreaConfig initial eSet attrs) = do
@@ -205,7 +199,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_element = _textAreaElement_raw i
     }
 
-{-# DEPRECATED CheckboxConfig "Use 'inputElement' directly" #-}
+{-# DEPRECATED CheckboxConfig, Checkbox, checkbox, checkboxView, CheckboxViewEventResultType, regularToCheckboxViewEventType, CheckboxViewEventResult "Use 'inputElement' directly" #-}
 data CheckboxConfig t
     = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
                      , _checkboxConfig_attributes :: Dynamic t (Map Text Text)
@@ -217,13 +211,11 @@ instance Reflex t => Default (CheckboxConfig t) where
                        , _checkboxConfig_attributes = constDyn mempty
                        }
 
-{-# DEPRECATED Checkbox "Use 'inputElement' directly" #-}
 data Checkbox t
    = Checkbox { _checkbox_value :: Dynamic t Bool
               , _checkbox_change :: Event t Bool
               }
 
-{-# DEPRECATED checkbox "Use 'inputElement' directly" #-}
 -- | Create an editable checkbox
 --   Note: if the "type" or "checked" attributes are provided as attributes, they will be ignored
 {-# INLINABLE checkbox #-}
@@ -242,12 +234,10 @@ checkbox checked config = do
     , _checkbox_change = _inputElement_checkedChange i
     }
 
-{-# DEPRECATED CheckboxViewEventResultType "Use 'inputElement' directly" #-}
 type family CheckboxViewEventResultType (en :: EventTag) :: * where
   CheckboxViewEventResultType 'ClickTag = Bool
   CheckboxViewEventResultType t = EventResultType t
 
-{-# DEPRECATED regularToCheckboxViewEventType "Use 'inputElement' directly" #-}
 regularToCheckboxViewEventType :: EventName t -> EventResultType t -> CheckboxViewEventResultType t
 regularToCheckboxViewEventType en r = case en of
   Click -> error "regularToCheckboxViewEventType: EventName Click should never be encountered"
@@ -297,10 +287,8 @@ regularToCheckboxViewEventType en r = case en of
   Touchend -> r
   Touchcancel -> r
 
-{-# DEPRECATED CheckboxViewEventResult "Use 'inputElement' directly" #-}
 newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEventResult :: CheckboxViewEventResultType en }
 
-{-# DEPRECATED checkboxView "Use 'inputElement' directly" #-}
 --TODO
 {-# INLINABLE checkboxView #-}
 checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
@@ -335,13 +323,12 @@ checkboxView dAttrs dValue = do
   i <- inputElement inputElementConfig
   return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 
-{-# DEPRECATED FileInput "Use 'inputElement' directly" #-}
+{-# DEPRECATED FileInput, FileInputConfig, fileInput "Use 'inputElement' directly" #-}
 data FileInput d t
    = FileInput { _fileInput_value :: Dynamic t [File]
                , _fileInput_element :: RawInputElement d
                }
 
-{-# DEPRECATED FileInputConfig "Use 'inputElement' directly" #-}
 newtype FileInputConfig t
    = FileInputConfig { _fileInputConfig_attributes :: Dynamic t (Map Text Text)
                      }
@@ -350,7 +337,6 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-{-# DEPRECATED fileInput "Use 'inputElement' directly" #-}
 fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
