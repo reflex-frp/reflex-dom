@@ -111,6 +111,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
+    Reflex.Dom.Xhr.FormData
   other-modules:
     Foreign.JavaScript.Internal.Utils
     Reflex.Dom.WebSocket.Foreign
