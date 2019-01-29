@@ -1,7 +1,10 @@
 Name: reflex-dom
 Version: 0.4
 Synopsis: Functional Reactive Web Apps with Reflex
-Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+Description:
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
+  .
+  For hackage documentation, please see: <https://hackage.haskell.org/package/reflex-dom-core>.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
