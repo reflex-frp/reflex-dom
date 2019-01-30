@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -38,16 +39,16 @@ import qualified GHCJS.DOM.Document as Document
 import qualified GHCJS.DOM.Node as Node
 import qualified GHCJS.DOM.Types as DOM
 
-type PrerenderClientConstraint t m =
+type PrerenderClientConstraint js t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
   , HasDocument m
   , TriggerEvent t m
-  , Prerender t m
-  , PrerenderBaseConstraints t m
+  , Prerender js t m
+  , PrerenderBaseConstraints js t m
   )
 
-type PrerenderBaseConstraints t m =
+type PrerenderBaseConstraints js t m =
   ( HasJSContext (Performable m)
   , HasJSContext m
   , MonadFix m
@@ -63,28 +64,30 @@ type PrerenderBaseConstraints t m =
   , PrimMonad m
   , Ref (Performable m) ~ IORef
   , Ref m ~ IORef
+  , HasJS js m
+  , HasJS js (Performable m)
   )
 
 -- | Render the first widget on the server, and the second on the client. The
 -- hydration builder will run *both* widgets.
 prerender_
-  :: (Functor m, Reflex t, Prerender t m)
-  => m () -> ((PrerenderClientConstraint t (Client m)) => Client m ()) -> m ()
+  :: (Functor m, Reflex t, Prerender js t m)
+  => m () -> ((PrerenderClientConstraint js t (Client m)) => Client m ()) -> m ()
 prerender_ server client = void $ prerender server client
 
-class Prerender t m | m -> t where
+class Prerender js t m | m -> t js where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
   -- | Render the first widget on the server, and the second on the client. The
   -- hydration builder will run *both* widgets, updating the result dynamic at
   -- switchover time.
-  prerender :: m a -> ((PrerenderClientConstraint t (Client m)) => Client m a) -> m (Dynamic t a)
+  prerender :: m a -> ((PrerenderClientConstraint js t (Client m)) => Client m a) -> m (Dynamic t a)
 
-instance (Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where
+instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints js t m) => Prerender js t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerender _ client = pure <$> client
 
-instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
+instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prerender js t (HydrationDomBuilderT HydrationDomSpace t m) where
   -- | PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
   type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)
@@ -118,7 +121,9 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
         insertBefore df =<< deleteToPrerenderEnd doc
     holdDyn a0 a'
 
-instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
+data NoJavaScript -- This type should never have a HasJS instance
+
+instance (js ~ NoJavaScript, SupportsStaticDomBuilder t m) => Prerender js t (StaticDomBuilderT t m) where
   type Client (StaticDomBuilderT t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
@@ -126,13 +131,13 @@ instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) whe
     _ <- commentNode $ CommentNodeConfig endMarker Nothing
     pure $ pure a
 
-instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
+instance (Prerender js t m, Monad m) => Prerender js t (ReaderT r m) where
   type Client (ReaderT r m) = ReaderT r (Client m)
   prerender server client = do
     r <- ask
     lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
+instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender js t (DynamicWriterT t w m) where
   type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
@@ -141,7 +146,7 @@ instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t
     tellDyn w
     pure a
 
-instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWriterT t w m) where
+instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (EventWriterT t w m) where
   type Client (EventWriterT t w m) = EventWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runEventWriterT server) (runEventWriterT client)
@@ -151,7 +156,7 @@ instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWr
     pure a
 
 -- TODO
---instance (Prerender t m, Monad m) => Prerender t (RequesterT t request response m) where
+--instance (Prerender js t m, Monad m) => Prerender js t (RequesterT t request response m) where
 --  type Client (RequesterT t request response m) = RequesterT t request response (Client m)
 --  prerender server client = mdo
 --    response :: Event t (RequesterData response) <- requesting request
@@ -160,7 +165,7 @@ instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWr
 --        request = switch $ current request' :: Event t (RequesterData request)
 --    pure a
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q) => Prerender t (QueryT t q m) where
+instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q) => Prerender js t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
   prerender server client = mdo
     result <- queryDyn query
@@ -169,11 +174,11 @@ instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Que
         query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
     pure a
 
-instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
+instance (Prerender js t m, Monad m) => Prerender js t (InputDisabledT m) where
   type Client (InputDisabledT m) = Client m
   prerender (InputDisabledT server) client = InputDisabledT $ prerender server client
 
-instance (Prerender t m, Monad m, ReflexHost t) => Prerender t (PostBuildT t m) where
+instance (Prerender js t m, Monad m, ReflexHost t) => Prerender js t (PostBuildT t m) where
   type Client (PostBuildT t m) = PostBuildT t (Client m)
   prerender server client = PostBuildT $ do
     pb <- ask

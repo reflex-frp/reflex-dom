@@ -1306,7 +1306,7 @@ withSeleniumServer f = do
     , _selenium_stopServer = stopServer
     }
 
-triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender t m) => Chan a -> m (Event t a)
+triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender js t m) => Chan a -> m (Event t a)
 triggerEventWithChan chan = do
   (e, trigger) <- newTriggerEvent
   -- In prerender because we only want to do this on the client
@@ -1338,7 +1338,7 @@ checkTextInId i expected = WD.findElem (WD.ById i) >>= shouldContainText expecte
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
 
-type TestWidget n t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender t m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadIO m)
+type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js t m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadIO m)
 
 testWidgetStatic
   :: WD b
