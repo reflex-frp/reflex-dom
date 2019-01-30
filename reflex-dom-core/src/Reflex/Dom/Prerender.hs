@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -14,7 +15,6 @@
 -- | Render the first widget on the server, and the second on the client.
 module Reflex.Dom.Prerender
        ( Prerender (..)
-       , prerender
        , prerender_
        , PrerenderClientConstraint
        , PrerenderBaseConstraints
@@ -23,8 +23,6 @@ module Reflex.Dom.Prerender
 import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..))
-import Control.Monad.State.Strict
-import Data.Foldable (traverse_)
 import Data.IORef (IORef, newIORef)
 import Data.Text (Text)
 import Foreign.JavaScript.TH
@@ -68,39 +66,31 @@ type PrerenderBaseConstraints t m =
   )
 
 -- | Render the first widget on the server, and the second on the client. The
--- hydration builder will run *both* widgets, updating the result dynamic at
--- switchover time.
-prerender
-  :: (Functor m, Prerender t m)
-  => m a -> ((PrerenderClientConstraint t (Client m)) => Client m a) -> m (Dynamic t a)
-prerender server client = snd <$> prerenderImpl ((,) () <$> server) client
-
--- | Render the first widget on the server, and the second on the client. The
 -- hydration builder will run *both* widgets.
 prerender_
   :: (Functor m, Reflex t, Prerender t m)
   => m () -> ((PrerenderClientConstraint t (Client m)) => Client m ()) -> m ()
-prerender_ server client = void $ prerenderImpl ((,) () <$> server) client
+prerender_ server client = void $ prerender server client
 
 class Prerender t m | m -> t where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
-  -- | This function should be considered internal: it should only be used where
-  -- the resultant 'Maybe' isn't used to change what is built in the DOM, or
-  -- hydration will fail.
-  prerenderImpl :: m (a, b) -> ((PrerenderClientConstraint t (Client m)) => Client m b) -> m (Maybe a, Dynamic t b)
+  -- | Render the first widget on the server, and the second on the client. The
+  -- hydration builder will run *both* widgets, updating the result dynamic at
+  -- switchover time.
+  prerender :: m a -> ((PrerenderClientConstraint t (Client m)) => Client m a) -> m (Dynamic t a)
 
 instance (Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
-  prerenderImpl _ client = (,) Nothing . pure <$> client
+  prerender _ client = pure <$> client
 
 instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
   -- | PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
-  type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m) -- PostBuildT t (ImmediateDomBuilderT t m)
+  type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)
   -- | Runs the server widget up until switchover, then replaces it with the
   -- client widget.
-  prerenderImpl server client = do
+  prerender server client = do
     env <- HydrationDomBuilderT ask
     events <- askEvents
     doc <- askDocument
@@ -117,64 +107,77 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
           , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
           , _hydrationDomBuilderEnv_switchover = never
           }
-    (a, b0) <- lift $ runHydrationDomBuilderT server (env { _hydrationDomBuilderEnv_delayed = delayed }) events
-    (b', trigger) <- newTriggerEvent
+    a0 <- lift $ runHydrationDomBuilderT server (env { _hydrationDomBuilderEnv_delayed = delayed }) events
+    (a', trigger) <- newTriggerEvent
     getHydrationMode >>= \case
       HydrationMode_Immediate -> do
-        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void b') env' events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') env' events
         append $ DOM.toNode df
       HydrationMode_Hydrating -> addHydrationStep $ do
-        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void b') env' events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') env' events
         insertBefore df =<< deleteToPrerenderEnd doc
-    (,) (Just a) <$> holdDyn b0 b'
+    holdDyn a0 a'
 
 instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
   type Client (StaticDomBuilderT t m) = HydrationDomBuilderT GhcjsDomSpace t m
-  prerenderImpl server _ = do
+  prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
-    (a, b) <- server
+    a <- server
     _ <- commentNode $ CommentNodeConfig endMarker Nothing
-    pure (Just a, pure b)
+    pure $ pure a
 
 instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
-  type Client (ReaderT r m) = Client m
-  prerenderImpl server client = do
+  type Client (ReaderT r m) = ReaderT r (Client m)
+  prerender server client = do
     r <- ask
-    lift $ prerenderImpl (runReaderT server r) client
+    lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender t m, Monad m, Functor (Client m)) => Prerender t (StateT s m) where
-  type Client (StateT s m) = Client m
-  prerenderImpl server client = do
-    s <- get
-    (ma, evt) <- lift $ prerenderImpl
-      (do ((a, b), s') <- runStateT server s; pure ((a, s'), b))
-      client
-    traverse_ (put . snd) ma
-    pure (fst <$> ma, evt)
+instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
+  type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
+  prerender server client = do
+    x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
+    let (a, w') = splitDynPure x
+        w = join w'
+    tellDyn w
+    pure a
 
-instance (Prerender t m, Monad m, Functor (Client m)) => Prerender t (DynamicWriterT t w m) where
-  type Client (DynamicWriterT t w m) = Client m
-  prerenderImpl (DynamicWriterT server) client = DynamicWriterT $ prerenderImpl server client
+instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWriterT t w m) where
+  type Client (EventWriterT t w m) = EventWriterT t w (Client m)
+  prerender server client = do
+    x <- lift $ prerender (runEventWriterT server) (runEventWriterT client)
+    let (a, w') = splitDynPure x
+        w = switch $ current w'
+    tellEvent w
+    pure a
 
-instance (Prerender t m, Monad m, Functor (Client m)) => Prerender t (EventWriterT t w m) where
-  type Client (EventWriterT t w m) = Client m
-  prerenderImpl (EventWriterT server) client = EventWriterT $ prerenderImpl server client
+-- TODO
+--instance (Prerender t m, Monad m) => Prerender t (RequesterT t request response m) where
+--  type Client (RequesterT t request response m) = RequesterT t request response (Client m)
+--  prerender server client = mdo
+--    response :: Event t (RequesterData response) <- requesting request
+--    x <- lift $ prerender (runRequesterT server response) (runRequesterT client response)
+--    let (a, request') = splitDynPure x
+--        request = switch $ current request' :: Event t (RequesterData request)
+--    pure a
 
-instance (Prerender t m, Monad m, Functor (Client m)) => Prerender t (RequesterT t request response m) where
-  type Client (RequesterT t request response m) = Client m
-  prerenderImpl (RequesterT server) client = RequesterT $ prerenderImpl server client
-
-instance (Prerender t m, Monad m, Functor (Client m)) => Prerender t (QueryT t q m) where
-  type Client (QueryT t q m) = Client m
-  prerenderImpl (QueryT server) client = QueryT $ prerenderImpl server client
+instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q) => Prerender t (QueryT t q m) where
+  type Client (QueryT t q m) = QueryT t q (Client m)
+  prerender server client = mdo
+    result <- queryDyn query
+    x <- lift $ prerender (runQueryT server result) (runQueryT client result)
+    let (a, inc) = splitDynPure x
+        query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
+    pure a
 
 instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
   type Client (InputDisabledT m) = Client m
-  prerenderImpl (InputDisabledT server) client = InputDisabledT $ prerenderImpl server client
+  prerender (InputDisabledT server) client = InputDisabledT $ prerender server client
 
-instance (Prerender t m, Monad m) => Prerender t (PostBuildT t m) where
-  type Client (PostBuildT t m) = Client m
-  prerenderImpl (PostBuildT server) client = PostBuildT $ prerenderImpl server client
+instance (Prerender t m, Monad m, ReflexHost t) => Prerender t (PostBuildT t m) where
+  type Client (PostBuildT t m) = PostBuildT t (Client m)
+  prerender server client = PostBuildT $ do
+    pb <- ask
+    lift $ prerender (runPostBuildT server pb) (runPostBuildT client pb)
 
 startMarker, endMarker :: Text
 startMarker = "prerender/start"
