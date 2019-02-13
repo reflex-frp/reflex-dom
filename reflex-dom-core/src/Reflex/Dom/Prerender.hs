@@ -42,6 +42,7 @@ import qualified GHCJS.DOM.Types as DOM
 type PrerenderClientConstraint js t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
+  , DomRenderHook t m
   , HasDocument m
   , TriggerEvent t m
   , Prerender js t m

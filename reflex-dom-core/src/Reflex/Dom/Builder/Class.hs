@@ -35,6 +35,7 @@ import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
+import Reflex.BehaviorWriter.Base
 import Reflex.DynamicWriter.Base
 import Reflex.EventWriter.Base
 import Reflex.NotReady.Class
@@ -715,7 +716,9 @@ instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
   requestDomAction = lift . requestDomAction
   requestDomAction_ = lift . requestDomAction_
 
+deriving instance DomRenderHook t m => DomRenderHook t (BehaviorWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
+deriving instance DomRenderHook t m => DomRenderHook t (DynamicWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
 deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
