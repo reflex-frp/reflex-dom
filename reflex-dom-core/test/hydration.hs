@@ -9,6 +9,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -25,6 +26,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Ref
 import Data.Constraint (Dict(..))
 import Data.Constraint.Extras
+import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
 import Data.Foldable (traverse_)
@@ -93,14 +95,6 @@ data DKey a where
   Key_Char :: DKey Char
   Key_Bool :: DKey Bool
 
-instance ArgDict DKey where
-  type ConstraintsFor DKey c = (c Int, c Char, c Bool)
-  type ConstraintsFor' DKey c g = (c (g Int), c (g Char), c (g Bool))
-  argDict = \case
-    Key_Int -> Dict
-    Key_Char -> Dict
-    Key_Bool -> Dict
-  argDict' = undefined -- Missing constraints?
 
 textKey :: DKey a -> Text
 textKey = \case
@@ -108,6 +102,7 @@ textKey = \case
   Key_Char -> "Key_Char"
   Key_Bool -> "Key_Bool"
 
+deriveArgDict ''DKey
 deriveGEq ''DKey
 deriveGCompare ''DKey
 deriveGShow ''DKey
@@ -1436,6 +1431,7 @@ data Key2 a where
 deriveGEq ''Key2
 deriveGCompare ''Key2
 deriveGShow ''Key2
+deriveArgDict ''Key2
 
 instance ShowTag Key2 Identity where
   showTaggedPrec = \case
@@ -1445,9 +1441,3 @@ instance ShowTag Key2 Identity where
 instance EqTag Key2 Identity where
   eqTagged (Key2_Int _) (Key2_Int _) = (==)
   eqTagged (Key2_Char _) (Key2_Char _) = (==)
-
-instance ArgDict Key2 where
-  type ConstraintsFor Key2 c = (c Int, c Char)
-  argDict = \case
-    Key2_Int _ -> Dict
-    Key2_Char _ -> Dict
