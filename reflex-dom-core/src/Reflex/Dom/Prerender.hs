@@ -101,27 +101,32 @@ instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prer
     env <- HydrationDomBuilderT ask
     events <- askEvents
     doc <- askDocument
+    serverDf <- Document.createDocumentFragment doc -- server dom should not be mounted in the window's doc in hydration
     df <- Document.createDocumentFragment doc
     unreadyChildren <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_unreadyChildren
-    hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
+    immediateMode <- liftIO $ newIORef HydrationMode_Immediate
     delayed <- liftIO $ newIORef $ pure ()
-    let env' = HydrationDomBuilderEnv
+    let clientEnv = env
+          { _hydrationDomBuilderEnv_parent = Left $ DOM.toNode df
+          , _hydrationDomBuilderEnv_hydrationMode = immediateMode
+          }
+        serverEnv = HydrationDomBuilderEnv
           { _hydrationDomBuilderEnv_document = doc
-          , _hydrationDomBuilderEnv_parent = Left $ DOM.toNode df
+          , _hydrationDomBuilderEnv_parent = Left $ DOM.toNode serverDf
           , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
           , _hydrationDomBuilderEnv_commitAction = pure ()
           , _hydrationDomBuilderEnv_delayed = delayed
-          , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
+          , _hydrationDomBuilderEnv_hydrationMode = immediateMode
           , _hydrationDomBuilderEnv_switchover = never
           }
-    a0 <- lift $ runHydrationDomBuilderT server (env { _hydrationDomBuilderEnv_delayed = delayed }) events
+    a0 <- lift $ runHydrationDomBuilderT server serverEnv events
     (a', trigger) <- newTriggerEvent
     getHydrationMode >>= \case
       HydrationMode_Immediate -> do
-        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') env' events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') clientEnv events
         append $ DOM.toNode df
       HydrationMode_Hydrating -> addHydrationStep $ do
-        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') env' events
+        liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') clientEnv events
         insertBefore df =<< deleteToPrerenderEnd doc
     holdDyn a0 a'
 
