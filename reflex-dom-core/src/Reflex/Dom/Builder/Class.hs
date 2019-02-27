@@ -249,13 +249,23 @@ data Element er d t
              , _element_raw :: RawElement d
              }
 
-data InputElementConfig er t s
-   = InputElementConfig { _inputElementConfig_initialValue :: Text
-                        , _inputElementConfig_setValue :: Maybe (Event t Text)
-                        , _inputElementConfig_initialChecked :: Bool
-                        , _inputElementConfig_setChecked :: Maybe (Event t Bool)
-                        , _inputElementConfig_elementConfig :: ElementConfig er t s
-                        }
+data InputElementConfig er t s = InputElementConfig
+  { _inputElementConfig_initialValue :: Text
+  , _inputElementConfig_setValue :: Maybe (Event t Text)
+  , _inputElementConfig_initialChecked :: Bool
+  , _inputElementConfig_setChecked :: Maybe (Event t Bool)
+  , _inputElementConfig_initialCustomValidity :: Text
+    -- ^ The initial custom validity status/message. An empty string indicates
+    -- valid, while a non-empty string indicates invalid. Custom validity is
+    -- just one endorser of validity; based on the type of the input various
+    -- other built-in checks may also deem the input invalid, and any one
+    -- invalid result makes the input invalid overall. '""' is thus the
+    -- identity.
+  , _inputElementConfig_setCustomValidity :: Maybe (Event t Text)
+    -- ^ An event that sets the custom validity. See the initial value
+    -- documentation for details.
+  , _inputElementConfig_elementConfig :: ElementConfig er t s
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 inputElementConfig_initialValue :: Lens' (InputElementConfig er t m) Text
@@ -280,6 +290,8 @@ instance (Reflex t, er ~ EventResult, DomSpace s) => Default (InputElementConfig
     , _inputElementConfig_setValue = Nothing
     , _inputElementConfig_initialChecked = False
     , _inputElementConfig_setChecked = Nothing
+    , _inputElementConfig_initialCustomValidity = ""
+    , _inputElementConfig_setCustomValidity = Nothing
     , _inputElementConfig_elementConfig = def
     }
 
@@ -294,11 +306,17 @@ data InputElement er d t
                   , _inputElement_files :: Dynamic t [RawFile d]
                   }
 
-data TextAreaElementConfig er t m
-   = TextAreaElementConfig { _textAreaElementConfig_initialValue :: Text
-                           , _textAreaElementConfig_setValue :: Maybe (Event t Text)
-                           , _textAreaElementConfig_elementConfig :: ElementConfig er t m
-                           }
+data TextAreaElementConfig er t m = TextAreaElementConfig
+  { _textAreaElementConfig_initialValue :: Text
+  , _textAreaElementConfig_setValue :: Maybe (Event t Text)
+  , _textAreaElementConfig_initialCustomValidity :: Text
+    -- ^ The initial custom validity status/message. See same field on 'InputElementConfig' for details.
+  , _textAreaElementConfig_setCustomValidity :: Maybe (Event t Text)
+    -- ^ An event that sets the custom validity. See the 'initialCustomValidity'
+    -- and 'setCustomValidity' fields on 'InputElementConfig' for details.
+    -- documentation for details.
+  , _textAreaElementConfig_elementConfig :: ElementConfig er t m
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 textAreaElementConfig_initialValue :: Lens' (TextAreaElementConfig er t m) Text
@@ -318,6 +336,7 @@ instance (Reflex t, er ~ EventResult, DomSpace s) => Default (TextAreaElementCon
   def = TextAreaElementConfig
     { _textAreaElementConfig_initialValue = ""
     , _textAreaElementConfig_setValue = Nothing
+    , _textAreaElementConfig_setCustomValidity = Nothing
     , _textAreaElementConfig_elementConfig = def
     }
 
@@ -394,10 +413,12 @@ data SelectElement er d t = SelectElement
 concat <$> mapM (uncurry makeLensesWithoutField)
   [ (["_textNodeConfig_setContents"], ''TextNodeConfig)
   , ([ "_inputElementConfig_setValue"
-     , "_inputElementConfig_setChecked" ], ''InputElementConfig)
+     , "_inputElementConfig_setChecked"
+     , "_inputElementConfig_setCustomValidity" ], ''InputElementConfig)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
   , (["_elementConfig_modifyAttributes"], ''ElementConfig)
-  , (["_textAreaElementConfig_setValue"], ''TextAreaElementConfig)
+  , ([ "_textAreaElementConfig_setValue"
+     , "_textAreaElementConfig_setCustomValidity" ], ''TextAreaElementConfig)
   , (["_selectElementConfig_setValue"], ''SelectElementConfig)
   ]
 #endif
@@ -423,6 +444,13 @@ inputElementConfig_setChecked =
       setter t e = t { _inputElementConfig_setChecked = Just e }
   in lens getter setter
 
+-- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+inputElementConfig_setCustomValidity :: Reflex t => Lens' (InputElementConfig er t m) (Event t Text)
+inputElementConfig_setCustomValidity =
+  let getter = fromMaybe never . _inputElementConfig_setCustomValidity
+      setter t e = t { _inputElementConfig_setCustomValidity = Just e }
+  in lens getter setter
+
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
 rawElementConfig_modifyAttributes =
@@ -442,6 +470,13 @@ textAreaElementConfig_setValue :: Reflex t => Lens' (TextAreaElementConfig er t 
 textAreaElementConfig_setValue =
   let getter = fromMaybe never . _textAreaElementConfig_setValue
       setter t e = t { _textAreaElementConfig_setValue = Just e }
+  in lens getter setter
+
+-- | This lens is technically illegal. The implementation of 'TextAreaElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextAreaElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+textAreaElementConfig_setCustomValidity :: Reflex t => Lens' (TextAreaElementConfig er t m) (Event t Text)
+textAreaElementConfig_setCustomValidity =
+  let getter = fromMaybe never . _textAreaElementConfig_setCustomValidity
+      setter t e = t { _textAreaElementConfig_setCustomValidity = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'SelectElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'SelectElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
