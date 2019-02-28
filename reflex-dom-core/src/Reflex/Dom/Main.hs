@@ -64,12 +64,12 @@ mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -
 mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ())
 
 {-# INLINE mainHydrationWidgetWithSwitchoverAction #-}
-mainHydrationWidgetWithSwitchoverAction :: IO () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidgetWithSwitchoverAction :: JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
 mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverAction'
 
 {-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
 -- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
-mainHydrationWidgetWithSwitchoverAction' :: IO () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithSwitchoverAction' :: JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
 mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body = do
   runHydrationWidgetWithHeadAndBody switchoverAction $ \appendHead appendBody -> do
     appendHead head'
@@ -77,7 +77,7 @@ mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body = do
 
 {-# INLINABLE attachHydrationWidget #-}
 attachHydrationWidget
-  :: IO ()
+  :: JSM ()
   -> JSContextSingleton ()
   -> ( Event DomTimeline ()
     -> IORef HydrationMode
@@ -105,7 +105,7 @@ attachHydrationWidget switchoverAction jsSing w = do
             let hydrate = runHydrationRunnerT runner Nothing rootNode events
             void $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
           liftIO $ writeIORef hydrationMode HydrationMode_Immediate
-          liftIO $ switchoverAction
+          runWithJSContextSingleton (DOM.liftJSM switchoverAction) jsSing
     pure (result, fc)
 
 type HydrationWidget x a = HydrationDomBuilderT HydrationDomSpace DomTimeline (DomCoreWidget x) a
@@ -117,7 +117,7 @@ type DomCoreWidget x = PostBuildT DomTimeline (WithJSContextSingleton x (Perform
 
 {-# INLINABLE runHydrationWidgetWithHeadAndBody #-}
 runHydrationWidgetWithHeadAndBody
-  :: IO ()
+  :: JSM ()
   -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head"
       -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body"
       -> FloatingWidget () ()
