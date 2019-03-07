@@ -152,6 +152,7 @@ test-suite hydration
   build-depends: base
                , aeson
                , bytestring
+               , chromedriver-utils
                , constraints
                , constraints-extras
                , containers
@@ -185,7 +186,7 @@ test-suite hydration
                , webdriver
                , websockets
   hs-source-dirs: test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
