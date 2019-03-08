@@ -29,7 +29,6 @@ import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
---import Data.Foldable (traverse_)
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
@@ -411,7 +410,6 @@ tests withDebugging wdConfig caps _selenium = do
           e <- inputElement def
           performEvent_ $ liftIO . writeRef focusRef <$> updated (_inputElement_hasFocus e)
       it "sets value appropriately" $ runWD $ do
-        putStrLnDebug "sets value appropriately"
         valueByUIRef :: IORef Text <- newRef ""
         valueRef :: IORef Text <- newRef ""
         setValueChan :: Chan Text <- liftIO newChan
@@ -432,74 +430,43 @@ tests withDebugging wdConfig caps _selenium = do
             performEvent_ $ liftIO . writeRef valueByUIRef <$> _inputElement_input e
             performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
       it "sets checked appropriately" $ runWD $ do
-        putStrLnDebug "sets checked appropriately"
         checkedByUIRef <- newRef False
         checkedRef <- newRef False
         setCheckedChan <- liftIO newChan
         let checkValue = do
-              putStrLnDebug "1"
               readRef checkedByUIRef `shouldBeWithRetryM` False
-              putStrLnDebug "2"
               readRef checkedRef `shouldBeWithRetryM` False
-              putStrLnDebug "3"
               e <- findElemWithRetry $ WD.ByTag "input"
-              putStrLnDebug "4"
               WD.moveToCenter e
-              putStrLnDebug "5"
               WD.click e
-              putStrLnDebug "6"
               readRef checkedByUIRef `shouldBeWithRetryM` True
-              putStrLnDebug "7"
               readRef checkedRef `shouldBeWithRetryM` True
-              putStrLnDebug "8"
               liftIO $ writeChan setCheckedChan False
-              putStrLnDebug "9"
               readRef checkedByUIRef `shouldBeWithRetryM` True
-              putStrLnDebug "10"
               readRef checkedRef `shouldBeWithRetryM` False
-              putStrLnDebug "11"
         testWidget (pure ()) checkValue $ do
-          putStrLnDebug "12"
           setChecked <- triggerEventWithChan setCheckedChan
-          putStrLnDebug "13"
           prerender_ (pure ()) $ do
-            putStrLnDebug "14"
             e <- inputElement $ def
               & initialAttributes .~ "type" =: "checkbox"
               & inputElementConfig_setChecked .~ setChecked
-            putStrLnDebug "15"
             performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
-            putStrLnDebug "16"
             performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
-            putStrLnDebug "17"
       it "captures file uploads" $ runWD $ do
         filesRef :: IORef [Text] <- newRef []
         let uploadFile = do
-              putStrLnDebug "1"
               e <- findElemWithRetry $ WD.ByTag "input"
-              putStrLnDebug "2"
               path <- liftIO $ writeSystemTempFile "testFile" "file contents"
-              putStrLnDebug "3"
               WD.sendKeys (T.pack path) e
-              putStrLnDebug "4"
               WD.click =<< (findElemWithRetry $ WD.ByTag "button")
-              putStrLnDebug "5"
               liftIO $ removeFile path
-              putStrLnDebug "6"
               readRef filesRef `shouldBeWithRetryM` [T.pack $ FilePath.takeFileName path]
-              putStrLnDebug "7"
         testWidget (pure ()) uploadFile $ prerender_ (pure ()) $ do
-          putStrLnDebug "8"
           e <- inputElement $ def & initialAttributes .~ "type" =: "file"
-          putStrLnDebug "9"
           click <- button "save"
-          putStrLnDebug "10"
           performEvent_ $ ffor (tag (current (_inputElement_files e)) click) $ \fs -> do
-            putStrLnDebug "11"
             names <- liftJSM $ traverse File.getName fs
-            putStrLnDebug "12"
             liftIO $ writeRef filesRef names
-            putStrLnDebug "13"
 
   describe "textAreaElement" $ do
     describe "hydration" $ session' $ do
