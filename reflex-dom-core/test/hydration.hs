@@ -294,7 +294,7 @@ tests withDebugging wdConfig caps _selenium = do
             pure e)
           (\e -> do
             WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
-            WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+            WD.click =<< findElemWithRetry (WD.ByTag "button")
             readRef inputRef `shouldBeWithRetryM` "hello world"
           ) $ do
           e <- inputElement def
@@ -303,8 +303,8 @@ tests withDebugging wdConfig caps _selenium = do
       it "captures user input after switchover" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         let checkValue = do
-              WD.sendKeys "hello world" =<< (findElemWithRetry $ WD.ByTag "input")
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.sendKeys "hello world" =<< findElemWithRetry (WD.ByTag "input")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "hello world"
         testWidget (pure ()) checkValue $ do
           e <- inputElement def
@@ -378,7 +378,7 @@ tests withDebugging wdConfig caps _selenium = do
               e <- findElemWithRetry $ WD.ByTag "input"
               path <- liftIO $ writeSystemTempFile "testFile" "file contents"
               WD.sendKeys (T.pack path) e
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               liftIO $ removeFile path
               readRef filesRef `shouldBeWithRetryM` [T.pack $ FilePath.takeFileName path]
         testWidget (pure ()) uploadFile $ do
@@ -392,8 +392,8 @@ tests withDebugging wdConfig caps _selenium = do
       it "captures user input after switchover" $ runWD $ do
         inputRef :: IORef Text <- newRef ""
         let checkValue = do
-              WD.sendKeys "hello world" =<< (findElemWithRetry $ WD.ByTag "input")
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.sendKeys "hello world" =<< findElemWithRetry (WD.ByTag "input")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "hello world"
         testWidget (pure ()) checkValue $ prerender_ (pure ()) $ do
           e <- inputElement def
@@ -458,7 +458,7 @@ tests withDebugging wdConfig caps _selenium = do
               e <- findElemWithRetry $ WD.ByTag "input"
               path <- liftIO $ writeSystemTempFile "testFile" "file contents"
               WD.sendKeys (T.pack path) e
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               liftIO $ removeFile path
               readRef filesRef `shouldBeWithRetryM` [T.pack $ FilePath.takeFileName path]
         testWidget (pure ()) uploadFile $ prerender_ (pure ()) $ do
@@ -488,8 +488,8 @@ tests withDebugging wdConfig caps _selenium = do
       it "captures user input after switchover" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         let checkValue = do
-              WD.sendKeys "hello world" =<< (findElemWithRetry $ WD.ByTag "textarea")
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.sendKeys "hello world" =<< findElemWithRetry (WD.ByTag "textarea")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "hello world"
         testWidget (pure ()) checkValue $ do
           e <- textAreaElement def
@@ -590,12 +590,12 @@ tests withDebugging wdConfig caps _selenium = do
         let setup = do
               e <- findElemWithRetry $ WD.ByTag "select"
               assertAttr e "value" (Just "three")
-              WD.click =<< (findElemWithRetry $ WD.ById "two")
+              WD.click =<< findElemWithRetry (WD.ById "two")
               pure e
             check e = do
               assertAttr e "value" (Just "two")
               readRef inputRef `shouldBeWithRetryM` "three"
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               assertAttr e "value" (Just "two")
               readRef inputRef `shouldBeWithRetryM` "two"
         testWidget' setup check $ do
@@ -608,9 +608,9 @@ tests withDebugging wdConfig caps _selenium = do
         let checkValue = do
               e <- findElemWithRetry $ WD.ByTag "select"
               assertAttr e "value" (Just "one")
-              WD.click =<< (findElemWithRetry $ WD.ById "two")
+              WD.click =<< findElemWithRetry (WD.ById "two")
               assertAttr e "value" (Just "two")
-              WD.click =<< (findElemWithRetry $ WD.ByTag "button")
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "two"
         testWidget (pure ()) checkValue $ do
           (e, ()) <- selectElement def options
@@ -840,7 +840,7 @@ tests withDebugging wdConfig caps _selenium = do
       replaceChan2 :: Chan Text <- liftIO newChan
       lock :: MVar () <- liftIO newEmptyMVar
       let check = do
-            shouldContainText "" =<< (findElemWithRetry (WD.ByTag "body"))
+            shouldContainText "" =<< findElemWithRetry (WD.ByTag "body")
             liftIO $ do
               writeChan replaceChan1 "one"
               takeMVar lock
@@ -926,8 +926,8 @@ tests withDebugging wdConfig caps _selenium = do
         checkItem :: WD.Element -> Text -> Text -> WD ()
         checkItem li k v = do
           putStrLnDebug "checkItem"
-          shouldContainTextNoRetry k =<< (WD.findElemFrom li (WD.ByClass "key"))
-          shouldContainTextNoRetry v =<< (WD.findElemFrom li (WD.ByClass "value"))
+          shouldContainTextNoRetry k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainTextNoRetry v =<< WD.findElemFrom li (WD.ByClass "value")
         checkInitialItems dm xs = do
           putStrLnDebug "checkInitialItems"
           liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
@@ -1139,8 +1139,8 @@ tests withDebugging wdConfig caps _selenium = do
           Key2_Char c -> "c" <> T.pack [c]
         checkItem :: WD.Element -> Text -> Text -> WD ()
         checkItem li k v = do
-          shouldContainTextNoRetry k =<< (WD.findElemFrom li (WD.ByClass "key"))
-          shouldContainTextNoRetry v =<< (WD.findElemFrom li (WD.ByClass "value"))
+          shouldContainTextNoRetry k =<< WD.findElemFrom li (WD.ByClass "key")
+          shouldContainTextNoRetry v =<< WD.findElemFrom li (WD.ByClass "value")
         checkInitialItems dm xs = do
           liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
           forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey2 k) (T.pack $ has @Show k $ show v)

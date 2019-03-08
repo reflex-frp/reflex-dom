@@ -8,7 +8,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
-import Data.Text
+import Data.Text as T
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import Reflex.Time
@@ -52,7 +52,7 @@ main = do
     mainThread <- myThreadId
     browserProcess <- spawnCommand $ mconcat
       [ "echo 'Starting Chromium' ; chromium "
-      , unpack $ intercalate " " chromeFlags
+      , unpack $ T.unwords chromeFlags
       , " http://localhost:3911 ; echo 'Chromium exited'"
       ]
     let finishTest result = do
