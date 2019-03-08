@@ -469,6 +469,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     ((e, _), domElement) <- makeElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
     Input.setValue domInputElement $ cfg ^. inputElementConfig_initialValue
+    Input.setCustomValidity domInputElement $ cfg ^. inputElementConfig_initialCustomValidity
     v0 <- Input.getValue domInputElement
     let getMyValue = Input.getValue domInputElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
@@ -496,6 +497,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ fmapMaybe id checkedChangedBySetChecked
       , checkedChangedByUI
       ]
+    case _inputElementConfig_setCustomValidity cfg of
+      Nothing -> pure ()
+      Just eSetInvalid -> void $ requestDomAction $ ffor eSetInvalid $ \v' -> do
+        Input.setCustomValidity domInputElement v'
     let initialFocus = False --TODO: Is this correct?
     hasFocus <- holdDyn initialFocus $ leftmost
       [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
@@ -521,6 +526,7 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     ((e, _), domElement) <- makeElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
     TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
+    TextArea.setCustomValidity domTextAreaElement $ cfg ^. textAreaElementConfig_initialCustomValidity
     v0 <- TextArea.getValue domTextAreaElement
     let getMyValue = TextArea.getValue domTextAreaElement
     valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select (_element_events e) (WrapArg Input)
@@ -533,6 +539,10 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
       [ valueChangedBySetValue
       , valueChangedByUI
       ]
+    case _textAreaElementConfig_setCustomValidity cfg of
+      Nothing -> pure ()
+      Just eSetInvalid -> void $ requestDomAction $ ffor eSetInvalid $ \v' -> do
+        void $ TextArea.setCustomValidity domTextAreaElement v'
     hasFocus <- mkHasFocus e
     return $ TextAreaElement
       { _textAreaElement_value = v
