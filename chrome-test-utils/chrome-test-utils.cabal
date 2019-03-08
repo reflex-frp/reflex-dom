@@ -3,8 +3,8 @@ Version: 0.4
 Synopsis: Utilities to write headless Chromium tests
 License: BSD3
 License-file: LICENSE
-Author: Ryan Trinkle
-Maintainer: ryan.trinkle@gmail.com
+Author: Obsidian Systems LLC
+Maintainer: maintainer@obsidian.systems
 Stability: Experimental
 Build-type: Simple
 Cabal-version: >=1.9.2
