@@ -1,9 +1,9 @@
 { mkDerivation, aeson, base, bifunctors, bimap, blaze-builder
-, bytestring, constraints, constraints-extras, containers
+, bytestring, chrome-test-utils, constraints, constraints-extras, containers
 , contravariant, data-default, dependent-map, dependent-sum
 , dependent-sum-template, directory, exception-transformers
 , exceptions, filepath, ghcjs-dom, hlint, hspec, hspec-webdriver, http-types, HUnit
-, jsaddle, jsaddle-warp, keycode, lens, lifted-base, linux-namespaces
+, jsaddle, jsaddle-warp, keycode, lens, lifted-base
 , monad-control, mtl, network, network-uri, primitive, process
 , random, ref-tf, reflex, semigroups, silently, stdenv, stm
 , template-haskell, temporary, text, these, transformers, unix, wai
@@ -15,7 +15,7 @@ let addGcTestDepends = drv: if (stdenv.system != "x86_64-linux" || stdenv.hostPl
       preCheck = ''
         export FONTCONFIG_PATH=${fontconfig.out}/etc/fonts
       '';
-      testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process linux-namespaces ];
+      testHaskellDepends = (drv.testHaskellDepends or []) ++ [ temporary jsaddle-warp process ];
       testSystemDepends = (drv.testSystemDepends or []) ++ [ chromium iproute ];
     };
 in mkDerivation (addGcTestDepends {
@@ -46,10 +46,10 @@ in mkDerivation (addGcTestDepends {
 
   testSystemDepends = [ selenium-server-standalone which ];
   testHaskellDepends = [
-    aeson base bytestring constraints constraints-extras containers
+    aeson base bytestring chrome-test-utils constraints constraints-extras containers
     dependent-map dependent-sum dependent-sum-template directory
     exceptions filepath ghcjs-dom hlint hspec hspec-webdriver http-types HUnit jsaddle
-    jsaddle-warp lens lifted-base linux-namespaces network process random reflex
+    jsaddle-warp lens lifted-base network process random reflex
     silently temporary text unix wai wai-websockets warp webdriver
     websockets
   ];

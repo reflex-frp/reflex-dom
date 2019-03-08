@@ -153,7 +153,7 @@ test-suite hydration
   build-depends: base
                , aeson
                , bytestring
-               , chromedriver-utils
+               , chrome-test-utils
                , constraints
                , constraints-extras
                , containers
@@ -198,7 +198,7 @@ test-suite hydration
 -- needs to be updated for changes in GHC.Stats
 test-suite gc
   build-depends: base
-               , chromedriver-utils
+               , chrome-test-utils
                , jsaddle
                , jsaddle-warp
                , process
@@ -210,21 +210,6 @@ test-suite gc
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64)
-    buildable: False
-
-library chromedriver-utils
-  hs-source-dirs: src-chromedriver-utils
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  build-depends: base
-               , linux-namespaces
-               , process
-               , temporary
-               , text
-               , unix
-  exposed-modules:
-    Test.Util.UnshareNetwork
-    Test.Util.ChromeFlags
   if !os(linux) || !arch(x86_64)
     buildable: False
 
