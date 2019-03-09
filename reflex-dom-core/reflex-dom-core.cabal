@@ -191,8 +191,8 @@ test-suite hydration
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
-  -- if !os(linux) || !arch(x86_64)-- || impl(ghc >= 8.4.0)
-  buildable: False
+  if !os(linux) || !arch(x86_64)
+    buildable: False
 
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats
