@@ -138,6 +138,7 @@ import Data.Functor.Product
 import Data.IORef
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe
+import Data.Monoid ((<>))
 import Data.Some (Some(..))
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
