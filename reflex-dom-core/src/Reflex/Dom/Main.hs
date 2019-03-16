@@ -27,6 +27,9 @@ import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
 import Reflex.TriggerEvent.Base
 import Reflex.TriggerEvent.Class
+#ifdef PROFILE_REFLEX
+import Reflex.Profiled
+#endif
 
 import Control.Concurrent
 import Control.Lens

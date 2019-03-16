@@ -191,7 +191,7 @@ test-suite hydration
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64)
+  if !os(linux) || !arch(x86_64) || flag(profile-reflex)
     buildable: False
 
 -- broken test on base 4.11 & ghc 8.4.3
