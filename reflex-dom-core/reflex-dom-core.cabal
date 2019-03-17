@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.4
+Version: 0.4.1
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -66,7 +66,7 @@ library
     primitive >= 0.5 && < 0.7,
     random,
     ref-tf == 0.4.*,
-    reflex == 0.5.*,
+    reflex == 0.6.*,
     semigroups >= 0.16 && < 0.19,
     stm == 2.4.*,
     text == 1.2.*,

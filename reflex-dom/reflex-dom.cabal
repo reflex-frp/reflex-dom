@@ -1,5 +1,5 @@
 Name: reflex-dom
-Version: 0.4
+Version: 0.4.1
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
@@ -62,7 +62,7 @@ library
   build-depends:
     base >= 4.7 && < 4.12,
     bytestring == 0.10.*,
-    reflex == 0.5.*,
+    reflex == 0.6.*,
     reflex-dom-core >=0.4 && <0.5,
     text == 1.2.*
   if !impl(ghcjs)
