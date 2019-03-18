@@ -25,6 +25,7 @@ import Control.Monad.Primitive (PrimMonad)
 import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..))
 import Data.IORef (IORef, newIORef)
+import Data.Semigroup (Semigroup)
 import Data.Text (Text)
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)

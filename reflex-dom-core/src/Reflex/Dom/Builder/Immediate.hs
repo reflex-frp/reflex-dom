@@ -86,9 +86,6 @@ module Reflex.Dom.Builder.Immediate
   , ghcjsEventSpec_filters
   , ghcjsEventSpec_handler
   , GhcjsEventHandler (..)
-#ifndef USE_TEMPLATE_HASKELL
-  , phantom2
-#endif
   , drawChildUpdate
   , ChildReadyState (..)
   , mkHasFocus
@@ -138,6 +135,7 @@ import Data.Functor.Product
 import Data.IORef
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe
+import Data.Monoid ((<>))
 import Data.Some (Some(..))
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
@@ -162,6 +160,9 @@ import Reflex.PerformEvent.Base (PerformEventT)
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base (PostBuildT)
 import Reflex.PostBuild.Class
+#ifdef PROFILE_REFLEX
+import Reflex.Profiled
+#endif
 import Reflex.Requester.Base
 import Reflex.Requester.Class
 import Reflex.Spider (Spider, SpiderHost, Global)
@@ -198,6 +199,7 @@ import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
+import Control.Lens (Lens', Getter)
 #endif
 
 #ifndef ghcjs_HOST_OS
@@ -527,17 +529,17 @@ wrap events e cfg = do
   return eventTriggerRefs
 
 {-# SPECIALIZE wrap
-  :: Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  :: Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
   -> DOM.Element
-  -> RawElementConfig er Spider HydrationDomSpace
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM (DMap EventName (EventFilterTriggerRef Spider er))
+  -> RawElementConfig er DomTimeline HydrationDomSpace
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (DMap EventName (EventFilterTriggerRef DomTimeline er))
   #-}
 
 {-# SPECIALIZE wrap
-  :: Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
+  :: Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
   -> DOM.Element
-  -> RawElementConfig er Spider GhcjsDomSpace
-  -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM (DMap EventName (EventFilterTriggerRef Spider er))
+  -> RawElementConfig er DomTimeline GhcjsDomSpace
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM (DMap EventName (EventFilterTriggerRef DomTimeline er))
   #-}
 
 {-# INLINE triggerBody #-}
@@ -573,23 +575,23 @@ triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t = case DMap.lookup 
 
 {-# SPECIALIZE triggerBody
   :: DOM.JSContextRef
-  -> RawElementConfig er Spider HydrationDomSpace
-  -> Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
-  -> DMap EventName (EventFilterTriggerRef Spider er)
+  -> RawElementConfig er DomTimeline HydrationDomSpace
+  -> Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
+  -> DMap EventName (EventFilterTriggerRef DomTimeline er)
   -> DOM.Element
   -> WrapArg er EventName x
-  -> EventTrigger Spider x
+  -> EventTrigger DomTimeline x
   -> IO (IO ())
   #-}
 
 {-# SPECIALIZE triggerBody
   :: DOM.JSContextRef
-  -> RawElementConfig er Spider GhcjsDomSpace
-  -> Chan [DSum (EventTriggerRef Spider) TriggerInvocation]
-  -> DMap EventName (EventFilterTriggerRef Spider er)
+  -> RawElementConfig er DomTimeline GhcjsDomSpace
+  -> Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
+  -> DMap EventName (EventFilterTriggerRef DomTimeline er)
   -> DOM.Element
   -> WrapArg er EventName x
-  -> EventTrigger Spider x
+  -> EventTrigger DomTimeline x
   -> IO (IO ())
   #-}
 
@@ -638,15 +640,11 @@ data GhcjsEventSpec er = GhcjsEventSpec
 newtype GhcjsEventHandler er = GhcjsEventHandler { unGhcjsEventHandler :: forall en. (EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)) }
 
 #ifndef USE_TEMPLATE_HASKELL
-phantom2 :: (Functor f, Contravariant f) => f a -> f b
-phantom2 = phantom
-{-# INLINE phantom2 #-}
-
 ghcjsEventSpec_filters :: forall er . Lens' (GhcjsEventSpec er) (DMap EventName (GhcjsEventFilter er))
 ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (\a' -> GhcjsEventSpec a' b) <$> f a
 {-# INLINE ghcjsEventSpec_filters #-}
 ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)))
-ghcjsEventSpec_handler f (GhcjsEventSpec _ (GhcjsEventHandler b)) = phantom2 (f b)
+ghcjsEventSpec_handler f (GhcjsEventSpec _ (GhcjsEventHandler b)) = phantom (f b)
 {-# INLINE ghcjsEventSpec_handler #-}
 #endif
 
@@ -694,16 +692,16 @@ elementImmediate elementTag cfg child = do
 
 {-# SPECIALIZE elementImmediate
   :: Text
-  -> ElementConfig er Spider HydrationDomSpace
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM a
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM (Element er GhcjsDomSpace Spider, a)
+  -> ElementConfig er DomTimeline HydrationDomSpace
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM a
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (Element er GhcjsDomSpace DomTimeline, a)
   #-}
 
 {-# SPECIALIZE elementImmediate
   :: Text
-  -> ElementConfig er Spider GhcjsDomSpace
-  -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM a
-  -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM (Element er GhcjsDomSpace Spider, a)
+  -> ElementConfig er DomTimeline GhcjsDomSpace
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM a
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM (Element er GhcjsDomSpace DomTimeline, a)
   #-}
 
 -- For specialisation
@@ -740,9 +738,9 @@ elementInternal elementTag cfg child = getHydrationMode >>= \case
 
 {-# SPECIALIZE elementInternal
   :: Text
-  -> ElementConfig er Spider HydrationDomSpace
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM a
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM (Element er HydrationDomSpace Spider, a)
+  -> ElementConfig er DomTimeline HydrationDomSpace
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM a
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (Element er HydrationDomSpace DomTimeline, a)
   #-}
 
 {-# INLINE hydrateElement #-}
@@ -830,9 +828,9 @@ hydrateElement elementTag cfg child = do
 
 {-# SPECIALIZE hydrateElement
   :: Text
-  -> ElementConfig er Spider HydrationDomSpace
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM a
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM ((Element er HydrationDomSpace Spider, a), IORef DOM.Element)
+  -> ElementConfig er DomTimeline HydrationDomSpace
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM a
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM ((Element er HydrationDomSpace DomTimeline, a), IORef DOM.Element)
   #-}
 
 {-# INLINE inputElementImmediate #-}
@@ -1699,17 +1697,17 @@ traverseIntMapWithKeyWithAdjust' = do
     liftIO $ writeIORef placeholders $! fromMaybe phs $ apply filtered phs
 
 {-# SPECIALIZE traverseIntMapWithKeyWithAdjust'
-  :: (IntMap.Key -> v -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM v')
+  :: (IntMap.Key -> v -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM v')
   -> IntMap v
-  -> Event Spider (PatchIntMap v)
-  -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  -> Event DomTimeline (PatchIntMap v)
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM (IntMap v', Event DomTimeline (PatchIntMap v'))
   #-}
 
 {-# SPECIALIZE traverseIntMapWithKeyWithAdjust'
-  :: (IntMap.Key -> v -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM v')
+  :: (IntMap.Key -> v -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM v')
   -> IntMap v
-  -> Event Spider (PatchIntMap v)
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  -> Event DomTimeline (PatchIntMap v)
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (IntMap v', Event DomTimeline (PatchIntMap v'))
   #-}
 
 data ChildReadyState a
@@ -1944,39 +1942,39 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
   return (result0, result')
 
 {-# SPECIALIZE hoistTraverseIntMapWithKeyWithAdjust
-  :: ((IntMap.Key -> v -> DomRenderHookT Spider HydrationM (TraverseChild Spider HydrationM Int v'))
+  :: ((IntMap.Key -> v -> DomRenderHookT DomTimeline HydrationM (TraverseChild DomTimeline HydrationM Int v'))
     -> IntMap v
-    -> Event Spider (PatchIntMap v)
-    -> DomRenderHookT Spider HydrationM (IntMap (TraverseChild Spider HydrationM Int v'), Event Spider (PatchIntMap (TraverseChild Spider HydrationM Int v'))))
-  -> (PatchIntMap (TraverseChild Spider HydrationM Int v')
+    -> Event DomTimeline (PatchIntMap v)
+    -> DomRenderHookT DomTimeline HydrationM (IntMap (TraverseChild DomTimeline HydrationM Int v'), Event DomTimeline (PatchIntMap (TraverseChild DomTimeline HydrationM Int v'))))
+  -> (PatchIntMap (TraverseChild DomTimeline HydrationM Int v')
     -> IntMap (IORef (ChildReadyState Int))
     -> IO (IntMap (IORef (ChildReadyState Int))))
   -> (IORef (IntMap DOM.Text)
     -> DOM.Text
-    -> PatchIntMap (TraverseChild Spider HydrationM Int v')
+    -> PatchIntMap (TraverseChild DomTimeline HydrationM Int v')
     -> JSM ())
-  -> (IntMap.Key -> v -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM v')
+  -> (IntMap.Key -> v -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM v')
   -> IntMap v
-  -> Event Spider (PatchIntMap v)
-  -> HydrationDomBuilderT HydrationDomSpace Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  -> Event DomTimeline (PatchIntMap v)
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (IntMap v', Event DomTimeline (PatchIntMap v'))
   #-}
 
 {-# SPECIALIZE hoistTraverseIntMapWithKeyWithAdjust
-  :: ((IntMap.Key -> v -> DomRenderHookT Spider HydrationM (TraverseChild Spider HydrationM Int v'))
+  :: ((IntMap.Key -> v -> DomRenderHookT DomTimeline HydrationM (TraverseChild DomTimeline HydrationM Int v'))
     -> IntMap v
-    -> Event Spider (PatchIntMap v)
-    -> DomRenderHookT Spider HydrationM (IntMap (TraverseChild Spider HydrationM Int v'), Event Spider (PatchIntMap (TraverseChild Spider HydrationM Int v'))))
-  -> (PatchIntMap (TraverseChild Spider HydrationM Int v')
+    -> Event DomTimeline (PatchIntMap v)
+    -> DomRenderHookT DomTimeline HydrationM (IntMap (TraverseChild DomTimeline HydrationM Int v'), Event DomTimeline (PatchIntMap (TraverseChild DomTimeline HydrationM Int v'))))
+  -> (PatchIntMap (TraverseChild DomTimeline HydrationM Int v')
     -> IntMap (IORef (ChildReadyState Int))
     -> IO (IntMap (IORef (ChildReadyState Int))))
   -> (IORef (IntMap DOM.Text)
     -> DOM.Text
-    -> PatchIntMap (TraverseChild Spider HydrationM Int v')
+    -> PatchIntMap (TraverseChild DomTimeline HydrationM Int v')
     -> JSM ())
-  -> (IntMap.Key -> v -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM v')
+  -> (IntMap.Key -> v -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM v')
   -> IntMap v
-  -> Event Spider (PatchIntMap v)
-  -> HydrationDomBuilderT GhcjsDomSpace Spider HydrationM (IntMap v', Event Spider (PatchIntMap v'))
+  -> Event DomTimeline (PatchIntMap v)
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM (IntMap v', Event DomTimeline (PatchIntMap v'))
   #-}
 
 data TraverseChildImmediate k = TraverseChildImmediate
@@ -2046,17 +2044,17 @@ drawChildUpdate initialEnv markReady child = do
         }
 
 {-# SPECIALIZE drawChildUpdate
-  :: HydrationDomBuilderEnv Spider HydrationM
+  :: HydrationDomBuilderEnv DomTimeline HydrationM
   -> (IORef (ChildReadyState Int) -> JSM ())
-  -> HydrationDomBuilderT s Spider HydrationM (Identity a)
-  -> DomRenderHookT Spider HydrationM (Compose (TraverseChild Spider HydrationM Int) Identity a)
+  -> HydrationDomBuilderT s DomTimeline HydrationM (Identity a)
+  -> DomRenderHookT DomTimeline HydrationM (Compose (TraverseChild DomTimeline HydrationM Int) Identity a)
   #-}
 
 {-# SPECIALIZE drawChildUpdate
-  :: HydrationDomBuilderEnv Spider HydrationM
+  :: HydrationDomBuilderEnv DomTimeline HydrationM
   -> (IORef (ChildReadyState (Some k)) -> JSM ())
-  -> HydrationDomBuilderT s Spider HydrationM (f a)
-  -> DomRenderHookT Spider HydrationM (Compose (TraverseChild Spider HydrationM (Some k)) f a)
+  -> HydrationDomBuilderT s DomTimeline HydrationM (f a)
+  -> DomRenderHookT DomTimeline HydrationM (Compose (TraverseChild DomTimeline HydrationM (Some k)) f a)
   #-}
 
 {-# INLINABLE drawChildUpdateInt #-}
@@ -2068,10 +2066,10 @@ drawChildUpdateInt :: (MonadIO m, MonadJSM m, Reflex t)
 drawChildUpdateInt env mark m = fmap runIdentity . getCompose <$> drawChildUpdate env mark (Identity <$> m)
 
 {-# SPECIALIZE drawChildUpdateInt
-  :: HydrationDomBuilderEnv Spider HydrationM
+  :: HydrationDomBuilderEnv DomTimeline HydrationM
   -> (IORef (ChildReadyState k) -> JSM ())
-  -> HydrationDomBuilderT s Spider HydrationM v
-  -> DomRenderHookT Spider HydrationM (TraverseChild Spider HydrationM k v)
+  -> HydrationDomBuilderT s DomTimeline HydrationM v
+  -> DomRenderHookT DomTimeline HydrationM (TraverseChild DomTimeline HydrationM k v)
   #-}
 
 {-# INLINE mkHasFocus #-}

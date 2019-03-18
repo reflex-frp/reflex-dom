@@ -35,6 +35,7 @@ import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
 import Data.Maybe
+import Data.Monoid
 import Data.Proxy
 import Data.Text (Text)
 import Language.Javascript.JSaddle (syncPoint, liftJSM)
@@ -54,9 +55,9 @@ import System.Process
 import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
 import qualified Test.Hspec as H
 import Test.Hspec (xit)
-import Test.Hspec.WebDriver hiding (runWD, click, uploadFile)
+import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
-import Test.WebDriver (WD)
+import Test.WebDriver (WD(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
@@ -77,7 +78,11 @@ seleniumPort = 8000
 jsaddlePort = 8001
 
 -- TODO Remove orphan
-deriving instance MonadRef WD
+instance MonadRef WD where
+  type Ref WD = Ref IO
+  newRef = WD . newRef
+  readRef = WD . readRef
+  writeRef r = WD . writeRef r
 
 assertEqual :: (MonadIO m, Eq a, Show a) => String -> a -> a -> m ()
 assertEqual a b = liftIO . HUnit.assertEqual a b

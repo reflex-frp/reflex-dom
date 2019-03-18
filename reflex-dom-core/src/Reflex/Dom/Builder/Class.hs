@@ -192,7 +192,7 @@ data CommentNodeConfig t
                        }
 
 #ifndef USE_TEMPLATE_HASKELL
-commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Comment
+commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Text
 commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNodeConfig a' b) <$> f a
 {-# INLINE commentNodeConfig_initialContents #-}
 #endif
