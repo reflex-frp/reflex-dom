@@ -4,18 +4,24 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
-       (module Main, run, mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp') where
+  ( module Main
+  , run
+  , mainWidget
+  , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
+  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  ) where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Reflex.Dom.Core (Widget)
 import Reflex.Dom.Main as Main hiding
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp')
+        mainWidgetWithHead', mainWidgetInElementById, runApp',
+        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
 import qualified Reflex.Dom.Main as Main
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp')
+        mainWidgetWithHead', mainWidgetInElementById, runApp',
+        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
 
 #if defined(ghcjs_HOST_OS)
 run :: a -> a
@@ -101,3 +107,11 @@ mainWidgetInElementById eid w = run $ Main.mainWidgetInElementById eid w
 runApp' :: (forall x. AppInput DomTimeline -> Widget x (AppOutput DomTimeline)) -> IO ()
 runApp' app = run $ Main.runApp' app
 {-# INLINE runApp' #-}
+
+mainHydrationWidgetWithHead :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> IO ()
+mainHydrationWidgetWithHead h b = run $ Main.mainHydrationWidgetWithHead h b
+{-# INLINE mainHydrationWidgetWithHead #-}
+
+mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -> IO ()
+mainHydrationWidgetWithHead' h b = run $ Main.mainHydrationWidgetWithHead' h b
+{-# INLINE mainHydrationWidgetWithHead' #-}

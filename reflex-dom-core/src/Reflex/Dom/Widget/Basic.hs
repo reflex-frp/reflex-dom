@@ -14,6 +14,8 @@ module Reflex.Dom.Widget.Basic
   -- * Displaying Values
     text
   , dynText
+  , comment
+  , dynComment
   , display
   , button
   , dyn
@@ -114,6 +116,19 @@ dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
 dynText t = do
   postBuild <- getPostBuild
   void $ textNode $ (def :: TextNodeConfig t) & textNodeConfig_setContents .~ leftmost
+    [ updated t
+    , tag (current t) postBuild
+    ]
+  notReadyUntil postBuild
+
+comment :: DomBuilder t m => Text -> m ()
+comment t = void $ commentNode $ def & commentNodeConfig_initialContents .~ t
+
+{-# INLINABLE dynComment #-}
+dynComment :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
+dynComment t = do
+  postBuild <- getPostBuild
+  void $ commentNode $ (def :: CommentNodeConfig t) & commentNodeConfig_setContents .~ leftmost
     [ updated t
     , tag (current t) postBuild
     ]

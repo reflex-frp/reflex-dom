@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.4
+Version: 0.5
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -17,6 +17,7 @@ extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
+                    ChangeLog.md
 
 flag use-template-haskell
   description: Use template haskell to generate lenses
@@ -64,8 +65,9 @@ library
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
     primitive >= 0.5 && < 0.7,
+    random,
     ref-tf == 0.4.*,
-    reflex == 0.5.*,
+    reflex == 0.6.*,
     semigroups >= 0.16 && < 0.19,
     stm == 2.4.*,
     text == 1.2.*,
@@ -100,7 +102,6 @@ library
     Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
-    Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
@@ -110,6 +111,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
+    Reflex.Dom.Xhr.FormData
   other-modules:
     Foreign.JavaScript.Internal.Utils
     Reflex.Dom.WebSocket.Foreign
@@ -148,16 +150,62 @@ test-suite hlint
   main-is: hlint.hs
   type: exitcode-stdio-1.0
 
-test-suite gc
+test-suite hydration
   build-depends: base
-               , reflex
-               , reflex-dom-core
+               , aeson
+               , bytestring
+               , chrome-test-utils
+               , constraints
+               , constraints-extras
+               , containers
+               , dependent-map
+               , dependent-sum
+               , dependent-sum-template
+               , directory
+               , exceptions
+               , filepath
+               , ghcjs-dom
+               , hspec
+               , hspec-webdriver
+               , http-types
+               , HUnit
                , jsaddle
                , jsaddle-warp
-               , linux-namespaces
+               , lens
+               , lifted-base
+               , network
+               , random
+               , ref-tf
+               , reflex
+               , reflex-dom-core
                , process
+               , silently
                , temporary
-               , unix
+               , text
+               , wai
+               , wai-websockets
+               , warp
+               , webdriver
+               , websockets
+  hs-source-dirs: test
+  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  main-is: hydration.hs
+  type: exitcode-stdio-1.0
+  if !os(linux) || !arch(x86_64) || flag(profile-reflex)
+    buildable: False
+
+-- broken test on base 4.11 & ghc 8.4.3
+-- needs to be updated for changes in GHC.Stats
+test-suite gc
+  build-depends: base
+               , chrome-test-utils
+               , jsaddle
+               , jsaddle-warp
+               , process
+               , reflex
+               , reflex-dom-core
+               , text
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto -optP-DPROFILING
