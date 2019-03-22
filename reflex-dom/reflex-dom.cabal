@@ -1,5 +1,5 @@
 Name: reflex-dom
-Version: 0.4.1
+Version: 0.5
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
@@ -13,7 +13,9 @@ Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
 cabal-version: >=1.24
-extra-source-files: java/org/reflexfrp/reflexdom/MainWidget.java
+extra-source-files:
+  java/org/reflexfrp/reflexdom/MainWidget.java
+  ChangeLog.md
 
 flag use-warp
   description: Use jsaddle-warp server
@@ -63,7 +65,7 @@ library
     base >= 4.7 && < 4.12,
     bytestring == 0.10.*,
     reflex == 0.6.*,
-    reflex-dom-core >=0.4 && <0.5,
+    reflex-dom-core >=0.5 && <0.6,
     text == 1.2.*
   if !impl(ghcjs)
     if flag(use-warp)
