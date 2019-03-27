@@ -135,7 +135,7 @@ main = do
     withSeleniumServer $ \selenium -> do
       browserPath <- liftIO $ T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
       when (T.null browserPath) $ fail "No browser found"
-      withDebugging <- isJust <$> lookupEnv "DEBUG"
+      withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
       let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
       hspec (tests withDebugging wdConfig [chromeCaps'] selenium) `finally` _selenium_stopServer selenium
