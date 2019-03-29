@@ -53,8 +53,8 @@ Add an entry to the changelog when your PR:
 * Makes any other change that will impact users
 
 You may need to add changelog entries to one or both of the changelogs in this repository:
-* [reflex-dom-core's changelog]((reflex-dom-core/ChangeLog.md)
-* [reflex-dom's changelog]((reflex-dom/ChangeLog.md)
+* [reflex-dom-core's changelog](reflex-dom-core/ChangeLog.md)
+* [reflex-dom's changelog](reflex-dom/ChangeLog.md)
 
 #### In the [Readme](README.md)
 The readme is the first place a lot of people look for information about the repository. Update any parts of the readme that are affected by your PR.
