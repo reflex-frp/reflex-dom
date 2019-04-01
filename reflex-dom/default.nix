@@ -10,7 +10,7 @@ let isAndroid = hostPlatform.libc == "bionic";
     }.${ghcBackend};
 in mkDerivation {
   pname = "reflex-dom";
-  version = "0.4";
+  version = "0.5";
   src = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [ ".git" "dist" ])) ./.;
   libraryHaskellDepends = [
     base bytestring reflex reflex-dom-core text
