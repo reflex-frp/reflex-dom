@@ -14,6 +14,7 @@
 #endif
 module Reflex.Dom.Old
        ( MonadWidget
+       , MonadWidgetConstraints
        , El
        , ElConfig (..)
        , elConfig_namespace
@@ -111,6 +112,7 @@ type MonadWidgetConstraints t m =
   , MonadSample t (Performable m)
   , MonadReflexCreateTrigger t m
   , PostBuild t m
+  , HasMountStatus t m
   , PerformEvent t m
   , MonadIO m
   , MonadIO (Performable m)
