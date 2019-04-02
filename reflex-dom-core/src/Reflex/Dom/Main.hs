@@ -119,11 +119,11 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   headFragment <- createDocumentFragment doc
   bodyElement <- getBodyUnchecked doc
   bodyFragment <- createDocumentFragment doc
+  childrenTriggerMountedActionsRef <- liftIO $ newIORef $ Just $ return ()
   ((events, postMountTriggerRef), fc) <- liftIO . attachWidget'' $ \events -> do
     let (headWidget, bodyWidget) = widgets
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     (postMount, postMountTriggerRef) <- newEventWithTriggerRef
-    mountState <- holdDyn Mounting (Mounted <$ postMount)
     let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
         go w df = do
           unreadyChildren <- liftIO $ newIORef 0
@@ -132,7 +132,8 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
                 , _immediateDomBuilderEnv_parent = toNode df
                 , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
                 , _immediateDomBuilderEnv_commitAction = return () --TODO
-                , _immediateDomBuilderEnv_mountState = mountState
+                , _immediateDomBuilderEnv_mounted = postMount
+                , _immediateDomBuilderEnv_childrenPendingMountedTriggerActions = childrenTriggerMountedActionsRef
                 }
           runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     rec b <- go (headWidget a) headFragment
@@ -140,9 +141,13 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
     return ((events, postMountTriggerRef), postBuildTriggerRef)
   replaceElementContents headElement headFragment
   replaceElementContents bodyElement bodyFragment
-  liftIO . runSpiderHost $ do
-    mPostMountTrigger <- readRef postMountTriggerRef
-    forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
+  liftIO $ do
+    Just childTriggerActions <- readIORef childrenTriggerMountedActionsRef
+    writeIORef childrenTriggerMountedActionsRef Nothing
+    liftIO . runSpiderHost $ do
+      mPostMountTrigger <- readRef postMountTriggerRef
+      forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
+    childTriggerActions
   liftIO $ processAsyncEvents events fc
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
@@ -156,24 +161,29 @@ attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> J
 attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
+  childrenTriggerMountedActionsRef <- liftIO $ newIORef $ Just $ return ()
   ((a, events, postMountTriggerRef), fc) <- liftIO . attachWidget'' $ \events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     (postMount, postMountTriggerRef) <- newEventWithTriggerRef
-    mountState <- holdDyn Mounting (Mounted <$ postMount)
     unreadyChildren <- liftIO $ newIORef 0
     let builderEnv = ImmediateDomBuilderEnv
           { _immediateDomBuilderEnv_document = toDocument doc
           , _immediateDomBuilderEnv_parent = toNode df
           , _immediateDomBuilderEnv_unreadyChildren = unreadyChildren
           , _immediateDomBuilderEnv_commitAction = return () --TODO
-          , _immediateDomBuilderEnv_mountState = mountState
+          , _immediateDomBuilderEnv_mounted = postMount
+          , _immediateDomBuilderEnv_childrenPendingMountedTriggerActions = childrenTriggerMountedActionsRef
           }
     a <- runWithJSContextSingleton (runImmediateDomBuilderT (runPostBuildT w postBuild) builderEnv events) jsSing
     return ((a, events, postMountTriggerRef), postBuildTriggerRef)
   replaceElementContents rootElement df
-  liftIO . runSpiderHost $ do
-    mPostMountTrigger <- liftIO $ readRef postMountTriggerRef
-    forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
+  liftIO $ do
+    Just childTriggerActions <- readIORef childrenTriggerMountedActionsRef
+    writeIORef childrenTriggerMountedActionsRef Nothing
+    liftIO . runSpiderHost $ do
+      mPostMountTrigger <- readRef postMountTriggerRef
+      forM_ mPostMountTrigger $ \ postMountTrigger -> runFireCommand fc [postMountTrigger :=> Identity ()] $ return ()
+    childTriggerActions
   liftIO $ processAsyncEvents events fc
   return (a, fc)
 

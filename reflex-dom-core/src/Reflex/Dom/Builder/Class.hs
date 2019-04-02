@@ -157,29 +157,25 @@ class DomBuilder t m => MountableDomBuilder t m where
 
 -- |'HasMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
---
--- ___Note:___ once the current scope is replaced, any 'performEvent's in the scope will be cancelled and so if you want to observe the 'Unmounted' status
--- you have to plumb the mount state dynamic back out of the current scope so the parent scope can react to it.
 class Monad m => HasMountStatus t m | m -> t where
-  -- |Get a 'Dynamic' representing the current 'MountState' of DOM elements created in the current scope.
-  getMountStatus :: m (Dynamic t MountState)
+  -- | Get a 'Event' which will fire only after the DOM elements are installed in the document
+  -- Note when this event fires, it is not guranteed that the DOM is still in the document, it could have been removed.
+  getMounted :: m (Event t ())
 
 instance HasMountStatus t m => HasMountStatus t (ReaderT r m) where
-  getMountStatus = lift getMountStatus
-instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
-  getMountStatus = lift getMountStatus
+  getMounted = lift getMounted
 
--- |Type representing the current mount status of a DOM structure. Mount status refers to whether the DOM structure is currently within the document tree, not
--- in the document tree, or transitioning.
-data MountState
-  -- note: order of these constructors is important, because Ord is derived and employed when combining parent and child mount states
-  = Unmounted
-  -- ^DOM structures have been removed from the document.
-  | Mounting
-  -- ^DOM structures are not yet installed in the document.
-  | Mounted
-  -- ^DOM structures are now in the document.
-  deriving (Eq, Ord, Show)
+instance HasMountStatus t m => HasMountStatus t (PostBuildT t m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m, Semigroup w) => HasMountStatus t (EventWriterT t w m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m, Monoid w) => HasMountStatus t (DynamicWriterT t w m) where
+  getMounted = lift getMounted
+
+instance (HasMountStatus t m) => HasMountStatus t (RequesterT t request response m) where
+  getMounted = lift getMounted
 
 type Namespace = Text
 
