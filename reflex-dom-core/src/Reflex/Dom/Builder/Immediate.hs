@@ -124,7 +124,6 @@ import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
 import Data.Functor.Product
-import Data.Foldable (for_)
 import Data.Traversable (for)
 import Data.IORef
 import qualified Data.Map as Map
@@ -132,7 +131,6 @@ import Data.Maybe
 import Data.Some (Some)
 import qualified Data.Some as Some
 import Data.Text (Text)
-import Data.Traversable (for)
 import qualified GHCJS.DOM as DOM
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
@@ -594,47 +592,6 @@ instance SupportsImmediateDomBuilder t m => DomBuilder t (ImmediateDomBuilderT t
     return (wrapped, result)
   placeRawElement = append . toNode
   wrapRawElement = wrap
-
-data FragmentState
-  = FragmentState_Unmounted
-  | FragmentState_Mounted (DOM.Text, DOM.Text)
-
-data ImmediateDomFragment = ImmediateDomFragment
-  { _immediateDomFragment_document :: DOM.DocumentFragment
-  , _immediateDomFragment_state :: IORef FragmentState
-  }
-
-extractFragment :: MonadJSM m => ImmediateDomFragment -> m ()
-extractFragment fragment = do
-  state <- liftIO $ readIORef $ _immediateDomFragment_state fragment
-  case state of
-    FragmentState_Unmounted -> return ()
-    FragmentState_Mounted (before, after) -> do
-      extractBetweenExclusive (_immediateDomFragment_document fragment) before after
-      liftIO $ writeIORef (_immediateDomFragment_state fragment) FragmentState_Unmounted
-
-instance SupportsImmediateDomBuilder t m => MountableDomBuilder t (ImmediateDomBuilderT t m) where
-  type DomFragment (ImmediateDomBuilderT t m) = ImmediateDomFragment
-  buildDomFragment w = do
-    df <- createDocumentFragment =<< askDocument
-    result <- flip localEnv w $ \env -> env
-      { _immediateDomBuilderEnv_parent = toNode df
-      }
-    state <- liftIO $ newIORef FragmentState_Unmounted
-    return (ImmediateDomFragment df state, result)
-  mountDomFragment fragment setFragment = do
-    parent <- askParent
-    extractFragment fragment
-    before <- textNodeInternal ("" :: Text)
-    appendChild_ parent $ _immediateDomFragment_document fragment
-    after <- textNodeInternal ("" :: Text)
-    xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
-    requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
-      extractFragment previousFragment
-      extractFragment childFragment
-      insertBefore (_immediateDomFragment_document childFragment) after
-      liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
-    liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
 instance (Reflex t, Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, MonadRef m, Ref m ~ IORef, MonadReflexCreateTrigger t m, PrimMonad m)
   => Adjustable t (ImmediateDomBuilderT t m) where

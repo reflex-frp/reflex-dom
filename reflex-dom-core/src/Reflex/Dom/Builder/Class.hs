@@ -146,15 +146,6 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
     }
   {-# INLINABLE wrapRawElement #-}
 
-{- 2017-05-19 dridus: Commented out per Ryan Trinkle. Note that this does not support mount state and possibly has issues with unready child handling.
-
-class DomBuilder t m => MountableDomBuilder t m where
-  type DomFragment m :: *
-  buildDomFragment :: m a -> m (DomFragment m, a)
-  mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
-
--}
-
 -- |'HasMountStatus' represents a widget that can be aware of whether the corresponding DOM built by the widget is present within the document yet or not.
 -- Its primary use is to integrate with external libraries which need to be invoked only when DOM structures are installed in the document.
 class Monad m => HasMountStatus t m | m -> t where
