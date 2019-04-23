@@ -14,6 +14,7 @@ module Reflex.Dom.Widget.Basic
   -- * Displaying Values
     text
   , dynText
+  , dynText'
   , comment
   , dynComment
   , display
@@ -111,15 +112,20 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
-{-# INLINABLE dynText #-}
-dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
-dynText t = do
+{-# INLINABLE dynText' #-}
+dynText' :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m (TextNode (DomBuilderSpace m) t)
+dynText' t = do
   postBuild <- getPostBuild
-  void $ textNode $ (def :: TextNodeConfig t) & textNodeConfig_setContents .~ leftmost
+  tn <- textNode $ (def :: TextNodeConfig t) & textNodeConfig_setContents .~ leftmost
     [ updated t
     , tag (current t) postBuild
     ]
   notReadyUntil postBuild
+  return tn
+
+{-# INLINABLE dynText #-}
+dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
+dynText = void . dynText'
 
 comment :: DomBuilder t m => Text -> m ()
 comment t = void $ commentNode $ def & commentNodeConfig_initialContents .~ t

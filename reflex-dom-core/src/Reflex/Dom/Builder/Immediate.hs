@@ -137,6 +137,7 @@ import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Some (Some(..))
+import Data.Functor (($>))
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
@@ -1140,23 +1141,23 @@ selectElementInternal cfg child = getHydrationMode >>= \case
 {-# INLINE textNodeImmediate #-}
 textNodeImmediate
   :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m)
-  => TextNodeConfig t -> HydrationDomBuilderT s t m DOM.Text
+  => TextNodeConfig t -> HydrationDomBuilderT s t m (DOM.Text, Event t Text)
 textNodeImmediate (TextNodeConfig !t mSetContents) = do
   p <- getParent
   doc <- askDocument
   n <- createTextNode doc t
   appendChild_ p n
-  mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
-  pure n
+  ev <- mapM (requestDomAction . fmap (\s -> setNodeValue n (Just s) $> s)) mSetContents
+  pure (n, fromMaybe never ev)
 
 {-# SPECIALIZE textNodeImmediate
   :: TextNodeConfig DomTimeline
-  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM DOM.Text
+  -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (DOM.Text, Event DomTimeline Text)
   #-}
 
 {-# SPECIALIZE textNodeImmediate
   :: TextNodeConfig DomTimeline
-  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM DOM.Text
+  -> HydrationDomBuilderT GhcjsDomSpace DomTimeline HydrationM (DOM.Text, Event DomTimeline Text)
   #-}
 
 {-# INLINE textNodeInternal #-}
@@ -1170,7 +1171,7 @@ textNodeInternal tc@(TextNodeConfig !t mSetContents) = do
     HydrationMode_Hydrating -> addHydrationStepWithSetup (maybe (pure $ pure t) (hold t) mSetContents) $ \currentText -> do
       n <- hydrateTextNode doc =<< sample currentText
       mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
-  pure $ TextNode ()
+  pure $ TextNode () never
 
 {-# SPECIALIZE textNodeInternal
   :: TextNodeConfig DomTimeline
@@ -1276,7 +1277,7 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
   HydrationMode_Immediate -> do
     -- If we're in immediate mode, we don't try to replace an existing comment,
     -- and just return a dummy key
-    t <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
+    (t, _) <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
     append $ toNode t
     textNodeRef <- liftIO $ newIORef t
     keyRef <- liftIO $ newIORef ""
@@ -1381,7 +1382,7 @@ instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT G
   {-# INLINABLE element #-}
   element = elementImmediate
   {-# INLINABLE textNode #-}
-  textNode = fmap TextNode . textNodeImmediate
+  textNode = fmap (uncurry TextNode) . textNodeImmediate
   {-# INLINABLE commentNode #-}
   commentNode = fmap CommentNode . commentNodeImmediate
   {-# INLINABLE inputElement #-}
@@ -1428,9 +1429,9 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
   mountDomFragment fragment setFragment = do
     parent <- getParent
     extractFragment fragment
-    before <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
+    (before, _) <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
     appendChild_ parent $ _immediateDomFragment_document fragment
-    after <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
+    (after, _) <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
     xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
     requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
       extractFragment previousFragment

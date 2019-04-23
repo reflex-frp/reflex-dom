@@ -182,8 +182,9 @@ instance (Reflex t) => Default (TextNodeConfig t) where
     , _textNodeConfig_setContents = Nothing
     }
 
-newtype TextNode d t = TextNode
+data TextNode d t = TextNode
   { _textNode_raw :: RawTextNode d
+  , _textNode_contentsUpdated :: Event t Text
   }
 
 data CommentNodeConfig t
