@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 -- | Render the first widget on the server, and the second on the client.
 module Reflex.Dom.Prerender
@@ -81,7 +82,7 @@ prerender_
   => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
-class PrerenderClientConstraint js t (Client m) => Prerender js t m | m -> t js where
+class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, Prerender js t m) => Prerender js t m | m -> t js where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
   -- | Render the first widget on the server, and the second on the client. The
@@ -132,19 +133,19 @@ instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prer
         insertBefore df =<< deleteToPrerenderEnd doc
     holdDyn a0 a'
 
-newtype UnrunnableT t m a = UnrunnableT { runUnrunnableT :: Void -> m a }
+newtype UnrunnableT js t m a = UnrunnableT { runUnrunnableT :: Void -> m a }
 
-instance Functor (UnrunnableT t m) where
+instance Functor (UnrunnableT js t m) where
   fmap _ _ = UnrunnableT $ \case
-instance Applicative (UnrunnableT t m) where
+instance Applicative (UnrunnableT js t m) where
   pure _ = UnrunnableT $ \case
   _ <*> _ = UnrunnableT $ \case
-instance Monad (UnrunnableT t m) where
+instance Monad (UnrunnableT js t m) where
   _ >>= _ = UnrunnableT $ \case
-instance MonadTrans (UnrunnableT t) where
+instance MonadTrans (UnrunnableT js t) where
   lift _ = UnrunnableT $ \case
-instance Reflex t => DomBuilder t (UnrunnableT t m) where
-  type DomBuilderSpace (UnrunnableT t m) = GhcjsDomSpace
+instance Reflex t => DomBuilder t (UnrunnableT js t m) where
+  type DomBuilderSpace (UnrunnableT js t m) = GhcjsDomSpace
   textNode _ = UnrunnableT $ \case
   commentNode _ = UnrunnableT $ \case
   element _ _ _ = UnrunnableT $ \case
@@ -153,51 +154,54 @@ instance Reflex t => DomBuilder t (UnrunnableT t m) where
   selectElement _ _ = UnrunnableT $ \case
   placeRawElement _ = UnrunnableT $ \case
   wrapRawElement _ _ = UnrunnableT $ \case
-instance NotReady t (UnrunnableT t m) where
+instance NotReady t (UnrunnableT js t m) where
   notReadyUntil _ = UnrunnableT $ \case
   notReady = UnrunnableT $ \case
-instance Reflex t => Adjustable t (UnrunnableT t m) where
+instance Reflex t => Adjustable t (UnrunnableT js t m) where
   runWithReplace _ _ = UnrunnableT $ \case
   traverseIntMapWithKeyWithAdjust _ _ _ = UnrunnableT $ \case
   traverseDMapWithKeyWithAdjust _ _ _ = UnrunnableT $ \case
   traverseDMapWithKeyWithAdjustWithMove _ _ _ = UnrunnableT $ \case
-instance Reflex t => PerformEvent t (UnrunnableT t m) where
-  type Performable (UnrunnableT t m) = UnrunnableT t m
+instance Reflex t => PerformEvent t (UnrunnableT js t m) where
+  type Performable (UnrunnableT js t m) = UnrunnableT js t m
   performEvent _ = UnrunnableT $ \case
   performEvent_ _ = UnrunnableT $ \case
-instance MonadRef (UnrunnableT t m) where
-  type Ref (UnrunnableT t m) = Ref IO
+instance MonadRef (UnrunnableT js t m) where
+  type Ref (UnrunnableT js t m) = Ref IO
   newRef _ = UnrunnableT $ \case
   readRef _ = UnrunnableT $ \case
   writeRef _ _ = UnrunnableT $ \case
-instance HasDocument (UnrunnableT t m) where
+instance HasDocument (UnrunnableT js t m) where
   askDocument = UnrunnableT $ \case
-instance HasJSContext (UnrunnableT t m) where
-  --type JsContextPhantom (UnrunnableT t m) = ()
-instance HasJS JS' (UnrunnableT t m) where
-  type JSX (UnrunnableT t m) = UnrunnableT t m
-instance MonadJS JS' (UnrunnableT t m) where
-instance TriggerEvent t (UnrunnableT t m) where
-instance MonadReflexCreateTrigger t (UnrunnableT t m) where
+instance HasJSContext (UnrunnableT js t m) where
+  --type JsContextPhantom (UnrunnableT js t m) = ()
+instance HasJS JS' (UnrunnableT js t m) where
+  type JSX (UnrunnableT js t m) = UnrunnableT js t m
+instance MonadJS JS' (UnrunnableT js t m) where
+instance TriggerEvent t (UnrunnableT js t m) where
+instance MonadReflexCreateTrigger t (UnrunnableT js t m) where
   newEventWithTrigger _ = UnrunnableT $ \case
-instance MonadFix (UnrunnableT t m) where
+instance MonadFix (UnrunnableT js t m) where
   mfix _ = UnrunnableT $ \case
-instance MonadHold t (UnrunnableT t m) where
+instance MonadHold t (UnrunnableT js t m) where
   hold _ _ = UnrunnableT $ \case
   holdDyn _ _ = UnrunnableT $ \case
   holdIncremental _ _ = UnrunnableT $ \case
-instance MonadSample t (UnrunnableT t m)
-instance MonadIO (UnrunnableT t m)
-instance MonadJSM (UnrunnableT t m) where
+instance MonadSample t (UnrunnableT js t m)
+instance MonadIO (UnrunnableT js t m)
+instance MonadJSM (UnrunnableT js t m) where
   liftJSM' _ = UnrunnableT $ \case
-instance Reflex t => PostBuild t (UnrunnableT t m)
-instance PrimMonad (UnrunnableT t m) where
---  type RawDocument (UnrunnableT t m) = DOM.Document
---instance HasJSContext (UnrunnableT t m)
---instance MonadJSM (UnrunnableT t m)
+instance Reflex t => PostBuild t (UnrunnableT js t m)
+instance PrimMonad (UnrunnableT js t m) where
+--  type RawDocument (UnrunnableT js t m) = DOM.Document
+--instance HasJSContext (UnrunnableT js t m)
+--instance MonadJSM (UnrunnableT js t m)
+instance Prerender JS' t (UnrunnableT js t m) where
+  type Client (UnrunnableT js t m) = UnrunnableT js t m
+  prerender _ _ = UnrunnableT $ \case
 
 instance (SupportsStaticDomBuilder t m) => Prerender JS' t (StaticDomBuilderT t m) where
-  type Client (StaticDomBuilderT t m) = UnrunnableT t m
+  type Client (StaticDomBuilderT t m) = UnrunnableT JS' t m
   prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
     a <- server
