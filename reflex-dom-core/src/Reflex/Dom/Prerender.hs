@@ -39,7 +39,6 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
-import Reflex.Requester.Base
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
