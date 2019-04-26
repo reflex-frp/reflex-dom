@@ -83,7 +83,7 @@ prerender_
   => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
-class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, Prerender js t m) => Prerender js t m | m -> t js where
+class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, Prerender js t (Client m)) => Prerender js t m | m -> t js where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
   -- | Render the first widget on the server, and the second on the client. The
