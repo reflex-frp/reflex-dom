@@ -24,7 +24,7 @@ module Reflex.Dom.Prerender
        , PrerenderBaseConstraints
        ) where
 
-import Control.Monad.Primitive (PrimMonad)
+import Control.Monad.Primitive (PrimMonad(..))
 import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..))
 import Data.IORef (IORef, newIORef)
@@ -170,28 +170,58 @@ instance Monad m => MonadRef (UnrunnableT js t m) where
 instance Monad m => HasDocument (UnrunnableT js t m) where
   askDocument = unrunnable
 instance Monad m => HasJSContext (UnrunnableT js t m) where
-  --type JsContextPhantom (UnrunnableT js t m) = ()
+  type JSContextPhantom (UnrunnableT js t m) = ()
+  askJSContext = unrunnable
 instance Monad m => HasJS JS' (UnrunnableT js t m) where
   type JSX (UnrunnableT js t m) = UnrunnableT js t m
+  liftJS _ = unrunnable
 instance Monad m => MonadJS JS' (UnrunnableT js t m) where
+  runJS _ _ = unrunnable
+  forkJS _ = unrunnable
+  mkJSUndefined = unrunnable
+  isJSNull _ = unrunnable
+  isJSUndefined _ = unrunnable
+  fromJSBool _ = unrunnable
+  fromJSString _ = unrunnable
+  fromJSArray _ = unrunnable
+  fromJSUint8Array _ = unrunnable
+  fromJSNumber _ = unrunnable
+  withJSBool _ _ = unrunnable
+  withJSString _ _ = unrunnable
+  withJSNumber _ _ = unrunnable
+  withJSArray _ _ = unrunnable
+  withJSUint8Array _ _ = unrunnable
+  mkJSFun _ = unrunnable
+  freeJSFun _ = unrunnable
+  setJSProp _ _ _ = unrunnable
+  getJSProp _ _ = unrunnable
+  withJSNode _ _ = unrunnable
 instance Monad m => TriggerEvent t (UnrunnableT js t m) where
+  newTriggerEvent = unrunnable
+  newTriggerEventWithOnComplete = unrunnable
+  newEventWithLazyTriggerWithOnComplete _ = unrunnable
 instance Monad m => MonadReflexCreateTrigger t (UnrunnableT js t m) where
   newEventWithTrigger _ = unrunnable
+  newFanEventWithTrigger _ = unrunnable
 instance Monad m => MonadFix (UnrunnableT js t m) where
   mfix _ = unrunnable
 instance Monad m => MonadHold t (UnrunnableT js t m) where
   hold _ _ = unrunnable
   holdDyn _ _ = unrunnable
   holdIncremental _ _ = unrunnable
-instance Monad m => MonadSample t (UnrunnableT js t m)
-instance Monad m => MonadIO (UnrunnableT js t m)
+  buildDynamic _ _ = unrunnable
+  headE _ = unrunnable
+instance Monad m => MonadSample t (UnrunnableT js t m) where
+  sample _ = unrunnable
+instance Monad m => MonadIO (UnrunnableT js t m) where
+  liftIO _ = unrunnable
 instance Monad m => MonadJSM (UnrunnableT js t m) where
   liftJSM' _ = unrunnable
-instance (Reflex t, Monad m) => PostBuild t (UnrunnableT js t m)
+instance (Reflex t, Monad m) => PostBuild t (UnrunnableT js t m) where
+  getPostBuild = unrunnable
 instance Monad m => PrimMonad (UnrunnableT js t m) where
---  type RawDocument (UnrunnableT js t m) = DOM.Document
---instance HasJSContext (UnrunnableT js t m)
---instance MonadJSM (UnrunnableT js t m)
+  type PrimState (UnrunnableT js t m) = PrimState IO
+  primitive _ = unrunnable
 instance (Reflex t, Monad m) => DomRenderHook t (UnrunnableT js t m) where
   withRenderHook _ _ = unrunnable
   requestDomAction _ = unrunnable
