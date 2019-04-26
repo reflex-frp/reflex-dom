@@ -1,6 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -137,7 +136,7 @@ newtype UnrunnableT js t m a = UnrunnableT (ReaderT Void m a)
   deriving (Functor, Applicative, Monad, MonadTrans)
 
 unrunnable :: UnrunnableT js t m a
-unrunnable = UnrunnableT $ ReaderT $ \case
+unrunnable = UnrunnableT $ ReaderT $ \case {}
 
 instance (Reflex t, Monad m) => DomBuilder t (UnrunnableT js t m) where
   type DomBuilderSpace (UnrunnableT js t m) = GhcjsDomSpace
