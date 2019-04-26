@@ -52,7 +52,6 @@ type PrerenderClientConstraint js t m =
   , DomRenderHook t m
   , HasDocument m
   , TriggerEvent t m
-  -- , Prerender js t m
   , PrerenderBaseConstraints js t m
   )
 
