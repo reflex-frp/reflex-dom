@@ -136,44 +136,47 @@ instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prer
 
 newtype UnrunnableT js t m a = UnrunnableT { runUnrunnableT :: Void -> m a }
 
+unrunnable :: UnrunnableT js t m a
+unrunnable = UnrunnableT $ \case
+
 instance Functor (UnrunnableT js t m) where
-  fmap _ _ = UnrunnableT $ \case
+  fmap _ _ = unrunnable
 instance Applicative (UnrunnableT js t m) where
-  pure _ = UnrunnableT $ \case
-  _ <*> _ = UnrunnableT $ \case
+  pure _ = unrunnable
+  _ <*> _ = unrunnable
 instance Monad (UnrunnableT js t m) where
-  _ >>= _ = UnrunnableT $ \case
+  _ >>= _ = unrunnable
 instance MonadTrans (UnrunnableT js t) where
-  lift _ = UnrunnableT $ \case
+  lift _ = unrunnable
 instance Reflex t => DomBuilder t (UnrunnableT js t m) where
   type DomBuilderSpace (UnrunnableT js t m) = GhcjsDomSpace
-  textNode _ = UnrunnableT $ \case
-  commentNode _ = UnrunnableT $ \case
-  element _ _ _ = UnrunnableT $ \case
-  inputElement _ = UnrunnableT $ \case
-  textAreaElement _ = UnrunnableT $ \case
-  selectElement _ _ = UnrunnableT $ \case
-  placeRawElement _ = UnrunnableT $ \case
-  wrapRawElement _ _ = UnrunnableT $ \case
+  textNode _ = unrunnable
+  commentNode _ = unrunnable
+  element _ _ _ = unrunnable
+  inputElement _ = unrunnable
+  textAreaElement _ = unrunnable
+  selectElement _ _ = unrunnable
+  placeRawElement _ = unrunnable
+  wrapRawElement _ _ = unrunnable
 instance NotReady t (UnrunnableT js t m) where
-  notReadyUntil _ = UnrunnableT $ \case
-  notReady = UnrunnableT $ \case
+  notReadyUntil _ = unrunnable
+  notReady = unrunnable
 instance Reflex t => Adjustable t (UnrunnableT js t m) where
-  runWithReplace _ _ = UnrunnableT $ \case
-  traverseIntMapWithKeyWithAdjust _ _ _ = UnrunnableT $ \case
-  traverseDMapWithKeyWithAdjust _ _ _ = UnrunnableT $ \case
-  traverseDMapWithKeyWithAdjustWithMove _ _ _ = UnrunnableT $ \case
+  runWithReplace _ _ = unrunnable
+  traverseIntMapWithKeyWithAdjust _ _ _ = unrunnable
+  traverseDMapWithKeyWithAdjust _ _ _ = unrunnable
+  traverseDMapWithKeyWithAdjustWithMove _ _ _ = unrunnable
 instance Reflex t => PerformEvent t (UnrunnableT js t m) where
   type Performable (UnrunnableT js t m) = UnrunnableT js t m
-  performEvent _ = UnrunnableT $ \case
-  performEvent_ _ = UnrunnableT $ \case
+  performEvent _ = unrunnable
+  performEvent_ _ = unrunnable
 instance MonadRef (UnrunnableT js t m) where
   type Ref (UnrunnableT js t m) = Ref IO
-  newRef _ = UnrunnableT $ \case
-  readRef _ = UnrunnableT $ \case
-  writeRef _ _ = UnrunnableT $ \case
+  newRef _ = unrunnable
+  readRef _ = unrunnable
+  writeRef _ _ = unrunnable
 instance HasDocument (UnrunnableT js t m) where
-  askDocument = UnrunnableT $ \case
+  askDocument = unrunnable
 instance HasJSContext (UnrunnableT js t m) where
   --type JsContextPhantom (UnrunnableT js t m) = ()
 instance HasJS JS' (UnrunnableT js t m) where
@@ -181,29 +184,29 @@ instance HasJS JS' (UnrunnableT js t m) where
 instance MonadJS JS' (UnrunnableT js t m) where
 instance TriggerEvent t (UnrunnableT js t m) where
 instance MonadReflexCreateTrigger t (UnrunnableT js t m) where
-  newEventWithTrigger _ = UnrunnableT $ \case
+  newEventWithTrigger _ = unrunnable
 instance MonadFix (UnrunnableT js t m) where
-  mfix _ = UnrunnableT $ \case
+  mfix _ = unrunnable
 instance MonadHold t (UnrunnableT js t m) where
-  hold _ _ = UnrunnableT $ \case
-  holdDyn _ _ = UnrunnableT $ \case
-  holdIncremental _ _ = UnrunnableT $ \case
+  hold _ _ = unrunnable
+  holdDyn _ _ = unrunnable
+  holdIncremental _ _ = unrunnable
 instance MonadSample t (UnrunnableT js t m)
 instance MonadIO (UnrunnableT js t m)
 instance MonadJSM (UnrunnableT js t m) where
-  liftJSM' _ = UnrunnableT $ \case
+  liftJSM' _ = unrunnable
 instance Reflex t => PostBuild t (UnrunnableT js t m)
 instance PrimMonad (UnrunnableT js t m) where
 --  type RawDocument (UnrunnableT js t m) = DOM.Document
 --instance HasJSContext (UnrunnableT js t m)
 --instance MonadJSM (UnrunnableT js t m)
 instance Reflex t => DomRenderHook t (UnrunnableT js t m) where
-  withRenderHook _ _ = UnrunnableT $ \case
-  requestDomAction _ = UnrunnableT $ \case
-  requestDomAction_ _ = UnrunnableT $ \case
+  withRenderHook _ _ = unrunnable
+  requestDomAction _ = unrunnable
+  requestDomAction_ _ = unrunnable
 instance Reflex t => Prerender JS' t (UnrunnableT js t m) where
   type Client (UnrunnableT js t m) = UnrunnableT js t m
-  prerender _ _ = UnrunnableT $ \case
+  prerender _ _ = unrunnable
 
 instance (SupportsStaticDomBuilder t m) => Prerender JS' t (StaticDomBuilderT t m) where
   type Client (StaticDomBuilderT t m) = UnrunnableT JS' t m
