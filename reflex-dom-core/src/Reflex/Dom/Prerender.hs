@@ -197,7 +197,11 @@ instance PrimMonad (UnrunnableT js t m) where
 --  type RawDocument (UnrunnableT js t m) = DOM.Document
 --instance HasJSContext (UnrunnableT js t m)
 --instance MonadJSM (UnrunnableT js t m)
-instance Prerender JS' t (UnrunnableT js t m) where
+instance Reflex t => DomRenderHook t (UnrunnableT js t m) where
+  withRenderHook _ _ = UnrunnableT $ \case
+  requestDomAction _ = UnrunnableT $ \case
+  requestDomAction_ _ = UnrunnableT $ \case
+instance Reflex t => Prerender JS' t (UnrunnableT js t m) where
   type Client (UnrunnableT js t m) = UnrunnableT js t m
   prerender _ _ = UnrunnableT $ \case
 
