@@ -192,7 +192,7 @@ data CommentNodeConfig t
                        }
 
 #ifndef USE_TEMPLATE_HASKELL
-commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Comment
+commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Text
 commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNodeConfig a' b) <$> f a
 {-# INLINE commentNodeConfig_initialContents #-}
 #endif
@@ -618,7 +618,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder 
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q, Eq q) => DomBuilder t (QueryT t q m) where
   type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode

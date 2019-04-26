@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.4
+Version: 0.5
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -17,6 +17,7 @@ extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
+                    ChangeLog.md
 
 flag use-template-haskell
   description: Use template haskell to generate lenses
@@ -66,7 +67,7 @@ library
     primitive >= 0.5 && < 0.7,
     random,
     ref-tf == 0.4.*,
-    reflex == 0.5.*,
+    reflex == 0.6.*,
     semigroups >= 0.16 && < 0.19,
     stm == 2.4.*,
     text == 1.2.*,
@@ -191,7 +192,7 @@ test-suite hydration
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
-  if !os(linux) || !arch(x86_64)
+  if !os(linux) || !arch(x86_64) || flag(profile-reflex)
     buildable: False
 
 -- broken test on base 4.11 & ghc 8.4.3
