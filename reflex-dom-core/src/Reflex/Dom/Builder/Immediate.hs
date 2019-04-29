@@ -347,7 +347,7 @@ runDomRenderHookT (DomRenderHookT a) events = do
   flip runTriggerEventT events $ do
     rec (result, req) <- runRequesterT a rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
-          traverseRequesterData (\r -> Identity <$> r) rm
+          traverseRequesterData (fmap Identity) rm
     return result
   where
     runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
@@ -362,7 +362,7 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (DomRenderHookT t m) where
   withRenderHook hook (DomRenderHookT a) = do
     DomRenderHookT $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT a $ runIdentity <$> rsp
-      return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
+      return (ffor req $ \rm -> hook $ traverseRequesterData (fmap Identity) rm, x)
   requestDomAction = DomRenderHookT . requestingIdentity
   requestDomAction_ = DomRenderHookT . requesting_
 
