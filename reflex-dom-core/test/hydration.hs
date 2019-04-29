@@ -35,7 +35,6 @@ import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
 import Data.Maybe
-import Data.Monoid
 import Data.Proxy
 import Data.Text (Text)
 import Language.Javascript.JSaddle (syncPoint, liftJSM)
@@ -54,6 +53,7 @@ import System.IO.Temp
 import System.Process
 import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
 import qualified Test.Hspec as H
+import qualified Test.Hspec.Core.Spec as H
 import Test.Hspec (xit)
 import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
@@ -812,7 +812,7 @@ tests withDebugging wdConfig caps _selenium = do
           , el "span" . text <$> replace
           ]
     it "can be nested in postBuild widget" $ runWD $ do
-      replaceChan <- liftIO newChan
+      replaceChan :: Chan Text <- liftIO newChan
       let setup = findElemWithRetry $ WD.ByTag "div"
           check ssr = do
             -- Check that the original element still exists and has the correct text
@@ -1153,6 +1153,9 @@ tests withDebugging wdConfig caps _selenium = do
           xs <- WD.findElems (WD.ByTag "li")
           checkInitialItems dm xs
           pure xs
+        moveSpec
+          :: (DMap Key2 Identity -> (WD.Element -> Chan (PatchDMapWithMove Key2 Identity) -> WD ()) -> WD ())
+          -> H.SpecM (WdTestSession ()) ()
         moveSpec testMove = do
           it "can insert an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
@@ -1192,7 +1195,7 @@ tests withDebugging wdConfig caps _selenium = do
     describe "hydration/immediate" $ moveSpec $ \initMap test -> do
       chan <- liftIO newChan
       replace <- liftIO newChan
-      lock <- liftIO newEmptyMVar
+      lock :: MVar () <- liftIO newEmptyMVar
       let check = do
             liftIO $ do
               writeChan replace ()
