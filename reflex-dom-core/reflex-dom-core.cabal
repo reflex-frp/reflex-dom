@@ -166,6 +166,7 @@ test-suite hydration
                , filepath
                , ghcjs-dom
                , hspec
+               , hspec-core
                , hspec-webdriver
                , http-types
                , HUnit
