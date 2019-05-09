@@ -1,4 +1,7 @@
 ## [Reflex-DOM](https://reflex-frp.org)
+
+[![Hackage](https://img.shields.io/hackage/v/reflex-dom.svg)](http://hackage.haskell.org/package/reflex-dom)
+
 ### A Framework for Functional Reactive Web Apps in Haskell
 
 Reflex-DOM is a framework for building web applications in Haskell, based on the [Functional Reactive Programming](https://wiki.haskell.org/Functional_Reactive_Programming) library [Reflex](https://github.com/reflex-frp/reflex).
@@ -11,8 +14,6 @@ A summary of Reflex-DOM functions is available in the [quick reference](Quickref
 [Get started with Reflex](https://github.com/reflex-frp/reflex-platform)
 
 [/r/reflexfrp](https://www.reddit.com/r/reflexfrp)
-
-[hackage](https://hackage.haskell.org/package/reflex)
 
 [irc.freenode.net #reflex-frp](http://webchat.freenode.net?channels=%23reflex-frp&uio=d4)
 
