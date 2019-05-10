@@ -22,6 +22,7 @@ import Reflex.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
 import Reflex.Host.Class
+import Reflex.Main
 import Reflex.PerformEvent.Base
 import Reflex.PostBuild.Base
 import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
@@ -86,30 +87,31 @@ attachHydrationWidget
     -> IORef HydrationMode
     -> Maybe (IORef [(Node, HydrationRunnerT DomTimeline (DomCoreWidget ()) ())])
     -> EventChannel
-    -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
+    -> PostBuildT DomTimeline (PerformEventT DomTimeline DomHost) a
      )
-  -> IO (a, FireCommand DomTimeline DomHost)
+  -> IO a
 attachHydrationWidget switchoverAction jsSing w = do
   hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
   rootNodesRef <- liftIO $ newIORef []
   events <- newChan
-  runDomHost $ flip runTriggerEventT events $ mdo
+  (result, _, _) <- runHostWithIO events runDomHost runDomHost $ flip runTriggerEventT events $ mdo
     (syncEvent, fireSync) <- newTriggerEvent
-    ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- lift $ hostPerformEventT $ do
-      a <- w syncEvent hydrationMode (Just rootNodesRef) events
-      _ <- runWithReplace (return ()) $ delayedAction <$ syncEvent
-      pure a
-    mPostBuildTrigger <- readRef postBuildTriggerRef
-    lift $ forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+
+    result <- lift $ w syncEvent hydrationMode (Just rootNodesRef) events
+    _ <- lift $ runWithReplace (return ()) $ delayedAction <$ syncEvent
+
     liftIO $ fireSync ()
     rootNodes <- liftIO $ readIORef rootNodesRef
-    let delayedAction = do
+    let delayedAction :: PostBuildT DomTimeline (PerformEventT DomTimeline DomHost) ()
+        delayedAction = do
           for_ (reverse rootNodes) $ \(rootNode, runner) -> do
             let hydrate = runHydrationRunnerT runner Nothing rootNode events
-            void $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
+            -- Should this be lift, or distributeJSContextSingleton? Why do we use never?
+            void $ lift $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
           liftIO $ writeIORef hydrationMode HydrationMode_Immediate
           runWithJSContextSingleton (DOM.liftJSM switchoverAction) jsSing
-    pure (result, fc)
+    pure result
+  pure result
 
 type HydrationWidget x a = HydrationDomBuilderT HydrationDomSpace DomTimeline (DomCoreWidget x) a
 
@@ -130,8 +132,7 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
   globalDoc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked globalDoc
   bodyElement <- getBodyUnchecked globalDoc
-  (events, fc) <- liftIO . attachHydrationWidget switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
-    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+  liftIO . attachHydrationWidget switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
     let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
         hydrateDom n w = do
           delayed <- liftIO $ newIORef $ pure ()
@@ -151,9 +152,7 @@ runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonM
               res <- liftIO $ readIORef delayed
               liftIO $ modifyIORef' hr ((n, res) :)
             pure a
-    runWithJSContextSingleton (runPostBuildT (runTriggerEventT (app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)) events) postBuild) jsSing
-    return (events, postBuildTriggerRef)
-  liftIO $ processAsyncEvents events fc
+    runWithJSContextSingleton (distributeJSContextSingleton (runTriggerEventT (app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)) events)) jsSing
 
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
@@ -221,10 +220,10 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
   bodyElement <- getBodyUnchecked doc
   bodyFragment <- createDocumentFragment doc
   hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
-  (events, fc) <- liftIO . attachWidget'' $ \events -> do
+  events <- liftIO newChan
+  _ <- liftIO . runHostWithIO events runDomHost runDomHost $ do
     let (headWidget, bodyWidget) = widgets
-    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
+    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PostBuildT DomTimeline (PerformEventT DomTimeline DomHost) c
         go w df = do
           unreadyChildren <- liftIO $ newIORef 0
           delayed <- liftIO $ newIORef $ pure ()
@@ -237,13 +236,20 @@ mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
                 , _hydrationDomBuilderEnv_delayed = delayed
                 , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
                 }
-          runWithJSContextSingleton (runPostBuildT (runHydrationDomBuilderT w builderEnv events) postBuild) jsSing
+          runWithJSContextSingleton (distributeJSContextSingleton (runHydrationDomBuilderT w builderEnv events)) jsSing
     rec b <- go (headWidget a) headFragment
         a <- go (bodyWidget b) bodyFragment
-    return (events, postBuildTriggerRef)
+    return ()
   replaceElementContents headElement headFragment
   replaceElementContents bodyElement bodyFragment
-  liftIO $ processAsyncEvents events fc
+
+distributeJSContextSingleton
+  :: PostBuildT t (WithJSContextSingleton x m) a
+  -> WithJSContextSingleton x (PostBuildT t m) a
+distributeJSContextSingleton (PostBuildT (ReaderT x)) =
+  WithJSContextSingleton $ ReaderT $ \j ->
+    PostBuildT $ ReaderT $ \p -> runReaderT (unWithJSContextSingleton (x p)) j
+
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
 replaceElementContents e df = do
@@ -257,8 +263,8 @@ attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
   hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
-  ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
-    (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
+  events <- liftIO newChan
+  (a, fc, _) <- liftIO . runHostWithIO events runDomHost runDomHost $ do
     unreadyChildren <- liftIO $ newIORef 0
     delayed <- liftIO $ newIORef $ pure ()
     let builderEnv = HydrationDomBuilderEnv
@@ -270,10 +276,9 @@ attachWidget' rootElement jsSing w = do
           , _hydrationDomBuilderEnv_delayed = delayed
           , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
           }
-    a <- runWithJSContextSingleton (runPostBuildT (runHydrationDomBuilderT w builderEnv events) postBuild) jsSing
-    return ((a, events), postBuildTriggerRef)
+    a <- runWithJSContextSingleton (distributeJSContextSingleton (runHydrationDomBuilderT w builderEnv events)) jsSing
+    return a
   replaceElementContents rootElement df
-  liftIO $ processAsyncEvents events fc
   return (a, fc)
 
 type EventChannel = Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
@@ -288,6 +293,7 @@ attachWidget'' w = do
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return (result, fc)
 
+{-# DEPRECATED processAsyncEvents "Use runHostWithIO" #-}
 processAsyncEvents :: EventChannel -> FireCommand DomTimeline DomHost -> IO ()
 processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
   ers <- readChan events
