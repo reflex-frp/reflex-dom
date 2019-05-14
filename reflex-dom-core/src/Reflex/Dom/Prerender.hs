@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -211,8 +212,10 @@ instance Monad m => MonadSample t (UnrunnableT js t m) where
   sample _ = unrunnable
 instance Monad m => MonadIO (UnrunnableT js t m) where
   liftIO _ = unrunnable
+#ifndef ghcjs_HOST_OS
 instance Monad m => MonadJSM (UnrunnableT js t m) where
   liftJSM' _ = unrunnable
+#endif
 instance (Reflex t, Monad m) => PostBuild t (UnrunnableT js t m) where
   getPostBuild = unrunnable
 instance Monad m => PrimMonad (UnrunnableT js t m) where

@@ -289,12 +289,10 @@ class Monad m => MonadJS x m | m -> x where
   getJSProp :: String -> JSRef x -> m (JSRef x)
   withJSNode :: Node -> (JSRef x -> m r) -> m r
 
-type HasJS' = HasJS JS'
-
 #ifdef ghcjs_HOST_OS
 
 data JSCtx_IO
-type JSX = JSCtx_IO
+type JS' = JSCtx_IO
 
 instance MonadIO m => HasJS JSCtx_IO (WithJSContextSingleton x m) where
   type JSX (WithJSContextSingleton x m) = IO
