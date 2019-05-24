@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import android.content.Intent;
 import android.content.ActivityNotFoundException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import java.nio.charset.StandardCharsets;
 
@@ -45,11 +46,17 @@ public class MainWidget {
     wv.setWebContentsDebuggingEnabled(true);
     // allow video to play without user interaction
     wv.getSettings().setMediaPlaybackRequiresUserGesture(false);
+    final AtomicBoolean jsaddleLoaded = new AtomicBoolean(false);
 
     wv.setWebViewClient(new WebViewClient() {
         @Override
         public void onPageFinished(WebView _view, String _url) {
-          wv.evaluateJavascript(initialJS, null);
+          Log.i("reflex", "onPageFinished");
+          boolean alreadyLoaded = jsaddleLoaded.getAndSet(true);
+          if(!alreadyLoaded) {
+            Log.i("reflex", "loading jsaddle");
+            wv.evaluateJavascript(initialJS, null);
+          }
         }
 
         // Re-route / to /android_asset
