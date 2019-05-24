@@ -121,8 +121,8 @@ type DomCoreWidget x = PostBuildT DomTimeline (WithJSContextSingleton x (Perform
 {-# INLINABLE runHydrationWidgetWithHeadAndBody #-}
 runHydrationWidgetWithHeadAndBody
   :: JSM ()
-  -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head"
-      -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body"
+  -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head" --TODO: test invoking this more than once
+      -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body" --TODO: test invoking this more than once
       -> FloatingWidget () ()
      )
   -> JSM ()
@@ -212,38 +212,47 @@ type Widget x = ImmediateDomBuilderT DomTimeline (DomCoreWidget x)
 attachWidget :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM a
 attachWidget rootElement wv w = fst <$> attachWidget' rootElement wv w
 
--- | Warning: `mainWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
-mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> JSM ()
-mainWidgetWithHead' widgets = withJSContextSingletonMono $ \jsSing -> do
-  doc <- currentDocumentUnchecked
-  headElement <- getHeadUnchecked doc
-  headFragment <- createDocumentFragment doc
-  bodyElement <- getBodyUnchecked doc
-  bodyFragment <- createDocumentFragment doc
-  hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
-  (events, fc) <- liftIO . attachWidget'' $ \events -> do
-    let (headWidget, bodyWidget) = widgets
+{-# INLINABLE runImmediateWidgetWithHeadAndBody #-}
+runImmediateWidgetWithHeadAndBody
+  :: (   (forall c. Widget () c -> FloatingWidget () c) -- "Append to head"
+      -> (forall c. Widget () c -> FloatingWidget () c) -- "Append to body"
+      -> FloatingWidget () ()
+     )
+  -> JSM ()
+runImmediateWidgetWithHeadAndBody app = withJSContextSingletonMono $ \jsSing -> do
+  globalDoc <- currentDocumentUnchecked
+  headElement <- getHeadUnchecked globalDoc
+  bodyElement <- getBodyUnchecked globalDoc
+  headFragment <- createDocumentFragment globalDoc
+  bodyFragment <- createDocumentFragment globalDoc
+  (events, fc) <- liftIO . attachImmediateWidget $ \hydrationMode events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let go :: forall c. Widget () c -> DOM.DocumentFragment -> PerformEventT DomTimeline DomHost c
-        go w df = do
+    let go :: forall c. DOM.DocumentFragment -> Widget () c -> FloatingWidget () c
+        go df w = do
           unreadyChildren <- liftIO $ newIORef 0
           delayed <- liftIO $ newIORef $ pure ()
           let builderEnv = HydrationDomBuilderEnv
-                { _hydrationDomBuilderEnv_document = toDocument doc
+                { _hydrationDomBuilderEnv_document = globalDoc
                 , _hydrationDomBuilderEnv_parent = Left $ toNode df
                 , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-                , _hydrationDomBuilderEnv_commitAction = return () --TODO
+                , _hydrationDomBuilderEnv_commitAction = pure () --TODO: possibly `replaceElementContents n f`
+                , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
                 , _hydrationDomBuilderEnv_switchover = never
                 , _hydrationDomBuilderEnv_delayed = delayed
-                , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
                 }
-          runWithJSContextSingleton (runPostBuildT (runHydrationDomBuilderT w builderEnv events) postBuild) jsSing
-    rec b <- go (headWidget a) headFragment
-        a <- go (bodyWidget b) bodyFragment
+          lift $ runHydrationDomBuilderT w builderEnv events
+    runWithJSContextSingleton (runPostBuildT (runTriggerEventT (app (go headFragment) (go bodyFragment)) events) postBuild) jsSing
     return (events, postBuildTriggerRef)
   replaceElementContents headElement headFragment
   replaceElementContents bodyElement bodyFragment
   liftIO $ processAsyncEvents events fc
+
+-- | Warning: `mainWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainWidgetWithHead' :: (a -> Widget () b, b -> Widget () a) -> JSM ()
+mainWidgetWithHead' (h, b) = runImmediateWidgetWithHeadAndBody $ \appendHead appendBody -> do
+  rec hOut <- appendHead $ h bOut
+      bOut <- appendBody $ b hOut
+  pure ()
 
 replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
 replaceElementContents e df = do
@@ -256,8 +265,7 @@ attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> J
 attachWidget' rootElement jsSing w = do
   doc <- getOwnerDocumentUnchecked rootElement
   df <- createDocumentFragment doc
-  hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
-  ((a, events), fc) <- liftIO . attachWidget'' $ \events -> do
+  ((a, events), fc) <- liftIO . attachImmediateWidget $ \hydrationMode events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     unreadyChildren <- liftIO $ newIORef 0
     delayed <- liftIO $ newIORef $ pure ()
@@ -278,12 +286,18 @@ attachWidget' rootElement jsSing w = do
 
 type EventChannel = Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
 
-{-# INLINABLE attachWidget'' #-}
-attachWidget'' :: (EventChannel -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))) -> IO (a, FireCommand DomTimeline DomHost)
-attachWidget'' w = do
+{-# INLINABLE attachImmediateWidget #-}
+attachImmediateWidget
+  :: (   IORef HydrationMode
+      -> EventChannel
+      -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
+     )
+  -> IO (a, FireCommand DomTimeline DomHost)
+attachImmediateWidget w = do
+  hydrationMode <- liftIO $ newIORef HydrationMode_Immediate
   events <- newChan
   runDomHost $ do
-    ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w events
+    ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w hydrationMode events
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
     return (result, fc)
@@ -325,3 +339,8 @@ runApp' app = withJSContextSingleton $ \jsSing -> do
           { _appInput_window = w
           }
   return ()
+
+{-# DEPRECATED attachWidget'' "Use 'attachImmediateWidget . const' instead" #-}
+{-# INLINABLE attachWidget'' #-}
+attachWidget'' :: (EventChannel -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))) -> IO (a, FireCommand DomTimeline DomHost)
+attachWidget'' = attachImmediateWidget . const
