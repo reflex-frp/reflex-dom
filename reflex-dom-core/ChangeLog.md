@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## 0.5.2
+
+* Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
+
 ## 0.5.1
 
 * Added support for marking elements with a "data-skip-hydration" attribute, which will cause hydration to ignore and skip over them.
