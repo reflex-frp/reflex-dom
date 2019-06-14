@@ -6,6 +6,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -35,7 +36,6 @@ import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
 import Data.Maybe
-import Data.Monoid
 import Data.Proxy
 import Data.Text (Text)
 import Language.Javascript.JSaddle (syncPoint, liftJSM)
@@ -54,6 +54,7 @@ import System.IO.Temp
 import System.Process
 import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
 import qualified Test.Hspec as H
+import qualified Test.Hspec.Core.Spec as H
 import Test.Hspec (xit)
 import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
@@ -116,17 +117,6 @@ deriveGEq ''DKey
 deriveGCompare ''DKey
 deriveGShow ''DKey
 
-instance ShowTag DKey Identity where
-  showTaggedPrec = \case
-    Key_Int -> showsPrec
-    Key_Char -> showsPrec
-    Key_Bool -> showsPrec
-
-instance EqTag DKey Identity where
-  eqTagged Key_Int Key_Int = (==)
-  eqTagged Key_Char Key_Char = (==)
-  eqTagged Key_Bool Key_Bool = (==)
-
 main :: IO ()
 main = do
   unshareNetork
@@ -135,7 +125,7 @@ main = do
     withSeleniumServer $ \selenium -> do
       browserPath <- liftIO $ T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
       when (T.null browserPath) $ fail "No browser found"
-      withDebugging <- isJust <$> lookupEnv "DEBUG"
+      withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
       let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
       hspec (tests withDebugging wdConfig [chromeCaps'] selenium) `finally` _selenium_stopServer selenium
@@ -805,7 +795,7 @@ tests withDebugging wdConfig caps _selenium = do
           , el "span" . text <$> replace
           ]
     it "can be nested in postBuild widget" $ runWD $ do
-      replaceChan <- liftIO newChan
+      replaceChan :: Chan Text <- liftIO newChan
       let setup = findElemWithRetry $ WD.ByTag "div"
           check ssr = do
             -- Check that the original element still exists and has the correct text
@@ -1146,6 +1136,9 @@ tests withDebugging wdConfig caps _selenium = do
           xs <- WD.findElems (WD.ByTag "li")
           checkInitialItems dm xs
           pure xs
+        moveSpec
+          :: (DMap Key2 Identity -> (WD.Element -> Chan (PatchDMapWithMove Key2 Identity) -> WD ()) -> WD ())
+          -> H.SpecM (WdTestSession ()) ()
         moveSpec testMove = do
           it "can insert an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
             shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
@@ -1185,7 +1178,7 @@ tests withDebugging wdConfig caps _selenium = do
     describe "hydration/immediate" $ moveSpec $ \initMap test -> do
       chan <- liftIO newChan
       replace <- liftIO newChan
-      lock <- liftIO newEmptyMVar
+      lock :: MVar () <- liftIO newEmptyMVar
       let check = do
             liftIO $ do
               writeChan replace ()
@@ -1410,12 +1403,3 @@ deriveGEq ''Key2
 deriveGCompare ''Key2
 deriveGShow ''Key2
 deriveArgDict ''Key2
-
-instance ShowTag Key2 Identity where
-  showTaggedPrec = \case
-    Key2_Int _ -> showsPrec
-    Key2_Char _ -> showsPrec
-
-instance EqTag Key2 Identity where
-  eqTagged (Key2_Int _) (Key2_Int _) = (==)
-  eqTagged (Key2_Char _) (Key2_Char _) = (==)

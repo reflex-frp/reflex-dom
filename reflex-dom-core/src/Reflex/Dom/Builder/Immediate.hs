@@ -347,7 +347,7 @@ runDomRenderHookT (DomRenderHookT a) events = do
   flip runTriggerEventT events $ do
     rec (result, req) <- runRequesterT a rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
-          traverseRequesterData (\r -> Identity <$> r) rm
+          traverseRequesterData (fmap Identity) rm
     return result
   where
     runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
@@ -362,7 +362,7 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (DomRenderHookT t m) where
   withRenderHook hook (DomRenderHookT a) = do
     DomRenderHookT $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT a $ runIdentity <$> rsp
-      return (ffor req $ \rm -> hook $ traverseRequesterData (\r -> Identity <$> r) rm, x)
+      return (ffor req $ \rm -> hook $ traverseRequesterData (fmap Identity) rm, x)
   requestDomAction = DomRenderHookT . requestingIdentity
   requestDomAction_ = DomRenderHookT . requesting_
 
@@ -1555,13 +1555,13 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
                   readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
                     ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
                     ChildReadyState_Unready _ -> do
-                      writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ This k
+                      writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
                       return $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState immediate)
                 PatchDMapWithMove.From_Delete -> return PatchDMapWithMove.From_Delete
                 PatchDMapWithMove.From_Move fromKey -> return $ PatchDMapWithMove.From_Move fromKey
               deleteOrMove :: forall a. k a -> Product (Constant (IORef (ChildReadyState (Some k)))) (ComposeMaybe k) a -> IO (Constant () a)
               deleteOrMove _ (Pair (Constant sRef) (ComposeMaybe mToKey)) = do
-                writeIORef sRef $ ChildReadyState_Unready $ This <$> mToKey -- This will be Nothing if deleting, and Just if moving, so it works out in both cases
+                writeIORef sRef $ ChildReadyState_Unready $ Some <$> mToKey -- This will be Nothing if deleting, and Just if moving, so it works out in both cases
                 return $ Constant ()
           p' <- fmap unsafePatchDMapWithMove $ DMap.traverseWithKey new $ unPatchDMapWithMove p
           _ <- DMap.traverseWithKey deleteOrMove $ PatchDMapWithMove.getDeletionsAndMoves p old
@@ -1571,8 +1571,8 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
       phsBefore <- liftIO $ readIORef placeholders
       let collectIfMoved :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> JSM (Constant (Maybe DOM.DocumentFragment) a)
           collectIfMoved k e = do
-            let mThisPlaceholder = Map.lookup (This k) phsBefore -- Will be Nothing if this element wasn't present before
-                nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (This k) phsBefore
+            let mThisPlaceholder = Map.lookup (Some k) phsBefore -- Will be Nothing if this element wasn't present before
+                nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phsBefore
             case isJust $ getComposeMaybe $ PatchDMapWithMove._nodeInfo_to e of
               False -> do
                 mapM_ (`deleteUpTo` nextPlaceholder) mThisPlaceholder
@@ -1591,7 +1591,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
             PatchMapWithMove.From_Move k -> Just $ PatchMapWithMove.From_Move k
       let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> JSM (Constant () a)
           placeFragment k e = do
-            let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (This k) phsAfter
+            let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phsAfter
             case PatchDMapWithMove._nodeInfo_from e of
               PatchDMapWithMove.From_Insert (Compose (TraverseChild x _)) -> case x of
                 Left _ -> pure ()
@@ -1622,7 +1622,7 @@ traverseDMapWithKeyWithAdjust' = do
                 readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
                   ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
                   ChildReadyState_Unready _ -> do
-                    writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ This k
+                    writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
                     return $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
             delete _ (Constant sRef) = do
               writeIORef sRef $ ChildReadyState_Unready Nothing
@@ -1633,9 +1633,9 @@ traverseDMapWithKeyWithAdjust' = do
   hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness $ \placeholders lastPlaceholder (PatchDMap patch) -> do
     phs <- liftIO $ readIORef placeholders
     forM_ (DMap.toList patch) $ \(k :=> ComposeMaybe mv) -> do
-      let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (This k) phs
+      let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phs
       -- Delete old node
-      forM_ (Map.lookup (This k) phs) $ \thisPlaceholder -> do
+      forM_ (Map.lookup (Some k) phs) $ \thisPlaceholder -> do
         thisPlaceholder `deleteUpTo` nextPlaceholder
       -- Insert new node
       forM_ mv $ \(Compose (TraverseChild e _)) -> case e of
@@ -1785,7 +1785,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
             liftIO $ writeIORef childReadyState ChildReadyState_Ready
             case countedAt of
               Nothing -> return ()
-              Just (This k) -> do -- This child has been counted as unready, so we need to remove it from the unready set
+              Just (Some k) -> do -- This child has been counted as unready, so we need to remove it from the unready set
                 (oldUnready, p) <- liftIO $ readIORef pendingChange
                 when (not $ DMap.null oldUnready) $ do -- This shouldn't actually ever be null
                   let newUnready = DMap.delete k oldUnready
@@ -1800,7 +1800,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
           readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
             ChildReadyState_Ready -> return Nothing
             ChildReadyState_Unready _ -> do
-              writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ This k
+              writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
               return $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
   initialUnready <- liftIO $ DMap.mapMaybeWithKey (\_ -> getComposeMaybe) <$> DMap.traverseWithKey processChild children0
   liftIO $ if DMap.null initialUnready

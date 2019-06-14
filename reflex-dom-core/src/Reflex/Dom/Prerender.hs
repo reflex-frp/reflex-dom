@@ -1,17 +1,18 @@
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 -- | Render the first widget on the server, and the second on the client.
 module Reflex.Dom.Prerender
@@ -21,12 +22,13 @@ module Reflex.Dom.Prerender
        , PrerenderBaseConstraints
        ) where
 
-import Control.Monad.Primitive (PrimMonad)
+import Control.Monad.Primitive (PrimMonad(..))
 import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..))
 import Data.IORef (IORef, newIORef)
 import Data.Semigroup (Semigroup)
 import Data.Text (Text)
+import Data.Void
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
@@ -35,7 +37,6 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
-import Reflex.Requester.Base
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
@@ -49,7 +50,6 @@ type PrerenderClientConstraint js t m =
   , DomRenderHook t m
   , HasDocument m
   , TriggerEvent t m
-  , Prerender js t m
   , PrerenderBaseConstraints js t m
   )
 
@@ -77,16 +77,16 @@ type PrerenderBaseConstraints js t m =
 -- hydration builder will run *both* widgets.
 prerender_
   :: (Functor m, Reflex t, Prerender js t m)
-  => m () -> ((PrerenderClientConstraint js t (Client m)) => Client m ()) -> m ()
+  => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
-class Prerender js t m | m -> t js where
+class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, Prerender js t (Client m)) => Prerender js t m | m -> t js where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
   -- | Render the first widget on the server, and the second on the client. The
   -- hydration builder will run *both* widgets, updating the result dynamic at
   -- switchover time.
-  prerender :: m a -> ((PrerenderClientConstraint js t (Client m)) => Client m a) -> m (Dynamic t a)
+  prerender :: m a -> Client m a -> m (Dynamic t a)
 
 instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints js t m) => Prerender js t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
@@ -131,10 +131,106 @@ instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prer
         insertBefore df =<< deleteToPrerenderEnd doc
     holdDyn a0 a'
 
-data NoJavaScript -- This type should never have a HasJS instance
+newtype UnrunnableT js t m a = UnrunnableT (ReaderT Void m a)
+  deriving (Functor, Applicative, Monad, MonadTrans)
 
-instance (js ~ NoJavaScript, SupportsStaticDomBuilder t m) => Prerender js t (StaticDomBuilderT t m) where
-  type Client (StaticDomBuilderT t m) = HydrationDomBuilderT GhcjsDomSpace t m
+unrunnable :: UnrunnableT js t m a
+unrunnable = UnrunnableT $ ReaderT $ \case {}
+
+instance (Reflex t, Monad m) => DomBuilder t (UnrunnableT js t m) where
+  type DomBuilderSpace (UnrunnableT js t m) = GhcjsDomSpace
+  textNode _ = unrunnable
+  commentNode _ = unrunnable
+  element _ _ _ = unrunnable
+  inputElement _ = unrunnable
+  textAreaElement _ = unrunnable
+  selectElement _ _ = unrunnable
+  placeRawElement _ = unrunnable
+  wrapRawElement _ _ = unrunnable
+instance (Reflex t, Monad m) => NotReady t (UnrunnableT js t m) where
+  notReadyUntil _ = unrunnable
+  notReady = unrunnable
+instance (Reflex t, Monad m) => Adjustable t (UnrunnableT js t m) where
+  runWithReplace _ _ = unrunnable
+  traverseIntMapWithKeyWithAdjust _ _ _ = unrunnable
+  traverseDMapWithKeyWithAdjust _ _ _ = unrunnable
+  traverseDMapWithKeyWithAdjustWithMove _ _ _ = unrunnable
+instance (Reflex t, Monad m) => PerformEvent t (UnrunnableT js t m) where
+  type Performable (UnrunnableT js t m) = UnrunnableT js t m
+  performEvent _ = unrunnable
+  performEvent_ _ = unrunnable
+instance Monad m => MonadRef (UnrunnableT js t m) where
+  type Ref (UnrunnableT js t m) = Ref IO
+  newRef _ = unrunnable
+  readRef _ = unrunnable
+  writeRef _ _ = unrunnable
+instance Monad m => HasDocument (UnrunnableT js t m) where
+  askDocument = unrunnable
+instance Monad m => HasJSContext (UnrunnableT js t m) where
+  type JSContextPhantom (UnrunnableT js t m) = ()
+  askJSContext = unrunnable
+instance Monad m => HasJS JS' (UnrunnableT js t m) where
+  type JSX (UnrunnableT js t m) = UnrunnableT js t m
+  liftJS _ = unrunnable
+instance Monad m => MonadJS JS' (UnrunnableT js t m) where
+  runJS _ _ = unrunnable
+  forkJS _ = unrunnable
+  mkJSUndefined = unrunnable
+  isJSNull _ = unrunnable
+  isJSUndefined _ = unrunnable
+  fromJSBool _ = unrunnable
+  fromJSString _ = unrunnable
+  fromJSArray _ = unrunnable
+  fromJSUint8Array _ = unrunnable
+  fromJSNumber _ = unrunnable
+  withJSBool _ _ = unrunnable
+  withJSString _ _ = unrunnable
+  withJSNumber _ _ = unrunnable
+  withJSArray _ _ = unrunnable
+  withJSUint8Array _ _ = unrunnable
+  mkJSFun _ = unrunnable
+  freeJSFun _ = unrunnable
+  setJSProp _ _ _ = unrunnable
+  getJSProp _ _ = unrunnable
+  withJSNode _ _ = unrunnable
+instance Monad m => TriggerEvent t (UnrunnableT js t m) where
+  newTriggerEvent = unrunnable
+  newTriggerEventWithOnComplete = unrunnable
+  newEventWithLazyTriggerWithOnComplete _ = unrunnable
+instance Monad m => MonadReflexCreateTrigger t (UnrunnableT js t m) where
+  newEventWithTrigger _ = unrunnable
+  newFanEventWithTrigger _ = unrunnable
+instance Monad m => MonadFix (UnrunnableT js t m) where
+  mfix _ = unrunnable
+instance Monad m => MonadHold t (UnrunnableT js t m) where
+  hold _ _ = unrunnable
+  holdDyn _ _ = unrunnable
+  holdIncremental _ _ = unrunnable
+  buildDynamic _ _ = unrunnable
+  headE _ = unrunnable
+instance Monad m => MonadSample t (UnrunnableT js t m) where
+  sample _ = unrunnable
+instance Monad m => MonadIO (UnrunnableT js t m) where
+  liftIO _ = unrunnable
+#ifndef ghcjs_HOST_OS
+instance Monad m => MonadJSM (UnrunnableT js t m) where
+  liftJSM' _ = unrunnable
+#endif
+instance (Reflex t, Monad m) => PostBuild t (UnrunnableT js t m) where
+  getPostBuild = unrunnable
+instance Monad m => PrimMonad (UnrunnableT js t m) where
+  type PrimState (UnrunnableT js t m) = PrimState IO
+  primitive _ = unrunnable
+instance (Reflex t, Monad m) => DomRenderHook t (UnrunnableT js t m) where
+  withRenderHook _ _ = unrunnable
+  requestDomAction _ = unrunnable
+  requestDomAction_ _ = unrunnable
+instance (Reflex t, Monad m) => Prerender JS' t (UnrunnableT js t m) where
+  type Client (UnrunnableT js t m) = UnrunnableT js t m
+  prerender _ _ = unrunnable
+
+instance (SupportsStaticDomBuilder t m) => Prerender JS' t (StaticDomBuilderT t m) where
+  type Client (StaticDomBuilderT t m) = UnrunnableT JS' t m
   prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
     a <- server

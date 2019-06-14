@@ -42,7 +42,7 @@ flag profile-reflex
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 1.4,
+    aeson >= 0.8 && < 1.5,
     base >= 4.7 && < 4.12,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
@@ -50,11 +50,11 @@ library
     bytestring == 0.10.*,
     containers == 0.5.*,
     constraints >= 0.9 && < 0.11,
-    contravariant >= 1.4 && < 1.5,
+    contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
-    dependent-map == 0.2.*,
-    dependent-sum >= 0.3 && < 0.5,
-    dependent-sum-template >= 0.0.0.4 && < 0.1,
+    dependent-map >= 0.2 && < 0.4,
+    dependent-sum >= 0.3 && < 0.7,
+    dependent-sum-template >= 0.0.0.4 && < 0.2,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
@@ -133,8 +133,8 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.3 && < 0.5,
-      dependent-sum-template >= 0.0.0.5 && < 0.1,
+      dependent-sum >= 0.3 && < 0.7,
+      dependent-sum-template >= 0.0.0.5 && < 0.2,
       template-haskell
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
@@ -166,6 +166,7 @@ test-suite hydration
                , filepath
                , ghcjs-dom
                , hspec
+               , hspec-core
                , hspec-webdriver
                , http-types
                , HUnit
