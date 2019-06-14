@@ -1399,28 +1399,7 @@ data Key2 a where
   Key2_Int :: Int -> Key2 Int
   Key2_Char :: Char -> Key2 Char
 
-
-instance ShowTag DKey Identity where
-  showTaggedPrec = \case
-    Key_Int -> showsPrec
-    Key_Char -> showsPrec
-    Key_Bool -> showsPrec
-
-instance EqTag DKey Identity where
-  eqTagged Key_Int Key_Int = (==)
-  eqTagged Key_Char Key_Char = (==)
-  eqTagged Key_Bool Key_Bool = (==)
-
 deriveGEq ''Key2
 deriveGCompare ''Key2
 deriveGShow ''Key2
 deriveArgDict ''Key2
-
-instance ShowTag Key2 Identity where
-  showTaggedPrec = \case
-    Key2_Int _ -> showsPrec
-    Key2_Char _ -> showsPrec
-
-instance EqTag Key2 Identity where
-  eqTagged (Key2_Int _) (Key2_Int _) = (==)
-  eqTagged (Key2_Char _) (Key2_Char _) = (==)

@@ -25,7 +25,7 @@ let addGcTestDepends = drv: if (stdenv.system != "x86_64-linux" || stdenv.hostPl
     };
 in mkDerivation (addGcTestDepends {
   pname = "reflex-dom-core";
-  version = "0.5.1";
+  version = "0.5.2";
   src = ./.;
   libraryHaskellDepends = [
     aeson base bifunctors bimap blaze-builder bytestring constraints
