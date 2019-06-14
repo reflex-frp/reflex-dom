@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.5.1
 
 * Added support for marking elements with a "data-skip-hydration" attribute, which will cause hydration to ignore and skip over them.
 * Removed "data-ssr" attributes from statically rendered output.:q
