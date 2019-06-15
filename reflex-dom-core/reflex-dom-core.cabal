@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.5
+Version: 0.5.2.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -52,9 +52,9 @@ library
     constraints >= 0.9 && < 0.11,
     contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
-    dependent-map >= 0.2 && < 0.4,
-    dependent-sum >= 0.3 && < 0.7,
-    dependent-sum-template >= 0.0.0.4 && < 0.2,
+    dependent-map >= 0.3 && < 0.4,
+    dependent-sum >= 0.6 && < 0.7,
+    dependent-sum-template >= 0.1 && < 0.2,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
@@ -67,7 +67,7 @@ library
     primitive >= 0.5 && < 0.7,
     random,
     ref-tf == 0.4.*,
-    reflex == 0.6.*,
+    reflex >= 0.6.2,
     semigroups >= 0.16 && < 0.19,
     stm == 2.4.*,
     text == 1.2.*,
@@ -133,8 +133,8 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.3 && < 0.7,
-      dependent-sum-template >= 0.0.0.5 && < 0.2,
+      dependent-sum >= 0.6,
+      dependent-sum-template >= 0.1 && < 0.2,
       template-haskell
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
@@ -142,7 +142,7 @@ library
       Reflex.Dom.Builder.Class.TH
   else
     build-depends:
-      dependent-sum == 0.4.*
+      dependent-sum == 0.6.*
 
 test-suite hlint
   build-depends: base, hlint
