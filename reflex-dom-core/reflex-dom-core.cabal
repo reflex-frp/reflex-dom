@@ -95,6 +95,7 @@ library
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
     Reflex.Dom.Builder.Static
+    Reflex.Dom.Builder.Template
     Reflex.Dom.Class
     Reflex.Dom.Core
     Reflex.Dom.Location
