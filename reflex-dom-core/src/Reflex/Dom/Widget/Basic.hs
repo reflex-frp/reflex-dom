@@ -137,6 +137,7 @@ dynComment t = do
 display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
 display = dynText . fmap (T.pack . show)
 
+{-# DEPRECATED button "Use 'elAttr'' in combination with 'domEvent' instead" #-}
 button :: DomBuilder t m => Text -> m (Event t ())
 button t = do
   (e, _) <- element "button" def $ text t
@@ -290,23 +291,25 @@ elDynHtmlAttr' elementTag attrs html = do
   wrapElement defaultDomEventHandler e
 -}
 
+{-# DEPRECATED Link "Will be removed when 'linkClass' and 'link' are removed" #-}
 newtype Link t
   = Link { _link_clicked :: Event t ()
          }
 
--- | >>> linkClass "Click here" "link-class"
--- > <a class="link-class">Click here</a>
+{-# DEPRECATED linkClass "Use 'elAttr'' in combination with 'domEvent' for just clicks. Use 'routeLink' for Obelisk navigation" #-}
 linkClass :: DomBuilder t m => Text -> Text -> m (Link t)
 linkClass s c = do
   (l,_) <- elAttr' "a" ("class" =: c) $ text s
   return $ Link $ domEvent Click l
 
+{-# DEPRECATED link "Use 'elAttr'' in combination with 'domEvent' for just clicks. Use 'routeLink' for Obelisk navigation" #-}
 link :: DomBuilder t m => Text -> m (Link t)
 link s = linkClass s ""
 
 divClass :: forall t m a. DomBuilder t m => Text -> m a -> m a
 divClass = elClass "div"
 
+{-# DEPRECATED dtdd "Use an application specific widget generating function" #-}
 dtdd :: forall t m a. DomBuilder t m => Text -> m a -> m a
 dtdd h w = do
   el "dt" $ text h
@@ -315,7 +318,9 @@ dtdd h w = do
 blank :: forall m. Monad m => m ()
 blank = return ()
 
+-- TODO: Move to an example project.
 -- | A widget to display a table with static columns and dynamic rows.
+{-# DEPRECATED tableDynAttr "Use an application specific widget generating function" #-}
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
   => Text                                   -- ^ Class applied to <table> element
   -> [(Text, k -> Dynamic t r -> m v)]      -- ^ Columns of (header, row key -> row value -> child widget)
@@ -331,9 +336,11 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
+-- TODO: Move to an example project.
 -- | A widget to construct a tabbed view that shows only one of its child widgets at a time.
 --   Creates a header bar containing a <ul> with one <li> per child; clicking a <li> displays
 --   the corresponding child and hides all others.
+{-# DEPRECATED tabDisplay "Use an application specific widget generating function" #-}
 tabDisplay :: forall t m k. (MonadFix m, DomBuilder t m, MonadHold t m, PostBuild t m, Ord k)
   => Text               -- ^ Class applied to <ul> element
   -> Text               -- ^ Class applied to currently active <li> element
