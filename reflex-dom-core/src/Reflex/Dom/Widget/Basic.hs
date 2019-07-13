@@ -144,7 +144,7 @@ button t = do
 
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
---   The returned Event of widget results occurs when the Dynamic does.
+--   The returned Event of widget results occurs at post-build time and when the Dynamic does.
 --   Note:  Often, the type @a@ is an 'Event', in which case the return value is an Event-of-Events that would typically be flattened (via 'switchHold').
 dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn = networkView
