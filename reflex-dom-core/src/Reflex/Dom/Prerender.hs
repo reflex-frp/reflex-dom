@@ -270,8 +270,8 @@ instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT 
           (x, e) <- runRequesterT w (selectInt fannedResponses selector)
           pure (x, fmapCheap (IntMap.singleton selector) e)
     (result, requestsDyn) <- fmap splitDynPure $ lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
-    responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switch $ current requestsDyn
-    pure result
+    responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switchPromptlyDyn requestsDyn
+    return result
 
 instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender js t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
