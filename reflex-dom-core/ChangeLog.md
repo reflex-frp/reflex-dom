@@ -1,5 +1,10 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Reintroduce "data-ssr": elements without this attribute are skipped during
+  hydration.
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
