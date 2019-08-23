@@ -39,6 +39,11 @@ flag profile-reflex
   default: False
   manual: True
 
+flag split-these
+  description: Use split these/semialign packages
+  manual:      False
+  default:     True
+
 library
   hs-source-dirs: src
   build-depends:
@@ -71,7 +76,6 @@ library
     semigroups >= 0.16 && < 0.19,
     stm == 2.5.*,
     text == 1.2.*,
-    these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,
     network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
@@ -85,6 +89,14 @@ library
     hs-source-dirs: src-ghc
     if !os(windows)
       build-depends: unix == 2.7.*
+
+  if flag(split-these)
+    build-depends:
+      semialign >= 1 && < 1.1,
+      these >= 1 && < 1.1
+  else
+    build-depends:
+      these >= 0.4 && < 0.9
 
   exposed-modules:
     Foreign.JavaScript.TH
