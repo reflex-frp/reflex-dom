@@ -1200,7 +1200,9 @@ tests withDebugging wdConfig caps _selenium = do
       let static = do
             checkBodyText "before\ninner\nafter"
             -- Two <p> tags should be present
-            [p1, p2] <- WD.findElems (WD.ByTag "p")
+            (p1, p2) <- WD.findElems (WD.ByTag "p") >>= \case
+              [p1, p2] -> pure (p1, p2)
+              _ -> error "Unexpected number of `p` tags (expected 2)"
             ol <- findElemWithRetry (WD.ByTag "ol")
             shouldContainText "before" p1
             shouldContainText "inner" ol
