@@ -41,14 +41,9 @@ flag build-examples
   default: False
   manual: True
 
-flag android
-  description: Build an Android app
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
-  if flag(android)
+  if os(android)
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
@@ -83,7 +78,7 @@ library
           build-depends:
             jsaddle-webkit2gtk
         else
-          if !flag(android)
+          if !os(android)
             build-depends:
               jsaddle-webkit2gtk
 

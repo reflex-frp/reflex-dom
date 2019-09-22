@@ -27,9 +27,7 @@ in mkDerivation {
   ] else [
     ghcBackendPackage
   ]);
-  configureFlags = if isAndroid then [
-    "-fandroid"
-  ] else if ghcBackend == "warp" then [
+  configureFlags = if ghcBackend == "warp" then [
     "-fuse-warp"
   ] else [
   ];
