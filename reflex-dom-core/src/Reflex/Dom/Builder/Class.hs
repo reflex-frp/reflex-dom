@@ -43,6 +43,7 @@ import Reflex.PostBuild.Base
 import Reflex.Query.Base
 import Reflex.Query.Class
 import Reflex.Requester.Base
+import Reflex.Requester.Base.Internal
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -577,24 +578,25 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
+instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterInternalT s t request response m) where
+  type DomBuilderSpace (RequesterInternalT s t request response m) = DomBuilderSpace m
+  textNode = liftTextNode
+  commentNode = liftCommentNode
+  element elementTag cfg (RequesterInternalT child) = RequesterInternalT $ element elementTag cfg child
+  inputElement = lift . inputElement
+  textAreaElement = lift . textAreaElement
+  selectElement cfg (RequesterInternalT child) = RequesterInternalT $ selectElement cfg child
+  placeRawElement = lift . placeRawElement
+  wrapRawElement e = lift . wrapRawElement e
+
 instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT t request response m) where
   type DomBuilderSpace (RequesterT t request response m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
-  element elementTag cfg (RequesterT child) = RequesterT $ do
-    r <- ask
-    old <- get
-    (el, (a, new)) <- lift $ lift $ element elementTag cfg $ runReaderT (runStateT child old) r
-    put new
-    return (el, a)
+  element elementTag cfg (RequesterT child) = RequesterT $ element elementTag cfg child
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
-  selectElement cfg (RequesterT child) = RequesterT $ do
-    r <- ask
-    old <- get
-    (el, (a, new)) <- lift $ lift $ selectElement cfg $ runReaderT (runStateT child old) r
-    put new
-    return (el, a)
+  selectElement cfg (RequesterT child) = RequesterT $ selectElement cfg child
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
@@ -718,9 +720,14 @@ instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
 deriving instance DomRenderHook t m => DomRenderHook t (BehaviorWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (DynamicWriterT t w m)
-deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
+deriving instance DomRenderHook t m => DomRenderHook t (RequesterInternalT s t req rsp m)
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
 deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
+
+instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m) where
+  withRenderHook f (RequesterT a) = RequesterT $ withRenderHook f a
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
 
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s

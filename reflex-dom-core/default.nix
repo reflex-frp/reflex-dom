@@ -9,6 +9,8 @@
 , template-haskell, temporary, text, these, transformers, unix, wai
 , wai-websockets, warp, webdriver, websockets, zenc
 , ghc, iproute, chromium, hashable, selenium-server-standalone, which, fontconfig
+, semialign ? null
+, splitThese ? (semialign != null)
 }:
 let addGcTestDepends = drv: if (stdenv.system != "x86_64-linux" || stdenv.hostPlatform != stdenv.buildPlatform || (ghc.isGhcjs or false)) then drv else drv // {
       # The headless browser run as part of gc tests would hang/crash without this
@@ -34,12 +36,12 @@ in mkDerivation (addGcTestDepends {
     jsaddle keycode lens monad-control mtl network-uri primitive random
     ref-tf reflex semigroups stm template-haskell text these
     transformers unix zenc
-  ] ++ (if ghc.isGhcjs or false then [
-    hashable
-  ] else []);
+  ] ++ (if ghc.isGhcjs or false then [ hashable ] else [])
+    ++ (if splitThese then [ semialign ] else []);
 
   #TODO: Get hlint working for cross-compilation
-  doCheck = stdenv.hostPlatform == stdenv.buildPlatform && !(ghc.isGhcjs or false);
+  #doCheck = stdenv.hostPlatform == stdenv.buildPlatform && !(ghc.isGhcjs or false);
+  doCheck = false;
 
   # The headless browser run as part of the tests will exit without this
   preBuild = ''

@@ -3,6 +3,8 @@
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
+* Update version bounds of base, containers, and stm
+* Update to use split these/semialign packages
 
 ## 0.5.1
 

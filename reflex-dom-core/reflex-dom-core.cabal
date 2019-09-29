@@ -39,6 +39,11 @@ flag profile-reflex
   default: False
   manual: True
 
+flag split-these
+  description: Use split these/semialign packages
+  manual:      False
+  default:     True
+
 library
   hs-source-dirs: src
   build-depends:
@@ -48,7 +53,7 @@ library
     bimap >= 0.3 && < 0.4,
     blaze-builder,
     bytestring == 0.10.*,
-    containers >= 0.5 && < 0.7,
+    containers == 0.6.*,
     constraints >= 0.9 && < 0.11,
     contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
@@ -70,9 +75,8 @@ library
     reflex >= 0.6.2,
     semialign == 1.*,
     semigroups >= 0.16 && < 0.19,
-    stm >= 2.4 && < 2.6,
+    stm == 2.5.*,
     text == 1.2.*,
-    these >= 0.4 && < 1.1,
     transformers >= 0.3 && < 0.6,
     network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
@@ -86,6 +90,14 @@ library
     hs-source-dirs: src-ghc
     if !os(windows)
       build-depends: unix == 2.7.*
+
+  if flag(split-these)
+    build-depends:
+      semialign >= 1 && < 1.1,
+      these >= 1 && < 1.1
+  else
+    build-depends:
+      these >= 0.4 && < 0.9
 
   exposed-modules:
     Foreign.JavaScript.TH
@@ -121,7 +133,7 @@ library
     Reflex.Dom.Xhr.Exception
 
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
-  ghc-prof-options: -fprof-auto
+  ghc-prof-options: -fprof-auto-calls
 
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings
@@ -191,7 +203,7 @@ test-suite hydration
                , websockets
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  ghc-prof-options: -fprof-auto-calls -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
   if !os(linux) || !arch(x86_64) || flag(profile-reflex)
@@ -210,7 +222,7 @@ test-suite gc
                , text
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  ghc-prof-options: -fprof-auto-calls -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
   if !os(linux) || !arch(x86_64)

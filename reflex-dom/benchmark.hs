@@ -33,7 +33,7 @@ import qualified GHCJS.DOM.Types as DOM
 
 --{-
 main :: IO ()
-main = mainWidget' $ do
+main = run $ mainWidget' $ do
   create1000 <- button "Create 1,000 rows"
   let row k _ = el "li" $ text $ T.pack $ show k
   el "ul" $ traverseIntMapWithKeyWithAdjust row IntMap.empty $ PatchIntMap (IntMap.fromDistinctAscList [(x, Just ()) | x <- [1 :: Int .. 1000]]) <$ create1000

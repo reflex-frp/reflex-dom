@@ -88,11 +88,11 @@ class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, 
   -- switchover time.
   prerender :: m a -> Client m a -> m (Dynamic t a)
 
-instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints js t m) => Prerender js t (HydrationDomBuilderT GhcjsDomSpace t m) where
+instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints js t m, PrimState m ~ PrimState IO, PrimMonad m) => Prerender js t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerender _ client = pure <$> client
 
-instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prerender js t (HydrationDomBuilderT HydrationDomSpace t m) where
+instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t, PrimState m ~ PrimState IO, PrimMonad m) => Prerender js t (HydrationDomBuilderT HydrationDomSpace t m) where
   -- | PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
   type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)
@@ -263,7 +263,7 @@ instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (E
 
 instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT t request response m) where
   type Client (RequesterT t request response m) = RequesterT t request response (Client m)
-  prerender server client = mdo
+  prerender server client = undefined {- mdo
     let fannedResponses = fanInt responses
         withFannedResponses :: forall m' a. Monad m' => RequesterT t request response m' a -> Int -> m' (a, Event t (IntMap (RequesterData request)))
         withFannedResponses w selector = do
@@ -271,7 +271,7 @@ instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT 
           pure (x, fmapCheap (IntMap.singleton selector) e)
     (result, requestsDyn) <- fmap splitDynPure $ lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
     responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switch $ current requestsDyn
-    pure result
+    pure result -}
 
 instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender js t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
@@ -296,7 +296,7 @@ startMarker, endMarker :: Text
 startMarker = "prerender/start"
 endMarker = "prerender/end"
 
-deleteToPrerenderEnd :: (MonadIO m, MonadJSM m, Reflex t, MonadFix m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
+deleteToPrerenderEnd :: (MonadIO m, MonadJSM m, Reflex t, MonadFix m, PrimState m ~ PrimState IO, PrimMonad m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
 deleteToPrerenderEnd doc = do
   startNode <- hydrateComment doc startMarker Nothing
   let go (n :: Int) lastNode = Node.getNextSibling lastNode >>= \case

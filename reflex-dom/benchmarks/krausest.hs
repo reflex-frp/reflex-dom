@@ -2,7 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+{-# OPTIONS_GHC -fmax-simplifier-iterations=10 -ddump-inlinings -ddump-spec -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+module Main (main) where
+
 import Control.Monad.State
 import Data.Monoid
 import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
@@ -13,6 +15,7 @@ import qualified Data.Vector as Vector
 import Reflex.Dom
 import Data.FastMutableIntMap
 import System.Random
+import qualified Data.ByteString.Char8 as BS
 
 type RNG = StdGen
 type Entropy   = Int
@@ -26,7 +29,14 @@ type TableDiff = PatchIntMap Row
 main :: IO ()
 main = do
   seed <- randomIO
-  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed)
+  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed never)
+--  showProfilingData
+  {-
+  (_, result) <- renderStatic $ do
+    postBuild <- getPostBuild
+    bodyW seed postBuild
+  BS.putStrLn result
+-}
 
 titleW :: DomBuilder t m => m ()
 titleW = text "Reflex-dom keyed"
@@ -36,8 +46,8 @@ headW = do
   el "title" titleW
   elAttr "link" ("href" =: "/css/currentStyle.css" <> "rel" =: "stylesheet") blank
 
-bodyW :: forall t m. (MonadFix m, MonadHold t m, DomBuilder t m) => Entropy -> m ()
-bodyW seed = divClass "main" $ divClass "container" $ mdo
+bodyW :: forall t m. (MonadFix m, MonadHold t m, DomBuilder t m) => Entropy -> Event t () -> m ()
+bodyW seed make10000 = divClass "main" $ divClass "container" $ mdo
   buttonEvents <- divClass "jumbotron" $ divClass "row" $ do
     divClass "col-md-6" $ el "h1" titleW
     divClass "col-md-6" $ divClass "row" $ sequence
@@ -50,7 +60,7 @@ bodyW seed = divClass "main" $ divClass "container" $ mdo
       ]
 
   let initial = Model { rng = mkStdGen seed, nextNum = 1, selection = Nothing }
-  let events = leftmost $ fmap (foldl1 sequenceSteps) rowEvents : buttonEvents
+  let events = leftmost $ (resetRows 100000 <$ make10000) : fmap (foldl1 sequenceSteps) rowEvents : buttonEvents
 
   rowEvents <- tableW dynMT
 

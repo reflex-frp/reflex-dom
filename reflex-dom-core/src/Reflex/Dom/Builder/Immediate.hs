@@ -66,7 +66,7 @@ module Reflex.Dom.Builder.Immediate
   , extractBetweenExclusive
   , deleteUpTo
   , extractUpTo
-  , SupportsHydrationDomBuilder
+--  , SupportsHydrationDomBuilder
   , collectUpTo
   , collectUpToGivenParent
   , EventTriggerRef (..)
@@ -241,9 +241,9 @@ data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
 -- continue in the vein of 'ImmediateDomBuilderT'.
 newtype HydrationDomBuilderT s t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (DomRenderHookT t m) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
-#if MIN_VERSION_base(4,9,1)
-           , MonadAsyncException
-#endif
+-- #if MIN_VERSION_base(4,9,1)
+--            , MonadAsyncException
+-- #endif
            )
 
 instance PrimMonad m => PrimMonad (HydrationDomBuilderT s t m) where
@@ -253,7 +253,7 @@ instance PrimMonad m => PrimMonad (HydrationDomBuilderT s t m) where
 instance MonadTrans (HydrationDomBuilderT s t) where
   lift = HydrationDomBuilderT . lift . lift
 
-instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT s t m) where
+instance (Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m) => DomRenderHook t (HydrationDomBuilderT s t m) where
   withRenderHook hook = HydrationDomBuilderT . mapReaderT (withRenderHook hook) . unHydrationDomBuilderT
   requestDomAction = HydrationDomBuilderT . lift . requestDomAction
   requestDomAction_ = HydrationDomBuilderT . lift . requestDomAction_
@@ -262,9 +262,9 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT s t m) 
 -- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT HydrationState (ReaderT Node (DomRenderHookT t m)) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
-#if MIN_VERSION_base(4,9,1)
-           , MonadAsyncException
-#endif
+-- #if MIN_VERSION_base(4,9,1)
+--            , MonadAsyncException
+-- #endif
            )
 
 data HydrationState = HydrationState
@@ -283,7 +283,7 @@ localRunner (HydrationRunnerT m) s parent = do
 
 {-# INLINABLE runHydrationRunnerT #-}
 runHydrationRunnerT
-  :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
+  :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m), PrimState m ~ PrimState JSM, PrimMonad m)
   => HydrationRunnerT t m a -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
 runHydrationRunnerT (HydrationRunnerT m) s parent events = flip runDomRenderHookT events $ flip runReaderT parent $ do
   (a, s') <- runStateT m (HydrationState s False)
@@ -305,7 +305,7 @@ instance MonadSample t m => MonadSample t (HydrationRunnerT t m) where
   {-# INLINABLE sample #-}
   sample = lift . sample
 
-instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationRunnerT t m) where
+instance (Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m) => DomRenderHook t (HydrationRunnerT t m) where
   withRenderHook hook = HydrationRunnerT . mapStateT (mapReaderT (withRenderHook hook)) . unHydrationRunnerT
   requestDomAction = HydrationRunnerT . lift . lift . requestDomAction
   requestDomAction_ = HydrationRunnerT . lift . lift . requestDomAction_
@@ -332,14 +332,14 @@ addHydrationStep m = do
 -- | Shared behavior for HydrationDomBuilderT and HydrationRunnerT
 newtype DomRenderHookT t m a = DomRenderHookT { unDomRenderHookT :: RequesterT t JSM Identity (TriggerEventT t m) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
-#if MIN_VERSION_base(4,9,1)
-           , MonadAsyncException
-#endif
+-- #if MIN_VERSION_base(4,9,1)
+--            , MonadAsyncException
+-- #endif
            )
 
 {-# INLINABLE runDomRenderHookT #-}
 runDomRenderHookT
-  :: (MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m), MonadRef m, Ref m ~ IORef)
+  :: (MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m), MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m)
   => DomRenderHookT t m a
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
@@ -358,7 +358,7 @@ instance MonadTrans (DomRenderHookT t) where
   {-# INLINABLE lift #-}
   lift = DomRenderHookT . lift . lift
 
-instance (Reflex t, MonadFix m) => DomRenderHook t (DomRenderHookT t m) where
+instance (Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m) => DomRenderHook t (DomRenderHookT t m) where
   withRenderHook hook (DomRenderHookT a) = do
     DomRenderHookT $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT a $ runIdentity <$> rsp
@@ -375,6 +375,8 @@ runHydrationDomBuilderT
      , MonadJSM (Performable m)
      , MonadRef m
      , Ref m ~ IORef
+     , PrimState m ~ PrimState JSM
+     , PrimMonad m
      )
   => HydrationDomBuilderT s t m a
   -> HydrationDomBuilderEnv t m
@@ -483,7 +485,7 @@ extractUpTo df s e = liftJSM $ do
   void $ call f f (df, s, e)
 #endif
 
-type SupportsHydrationDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m))
+#define SupportsHydrationDomBuilder(t, m) (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m), PrimState m ~ PrimState JSM, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
@@ -671,7 +673,7 @@ makeElement doc elementTag cfg = do
 {-# INLINE elementImmediate #-}
 elementImmediate
   :: ( RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, EventSpec s ~ GhcjsEventSpec
-     , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m )
+     , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m)
   => Text
   -> ElementConfig er t s
   -> HydrationDomBuilderT s t m a
@@ -725,7 +727,7 @@ type HydrationM = DomCoreWidget ()
 
 {-# INLINE elementInternal #-}
 elementInternal
-  :: (MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m)
+  :: (MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m)
   => Text
   -> ElementConfig er t HydrationDomSpace
   -> HydrationDomBuilderT HydrationDomSpace t m a
@@ -745,7 +747,7 @@ elementInternal elementTag cfg child = getHydrationMode >>= \case
 
 {-# INLINE hydrateElement #-}
 hydrateElement
-  :: forall er t m a. (MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m)
+  :: forall er t m a. (MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m)
   => Text
   -> ElementConfig er t HydrationDomSpace
   -> HydrationDomBuilderT HydrationDomSpace t m a
@@ -837,7 +839,7 @@ hydrateElement elementTag cfg child = do
 inputElementImmediate
   :: ( RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, EventSpec s ~ GhcjsEventSpec
      , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m
-     , MonadRef m, Ref m ~ IORef )
+     , MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m )
   => InputElementConfig er t s -> HydrationDomBuilderT s t m (InputElement er GhcjsDomSpace t)
 inputElementImmediate cfg = do
   (e@(Element eventSelector domElement), ()) <- elementImmediate "input" (_inputElementConfig_elementConfig cfg) $ return ()
@@ -890,7 +892,7 @@ inputElementImmediate cfg = do
 {-# INLINE inputElementInternal #-}
 inputElementInternal
   :: ( MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m
-     , MonadRef m, Ref m ~ IORef )
+     , MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m )
   => InputElementConfig er t HydrationDomSpace -> HydrationDomBuilderT HydrationDomSpace t m (InputElement er HydrationDomSpace t)
 inputElementInternal cfg = getHydrationMode >>= \case
   HydrationMode_Immediate -> ffor (inputElementImmediate cfg) $ \result -> result
@@ -969,7 +971,7 @@ inputElementInternal cfg = getHydrationMode >>= \case
 textAreaElementImmediate
   :: ( RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, EventSpec s ~ GhcjsEventSpec
      , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m
-     , MonadRef m, Ref m ~ IORef )
+     , MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m )
   => TextAreaElementConfig er t s -> HydrationDomBuilderT s t m (TextAreaElement er GhcjsDomSpace t)
 textAreaElementImmediate cfg = do
   (e@(Element eventSelector domElement), _) <- elementImmediate "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
@@ -999,7 +1001,7 @@ textAreaElementImmediate cfg = do
 {-# INLINE textAreaElementInternal #-}
 textAreaElementInternal
   :: ( MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m
-     , MonadRef m, Ref m ~ IORef )
+     , MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m )
     => TextAreaElementConfig er t HydrationDomSpace -> HydrationDomBuilderT HydrationDomSpace t m (TextAreaElement er HydrationDomSpace t)
 textAreaElementInternal cfg = getHydrationMode >>= \case
   HydrationMode_Immediate -> ffor (textAreaElementImmediate cfg) $ \result -> result
@@ -1052,7 +1054,7 @@ textAreaElementInternal cfg = getHydrationMode >>= \case
 {-# INLINE selectElementImmediate #-}
 selectElementImmediate
   :: ( EventSpec s ~ GhcjsEventSpec, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document
-     , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m )
+     , MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m, PrimState m ~ PrimState JSM, PrimMonad m )
   => SelectElementConfig er t s
   -> HydrationDomBuilderT s t m a
   -> HydrationDomBuilderT s t m (SelectElement er GhcjsDomSpace t, a)
@@ -1085,7 +1087,7 @@ selectElementImmediate cfg child = do
 {-# INLINE selectElementInternal #-}
 selectElementInternal
   :: ( MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m, MonadHold t m
-     , MonadRef m, Ref m ~ IORef )
+     , MonadRef m, Ref m ~ IORef, PrimState m ~ PrimState JSM, PrimMonad m )
     => SelectElementConfig er t HydrationDomSpace
     -> HydrationDomBuilderT HydrationDomSpace t m a
     -> HydrationDomBuilderT HydrationDomSpace t m (SelectElement er HydrationDomSpace t, a)
@@ -1139,7 +1141,7 @@ selectElementInternal cfg child = getHydrationMode >>= \case
 
 {-# INLINE textNodeImmediate #-}
 textNodeImmediate
-  :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m)
+  :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m)
   => TextNodeConfig t -> HydrationDomBuilderT s t m DOM.Text
 textNodeImmediate (TextNodeConfig !t mSetContents) = do
   p <- getParent
@@ -1161,7 +1163,7 @@ textNodeImmediate (TextNodeConfig !t mSetContents) = do
 
 {-# INLINE textNodeInternal #-}
 textNodeInternal
-  :: (Adjustable t m, MonadHold t m, MonadJSM m, MonadFix m, Reflex t)
+  :: (Adjustable t m, MonadHold t m, MonadJSM m, MonadFix m, Reflex t, PrimState m ~ PrimState JSM, PrimMonad m)
   => TextNodeConfig t -> HydrationDomBuilderT HydrationDomSpace t m (TextNode HydrationDomSpace t)
 textNodeInternal tc@(TextNodeConfig !t mSetContents) = do
   doc <- askDocument
@@ -1217,7 +1219,7 @@ hydrateTextNode doc t = do
 
 {-# INLINE commentNodeImmediate #-}
 commentNodeImmediate
-  :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m)
+  :: (RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, MonadJSM m, Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m)
   => CommentNodeConfig t -> HydrationDomBuilderT s t m DOM.Comment
 commentNodeImmediate (CommentNodeConfig !t mSetContents) = do
   p <- getParent
@@ -1229,7 +1231,7 @@ commentNodeImmediate (CommentNodeConfig !t mSetContents) = do
 
 {-# INLINE commentNodeInternal #-}
 commentNodeInternal
-  :: (Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadJSM m, MonadFix m, Reflex t, Adjustable t m, MonadHold t m, MonadSample t m)
+  :: (Ref m ~ IORef, MonadRef m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM (Performable m), MonadJSM m, MonadFix m, Reflex t, Adjustable t m, MonadHold t m, MonadSample t m, PrimState m ~ PrimState JSM, PrimMonad m)
   => CommentNodeConfig t -> HydrationDomBuilderT HydrationDomSpace t m (CommentNode HydrationDomSpace t)
 commentNodeInternal tc@(CommentNodeConfig t0 mSetContents) = do
   doc <- askDocument
@@ -1241,7 +1243,7 @@ commentNodeInternal tc@(CommentNodeConfig t0 mSetContents) = do
   pure $ CommentNode ()
 
 {-# INLINE hydrateComment #-}
-hydrateComment :: (MonadJSM m, Reflex t, MonadFix m) => Document -> Text -> Maybe (Event t Text) -> HydrationRunnerT t m DOM.Comment
+hydrateComment :: (MonadJSM m, Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m) => Document -> Text -> Maybe (Event t Text) -> HydrationRunnerT t m DOM.Comment
 hydrateComment doc t mSetContents = do
   parent <- askParent
   let go mLastNode = maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
@@ -1268,7 +1270,7 @@ hydrateComment doc t mSetContents = do
 -- out at hydration time, replacing them with empty text nodes.
 {-# INLINABLE skipToAndReplaceComment #-}
 skipToAndReplaceComment
-  :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
+  :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m)
   => Text
   -> IORef Text
   -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
@@ -1311,14 +1313,14 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
     pure (switchComment, textNodeRef, keyRef)
 
 {-# INLINABLE skipToReplaceStart #-}
-skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
+skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m) => HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
 skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORef "")
 
 {-# INLINABLE skipToReplaceEnd #-}
-skipToReplaceEnd :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => IORef Text -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text)
+skipToReplaceEnd :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m) => IORef Text -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text)
 skipToReplaceEnd key = fmap (\(m,e,_) -> (m,e)) $ skipToAndReplaceComment "replace-end" key
 
-instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT s t m) where
+instance SupportsHydrationDomBuilder(t, m) => NotReady t (HydrationDomBuilderT s t m) where
   notReadyUntil e = do
     eOnce <- headE e
     unreadyChildren <- askUnreadyChildren
@@ -1359,7 +1361,7 @@ instance DomSpace HydrationDomSpace where
         in DMap.alter f' en $ _ghcjsEventSpec_filters es
     }
 
-instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT HydrationDomSpace t m) where
+instance SupportsHydrationDomBuilder(t, m) => DomBuilder t (HydrationDomBuilderT HydrationDomSpace t m) where
   type DomBuilderSpace (HydrationDomBuilderT HydrationDomSpace t m) = HydrationDomSpace
   {-# INLINABLE element #-}
   element = elementInternal
@@ -1373,10 +1375,12 @@ instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT H
   textAreaElement = textAreaElementInternal
   {-# INLINABLE selectElement #-}
   selectElement = selectElementInternal
+  {-# INLINABLE placeRawElement #-}
   placeRawElement () = pure ()
+  {-# INLINABLE wrapRawElement #-}
   wrapRawElement () _cfg = pure $ Element (EventSelector $ const never) ()
 
-instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT GhcjsDomSpace t m) where
+instance SupportsHydrationDomBuilder(t, m) => DomBuilder t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type DomBuilderSpace (HydrationDomBuilderT GhcjsDomSpace t m) = GhcjsDomSpace
   {-# INLINABLE element #-}
   element = elementImmediate
@@ -1390,7 +1394,9 @@ instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT G
   textAreaElement = textAreaElementImmediate
   {-# INLINABLE selectElement #-}
   selectElement = selectElementImmediate
+  {-# INLINABLE placeRawElement #-}
   placeRawElement = append . toNode
+  {-# INLINABLE wrapRawElement #-}
   wrapRawElement e rawCfg = do
     events <- askEvents
     ctx <- askJSM
@@ -1416,7 +1422,7 @@ extractFragment fragment = do
       extractBetweenExclusive (_immediateDomFragment_document fragment) before after
       liftIO $ writeIORef (_immediateDomFragment_state fragment) FragmentState_Unmounted
 
-instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomBuilderT GhcjsDomSpace t m) where
+instance SupportsHydrationDomBuilder(t, m) => MountableDomBuilder t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type DomFragment (HydrationDomBuilderT GhcjsDomSpace t m) = ImmediateDomFragment
   buildDomFragment w = do
     df <- createDocumentFragment =<< askDocument
@@ -1440,12 +1446,16 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
 instance (Reflex t, Monad m, Adjustable t m, MonadHold t m, MonadFix m) => Adjustable t (DomRenderHookT t m) where
+  {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = DomRenderHookT $ runWithReplace (unDomRenderHookT a0) (fmapCheap unDomRenderHookT a')
+  {-# INLINABLE traverseIntMapWithKeyWithAdjust #-}
   traverseIntMapWithKeyWithAdjust f m = DomRenderHookT . traverseIntMapWithKeyWithAdjust (\k -> unDomRenderHookT . f k) m
+  {-# INLINABLE traverseDMapWithKeyWithAdjust #-}
   traverseDMapWithKeyWithAdjust f m = DomRenderHookT . traverseDMapWithKeyWithAdjust (\k -> unDomRenderHookT . f k) m
+  {-# INLINABLE traverseDMapWithKeyWithAdjustWithMove #-}
   traverseDMapWithKeyWithAdjustWithMove f m = DomRenderHookT . traverseDMapWithKeyWithAdjustWithMove (\k -> unDomRenderHookT . f k) m
 
-instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => Adjustable t (HydrationDomBuilderT s t m) where
+instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m) => Adjustable t (HydrationDomBuilderT s t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
     initialEnv <- HydrationDomBuilderT ask
@@ -1607,7 +1617,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
 
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
 traverseDMapWithKeyWithAdjust'
-  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, DMap.GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
+  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, DMap.GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m)
   => (forall a. k a -> v a -> HydrationDomBuilderT s t m (v' a))
   -> DMap k v
   -> Event t (PatchDMap k v)
@@ -1653,7 +1663,7 @@ traverseDMapWithKeyWithAdjust' = do
 
 {-# INLINABLE traverseIntMapWithKeyWithAdjust' #-}
 traverseIntMapWithKeyWithAdjust'
-  :: forall s t m v v'. (Adjustable t m, MonadJSM m, MonadFix m, PrimMonad m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
+  :: forall s t m v v'. (Adjustable t m, MonadJSM m, MonadFix m, PrimMonad m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document, PrimState m ~ PrimState JSM, PrimMonad m)
   => (IntMap.Key -> v -> HydrationDomBuilderT s t m v')
   -> IntMap v
   -> Event t (PatchIntMap v)
@@ -1739,6 +1749,8 @@ hoistTraverseWithKeyWithAdjust
   , PatchTarget (p k (Compose (TraverseChild t m (Some k)) v')) ~ DMap k (Compose (TraverseChild t m (Some k)) v')
   , Monoid (p k (Compose (TraverseChild t m (Some k)) v'))
   , RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document
+  , PrimState m ~ PrimState JSM
+  , PrimMonad m
   )
   => (forall vv vv'.
          (forall a. k a -> vv a -> DomRenderHookT t m (vv' a))
@@ -1846,6 +1858,8 @@ hoistTraverseIntMapWithKeyWithAdjust ::
   , Patch (p (HydrationRunnerT t m ()))
   , Patch (p (TraverseChild t m Int v'))
   , RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document
+  , PrimState m ~ PrimState JSM
+  , PrimMonad m
   )
   => ((IntMap.Key -> v -> DomRenderHookT t m (TraverseChild t m Int v'))
     -> IntMap v
@@ -2633,6 +2647,12 @@ wrapWindow wv _ = do
     { _window_events = events
     , _window_raw = wv
     }
+
+#ifndef ghcjs_HOST_OS
+instance PrimMonad JSM where
+  type PrimState JSM = PrimState IO
+  primitive = liftIO . primitive
+#endif
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLenses ''GhcjsEventSpec
