@@ -98,6 +98,7 @@ library
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Core
+    Reflex.Dom.EventSource
     Reflex.Dom.Location
     Reflex.Dom.Main
     Reflex.Dom.Modals.Class
@@ -115,6 +116,7 @@ library
     Reflex.Dom.Xhr.FormData
   other-modules:
     Foreign.JavaScript.Internal.Utils
+    Reflex.Dom.EventSource.Foreign
     Reflex.Dom.WebSocket.Foreign
     Reflex.Dom.Xhr.Foreign
     Reflex.Dom.Xhr.ResponseType
