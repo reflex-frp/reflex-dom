@@ -40,8 +40,7 @@ in mkDerivation (addGcTestDepends {
     ++ (if splitThese then [ semialign ] else []);
 
   #TODO: Get hlint working for cross-compilation
-  #doCheck = stdenv.hostPlatform == stdenv.buildPlatform && !(ghc.isGhcjs or false);
-  doCheck = false;
+  doCheck = stdenv.hostPlatform == stdenv.buildPlatform && !(ghc.isGhcjs or false);
 
   # The headless browser run as part of the tests will exit without this
   preBuild = ''
