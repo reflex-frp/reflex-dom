@@ -148,7 +148,7 @@ executable benchmark
   default-language: Haskell2010
 
 executable krausest
-  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector, bytestring
+  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
   ghc-options: -O2 -fspecialise-aggressively
