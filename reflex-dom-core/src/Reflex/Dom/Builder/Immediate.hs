@@ -66,7 +66,6 @@ module Reflex.Dom.Builder.Immediate
   , extractBetweenExclusive
   , deleteUpTo
   , extractUpTo
---  , SupportsHydrationDomBuilder
   , collectUpTo
   , collectUpToGivenParent
   , EventTriggerRef (..)
@@ -240,11 +239,7 @@ data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
 -- DOM takeover and sets up the events, after which point this monad will
 -- continue in the vein of 'ImmediateDomBuilderT'.
 newtype HydrationDomBuilderT s t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (DomRenderHookT t m) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
--- #if MIN_VERSION_base(4,9,1)
---            , MonadAsyncException
--- #endif
-           )
+  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException)
 
 instance PrimMonad m => PrimMonad (HydrationDomBuilderT s t m) where
   type PrimState (HydrationDomBuilderT s t m) = PrimState m
@@ -261,11 +256,7 @@ instance (Reflex t, MonadFix m, PrimState m ~ PrimState JSM, PrimMonad m) => Dom
 -- | The monad which performs the delayed actions to reuse prerendered nodes and set up events.
 -- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT HydrationState (ReaderT Node (DomRenderHookT t m)) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
--- #if MIN_VERSION_base(4,9,1)
---            , MonadAsyncException
--- #endif
-           )
+  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException)
 
 data HydrationState = HydrationState
   { _hydrationState_previousNode :: !(Maybe Node)
@@ -331,11 +322,7 @@ addHydrationStep m = do
 
 -- | Shared behavior for HydrationDomBuilderT and HydrationRunnerT
 newtype DomRenderHookT t m a = DomRenderHookT { unDomRenderHookT :: RequesterT t JSM Identity (TriggerEventT t m) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
--- #if MIN_VERSION_base(4,9,1)
---            , MonadAsyncException
--- #endif
-           )
+  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException)
 
 {-# INLINABLE runDomRenderHookT #-}
 runDomRenderHookT
