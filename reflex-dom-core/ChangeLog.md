@@ -1,5 +1,8 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+* Update to support new RequesterT implementation in reflex
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
