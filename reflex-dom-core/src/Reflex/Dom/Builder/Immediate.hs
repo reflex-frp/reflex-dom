@@ -472,6 +472,7 @@ extractUpTo df s e = liftJSM $ do
   void $ call f f (df, s, e)
 #endif
 
+--IMPORTANT: SupportsHydrationDomBuilder is a CPP macro rather than a constraint alias, because using constraint tuples seems to make performance quite a bit worse.  In particular, it results in tuples of constraints being passed around, which never get inlined, and as a result the constraints 
 #define SupportsHydrationDomBuilder(t, m) (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m), PrimState m ~ PrimState JSM, PrimMonad m)
 
 {-# INLINABLE collectUpTo #-}
