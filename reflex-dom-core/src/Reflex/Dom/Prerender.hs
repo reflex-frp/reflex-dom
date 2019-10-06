@@ -37,6 +37,7 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
+import Reflex.Requester.Base.Internal (RequesterInternalT (..))
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
@@ -261,17 +262,9 @@ instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (E
     tellEvent w
     pure a
 
-instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT t request response m) where
+instance (Prerender js t m, MonadFix m, Reflex t, PrimState (Client m) ~ PrimState m) => Prerender js t (RequesterT t request response m) where
   type Client (RequesterT t request response m) = RequesterT t request response (Client m)
-  prerender server client = undefined {- mdo
-    let fannedResponses = fanInt responses
-        withFannedResponses :: forall m' a. Monad m' => RequesterT t request response m' a -> Int -> m' (a, Event t (IntMap (RequesterData request)))
-        withFannedResponses w selector = do
-          (x, e) <- runRequesterT w (selectInt fannedResponses selector)
-          pure (x, fmapCheap (IntMap.singleton selector) e)
-    (result, requestsDyn) <- fmap splitDynPure $ lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
-    responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switch $ current requestsDyn
-    pure result -}
+  prerender (RequesterT (RequesterInternalT server)) (RequesterT (RequesterInternalT client)) = RequesterT $ RequesterInternalT $ prerender server client
 
 instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender js t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
