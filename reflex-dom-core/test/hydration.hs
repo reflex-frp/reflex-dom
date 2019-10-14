@@ -1347,7 +1347,7 @@ testWidgetDebug' withDebugging beforeJS afterSwitchover bodyWidget = do
           bodyWidget
           el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
   putStrLnDebug "rendering static"
-  ((), html) <- liftIO $ renderStatic staticApp
+  ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
   waitBeforeJS <- liftIO newEmptyMVar -- Empty until JS should be run
   waitUntilSwitchover <- liftIO newEmptyMVar -- Empty until switchover

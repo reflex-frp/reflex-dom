@@ -95,6 +95,7 @@ library
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
+    Reflex.Dom.Builder.Hydratable
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Core
