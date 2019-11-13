@@ -52,6 +52,7 @@ import System.IO (stderr)
 import System.IO.Silently
 import System.IO.Temp
 import System.Process
+import System.Which (staticWhich)
 import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
 import qualified Test.Hspec as H
 import qualified Test.Hspec.Core.Spec as H
@@ -73,6 +74,9 @@ import qualified Test.WebDriver.Capabilities as WD
 
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
+
+chromium :: FilePath
+chromium = $(staticWhich "chromium")
 
 seleniumPort, jsaddlePort :: PortNumber
 seleniumPort = 8000
@@ -123,7 +127,7 @@ main = do
   isHeadless <- (== Nothing) <$> lookupEnv "NO_HEADLESS"
   withSandboxedChromeFlags isHeadless $ \chromeFlags -> do
     withSeleniumServer $ \selenium -> do
-      browserPath <- liftIO $ T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
+      let browserPath = T.strip $ T.pack chromium
       when (T.null browserPath) $ fail "No browser found"
       withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
       let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
