@@ -33,6 +33,7 @@ import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Hydratable
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
@@ -283,8 +284,12 @@ instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, 
     return a
 
 instance (Prerender js t m, Monad m) => Prerender js t (InputDisabledT m) where
-  type Client (InputDisabledT m) = Client m
-  prerender (InputDisabledT server) client = InputDisabledT $ prerender server client
+  type Client (InputDisabledT m) = InputDisabledT (Client m)
+  prerender (InputDisabledT server) (InputDisabledT client) = InputDisabledT $ prerender server client
+
+instance (Prerender js t m, Monad m) => Prerender js t (HydratableT m) where
+  type Client (HydratableT m) = HydratableT (Client m)
+  prerender (HydratableT server) (HydratableT client) = HydratableT $ prerender server client
 
 instance (Prerender js t m, Monad m, ReflexHost t) => Prerender js t (PostBuildT t m) where
   type Client (PostBuildT t m) = PostBuildT t (Client m)

@@ -288,7 +288,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
       (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing
-      attrs0 <- foldDyn applyMap (Map.insert "data-ssr" "" $ cfg ^. initialAttributes) (cfg ^. modifyAttributes)
+      attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       selectValue <- asks _staticDomBuilderEnv_selectValue
       let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
             Just v | v == sel -> attrs <> Map.singleton "selected" ""

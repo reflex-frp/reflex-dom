@@ -1,13 +1,19 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
+* Reintroduce "data-ssr": elements without this attribute are skipped during
+  hydration.
+* Fix an issue in the hydration tests that prevented the test from finding the chromium executable
+* Relax constraints on `dyn` and `widgetHold` to match the ones in `networkView` and `networkHold` respectively
 
 ## 0.5.1
 
 * Added support for marking elements with a "data-skip-hydration" attribute, which will cause hydration to ignore and skip over them.
-* Removed "data-ssr" attributes from statically rendered output.:q
+* Removed "data-ssr" attributes from statically rendered output.
 
 ## 0.5
 

@@ -52,6 +52,7 @@ import System.IO (stderr)
 import System.IO.Silently
 import System.IO.Temp
 import System.Process
+import System.Which (staticWhich)
 import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
 import qualified Test.Hspec as H
 import qualified Test.Hspec.Core.Spec as H
@@ -73,6 +74,9 @@ import qualified Test.WebDriver.Capabilities as WD
 
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
+
+chromium :: FilePath
+chromium = $(staticWhich "chromium")
 
 seleniumPort, jsaddlePort :: PortNumber
 seleniumPort = 8000
@@ -123,7 +127,7 @@ main = do
   isHeadless <- (== Nothing) <$> lookupEnv "NO_HEADLESS"
   withSandboxedChromeFlags isHeadless $ \chromeFlags -> do
     withSeleniumServer $ \selenium -> do
-      browserPath <- liftIO $ T.strip . T.pack <$> readProcess "which" [ "chromium" ] ""
+      let browserPath = T.strip $ T.pack chromium
       when (T.null browserPath) $ fail "No browser found"
       withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
       let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
@@ -1200,7 +1204,9 @@ tests withDebugging wdConfig caps _selenium = do
       let static = do
             checkBodyText "before\ninner\nafter"
             -- Two <p> tags should be present
-            [p1, p2] <- WD.findElems (WD.ByTag "p")
+            (p1, p2) <- WD.findElems (WD.ByTag "p") >>= \case
+              [p1, p2] -> pure (p1, p2)
+              _ -> error "Unexpected number of `p` tags (expected 2)"
             ol <- findElemWithRetry (WD.ByTag "ol")
             shouldContainText "before" p1
             shouldContainText "inner" ol
@@ -1345,7 +1351,7 @@ testWidgetDebug' withDebugging beforeJS afterSwitchover bodyWidget = do
           bodyWidget
           el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
   putStrLnDebug "rendering static"
-  ((), html) <- liftIO $ renderStatic staticApp
+  ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
   waitBeforeJS <- liftIO newEmptyMVar -- Empty until JS should be run
   waitUntilSwitchover <- liftIO newEmptyMVar -- Empty until switchover
