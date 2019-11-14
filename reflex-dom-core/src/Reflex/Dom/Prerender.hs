@@ -236,7 +236,7 @@ instance (SupportsStaticDomBuilder t m) => Prerender JS' t (StaticDomBuilderT t 
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
     a <- server
     _ <- commentNode $ CommentNodeConfig endMarker Nothing
-    return $ pure a
+    pure $ pure a
 
 instance (Prerender js t m, Monad m) => Prerender js t (ReaderT r m) where
   type Client (ReaderT r m) = ReaderT r (Client m)
@@ -251,7 +251,7 @@ instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerende
     let (a, w') = splitDynPure x
         w = join w'
     tellDyn w
-    return a
+    pure a
 
 instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (EventWriterT t w m) where
   type Client (EventWriterT t w m) = EventWriterT t w (Client m)
@@ -260,7 +260,7 @@ instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (E
     let (a, w') = splitDynPure x
         w = switch $ current w'
     tellEvent w
-    return a
+    pure a
 
 instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT t request response m) where
   type Client (RequesterT t request response m) = RequesterT t request response (Client m)
@@ -281,7 +281,7 @@ instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, 
     x <- lift $ prerender (runQueryT server result) (runQueryT client result)
     let (a, inc) = splitDynPure x
         query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
-    return a
+    pure a
 
 instance (Prerender js t m, Monad m) => Prerender js t (InputDisabledT m) where
   type Client (InputDisabledT m) = InputDisabledT (Client m)
@@ -320,4 +320,4 @@ deleteToPrerenderEnd doc = do
   endNode <- go 0 $ DOM.toNode startNode
   deleteBetweenExclusive startNode endNode
   setPreviousNode $ Just $ DOM.toNode endNode
-  return endNode
+  pure endNode
