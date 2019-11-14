@@ -5,6 +5,8 @@
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
+* Update version bounds of base, containers, and stm
+* Update to use the newly split `these`/`semialign` packages. To use the pre-split `these` package, set the `split-these` flag to false.
 * Reintroduce "data-ssr": elements without this attribute are skipped during
   hydration.
 * Fix an issue in the hydration tests that prevented the test from finding the chromium executable
