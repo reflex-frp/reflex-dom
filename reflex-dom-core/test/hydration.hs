@@ -20,9 +20,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
+import Prelude hiding (fail)
 import Control.Concurrent
-import Control.Monad
+import Control.Monad hiding (fail)
 import Control.Monad.Catch
+import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Ref
@@ -60,6 +62,7 @@ import Test.Hspec (xit)
 import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
 import Test.WebDriver (WD(..))
+import Test.WebDriver.Exceptions (ServerError(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
@@ -120,6 +123,8 @@ deriveArgDict ''DKey
 deriveGEq ''DKey
 deriveGCompare ''DKey
 deriveGShow ''DKey
+
+deriving instance MonadFail WD
 
 main :: IO ()
 main = do
@@ -741,9 +746,9 @@ tests withDebugging wdConfig caps _selenium = do
           pb <- getPostBuild
           performEvent_ $ liftIO (putMVar lock ()) <$ pb
     it "result Dynamic is updated *after* switchover" $ runWD $ do
-      let static = checkBodyText "PostBuild"
+      let preSwitchover = checkBodyText "PostBuild"
           check = checkBodyText "Client"
-      testWidget static check $ void $ do
+      testWidget preSwitchover check $ void $ do
         d <- prerender (pure "Initial") (pure "Client")
         pb <- getPostBuild
         initial <- sample $ current d
@@ -751,16 +756,16 @@ tests withDebugging wdConfig caps _selenium = do
     -- This essentially checks that the client IO runs *after* switchover/postBuild,
     -- thus can't create conflicting DOM
     it "can't exploit IO to break hydration" $ runWD $ do
-      let static = checkBodyText "Initial"
-      testWidgetStatic static $ void $ do
+      let preSwitchover = checkBodyText "Initial"
+      testWidgetStatic preSwitchover $ void $ do
         ref <- liftIO $ newRef "Initial"
         prerender_ (pure ()) (liftIO $ writeRef ref "Client")
         text <=< liftIO $ readRef ref
     -- As above, so below
     it "can't exploit triggerEvent to break hydration" $ runWD $ do
-      let static = checkBodyText "Initial"
+      let preSwitchover = checkBodyText "Initial"
           check = checkBodyText "Client"
-      testWidget static check $ void $ do
+      testWidget preSwitchover check $ void $ do
         (e, trigger) <- newTriggerEvent
         prerender_ (pure ()) (liftIO $ trigger "Client")
         textNode $ TextNodeConfig "Initial" $ Just e
@@ -949,26 +954,26 @@ tests withDebugging wdConfig caps _selenium = do
         postBuildPatch = PatchDMap $ DMap.fromList [Key_Char :=> ComposeMaybe Nothing, Key_Bool :=> ComposeMaybe (Just $ Identity True)]
     it "doesn't replace elements at switchover, can delete/update/insert" $ runWD $ do
       chan <- liftIO newChan
-      let static :: WD [WD.Element]
-          static = getAndCheckInitialItems keyMap
+      let preSwitchover :: WD [WD.Element]
+          preSwitchover = getAndCheckInitialItems keyMap
           check :: [WD.Element] -> WD ()
           check xs = do
             checkInitialItems keyMap xs
             checkRemoval chan Key_Int
             checkReplace chan Key_Char 'B'
             checkInsert chan Key_Bool True
-      testWidget' static check $ do
+      testWidget' preSwitchover check $ do
         (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap =<< triggerEventWithChan chan
         liftIO $ dmap `H.shouldBe` keyMap
     it "handles postBuild correctly" $ runWD $ do
       chan <- liftIO newChan
-      let static = getAndCheckInitialItems $ applyAlways postBuildPatch keyMap
+      let preSwitchover = getAndCheckInitialItems $ applyAlways postBuildPatch keyMap
           check xs = do
             withRetry $ checkInitialItems (applyAlways postBuildPatch keyMap) xs
             checkRemoval chan Key_Int
             checkInsert chan Key_Char 'B'
             checkReplace chan Key_Bool True
-      testWidget' static check $ void $ do
+      testWidget' preSwitchover check $ void $ do
         pb <- getPostBuild
         replace <- triggerEventWithChan chan
         (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
@@ -1058,24 +1063,24 @@ tests withDebugging wdConfig caps _selenium = do
         postBuildPatch = PatchIntMap $ IntMap.fromList [(2, Nothing), (3, Just "trois"), (4, Just "four")]
     xit "doesn't replace elements at switchover, can delete/update/insert" $ runWD $ do
       chan <- liftIO newChan
-      let static = getAndCheckInitialItems intMap
+      let preSwitchover = getAndCheckInitialItems intMap
           check xs = do
             checkInitialItems intMap xs
             checkRemoval chan 1
             checkReplace chan 2 "deux"
             checkInsert chan 4 "four"
-      testWidget' static check $ void $ do
+      testWidget' preSwitchover check $ void $ do
         (im, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap =<< triggerEventWithChan chan
         liftIO $ im `H.shouldBe` intMap
     xit "handles postBuild correctly" $ runWD $ do
       chan <- liftIO newChan
-      let static = getAndCheckInitialItems $ applyAlways postBuildPatch intMap
+      let preSwitchover = getAndCheckInitialItems $ applyAlways postBuildPatch intMap
           check xs = do
             withRetry $ checkInitialItems (applyAlways postBuildPatch intMap) xs
             checkRemoval chan 1
             checkInsert chan 2 "deux"
             checkReplace chan 3 "trois"
-      testWidget' static check $ void $ do
+      testWidget' preSwitchover check $ void $ do
         pb <- getPostBuild
         replace <- triggerEventWithChan chan
         (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
@@ -1170,12 +1175,12 @@ tests withDebugging wdConfig caps _selenium = do
 
     describe "hydration" $ moveSpec $ \initMap test -> do
       chan <- liftIO newChan
-      let static = getAndCheckInitialItems initMap
+      let preSwitchover = getAndCheckInitialItems initMap
           check xs = do
             checkInitialItems initMap xs
             body <- getBody
             test body chan
-      testWidget' static check $ void $ do
+      testWidget' preSwitchover check $ void $ do
         (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
         liftIO $ assertEqual "DMap" initMap dmap
 
@@ -1201,7 +1206,7 @@ tests withDebugging wdConfig caps _selenium = do
 
   describe "hydrating invalid HTML" $ session' $ do
     it "can hydrate list in paragraph" $ runWD $ do
-      let static = do
+      let preSwitchover = do
             checkBodyText "before\ninner\nafter"
             -- Two <p> tags should be present
             (p1, p2) <- WD.findElems (WD.ByTag "p") >>= \case
@@ -1217,7 +1222,7 @@ tests withDebugging wdConfig caps _selenium = do
             shouldContainText "before\ninner\nafter" p1
             elementShouldBeRemoved ol
             elementShouldBeRemoved p2
-      testWidget' static check $ do
+      testWidget' preSwitchover check $ do
         -- This is deliberately invalid HTML, the browser will interpret it as
         -- <p>before</p><ol>inner</ol>after<p></p>
         el "p" $ do
