@@ -6,6 +6,7 @@ in {
   reflex-dom-core = haskellPackages.callPackage
     ({ temporary, jsaddle-warp, process, chrome-test-utils
      , selenium-server-standalone, which, fontconfig, chromium, pkgs
+     , ...
      }: let
       inherit (haskellPackages) ghc;
       noGcTest = stdenv.hostPlatform.system != "x86_64-linux"
