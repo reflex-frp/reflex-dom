@@ -8,6 +8,7 @@
 * Reintroduce "data-ssr": elements without this attribute are skipped during
   hydration.
 * Fix an issue in the hydration tests that prevented the test from finding the chromium executable
+* Relax constraints on `dyn` and `widgetHold` to match the ones in `networkView` and `networkHold` respectively
 
 ## 0.5.1
 
