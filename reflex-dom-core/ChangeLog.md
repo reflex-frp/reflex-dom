@@ -11,6 +11,7 @@
   hydration.
 * Fix an issue in the hydration tests that prevented the test from finding the chromium executable
 * Relax constraints on `dyn` and `widgetHold` to match the ones in `networkView` and `networkHold` respectively
+* Fix prerender for RequesterT so that it doesn't accidentally discard a request that is made at the same moment as getPostBuild's Event fires
 
 ## 0.5.1
 
