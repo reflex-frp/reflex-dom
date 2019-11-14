@@ -7,6 +7,7 @@
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
 * Reintroduce "data-ssr": elements without this attribute are skipped during
   hydration.
+* Fix an issue in the hydration tests that prevented the test from finding the chromium executable
 
 ## 0.5.1
 
