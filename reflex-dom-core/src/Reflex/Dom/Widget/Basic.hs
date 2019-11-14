@@ -60,6 +60,7 @@ module Reflex.Dom.Widget.Basic
   , partitionMapBySetLT
   ) where
 
+import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dom.Builder.Class
@@ -146,21 +147,21 @@ button t = do
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
 --   The returned Event of widget results occurs when the Dynamic does.
 --   Note:  Often, the type @a@ is an 'Event', in which case the return value is an Event-of-Events that would typically be flattened (via 'switchHold').
-dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+dyn :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn = networkView
 
 -- | Like 'dyn' but discards result.
-dyn_ :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m ()
+dyn_ :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m ()
 dyn_ = void . dyn
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened (via 'switchDyn').
-widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
+widgetHold :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold = networkHold
 
 -- | Like 'widgetHold' but discards result.
-widgetHold_ :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m ()
+widgetHold_ :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m ()
 widgetHold_ z = void . widgetHold z
 
 -- | Create a DOM element
