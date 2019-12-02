@@ -7,8 +7,8 @@ Using `element`, a low-level DOM builder function. Its second argument, `Element
 For example:
 
 ```haskell
-linkPreventDefault :: forall t m a. DomBuilder t m => m a -> m (Event t (), a)
-linkPreventDefault c = do
+link :: forall t m a. DomBuilder t m => m a -> m (Event t (), a)
+link c = do
   let cfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & elementConfig_initialAttributes .~ ("href" =: "https://reflex-frp.org")
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const preventDefault)
