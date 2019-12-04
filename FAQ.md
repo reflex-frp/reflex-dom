@@ -7,12 +7,23 @@ Using `element`, a low-level DOM builder function. Its second argument, `Element
 For example:
 
 ```haskell
-link :: forall t m a. DomBuilder t m => m a -> m (Event t (), a)
-link c = do
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
+import Control.Lens ((&), (%~), (.~))
+import Data.Proxy
+import Reflex.Dom
+
+main :: IO ()
+main = mainWidget $ do
+  (click, ()) <- linkPreventDefault $ text "reflex-frp"
+  display =<< count click
+
+linkPreventDefault :: forall t m a. DomBuilder t m => m a -> m (Event t (), a)
+linkPreventDefault c = do
   let cfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         & elementConfig_initialAttributes .~ ("href" =: "https://reflex-frp.org")
         & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const preventDefault)
-        & elementConfig_eventSpec %~ addEventSpecFlags (Proxy :: Proxy (DomBuilderSpace m)) Click (const stopPropagation)
   (link, a) <- element "a" cfg c
   return (domEvent Click link, a)
 ```
