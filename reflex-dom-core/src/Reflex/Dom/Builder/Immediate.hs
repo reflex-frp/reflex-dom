@@ -1556,23 +1556,17 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
   traverseDMapWithKeyWithAdjustWithMove = do
     let updateChildUnreadiness (p :: PatchDMapWithMove k (Compose (TraverseChild t m (Some k)) v')) old = do
           let new :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> IO (PatchDMapWithMove.NodeInfo k (Constant (IORef (ChildReadyState (Some k)))) a)
-              new k = PatchDMapWithMove.nodeInfoMapFromM $ \case
-                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Left _hydration) _)) -> return PatchDMapWithMove.From_Delete
+              new k =  PatchDMapWithMove.nodeInfoMapFromM $ \case
                 PatchDMapWithMove.From_Insert (Compose (TraverseChild (Right immediate) _)) -> do
                   readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
-                    ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
                     ChildReadyState_Unready _ -> do
                       writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
                       return $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState immediate)
-                PatchDMapWithMove.From_Delete -> return PatchDMapWithMove.From_Delete
-                PatchDMapWithMove.From_Move fromKey -> return $ PatchDMapWithMove.From_Move fromKey
-              deleteOrMove :: forall a. k a -> Product (Constant (IORef (ChildReadyState (Some k)))) (ComposeMaybe k) a -> IO (Constant () a)
-              deleteOrMove _ (Pair (Constant sRef) (ComposeMaybe mToKey)) = do
-                writeIORef sRef $ ChildReadyState_Unready $ Some <$> mToKey -- This will be Nothing if deleting, and Just if moving, so it works out in both cases
-                return $ Constant ()
+                PatchDMapWithMove.From_Move fromKey ->
+                  return $ PatchDMapWithMove.From_Move fromKey
           p' <- fmap unsafePatchDMapWithMove $ DMap.traverseWithKey new $ unPatchDMapWithMove p
-          _ <- DMap.traverseWithKey deleteOrMove $ PatchDMapWithMove.getDeletionsAndMoves p old
           return $ applyAlways p' old
+
     hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove updateChildUnreadiness $ \placeholders lastPlaceholder (p_ :: PatchDMapWithMove k (Compose (TraverseChild t m (Some k)) v')) -> do
       let p = unPatchDMapWithMove p_
       phsBefore <- liftIO $ readIORef placeholders
@@ -1592,19 +1586,16 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
           weakened = weakenPatchDMapWithMoveWith (_traverseChild_mode . getCompose) p_
           filtered :: PatchMapWithMove (Some k) DOM.Text
           filtered = PatchMapWithMove $ flip Map.mapMaybe (unPatchMapWithMove weakened) $ \(PatchMapWithMove.NodeInfo from to) -> flip PatchMapWithMove.NodeInfo to <$> case from of
-            PatchMapWithMove.From_Insert (Left _hydration) -> Nothing
-            PatchMapWithMove.From_Insert (Right immediate) -> Just $ PatchMapWithMove.From_Insert $ _traverseChildImmediate_placeholder immediate
-            PatchMapWithMove.From_Delete -> Just $ PatchMapWithMove.From_Delete
-            PatchMapWithMove.From_Move k -> Just $ PatchMapWithMove.From_Move k
+            PatchMapWithMove.From_Insert (Right immediate) ->
+              Just $ PatchMapWithMove.From_Insert $ _traverseChildImmediate_placeholder immediate
+            PatchMapWithMove.From_Move k ->
+              Just $ PatchMapWithMove.From_Move k
       let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> JSM (Constant () a)
           placeFragment k e = do
             let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phsAfter
             case PatchDMapWithMove._nodeInfo_from e of
               PatchDMapWithMove.From_Insert (Compose (TraverseChild x _)) -> case x of
-                Left _ -> pure ()
                 Right immediate -> _traverseChildImmediate_fragment immediate `insertBefore` nextPlaceholder
-              PatchDMapWithMove.From_Delete -> do
-                return ()
               PatchDMapWithMove.From_Move fromKey -> do
                 Just (Constant mdf) <- return $ DMap.lookup fromKey collected
                 mapM_ (`insertBefore` nextPlaceholder) mdf
@@ -1810,17 +1801,10 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
               writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
               return $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
   initialUnready <- liftIO $ DMap.mapMaybeWithKey (\_ -> getComposeMaybe) <$> DMap.traverseWithKey processChild children0
-  liftIO $ if DMap.null initialUnready
-    then writeIORef haveEverBeenReady True
-    else do
-      modifyIORef' parentUnreadyChildren succ
-      writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
+  liftIO $ when (not $ DMap.null initialUnready) $ do
+    modifyIORef' parentUnreadyChildren succ
+    writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
   getHydrationMode >>= \case
-    HydrationMode_Hydrating -> addHydrationStepWithSetup (holdIncremental children0 children') $ \children -> do
-      dm :: DMap k (Compose (TraverseChild t m (Some k)) v') <- sample $ currentIncremental children
-      phs <- traverse id $ weakenDMapWith (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode . getCompose) dm
-      liftIO $ writeIORef placeholders $! phs
-      insertAfterPreviousNode lastPlaceholder
     HydrationMode_Immediate -> do
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
