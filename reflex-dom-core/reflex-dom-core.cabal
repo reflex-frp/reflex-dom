@@ -39,17 +39,22 @@ flag profile-reflex
   default: False
   manual: True
 
+flag split-these
+  description: Use split these/semialign packages
+  manual:      False
+  default:     True
+
 library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 1.5,
-    base >= 4.7 && < 4.12,
+    base >= 4.7 && < 4.13,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     blaze-builder,
     bytestring == 0.10.*,
-    containers == 0.5.*,
-    constraints >= 0.9 && < 0.11,
+    containers >= 0.6 && < 0.7,
+    constraints >= 0.9 && < 0.12,
     contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
     dependent-map >= 0.3 && < 0.4,
@@ -69,9 +74,8 @@ library
     ref-tf == 0.4.*,
     reflex >= 0.6.2,
     semigroups >= 0.16 && < 0.19,
-    stm == 2.4.*,
+    stm >= 2.4 && < 2.6,
     text == 1.2.*,
-    these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,
     network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
@@ -86,6 +90,14 @@ library
     if !os(windows)
       build-depends: unix == 2.7.*
 
+  if flag(split-these)
+    build-depends:
+      semialign >= 1 && < 1.1,
+      these >= 1 && < 1.1
+  else
+    build-depends:
+      these >= 0.4 && < 0.9
+
   exposed-modules:
     Foreign.JavaScript.TH
     Foreign.JavaScript.Orphans
@@ -94,6 +106,7 @@ library
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
+    Reflex.Dom.Builder.Hydratable
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Core
@@ -188,6 +201,7 @@ test-suite hydration
                , warp
                , webdriver
                , websockets
+               , which
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto -optP-DPROFILING
