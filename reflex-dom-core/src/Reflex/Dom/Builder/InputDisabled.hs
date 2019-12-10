@@ -80,6 +80,7 @@ instance Adjustable t m => Adjustable t (InputDisabledT m) where
   runWithReplace a0 a' = InputDisabledT $ runWithReplace (coerce a0) (coerceEvent a')
   traverseDMapWithKeyWithAdjust f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjust (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
   traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = InputDisabledT $ traverseDMapWithKeyWithAdjustWithMove (\k v -> runInputDisabledT $ f k v) (coerce dm0) (coerceEvent dm')
+  traverseIntMapWithKeyWithAdjust f m0 m' = InputDisabledT $ traverseIntMapWithKeyWithAdjust (\k v -> runInputDisabledT $ f k v) (coerce m0) (coerceEvent m')
 
 instance NotReady t m => NotReady t (InputDisabledT m) where
   notReadyUntil = lift . notReadyUntil
@@ -108,3 +109,8 @@ instance HasJSContext m => HasJSContext (InputDisabledT m) where
 instance HasJS js m => HasJS js (InputDisabledT m) where
   type JSX (InputDisabledT m) = JSX m
   liftJS = lift . liftJS
+
+instance DomRenderHook t m => DomRenderHook t (InputDisabledT m) where
+  withRenderHook f = InputDisabledT . withRenderHook f . runInputDisabledT
+  requestDomAction = InputDisabledT . requestDomAction
+  requestDomAction_ = InputDisabledT . requestDomAction_

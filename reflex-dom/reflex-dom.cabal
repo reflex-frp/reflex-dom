@@ -1,5 +1,5 @@
 Name: reflex-dom
-Version: 0.5.2
+Version: 0.5.2.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
@@ -41,14 +41,9 @@ flag build-examples
   default: False
   manual: True
 
-flag android
-  description: Build an Android app
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
-  if flag(android)
+  if os(android)
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
@@ -62,7 +57,7 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.12,
+    base >= 4.7 && < 4.13,
     bytestring == 0.10.*,
     reflex >= 0.6.2,
     reflex-dom-core >=0.5.2 && <0.6,
@@ -83,7 +78,7 @@ library
           build-depends:
             jsaddle-webkit2gtk
         else
-          if !flag(android)
+          if !os(android)
             build-depends:
               jsaddle-webkit2gtk
 

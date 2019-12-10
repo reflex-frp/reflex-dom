@@ -765,10 +765,17 @@ hydrateElement elementTag cfg child = do
   result <- HydrationDomBuilderT $ lift $ runReaderT (unHydrationDomBuilderT child) env'
   wrapResult <- liftIO newEmptyMVar
   let skipAttr = "data-hydration-skip" :: DOM.JSString
-      hasSkipAttribute :: DOM.Element -> HydrationRunnerT t m Bool
-      hasSkipAttribute e = case cfg ^. namespace of
-        Nothing -> hasAttribute e skipAttr
-        Just ns -> hasAttributeNS e (Just ns) skipAttr
+      ssrAttr = "data-ssr" :: DOM.JSString
+      shouldSkip :: DOM.Element -> HydrationRunnerT t m Bool
+      shouldSkip e = case cfg ^. namespace of
+        Nothing -> do
+          skip <- hasAttribute e skipAttr
+          ssr <- hasAttribute e ssrAttr
+          pure $ skip || not ssr
+        Just ns -> do
+          skip <- hasAttributeNS e (Just ns) skipAttr
+          ssr <- hasAttributeNS e (Just ns) ssrAttr
+          pure $ skip || not ssr
   childDom <- liftIO $ readIORef childDelayedRef
   let rawCfg = extractRawElementConfig cfg
   doc <- askDocument
@@ -783,7 +790,7 @@ hydrateElement elementTag cfg child = do
             pure e
           Just node -> DOM.castTo DOM.Element node >>= \case
             Nothing -> go (Just node) -- this node is not an element, skip
-            Just e -> hasSkipAttribute e >>= \case
+            Just e -> shouldSkip e >>= \case
               True -> go (Just node) -- this element is explicitly marked for being skipped by hydration
               False -> do
                 t <- Element.getTagName e
