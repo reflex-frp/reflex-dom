@@ -1,5 +1,8 @@
 # Revision history for reflex-dom
 
+## Unreleased
+* Enables geolocation permissions for android
+
 ## 0.5.1
 
 * The default jsaddle backend on macOS when built from nix
