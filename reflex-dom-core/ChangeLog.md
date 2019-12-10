@@ -1,6 +1,14 @@
 # Revision history for reflex-dom-core
 
 ## Unreleased
+* Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
+   * `Link`
+   * `button`
+   * `dtdd`
+   * `linkClass`
+   * `link`
+   * `tabDisplay`
+   * `tableDynAttr`
 
 ## 0.5.2
 
