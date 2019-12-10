@@ -107,6 +107,7 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
     }
 
 {-# INLINE textInputGetEnter #-}
+{-# DEPRECATED textInputGetEnter "Use 'keypress Enter' instead" #-}
 textInputGetEnter :: Reflex t => TextInput t -> Event t ()
 textInputGetEnter = keypress Enter
 
