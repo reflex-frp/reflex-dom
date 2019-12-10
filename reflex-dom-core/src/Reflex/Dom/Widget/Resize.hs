@@ -33,6 +33,10 @@ import qualified GHCJS.DOM.Types as DOM
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from @github.com\/marcj\/css-element-queries@
+--
+-- This function can cause strange scrollbars to appear in some circumstances.
+-- These can be hidden with pseudo selectors, for example, in webkit browsers:
+-- .wrapper *::-webkit-scrollbar { width: 0px; background: transparent; }
 resizeDetector :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m) => m a -> m (Event t (), a)
 resizeDetector = resizeDetectorWithStyle ""
 
