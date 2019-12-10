@@ -1,7 +1,10 @@
 # Revision history for reflex-dom
 
 ## Unreleased
-* Enables geolocation permissions for android
+* On Android, enable propting the user for geolocation
+  permissions on demand by default. See
+  https://developer.android.com/reference/android/webkit/WebChromeClient.html#onGeolocationPermissionsShowPrompt(java.lang.String,%20android.webkit.GeolocationPermissions.Callback)
+  for details.
 
 ## 0.5.1
 
