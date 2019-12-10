@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
+
    * `Link`
    * `button`
    * `dtdd`
@@ -10,6 +11,13 @@
    * `link`
    * `tabDisplay`
    * `tableDynAttr`
+
+  And in `Reflex.Dom.Widget.Input`:
+
+   * `TextInput`
+   * `TextAreaConfig`
+   * `CheckboxConfig`
+   * `FileInput`
 
 ## 0.5.2
 
