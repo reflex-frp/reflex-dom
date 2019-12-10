@@ -1,6 +1,8 @@
 {-# OPTIONS_HADDOCK hide #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Foreign.JavaScript.Orphans where
 

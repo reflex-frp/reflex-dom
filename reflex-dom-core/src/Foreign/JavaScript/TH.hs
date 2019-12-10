@@ -6,11 +6,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
@@ -294,7 +292,7 @@ class Monad m => MonadJS x m | m -> x where
 #ifdef ghcjs_HOST_OS
 
 data JSCtx_IO
-type HasJS' = HasJS JSCtx_IO
+type JS' = JSCtx_IO
 
 instance MonadIO m => HasJS JSCtx_IO (WithJSContextSingleton x m) where
   type JSX (WithJSContextSingleton x m) = IO
@@ -345,7 +343,7 @@ foreign import javascript unsafe "function(){ return $1(arguments); }" funWithAr
 #else
 
 data JSCtx_JavaScriptCore x
-type HasJS' = HasJS (JSCtx_JavaScriptCore ())
+type JS' = JSCtx_JavaScriptCore ()
 
 instance IsJSContext (JSCtx_JavaScriptCore x) where
   newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSVal }

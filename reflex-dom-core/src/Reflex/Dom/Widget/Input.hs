@@ -289,7 +289,7 @@ regularToCheckboxViewEventType en r = case en of
 
 newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEventResult :: CheckboxViewEventResultType en }
 
---TODO
+-- | Create a view only checkbox
 {-# INLINABLE checkboxView #-}
 checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do

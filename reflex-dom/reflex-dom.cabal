@@ -1,7 +1,10 @@
 Name: reflex-dom
-Version: 0.4
+Version: 0.5.2.0
 Synopsis: Functional Reactive Web Apps with Reflex
-Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+Description:
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
+  .
+  For hackage documentation, please see: <https://hackage.haskell.org/package/reflex-dom-core>.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
@@ -10,7 +13,9 @@ Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
 cabal-version: >=1.24
-extra-source-files: java/org/reflexfrp/reflexdom/MainWidget.java
+extra-source-files:
+  java/org/reflexfrp/reflexdom/MainWidget.java
+  ChangeLog.md
 
 flag use-warp
   description: Use jsaddle-warp server
@@ -36,14 +41,9 @@ flag build-examples
   default: False
   manual: True
 
-flag android
-  description: Build an Android app
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
-  if flag(android)
+  if os(android)
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
@@ -57,28 +57,28 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.12,
+    base >= 4.7 && < 4.13,
     bytestring == 0.10.*,
-    reflex == 0.5.*,
-    reflex-dom-core >=0.4 && <0.5,
+    reflex >= 0.6.2,
+    reflex-dom-core >=0.5.2 && <0.6,
     text == 1.2.*
   if !impl(ghcjs)
-    if os(osx) || os(ios)
+    if flag(use-warp) && (os(linux) || os(osx))
       build-depends:
-        data-default == 0.7.*,
         jsaddle,
-        jsaddle-wkwebview
+        jsaddle-warp
     else
-      if flag(use-warp)
+      if os(osx) || os(ios)
         build-depends:
+          data-default == 0.7.*,
           jsaddle,
-          jsaddle-warp
+          jsaddle-wkwebview
       else
         if flag(webkit2gtk)
           build-depends:
             jsaddle-webkit2gtk
         else
-          if !flag(android)
+          if !os(android)
             build-depends:
               jsaddle-webkit2gtk
 

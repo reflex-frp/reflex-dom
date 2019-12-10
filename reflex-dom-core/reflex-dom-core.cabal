@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.4
+Version: 0.5.2.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -17,6 +17,7 @@ extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src/Reflex/Dom/WebSocket/Foreign.hs
                     src/Reflex/Dom/Xhr/ResponseType.hs
                     src/Reflex/Dom/Xhr/Exception.hs
+                    ChangeLog.md
 
 flag use-template-haskell
   description: Use template haskell to generate lenses
@@ -38,22 +39,27 @@ flag profile-reflex
   default: False
   manual: True
 
+flag split-these
+  description: Use split these/semialign packages
+  manual:      False
+  default:     True
+
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 1.4,
-    base >= 4.7 && < 4.12,
+    aeson >= 0.8 && < 1.5,
+    base >= 4.7 && < 4.13,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     blaze-builder,
     bytestring == 0.10.*,
-    containers == 0.5.*,
-    constraints >= 0.9 && < 0.11,
-    contravariant >= 1.4 && < 1.5,
+    containers >= 0.6 && < 0.7,
+    constraints >= 0.9 && < 0.12,
+    contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
-    dependent-map == 0.2.*,
-    dependent-sum >= 0.3 && < 0.5,
-    dependent-sum-template >= 0.0.0.4 && < 0.1,
+    dependent-map >= 0.3 && < 0.4,
+    dependent-sum >= 0.6 && < 0.7,
+    dependent-sum-template >= 0.1 && < 0.2,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
@@ -64,12 +70,12 @@ library
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
     primitive >= 0.5 && < 0.7,
+    random,
     ref-tf == 0.4.*,
-    reflex == 0.5.*,
+    reflex >= 0.6.2,
     semigroups >= 0.16 && < 0.19,
-    stm == 2.4.*,
+    stm >= 2.4 && < 2.6,
     text == 1.2.*,
-    these >= 0.4 && < 0.8,
     transformers >= 0.3 && < 0.6,
     network-uri >= 2.6.1 && < 2.7,
     zenc == 0.1.*
@@ -84,6 +90,14 @@ library
     if !os(windows)
       build-depends: unix == 2.7.*
 
+  if flag(split-these)
+    build-depends:
+      semialign >= 1 && < 1.1,
+      these >= 1 && < 1.1
+  else
+    build-depends:
+      these >= 0.4 && < 0.9
+
   exposed-modules:
     Foreign.JavaScript.TH
     Foreign.JavaScript.Orphans
@@ -92,6 +106,7 @@ library
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate
     Reflex.Dom.Builder.InputDisabled
+    Reflex.Dom.Builder.Hydratable
     Reflex.Dom.Builder.Static
     Reflex.Dom.Class
     Reflex.Dom.Core
@@ -100,7 +115,6 @@ library
     Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
-    Reflex.Dom.Specializations
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
@@ -110,6 +124,7 @@ library
     Reflex.Dom.Widget.Lazy
     Reflex.Dom.Widget.Resize
     Reflex.Dom.Xhr
+    Reflex.Dom.Xhr.FormData
   other-modules:
     Foreign.JavaScript.Internal.Utils
     Reflex.Dom.WebSocket.Foreign
@@ -131,8 +146,8 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.3 && < 0.5,
-      dependent-sum-template >= 0.0.0.5 && < 0.1,
+      dependent-sum >= 0.6,
+      dependent-sum-template >= 0.1 && < 0.2,
       template-haskell
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
@@ -140,7 +155,7 @@ library
       Reflex.Dom.Builder.Class.TH
   else
     build-depends:
-      dependent-sum == 0.4.*
+      dependent-sum == 0.6.*
 
 test-suite hlint
   build-depends: base, hlint
@@ -148,16 +163,64 @@ test-suite hlint
   main-is: hlint.hs
   type: exitcode-stdio-1.0
 
-test-suite gc
+test-suite hydration
   build-depends: base
-               , reflex
-               , reflex-dom-core
+               , aeson
+               , bytestring
+               , chrome-test-utils
+               , constraints
+               , constraints-extras
+               , containers
+               , dependent-map
+               , dependent-sum
+               , dependent-sum-template
+               , directory
+               , exceptions
+               , filepath
+               , ghcjs-dom
+               , hspec
+               , hspec-core
+               , hspec-webdriver
+               , http-types
+               , HUnit
                , jsaddle
                , jsaddle-warp
-               , linux-namespaces
+               , lens
+               , lifted-base
+               , network
+               , random
+               , ref-tf
+               , reflex
+               , reflex-dom-core
                , process
+               , silently
                , temporary
-               , unix
+               , text
+               , wai
+               , wai-websockets
+               , warp
+               , webdriver
+               , websockets
+               , which
+  hs-source-dirs: test
+  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-prof-options: -fprof-auto -optP-DPROFILING
+  main-is: hydration.hs
+  type: exitcode-stdio-1.0
+  if !os(linux) || !arch(x86_64) || flag(profile-reflex)
+    buildable: False
+
+-- broken test on base 4.11 & ghc 8.4.3
+-- needs to be updated for changes in GHC.Stats
+test-suite gc
+  build-depends: base
+               , chrome-test-utils
+               , jsaddle
+               , jsaddle-warp
+               , process
+               , reflex
+               , reflex-dom-core
+               , text
   hs-source-dirs: test
   ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   ghc-prof-options: -fprof-auto -optP-DPROFILING
