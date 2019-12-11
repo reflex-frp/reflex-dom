@@ -162,7 +162,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'WheelTag = WheelEventResult
 
 data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
-  deriving (Show, Read, Eq, Ord)
+  deriving (Show, Read, Eq, Ord, Bounded, Enum)
 
 data WheelEventResult = WheelEventResult
   { _wheelEventResult_deltaX :: Double
