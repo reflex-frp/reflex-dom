@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* *breaking change* The wheel event now is of `WheelEventResult` rather `()`.
+  This provides information about the wheels motion beyond the fact that it merely moved.
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
