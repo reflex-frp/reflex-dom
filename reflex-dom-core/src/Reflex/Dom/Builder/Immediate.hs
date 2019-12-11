@@ -2624,6 +2624,7 @@ getWheelEvent = do
         0 -> DeltaPixel
         1 -> DeltaLine
         2 -> DeltaPage
+        -- See https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaMode
         _ -> error "getWheelEvent: impossible encoding"
     }
 
