@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-* *breaking change* The wheel event now is of `WheelEventResult` rather `()`.
+* *breaking change* The wheel event now is of `WheelEventResult` rather than `()`.
   This provides information about the wheels motion beyond the fact that it merely moved.
 
 ## 0.5.2
