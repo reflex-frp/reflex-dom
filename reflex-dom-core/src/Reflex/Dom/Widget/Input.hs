@@ -54,7 +54,7 @@ import qualified Text.Read as T
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
 
-{-# DEPRECATED TextInput, _textInput_element, TextInputConfig, textInput, textInputGetEnter "Use 'inputElement' directly" #-}
+{-# DEPRECATED TextInput, _textInput_element, TextInputConfig, textInput "Use 'inputElement' directly" #-}
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text
                , _textInput_input :: Event t Text
