@@ -17,39 +17,31 @@ let
     ] ++ lib.optionals (reflex-platform.iosSupport) [
       "ghcIosAarch64"
     ];
-    variations = map (v: "reflex-dom" + v) [
-      ""
-    ];
     compilerPkgs = lib.genAttrs compilers (ghc: let
-      variationPkgs = lib.genAttrs variations (variation: let
-        reflex-platform = reflex-platform-fun {
-          inherit system;
-          haskellOverlays = [
-            # Use this package's source for reflex
-            (self: super: {
-              _dep = super._dep // {
-                reflex-dom = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [
-                  "release.nix"
-                  ".git"
-                  "dist"
-                ])) ./.;
-              };
-            })
-          ];
-        };
-        all = {
-          inherit (reflex-platform.${ghc})
-            reflex-dom-core
-            reflex-dom
-            ;
-        };
-      in all // {
-        cache = reflex-platform.pinBuildInputs "reflex-${system}-${ghc}-${variation}"
-          (builtins.attrValues all);
-      });
-    in variationPkgs // {
+      reflex-platform = reflex-platform-fun {
+        inherit system;
+        haskellOverlays = [
+          # Use this package's source for reflex
+          (self: super: {
+            _dep = super._dep // {
+              reflex-dom = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [
+                "release.nix"
+                ".git"
+                "dist"
+              ])) ./.;
+            };
+          })
+        ];
+      };
+      all = {
+        inherit (reflex-platform.${ghc})
+          reflex-dom-core
+          reflex-dom
+          ;
+      };
+    in all // {
       cache = reflex-platform.pinBuildInputs "reflex-${system}-${ghc}"
-        (map (a: a.cache) (builtins.attrValues variationPkgs));
+        (builtins.attrValues all);
     });
   in compilerPkgs // {
     cache = reflex-platform.pinBuildInputs "reflex-${system}"
