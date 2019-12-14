@@ -215,7 +215,7 @@ _xhrResponse_body :: XhrResponse -> Maybe Text
 _xhrResponse_body = _xhrResponse_responseText
 
 {-# DEPRECATED xhrResponse_body "Use xhrResponse_response or xhrResponse_responseText instead." #-}
-xhrResponse_body :: Lens XhrResponse XhrResponse (Maybe Text) (Maybe Text)
+xhrResponse_body :: Lens' XhrResponse (Maybe Text)
 xhrResponse_body = lens _xhrResponse_responseText (\r t -> r { _xhrResponse_responseText = t })
 
 instance a ~ () => Default (XhrRequestConfig a) where
@@ -378,7 +378,7 @@ decodeText = decode . BL.fromStrict . encodeUtf8
 
 -- | Convenience function to decode JSON-encoded responses.
 decodeXhrResponse :: FromJSON a => XhrResponse -> Maybe a
-decodeXhrResponse = join . fmap decodeText . _xhrResponse_responseText
+decodeXhrResponse = decodeText <=< _xhrResponse_responseText
 
 #ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM makeLenses

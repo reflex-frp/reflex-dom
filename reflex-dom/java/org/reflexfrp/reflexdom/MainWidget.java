@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
@@ -21,6 +22,8 @@ import android.graphics.Bitmap;
 import java.io.IOException;
 import java.io.InputStream;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import java.nio.charset.StandardCharsets;
 
@@ -44,11 +47,17 @@ public class MainWidget {
     wv.setWebContentsDebuggingEnabled(true);
     // allow video to play without user interaction
     wv.getSettings().setMediaPlaybackRequiresUserGesture(false);
+    final AtomicBoolean jsaddleLoaded = new AtomicBoolean(false);
 
     wv.setWebViewClient(new WebViewClient() {
         @Override
         public void onPageFinished(WebView _view, String _url) {
-          wv.evaluateJavascript(initialJS, null);
+          Log.i("reflex", "onPageFinished");
+          boolean alreadyLoaded = jsaddleLoaded.getAndSet(true);
+          if(!alreadyLoaded) {
+            Log.i("reflex", "loading jsaddle");
+            wv.evaluateJavascript(initialJS, null);
+          }
         }
 
         // Re-route / to /android_asset
@@ -79,7 +88,12 @@ public class MainWidget {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
             if( url != null && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-                view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                try {
+                    view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                }
+                catch(ActivityNotFoundException  e) {
+                    Log.e("reflex", "Starting activity for intent '" + url + "' failed!");
+                }
                 return true;
             } else {
                 return false;
@@ -108,6 +122,11 @@ public class MainWidget {
         @Override
         public Bitmap getDefaultVideoPoster() {
             return Bitmap.createBitmap(10, 10, Bitmap.Config.ARGB_8888);
+        }
+
+        @Override
+        public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+            callback.invoke(origin, true, false);
         }
     });
 

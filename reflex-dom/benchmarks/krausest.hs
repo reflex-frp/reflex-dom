@@ -28,15 +28,15 @@ main = do
   seed <- randomIO
   mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed)
 
-titleW :: MonadWidget t m => m ()
+titleW :: DomBuilder t m => m ()
 titleW = text "Reflex-dom keyed"
 
-headW :: MonadWidget t m => m ()
+headW :: DomBuilder t m => m ()
 headW = do
   el "title" titleW
   elAttr "link" ("href" =: "/css/currentStyle.css" <> "rel" =: "stylesheet") blank
 
-bodyW :: forall t m. MonadWidget t m => Entropy -> m ()
+bodyW :: forall t m. (MonadFix m, MonadHold t m, DomBuilder t m) => Entropy -> m ()
 bodyW seed = divClass "main" $ divClass "container" $ mdo
   buttonEvents <- divClass "jumbotron" $ divClass "row" $ do
     divClass "col-md-6" $ el "h1" titleW
@@ -75,14 +75,14 @@ step (m, t) f = ((m', t'), dt)
     (m', dt) = f (m, t)
     t' = applyAlways dt t
 
-buttonW :: MonadWidget t m => Text -> Text -> a -> m (Event t a)
+buttonW :: DomBuilder t m => Text -> Text -> a -> m (Event t a)
 buttonW id txt val = divClass "col-sm-6 smallpad" $ buttonW' ("class" =: "btn btn-primary btn-block" <> "id" =: id)
   where
     buttonW' attrs = do
       (b, _) <- elAttr' "button" attrs $ text txt
       pure $ val <$ domEvent Click b
 
-tableW :: MonadWidget t m => Event t TableDiff -> m (Event t (IntMap Step))
+tableW :: (MonadHold t m, DomBuilder t m) => Event t TableDiff -> m (Event t (IntMap Step))
 tableW diff = do
   elClass "table" "table table-hover table-striped test-data" $ do
     el "tbody" $ do
@@ -90,7 +90,7 @@ tableW diff = do
       rowEvents <- holdIncremental v0 v'
       return $ mergeIntIncremental rowEvents
 
-rowW :: MonadWidget t m => Row -> m (Event t Step)
+rowW :: DomBuilder t m => Row -> m (Event t Step)
 rowW row = elClass "tr" (if selected row then "danger" else "") $
   do
     elClass "td" "col-md-1" $ do
@@ -102,7 +102,7 @@ rowW row = elClass "tr" (if selected row then "danger" else "") $
   where
     tagClick f el = f row <$ (domEvent Click el)
 
-deleteW :: MonadWidget t m => m ()
+deleteW :: DomBuilder t m => m ()
 deleteW = el "a" $ elAttr "span" ("aria-hidden" =: "true" <> "class" =: "glyphicon glyphicon-remove") blank
 
 

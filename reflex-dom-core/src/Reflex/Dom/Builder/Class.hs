@@ -11,10 +11,9 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 #endif
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -29,13 +28,15 @@ module Reflex.Dom.Builder.Class
        , module Reflex.NotReady.Class
        ) where
 
+import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
-import Reflex.DynamicWriter
-import Reflex.EventWriter
+import Reflex.BehaviorWriter.Base
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
 import Reflex.NotReady.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
@@ -46,6 +47,7 @@ import Reflex.Requester.Base
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Reader
+import qualified Control.Monad.State as Lazy
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
@@ -59,12 +61,14 @@ import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
+import qualified GHCJS.DOM.Types as DOM
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> *) -> *
+  type RawDocument d :: *
   type RawTextNode d :: *
+  type RawCommentNode d :: *
   type RawElement d :: *
-  type RawFile d :: *
   type RawInputElement d :: *
   type RawTextAreaElement d :: *
   type RawSelectElement d :: *
@@ -83,6 +87,15 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                    => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   textNode = lift . textNode
   {-# INLINABLE textNode #-}
+  commentNode :: CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
+  default commentNode :: ( MonadTrans f
+                      , m ~ f m'
+                      , DomBuilderSpace m' ~ DomBuilderSpace m
+                      , DomBuilder t m'
+                      )
+                   => CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
+  commentNode = lift . commentNode
+  {-# INLINABLE commentNode #-}
   element :: Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   default element :: ( MonadTransControl f
                      , StT f a ~ a
@@ -170,6 +183,28 @@ instance (Reflex t) => Default (TextNodeConfig t) where
 
 newtype TextNode d t = TextNode
   { _textNode_raw :: RawTextNode d
+  }
+
+data CommentNodeConfig t
+   = CommentNodeConfig { _commentNodeConfig_initialContents :: {-# UNPACK #-} !Text
+                       , _commentNodeConfig_setContents :: !(Maybe (Event t Text))
+                       }
+
+#ifndef USE_TEMPLATE_HASKELL
+commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Text
+commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNodeConfig a' b) <$> f a
+{-# INLINE commentNodeConfig_initialContents #-}
+#endif
+
+instance (Reflex t) => Default (CommentNodeConfig t) where
+  {-# INLINABLE def #-}
+  def = CommentNodeConfig
+    { _commentNodeConfig_initialContents = mempty
+    , _commentNodeConfig_setContents = Nothing
+    }
+
+newtype CommentNode d t = CommentNode
+  { _commentNode_raw :: RawCommentNode d
   }
 
 data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
@@ -288,7 +323,7 @@ data InputElement er d t
                   , _inputElement_hasFocus :: Dynamic t Bool
                   , _inputElement_element :: Element er d t
                   , _inputElement_raw :: RawInputElement d
-                  , _inputElement_files :: Dynamic t [RawFile d]
+                  , _inputElement_files :: Dynamic t [DOM.File]
                   }
 
 data TextAreaElementConfig er t m
@@ -390,6 +425,7 @@ data SelectElement er d t = SelectElement
 #ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM (uncurry makeLensesWithoutField)
   [ (["_textNodeConfig_setContents"], ''TextNodeConfig)
+  , (["_commentNodeConfig_setContents"], ''CommentNodeConfig)
   , ([ "_inputElementConfig_setValue"
      , "_inputElementConfig_setChecked" ], ''InputElementConfig)
   , (["_rawElementConfig_modifyAttributes"], ''RawElementConfig)
@@ -400,49 +436,56 @@ concat <$> mapM (uncurry makeLensesWithoutField)
 #endif
 
 -- | This lens is technically illegal. The implementation of 'TextNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-textNodeConfig_setContents :: Reflex t => Lens (TextNodeConfig t) (TextNodeConfig t) (Event t Text) (Event t Text)
+textNodeConfig_setContents :: Reflex t => Lens' (TextNodeConfig t) (Event t Text)
 textNodeConfig_setContents =
   let getter = fromMaybe never . _textNodeConfig_setContents
       setter t e = t { _textNodeConfig_setContents = Just e }
   in lens getter setter
 
+-- | This lens is technically illegal. The implementation of 'CommentNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'CommentNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
+commentNodeConfig_setContents :: Reflex t => Lens (CommentNodeConfig t) (CommentNodeConfig t) (Event t Text) (Event t Text)
+commentNodeConfig_setContents =
+  let getter = fromMaybe never . _commentNodeConfig_setContents
+      setter t e = t { _commentNodeConfig_setContents = Just e }
+  in lens getter setter
+
 -- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-inputElementConfig_setValue :: Reflex t => Lens (InputElementConfig er t m) (InputElementConfig er t m) (Event t Text) (Event t Text)
+inputElementConfig_setValue :: Reflex t => Lens' (InputElementConfig er t m) (Event t Text)
 inputElementConfig_setValue =
   let getter = fromMaybe never . _inputElementConfig_setValue
       setter t e = t { _inputElementConfig_setValue = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-inputElementConfig_setChecked :: Reflex t => Lens (InputElementConfig er t m) (InputElementConfig er t m) (Event t Bool) (Event t Bool)
+inputElementConfig_setChecked :: Reflex t => Lens' (InputElementConfig er t m) (Event t Bool)
 inputElementConfig_setChecked =
   let getter = fromMaybe never . _inputElementConfig_setChecked
       setter t e = t { _inputElementConfig_setChecked = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-rawElementConfig_modifyAttributes :: Reflex t => Lens (RawElementConfig er t m) (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
 rawElementConfig_modifyAttributes =
   let getter = fromMaybe never . _rawElementConfig_modifyAttributes
       setter t e = t { _rawElementConfig_modifyAttributes = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-elementConfig_modifyAttributes :: Reflex t => Lens (ElementConfig er t m) (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text))) (Event t (Map AttributeName (Maybe Text)))
+elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
 elementConfig_modifyAttributes =
   let getter = fromMaybe never . _elementConfig_modifyAttributes
       setter t e = t { _elementConfig_modifyAttributes = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'TextAreaElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextAreaElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-textAreaElementConfig_setValue :: Reflex t => Lens (TextAreaElementConfig er t m) (TextAreaElementConfig er t m) (Event t Text) (Event t Text)
+textAreaElementConfig_setValue :: Reflex t => Lens' (TextAreaElementConfig er t m) (Event t Text)
 textAreaElementConfig_setValue =
   let getter = fromMaybe never . _textAreaElementConfig_setValue
       setter t e = t { _textAreaElementConfig_setValue = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'SelectElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'SelectElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-selectElementConfig_setValue :: Reflex t => Lens (SelectElementConfig er t m) (SelectElementConfig er t m) (Event t Text) (Event t Text)
+selectElementConfig_setValue :: Reflex t => Lens' (SelectElementConfig er t m) (Event t Text)
 selectElementConfig_setValue =
   let getter = fromMaybe never . _selectElementConfig_setValue
       setter t e = t { _selectElementConfig_setValue = Just e }
@@ -518,6 +561,7 @@ instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) 
 instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (DynamicWriterT child) = DynamicWriterT $ do
     s <- get
     (el, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
@@ -536,6 +580,7 @@ instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (
 instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT t request response m) where
   type DomBuilderSpace (RequesterT t request response m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (RequesterT child) = RequesterT $ do
     r <- ask
     old <- get
@@ -556,6 +601,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
 instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (EventWriterT child) = EventWriterT $ do
     old <- get
     (el, (a, new)) <- lift $ element elementTag cfg $ runStateT child old
@@ -571,9 +617,10 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder 
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q) => DomBuilder t (QueryT t q m) where
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q, Eq q) => DomBuilder t (QueryT t q m) where
   type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
   textNode = liftTextNode
+  commentNode = liftCommentNode
   element elementTag cfg (QueryT child) = QueryT $ do
     s <- get
     (e, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
@@ -642,6 +689,9 @@ liftWithStateless a = liftWith $ \run -> a $ fmap (fromStT (Proxy :: Proxy t)) .
 liftTextNode :: (MonadTrans f, DomBuilder t m) => TextNodeConfig t -> f m (TextNode (DomBuilderSpace m) t)
 liftTextNode = lift . textNode
 
+liftCommentNode :: (MonadTrans f, DomBuilder t m) => CommentNodeConfig t -> f m (CommentNode (DomBuilderSpace m) t)
+liftCommentNode = lift . commentNode
+
 liftElement :: LiftDomBuilder t f m => Text -> ElementConfig er t (DomBuilderSpace m) -> f m a -> f m (Element er (DomBuilderSpace m) t, a)
 liftElement elementTag cfg child = liftWithStateless $ \run -> element elementTag cfg $ run child
 
@@ -660,7 +710,14 @@ instance DomRenderHook t m => DomRenderHook t (StateT e m) where
   requestDomAction = lift . requestDomAction
   requestDomAction_ = lift . requestDomAction_
 
+instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
+  withRenderHook hook (Lazy.StateT a) = Lazy.StateT $ \s -> withRenderHook hook $ a s
+  requestDomAction = lift . requestDomAction
+  requestDomAction_ = lift . requestDomAction_
+
+deriving instance DomRenderHook t m => DomRenderHook t (BehaviorWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
+deriving instance DomRenderHook t m => DomRenderHook t (DynamicWriterT t w m)
 deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
 deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
 deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
@@ -668,3 +725,22 @@ deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
 liftElementConfig = id
+
+class Monad m => HasDocument m where
+  askDocument :: m (RawDocument (DomBuilderSpace m))
+  default askDocument
+    :: ( m ~ f m'
+       , RawDocument (DomBuilderSpace m) ~ RawDocument (DomBuilderSpace m')
+       , MonadTrans f
+       , Monad m'
+       , HasDocument m'
+       )
+    => m (RawDocument (DomBuilderSpace m))
+  askDocument = lift askDocument
+
+instance HasDocument m => HasDocument (ReaderT r m)
+instance HasDocument m => HasDocument (EventWriterT t w m)
+instance HasDocument m => HasDocument (DynamicWriterT t w m)
+instance HasDocument m => HasDocument (PostBuildT t m)
+instance HasDocument m => HasDocument (RequesterT t request response m)
+instance HasDocument m => HasDocument (QueryT t q m)

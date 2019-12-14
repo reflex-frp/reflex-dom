@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -103,7 +102,6 @@ elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
 {-# INLINE elConfig_attributes #-}
 #endif
 
---TODO: HasDocument is still not accounted for
 type MonadWidgetConstraints t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace

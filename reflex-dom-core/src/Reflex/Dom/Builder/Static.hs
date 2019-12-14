@@ -15,6 +15,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Data.IORef (IORef)
 import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
 import Control.Monad.Exception
@@ -32,23 +33,29 @@ import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
 import Data.Functor.Compose
 import Data.Functor.Constant
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
-import Data.Monoid
+import Data.Monoid ((<>))
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
+import Reflex.Adjustable.Class
 import Reflex.Class
+import Reflex.Dom.Main (DomHost, DomTimeline, runDomHost)
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
-import Reflex.Spider
+import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
+import System.Random (randomRIO)
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
@@ -75,6 +82,10 @@ runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> Static
 runStaticDomBuilderT (StaticDomBuilderT a) e = do
   (result, a') <- runStateT (runReaderT a e) []
   return (result, mconcat $ reverse a')
+
+instance PostBuild t m => PostBuild t (StaticDomBuilderT t m) where
+  {-# INLINABLE getPostBuild #-}
+  getPostBuild = lift getPostBuild
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (StaticDomBuilderT t m) where
   {-# INLINABLE newEventWithTrigger #-}
@@ -138,29 +149,82 @@ instance Default (StaticEventSpec er)
 
 instance DomSpace StaticDomSpace where
   type EventSpec StaticDomSpace = StaticEventSpec
+  type RawDocument StaticDomSpace = ()
   type RawTextNode StaticDomSpace = ()
+  type RawCommentNode StaticDomSpace = ()
   type RawElement StaticDomSpace = ()
-  type RawFile StaticDomSpace = ()
   type RawInputElement StaticDomSpace = ()
   type RawTextAreaElement StaticDomSpace = ()
   type RawSelectElement StaticDomSpace = ()
   addEventSpecFlags _ _ _ _ = StaticEventSpec
 
-instance (Reflex t, Adjustable t m, MonadHold t m) => Adjustable t (StaticDomBuilderT t m) where
+instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilderT t m) where
+  askDocument = pure ()
+
+instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
+    key <- replaceStart
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
+    replaceEnd key
     return (fst result0, fmapCheap fst result')
+  traverseIntMapWithKeyWithAdjust = hoistIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
+
+-- TODO remove this?
+replaceStart :: (DomBuilder t m, MonadIO m) => m Text
+replaceStart = do
+  str <- liftIO $ replicateM 8 $ randomRIO ('a', 'z')
+  let key = "-" <> T.pack str
+  _ <- commentNode $ def { _commentNodeConfig_initialContents = "replace-start" <> key }
+  pure key
+
+replaceEnd :: DomBuilder t m => Text -> m ()
+replaceEnd key = void $ commentNode $ def { _commentNodeConfig_initialContents = "replace-end" <> key }
+
+hoistIntMapWithKeyWithAdjust :: forall t m p a b.
+  ( Adjustable t m
+  , MonadHold t m
+  , Patch (p a)
+  , Functor p
+  , Patch (p (Behavior t Builder))
+  , PatchTarget (p (Behavior t Builder)) ~ IntMap (Behavior t Builder)
+  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
+  )
+  => (forall x. (IntMap.Key -> a -> m x)
+      -> IntMap a
+      -> Event t (p a)
+      -> m (IntMap x, Event t (p x))
+     ) -- ^ The base monad's traversal
+  -> (IntMap.Key -> a -> StaticDomBuilderT t m b)
+  -> IntMap a
+  -> Event t (p a)
+  -> StaticDomBuilderT t m (IntMap b, Event t (p b))
+hoistIntMapWithKeyWithAdjust base f im0 im' = do
+  e <- StaticDomBuilderT ask
+  (children0, children') <- lift $ base (\k v -> runStaticDomBuilderT (f k v) e) im0 im'
+  let result0 = IntMap.map fst children0
+      result' = (fmap . fmap) fst children'
+      outputs0 :: IntMap (Behavior t Builder)
+      outputs0 = IntMap.map snd children0
+      outputs' :: Event t (p (Behavior t Builder))
+      outputs' = (fmap . fmap) snd children'
+  outputs <- holdIncremental outputs0 outputs'
+  StaticDomBuilderT $ modify $ (:) $ pull $ do
+    os <- sample $ currentIncremental outputs
+    fmap mconcat $ forM (IntMap.toList os) $ \(_, o) -> do
+      sample o
+  return (result0, result')
 
 hoistDMapWithKeyWithAdjust :: forall (k :: * -> *) v v' t m p.
   ( Adjustable t m
   , MonadHold t m
   , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
   , Patch (p k (Constant (Behavior t Builder)))
+  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
   )
   => (forall vv vv'.
          (forall a. k a -> vv a -> m (vv' a))
@@ -205,6 +269,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       Nothing -> return (pure (escape initialContents))
       Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
     return $ TextNode ()
+  {-# INLINABLE commentNode #-}
+  commentNode (CommentNodeConfig initialContents mSetContents) = StaticDomBuilderT $ do
+    --TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
+    shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
+    let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
+    modify . (:) =<< (\c -> "<!--" <> c <> "-->") <$> case mSetContents of
+      Nothing -> return (pure (escape initialContents))
+      Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
+    return $ CommentNode ()
   {-# INLINABLE element #-}
   element elementTag cfg child = do
     -- https://www.w3.org/TR/html-markup/syntax.html#syntax-elements
@@ -283,12 +356,12 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
-type StaticWidget x = PostBuildT Spider (StaticDomBuilderT Spider (PerformEventT Spider (SpiderHost Global)))
+type StaticWidget x = PostBuildT DomTimeline (StaticDomBuilderT DomTimeline (PerformEventT DomTimeline DomHost))
 
 {-# INLINE renderStatic #-}
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do
-  runSpiderHost $ do
+  runDomHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let env0 = StaticDomBuilderEnv True Nothing
     ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
