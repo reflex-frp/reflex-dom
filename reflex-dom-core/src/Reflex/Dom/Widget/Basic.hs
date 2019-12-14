@@ -272,29 +272,7 @@ dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
         return $ if Map.null p then Nothing else Just p
   return modificationsNeeded
 
---------------------------------------------------------------------------------
--- Copied and pasted from Reflex.Widget.Class
---------------------------------------------------------------------------------
-
-{-
-schedulePostBuild x = performEvent_ . (x <$) =<< getPostBuild
-
-elDynHtml' :: DomBuilder t m => Text -> Dynamic t Text -> m (El t)
-elDynHtml' elementTag html = do
-  e <- buildEmptyElement elementTag (Map.empty :: Map Text Text)
-  schedulePostBuild $ setInnerHTML e . Just =<< sample (current html)
-  performEvent_ $ fmap (setInnerHTML e . Just) $ updated html
-  wrapElement defaultDomEventHandler e
-
-elDynHtmlAttr' :: DomBuilder t m => Text -> Map Text Text -> Dynamic t Text -> m (El t)
-elDynHtmlAttr' elementTag attrs html = do
-  e <- buildEmptyElement elementTag attrs
-  schedulePostBuild $ setInnerHTML e . Just =<< sample (current html)
-  performEvent_ $ fmap (setInnerHTML e . Just) $ updated html
-  wrapElement defaultDomEventHandler e
--}
-
-{-# DEPRECATED Link "Will be removed when 'linkClass' and 'link' are removed" #-}
+{-# DEPRECATED Link "Will be removed when 'linkClass' and 'link' are removed. Follow those functions' deprecation instructions." #-}
 newtype Link t
   = Link { _link_clicked :: Event t ()
          }
