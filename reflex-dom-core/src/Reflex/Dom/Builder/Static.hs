@@ -59,11 +59,6 @@ import System.Random (randomRIO)
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
-  , _staticDomBuilderEnv_selectValue :: Maybe (Behavior t Text)
-    -- ^ When the parent element is a "select" whose value has been set, this value tells us the current value.
-    -- We use this to add a "selected" attribute to the appropriate "option" child element.
-    -- This is not yet a perfect simulation of what the browser does, but it is much closer than doing nothing.
-    -- TODO: Handle edge cases, e.g. setting to a value for which there is no option, then adding that option dynamically afterwards.
   }
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -287,15 +282,9 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
-      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing
+      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
-      selectValue <- asks _staticDomBuilderEnv_selectValue
-      let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
-            Just v | v == sel -> attrs <> Map.singleton "selected" ""
-            _ -> Map.delete "selected" attrs
-      let attrs1 = case (elementTag, selectValue) of
-            ("option", Just sv) -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
-            _ -> current attrs0
+      let attrs1 = current attrs0
       let attrs2 = ffor attrs1 $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
@@ -340,10 +329,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       }
   selectElement cfg child = do
     v <- holdDyn (cfg ^. selectElementConfig_initialValue) (cfg ^. selectElementConfig_setValue)
-    (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) $ do
-      (a, innerHtml) <- StaticDomBuilderT $ lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False $ Just (current v)
-      StaticDomBuilderT $ lift $ modify $ (:) innerHtml
-      return a
+    (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) child
     let wrapped = SelectElement
           { _selectElement_value = v
           , _selectElement_change = never
@@ -363,7 +349,7 @@ renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do
   runDomHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let env0 = StaticDomBuilderEnv True Nothing
+    let env0 = StaticDomBuilderEnv True
     ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
