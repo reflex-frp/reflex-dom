@@ -19,6 +19,8 @@
    * `CheckboxConfig`
    * `FileInput`
 
+ * Add `< 0.7` upper bound for reflex
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
