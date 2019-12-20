@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
 
@@ -18,6 +18,8 @@
    * `TextAreaConfig`
    * `CheckboxConfig`
    * `FileInput`
+
+ * Add `< 0.7` upper bound for reflex
 
 ## 0.5.2
 
