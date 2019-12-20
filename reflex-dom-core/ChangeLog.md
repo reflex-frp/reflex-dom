@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
 
