@@ -438,12 +438,11 @@ dropdown k0 options (DropdownConfig setK attrs) = do
         in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   postBuild <- getPostBuild
-  let updatedSelection = attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK
-      initialSelection = attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys (k0 <$ postBuild)
-      selection = leftmost [updatedSelection, initialSelection]
+  let setSelection = attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys $
+        leftmost [setK, k0 <$ postBuild]
   let cfg = def
         & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-        & selectElementConfig_setValue .~ fmap (T.pack . show) selection
+        & selectElementConfig_setValue .~ fmap (T.pack . show) setSelection
   (eRaw, _) <- selectElement cfg $ listWithKey indexedOptions $ \(ix, k) v -> do
     let optionAttrs = fmap (\dk -> "value" =: T.pack (show ix) <> if dk == k then "selected" =: "selected" else mempty) defaultKey
     elDynAttr "option" optionAttrs $ dynText v
