@@ -19,6 +19,8 @@
    * `CheckboxConfig`
    * `FileInput`
 
+* Fix the static rendering of which dropdown value is selected, see [#310](https://github.com/reflex-frp/reflex-dom/issues/310).
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).
