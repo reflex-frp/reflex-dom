@@ -54,6 +54,7 @@ import qualified Text.Read as T
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
 
+{-# DEPRECATED TextInput, _textInput_element, TextInputConfig, textInput "Use 'inputElement' directly" #-}
 data TextInput t
    = TextInput { _textInput_value :: Dynamic t Text
                , _textInput_input :: Event t Text
@@ -161,6 +162,7 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
     , _rangeInput_element = _inputElement_raw i
     }
 
+{-# DEPRECATED TextAreaConfig, TextArea, textArea "Use 'textAreaElement' directly" #-}
 data TextAreaConfig t
    = TextAreaConfig { _textAreaConfig_initialValue :: Text
                     , _textAreaConfig_setValue :: Event t Text
@@ -198,6 +200,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
     , _textArea_element = _textAreaElement_raw i
     }
 
+{-# DEPRECATED CheckboxConfig, Checkbox, checkbox, checkboxView, CheckboxViewEventResultType, regularToCheckboxViewEventType, CheckboxViewEventResult "Use 'inputElement' directly" #-}
 data CheckboxConfig t
     = CheckboxConfig { _checkboxConfig_setValue :: Event t Bool
                      , _checkboxConfig_attributes :: Dynamic t (Map Text Text)
@@ -287,7 +290,7 @@ regularToCheckboxViewEventType en r = case en of
 
 newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEventResult :: CheckboxViewEventResultType en }
 
---TODO
+-- | Create a view only checkbox
 {-# INLINABLE checkboxView #-}
 checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
@@ -321,6 +324,7 @@ checkboxView dAttrs dValue = do
   i <- inputElement inputElementConfig
   return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 
+{-# DEPRECATED FileInput, FileInputConfig, fileInput "Use 'inputElement' directly" #-}
 data FileInput d t
    = FileInput { _fileInput_value :: Dynamic t [File]
                , _fileInput_element :: RawInputElement d
@@ -681,41 +685,3 @@ instance HasValue (Dropdown t k) where
 instance HasValue (Checkbox t) where
   type Value (Checkbox t) = Dynamic t Bool
   value = _checkbox_value
-
-{-
-type family Controller sm t a where
-  Controller Edit t a = (a, Event t a) -- Initial value and setter
-  Controller View t a = Dynamic t a -- Value (always)
-
-type family Output sm t a where
-  Output Edit t a = Dynamic t a -- Value (always)
-  Output View t a = Event t a -- Requested changes
-
-data CheckboxConfig sm t
-   = CheckboxConfig { _checkbox_input :: Controller sm t Bool
-                    , _checkbox_attributes :: Attributes
-                    }
-
-instance Reflex t => Default (CheckboxConfig Edit t) where
-  def = CheckboxConfig (False, never) mempty
-
-data Checkbox sm t
-  = Checkbox { _checkbox_output :: Output sm t Bool
-             }
-
-data StateMode = Edit | View
-
---TODO: There must be a more generic way to get this witness and allow us to case on the type-level StateMode
-data StateModeWitness (sm :: StateMode) where
-  EditWitness :: StateModeWitness Edit
-  ViewWitness :: StateModeWitness View
-
-class HasStateModeWitness (sm :: StateMode) where
-  stateModeWitness :: StateModeWitness sm
-
-instance HasStateModeWitness Edit where
-  stateModeWitness = EditWitness
-
-instance HasStateModeWitness View where
-  stateModeWitness = ViewWitness
--}

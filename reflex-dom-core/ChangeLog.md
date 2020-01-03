@@ -1,6 +1,25 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.5.3
+
+* Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
+
+   * `Link`
+   * `button`
+   * `dtdd`
+   * `linkClass`
+   * `link`
+   * `tabDisplay`
+   * `tableDynAttr`
+
+  And in `Reflex.Dom.Widget.Input`:
+
+   * `TextInput`
+   * `TextAreaConfig`
+   * `CheckboxConfig`
+   * `FileInput`
+
+ * Add `< 0.7` upper bound for reflex
 
 * *breaking change* The wheel event now is of `WheelEventResult` rather than `()`.
   This provides information about the wheels motion beyond the fact that it merely moved.
