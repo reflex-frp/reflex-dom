@@ -1,12 +1,15 @@
 # Revision history for reflex-dom
 
-## Unreleased
+## 0.5.3
+
 * On Android, enable prompting the user for geolocation
   permissions on demand by default. See
   https://developer.android.com/reference/android/webkit/WebChromeClient.html#onGeolocationPermissionsShowPrompt(java.lang.String,%20android.webkit.GeolocationPermissions.Callback)
   for details.
 
-## 0.5.1
+ * Add `< 0.7` upper bound for reflex
+
+## 0.5.2
 
 * The default jsaddle backend on macOS when built from nix
   is now jsaddle-wkwebview, matching the behaviour of cabal
