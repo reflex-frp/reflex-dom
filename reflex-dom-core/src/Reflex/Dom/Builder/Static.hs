@@ -35,6 +35,7 @@ import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.List (isPrefixOf)
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
 import Data.Monoid ((<>))
@@ -44,6 +45,7 @@ import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
+import GHC.Stack (CallStack, SrcLoc(..), callStack, fromCallSiteList, getCallStack, prettyCallStack)
 import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Dom.Main (DomHost, DomTimeline, runDomHost)
@@ -257,6 +259,18 @@ instance SupportsStaticDomBuilder t m => NotReady t (StaticDomBuilderT t m) wher
   notReadyUntil _ = pure ()
   notReady = pure ()
 
+prependCallStackComment :: DomBuilder t m => CallStack -> m a -> m a
+prependCallStackComment cs w = do
+  let
+    removeSelf :: [([Char], SrcLoc)] -> [([Char], SrcLoc)]
+    removeSelf = filter $ not . ("reflex-dom-core" `isPrefixOf`) . srcLocPackage . snd
+
+    editStack :: CallStack -> CallStack
+    editStack = fromCallSiteList . removeSelf . getCallStack
+
+  void $ commentNode $ def & commentNodeConfig_initialContents .~ T.pack (prettyCallStack $ editStack cs)
+  w
+
 -- TODO: the uses of illegal lenses in this instance causes it to be somewhat less efficient than it can be. replacing them with explicit cases to get the underlying Maybe Event and working with those is ideal.
 instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) where
   type DomBuilderSpace (StaticDomBuilderT t m) = StaticDomSpace
@@ -279,7 +293,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents --Only because it doesn't get optimized when profiling is on
     return $ CommentNode ()
   {-# INLINABLE element #-}
-  element elementTag cfg child = do
+  element elementTag cfg child = prependCallStackComment callStack $ do
     -- https://www.w3.org/TR/html-markup/syntax.html#syntax-elements
     let voidElements = Set.fromList ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"]
     let noEscapeElements = Set.fromList ["style", "script"]
