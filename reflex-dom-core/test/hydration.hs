@@ -37,6 +37,7 @@ import Data.Functor.Misc
 import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
+import Data.List (sort)
 import Data.Maybe
 import Data.Proxy
 import Data.Text (Text)
@@ -47,6 +48,7 @@ import Network.Socket
 import Network.Wai
 import Network.WebSockets
 import Reflex.Dom.Core
+import Reflex.Dom.Widget.Input (dropdown)
 import Reflex.Patch.DMapWithMove
 import System.Directory
 import System.Environment
@@ -55,7 +57,7 @@ import System.IO.Silently
 import System.IO.Temp
 import System.Process
 import System.Which (staticWhich)
-import qualified Test.HUnit as HUnit (assertEqual, assertFailure)
+import qualified Test.HUnit as HUnit
 import qualified Test.Hspec as H
 import qualified Test.Hspec.Core.Spec as H
 import Test.Hspec (xit)
@@ -93,10 +95,13 @@ instance MonadRef WD where
   writeRef r = WD . writeRef r
 
 assertEqual :: (MonadIO m, Eq a, Show a) => String -> a -> a -> m ()
-assertEqual a b = liftIO . HUnit.assertEqual a b
+assertEqual msg a b = liftIO $ HUnit.assertEqual msg a b
 
 assertFailure :: MonadIO m => String -> m ()
 assertFailure = liftIO . HUnit.assertFailure
+
+assertBool :: (MonadIO m) => String -> Bool -> m ()
+assertBool msg bool = liftIO $ HUnit.assertBool msg bool
 
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags }) WD.defaultConfig
@@ -155,6 +160,27 @@ tests withDebugging wdConfig caps _selenium = do
       testWidget = testWidgetDebug withDebugging
       testWidget' :: WD a -> (a -> WD b) -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> WD b
       testWidget' = testWidgetDebug' withDebugging
+
+  -- TODO: This test presupposes the exact set of labels that "dropdown" places in the "value" fields to distinguish options.
+  -- This dependence on internal implementation details is undesirable in a test case, but seems fairly tricky to avoid.
+  -- It seems expedient for the time being to expect this test case to be updated, should those implementation details ever change.
+  describe "dropdown" $ session' $ do
+    let fetchElement e = do
+          val <- withRetry $ WD.attr e "value"
+          sel <- withRetry $ WD.attr e "selected"
+          return (fromMaybe "" val, sel /= Nothing)
+        doTest expectedOpts (initialValue :: Text) = do
+          let doCheck = do
+                es <- findElemsWithRetry $ WD.ByTag "option"
+                opts <- mapM fetchElement es
+                assertEqual "missing/extra/incorrect option element(s)" expectedOpts (sort opts)
+          testWidget doCheck doCheck $ do
+            void $ dropdown initialValue (constDyn (("aa" :: Text) =: "aaa" <> "bb" =: "bbb")) def
+    it "statically renders initial values (on aa)" $ runWD $ do
+      doTest [("0",True),("1",False)] "aa"
+    it "statically renders initial values (on bb)" $ runWD $ do
+      doTest [("0",False),("1",True)] "bb"
+{--
   describe "text" $ session' $ do
     it "works" $ runWD $ do
       testWidgetStatic (checkBodyText "hello world") $ do
@@ -1229,6 +1255,7 @@ tests withDebugging wdConfig caps _selenium = do
           text "before"
           el "ol" $ text "inner"
           text "after"
+--}
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
@@ -1296,6 +1323,9 @@ checkTextInId i expected = do
 
 findElemWithRetry :: Selector -> WD WD.Element
 findElemWithRetry = withRetry . WD.findElem
+
+findElemsWithRetry :: Selector -> WD [WD.Element]
+findElemsWithRetry = withRetry . WD.findElems
 
 getBody :: WD WD.Element
 getBody = WD.findElem $ WD.ByTag "body"
