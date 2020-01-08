@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+Support GHC 8.8.
+
 ## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
