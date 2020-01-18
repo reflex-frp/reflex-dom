@@ -64,7 +64,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
   let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
-    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     toContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
@@ -108,7 +108,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
   uniqWindow <- holdUniqDyn window
   return (uniqWindow, result)
   where
-    toStyleAttr m = "style" =: Map.foldWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
                                  "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
     mkContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
@@ -142,7 +142,7 @@ virtualListBuffered buffer heightPx rowPx maxIndex i0 setI keyToIndex items0 ite
     (win, m) <- virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBuilder
     pb <- getPostBuild
     let extendWin o l = (max 0 (o - l * (buffer-1) `div` 2), l * buffer)
-    rec let winHitEdge = fmapMaybe id $ attachWith (\(oldOffset, oldLimit) (winOffset, winLimit) ->
+    rec let winHitEdge = attachWithMaybe (\(oldOffset, oldLimit) (winOffset, winLimit) ->
               if winOffset > oldOffset && winOffset + winLimit < oldOffset + oldLimit
                  then Nothing
                  else Just (extendWin winOffset winLimit)) (current winBuffered) (updated win)

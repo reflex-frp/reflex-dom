@@ -1,0 +1,30 @@
+Name: chrome-test-utils
+Version: 0.4
+Synopsis: Utilities to write headless Chromium tests
+License: BSD3
+License-file: LICENSE
+Author: Obsidian Systems LLC
+Maintainer: maintainer@obsidian.systems
+Stability: Experimental
+Build-type: Simple
+Cabal-version: >=1.9.2
+
+library
+  hs-source-dirs: src
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  build-depends: base
+               , linux-namespaces
+               , process
+               , temporary
+               , text
+               , unix
+  exposed-modules:
+    Test.Util.UnshareNetwork
+    Test.Util.ChromeFlags
+  if !os(linux) || !arch(x86_64)
+    buildable: False
+
+source-repository head
+  type: git
+  location: https://github.com/reflex-frp/reflex-dom
+  subdir: chrome-test-utils

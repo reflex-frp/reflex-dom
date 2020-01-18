@@ -6,11 +6,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
@@ -28,8 +26,9 @@ module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 import Foreign.JavaScript.Orphans ()
 import Prelude hiding ((!!))
 import Reflex.Class
-import Reflex.DynamicWriter
-import Reflex.EventWriter
+import Reflex.Adjustable.Class
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -242,7 +241,7 @@ instance HasJS x m => HasJS x (ReaderT r m) where
   type JSX (ReaderT r m) = JSX m
   liftJS = lift . liftJS
 
-instance (HasJS x m, ReflexHost t) => HasJS x (PostBuildT t m) where
+instance HasJS x m => HasJS x (PostBuildT t m) where
   type JSX (PostBuildT t m) = JSX m
   liftJS = lift . liftJS
 
@@ -252,6 +251,10 @@ instance (HasJS x (HostFrame t), ReflexHost t) => HasJS x (PerformEventT t m) wh
 
 instance HasJS x m => HasJS x (DynamicWriterT t w m) where
   type JSX (DynamicWriterT t w m) = JSX m
+  liftJS = lift . liftJS
+
+instance HasJS x m => HasJS x (EventWriterT t w m) where
+  type JSX (EventWriterT t w m) = JSX m
   liftJS = lift . liftJS
 
 instance HasJS x m => HasJS x (RequesterT t request response m) where
@@ -289,7 +292,7 @@ class Monad m => MonadJS x m | m -> x where
 #ifdef ghcjs_HOST_OS
 
 data JSCtx_IO
-type HasJS' = HasJS JSCtx_IO
+type JS' = JSCtx_IO
 
 instance MonadIO m => HasJS JSCtx_IO (WithJSContextSingleton x m) where
   type JSX (WithJSContextSingleton x m) = IO
@@ -340,7 +343,7 @@ foreign import javascript unsafe "function(){ return $1(arguments); }" funWithAr
 #else
 
 data JSCtx_JavaScriptCore x
-type HasJS' = HasJS (JSCtx_JavaScriptCore ())
+type JS' = JSCtx_JavaScriptCore ()
 
 instance IsJSContext (JSCtx_JavaScriptCore x) where
   newtype JSRef (JSCtx_JavaScriptCore x) = JSRef_JavaScriptCore { unJSRef_JavaScriptCore :: JSVal }

@@ -1,21 +1,27 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Internal
-       (module Main, run, mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp') where
+  ( module Main
+  , run
+  , mainWidget
+  , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
+  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  ) where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Reflex.Spider (Spider)
 import Reflex.Dom.Core (Widget)
 import Reflex.Dom.Main as Main hiding
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp')
+        mainWidgetWithHead', mainWidgetInElementById, runApp',
+        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
 import qualified Reflex.Dom.Main as Main
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp')
+        mainWidgetWithHead', mainWidgetInElementById, runApp',
+        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
 
 #if defined(ghcjs_HOST_OS)
 run :: a -> a
@@ -33,7 +39,26 @@ run jsm = do
   putStrLn $ "Running jsaddle-warp server on port " <> show port
   JW.run port jsm
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
+#if defined(ios_HOST_OS)
+import Data.Default
+import Data.Monoid ((<>))
+import Language.Javascript.JSaddle (JSM)
+import Language.Javascript.JSaddle.WKWebView (run', mainBundleResourcePath)
+import Language.Javascript.JSaddle.WKWebView.Internal (jsaddleMainHTMLWithBaseURL)
+
+-- TODO: upstream to jsaddle-wkwebview
+run :: JSM () -> IO ()
+run jsm = do
+  let indexHtml = "<!DOCTYPE html><html><head></head><body></body></html>"
+  baseUrl <- mainBundleResourcePath >>= \case
+    Nothing -> do
+      putStrLn "Reflex.Dom.run: unable to find main bundle resource path. Assets may not load properly."
+      return ""
+    Just p -> return $ "file://" <> p <> "/index.html"
+  run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
+#else
 import Language.Javascript.JSaddle.WKWebView (run)
+#endif
 #elif defined(ANDROID)
 import Android.HaskellActivity
 import Control.Monad
@@ -79,6 +104,14 @@ mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> IO ()
 mainWidgetInElementById eid w = run $ Main.mainWidgetInElementById eid w
 {-# INLINE mainWidgetInElementById #-}
 
-runApp' :: (t ~ Spider) => (forall x. AppInput t -> Widget x (AppOutput t)) -> IO ()
+runApp' :: (forall x. AppInput DomTimeline -> Widget x (AppOutput DomTimeline)) -> IO ()
 runApp' app = run $ Main.runApp' app
 {-# INLINE runApp' #-}
+
+mainHydrationWidgetWithHead :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> IO ()
+mainHydrationWidgetWithHead h b = run $ Main.mainHydrationWidgetWithHead h b
+{-# INLINE mainHydrationWidgetWithHead #-}
+
+mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -> IO ()
+mainHydrationWidgetWithHead' h b = run $ Main.mainHydrationWidgetWithHead' h b
+{-# INLINE mainHydrationWidgetWithHead' #-}

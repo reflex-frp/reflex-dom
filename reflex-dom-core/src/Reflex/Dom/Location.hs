@@ -12,6 +12,7 @@ module Reflex.Dom.Location
   , getLocationProtocol
   , getLocationUrl
   , manageHistory
+  , manageHistory'
   , HistoryCommand (..)
   , HistoryStateUpdate (..)
   , HistoryItem (..)
@@ -23,8 +24,11 @@ import Reflex.Dom.Builder.Immediate (wrapDomEvent)
 
 import Control.Lens ((^.))
 import Control.Monad ((>=>))
+import Control.Monad.Fix (MonadFix)
+import Data.Align (align)
 import Data.Monoid
 import Data.Text (Text)
+import Data.These (These(..))
 import qualified GHCJS.DOM as DOM
 import qualified GHCJS.DOM.EventM as DOM
 import qualified GHCJS.DOM.Location as Location
@@ -157,5 +161,40 @@ manageHistory runCmd = do
     HistoryItem
       <$> (SerializedScriptValue <$> PopStateEvent.getState e)
       <*> getLocationUri location
+  holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
+--TODO: Handle title setting better
+
+manageHistory'
+  :: (MonadFix m, MonadJSM m, TriggerEvent t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m))
+  => Event t ()
+  -- ^ Don't do anything until this event has fired
+  -> Event t HistoryCommand
+  -> m (Dynamic t HistoryItem)
+manageHistory' switchover runCmd = do
+  window <- DOM.currentWindowUnchecked
+  location <- Window.getLocation window
+  history <- Window.getHistory window
+  let getCurrentHistoryItem = HistoryItem
+        <$> History.getState history
+        <*> getLocationUri location
+  item0 <- liftJSM getCurrentHistoryItem
+  itemSetExternal' <- wrapDomEvent window (`DOM.on` DOM.popState) $ do
+    e <- DOM.event
+    HistoryItem
+      <$> (SerializedScriptValue <$> PopStateEvent.getState e)
+      <*> getLocationUri location
+  let f :: (Bool, Maybe a) -> These a () -> (Maybe (Bool, Maybe a), Maybe a)
+      f (switched, acc) = \case
+        This change
+          | switched -> (Nothing, Just change)
+          | otherwise -> (Just (switched, Just change), Nothing)
+        That () -> (Just (True, Nothing), acc)
+        These change () -> (Just (True, Nothing), Just change)
+  -- Accumulate the events before switchover
+  (_, cmd') <- mapAccumMaybeB f (False, Nothing) $ align (leftmost [Left <$> runCmd, Right <$> itemSetExternal']) switchover
+  let (itemSetInternal', itemSetExternal) = fanEither cmd'
+  itemSetInternal <- performEvent $ ffor itemSetInternal' $ \cmd -> liftJSM $ do
+    runHistoryCommand history cmd
+    getCurrentHistoryItem
   holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
 --TODO: Handle title setting better

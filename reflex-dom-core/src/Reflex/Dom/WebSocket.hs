@@ -46,6 +46,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.Default
 import Data.IORef
 import Data.JSString.Text
@@ -54,6 +55,7 @@ import Data.Text
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (jsonDecode)
 import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
@@ -100,7 +102,7 @@ webSocket' url config onRawMessage = do
         liftIO $ triggerEClose args
         _ <- liftIO $ atomically $ tryTakeTMVar isOpen
         liftIO $ writeIORef currentSocketRef Nothing
-        when (_webSocketConfig_reconnect config) $ do
+        when (_webSocketConfig_reconnect config) $ forkJSM $ do
           liftIO $ threadDelay 1000000
           start
       start = do
@@ -126,9 +128,11 @@ webSocket' url config onRawMessage = do
     mws <- liftIO $ readIORef currentSocketRef
     success <- case mws of
       Nothing -> return False
-      Just ws -> runJSM ((webSocketSend ws payload >> return True)
-                         `JS.catch`
-                         (\(_ :: SomeException) -> return False)) ctx
+      Just ws -> flip runJSM ctx $ do
+        rs <- getReadyState $ unWebSocket ws
+        if rs == 1
+          then (webSocketSend ws payload >> return True) `JS.catch` (\(_ :: SomeException) -> return False)
+          else return False
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
@@ -137,8 +141,13 @@ textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSV
 
 jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), HasJSContext m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
 jsonWebSocket url cfg = do
-  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap encode <$> _webSocketConfig_send cfg }
+  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg }
   return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }
+
+forkJSM :: JSM () -> JSM ()
+forkJSM a = do
+  jsm <- askJSM
+  void $ liftIO $ forkIO $ runJSM a jsm
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLensesWith (lensRules & simpleLenses .~ True) ''WebSocketConfig

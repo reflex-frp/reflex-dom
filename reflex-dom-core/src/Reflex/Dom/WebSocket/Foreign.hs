@@ -12,7 +12,6 @@ module Reflex.Dom.WebSocket.Foreign
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
-import Control.Monad.Reader
 import Data.Bifoldable
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
@@ -20,12 +19,11 @@ import Data.Text (Text)
 import Data.Text.Encoding
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.CloseEvent
-import GHCJS.DOM.EventM (on)
 import GHCJS.DOM.MessageEvent
-import GHCJS.DOM.Types (JSM, JSVal, liftJSM, fromJSValUnchecked)
-import GHCJS.DOM.WebSocket (WebSocket)
+import GHCJS.DOM.Types (JSM, JSVal, liftJSM, fromJSValUnchecked, WebSocket(..))
 import qualified GHCJS.DOM.WebSocket as DOM
 import GHCJS.Foreign (JSType(..), jsTypeOf)
+import Language.Javascript.JSaddle (fun, eval, toJSVal, call)
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import Language.Javascript.JSaddle.Types (ghcjsPure)
 
@@ -64,25 +62,41 @@ newWebSocket
   -> ((Bool, Word, Text) -> JSM ()) -- onclose
   -> JSM JSWebSocket
 newWebSocket _ url protocols onMessage onOpen onError onClose = do
-  ws <- DOM.newWebSocket url protocols
-  DOM.setBinaryType ws "arraybuffer"
-  _ <- on ws DOM.open $ liftJSM onOpen
-  _ <- on ws DOM.error $ liftJSM onError
-  _ <- on ws DOM.closeEvent $ do
-    e <- ask
-    wasClean <- getWasClean e
-    code <- getCode e
-    reason <- getReason e
-    liftJSM $ onClose (wasClean, code, reason)
-  _ <- on ws DOM.message $ do
-    e <- ask
-    d <- getData e
-    liftJSM $ ghcjsPure (jsTypeOf d) >>= \case
-      String -> onMessage $ Right d
-      _ -> do
-        ab <- mutableArrayBufferFromJSVal d
-        bsFromMutableArrayBuffer ab >>= onMessage . Left
-  return $ JSWebSocket ws
+  let onOpenWrapped = fun $ \_ _ _ -> onOpen
+      onErrorWrapped = fun $ \_ _ _ -> onError
+      onCloseWrapped = fun $ \_ _ (e:_) -> do
+        let e' = CloseEvent e
+        wasClean <- getWasClean e'
+        code <- getCode e'
+        reason <- getReason e'
+        liftJSM $ onClose (wasClean, code, reason)
+      onMessageWrapped = fun $ \_ _ (e:_) -> do
+        let e' = MessageEvent e
+        d <- getData e'
+        liftJSM $ ghcjsPure (jsTypeOf d) >>= \case
+          String -> onMessage $ Right d
+          _ -> do
+            ab <- mutableArrayBufferFromJSVal d
+            bsFromMutableArrayBuffer ab >>= onMessage . Left
+  newWS <- eval $ unlines
+    [ "(function(url, protos, open, error, close, message) {"
+    , "  var ws = new window['WebSocket'](url, protos);"
+    , "  ws['binaryType'] = 'arraybuffer';"
+    , "  ws['addEventListener']('open', open);"
+    , "  ws['addEventListener']('error', error);"
+    , "  ws['addEventListener']('close', close);"
+    , "  ws['addEventListener']('message', message);"
+    , "  return ws;"
+    , "})"
+    ]
+  url' <- toJSVal url
+  protocols' <- toJSVal protocols
+  onOpen' <- toJSVal onOpenWrapped
+  onError' <- toJSVal onErrorWrapped
+  onClose' <- toJSVal onCloseWrapped
+  onMessage' <- toJSVal onMessageWrapped
+  ws <- call newWS newWS [url', protocols', onOpen', onError', onClose', onMessage']
+  return $ JSWebSocket $ WebSocket ws
 
 onBSMessage :: Either ByteString JSVal -> JSM ByteString
 onBSMessage = either return $ fmap encodeUtf8 . fromJSValUnchecked

@@ -8,16 +8,25 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Int
-import GHC.Stats
+import Data.Text as T
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
 import Reflex.Time
 import System.Exit
-import System.IO.Temp
-import System.Linux.Namespaces
 import System.Mem
-import System.Posix
 import System.Process
+
+import Test.Util.ChromeFlags
+import Test.Util.UnshareNetwork
+
+#if MIN_VERSION_base(4,11,0)
+import GHC.Stats (getRTSStatsEnabled, getRTSStats, RTSStats(..), gcdetails_live_bytes, gc)
+currentBytesUsed :: RTSStats -> Int64
+currentBytesUsed = fromIntegral . gcdetails_live_bytes . gc
+#else
+import GHC.Stats (getGCStats, GCStats(..))
+getRTSStats = getGCStats
+#endif
 
 -- In initial testing, the minimum live bytes count was 233128 and maximum was
 -- 363712.  Going over the maximum means the test has actually failed - we
@@ -38,14 +47,14 @@ failureLimit = 0
 
 main :: IO ()
 main = do
-  uid <- getEffectiveUserID
-  handle (\(_ :: IOError) -> return ()) $ do -- If we run into an exception with sandboxing, just don't bother
-    unshare [User, Network]
-    writeUserMappings Nothing [UserMapping 0 uid 1]
-    callCommand "ip link set lo up ; ip addr"
-  mainThread <- myThreadId
-  withSystemTempDirectory "reflex-dom-core_test_gc" $ \tmp -> do
-    browserProcess <- spawnCommand $ "echo 'Starting Chromium' ; chromium --headless --disable-gpu --no-sandbox --remote-debugging-port=9222 --user-data-dir=" ++ tmp ++ " http://localhost:3911 ; echo 'Chromium exited'"
+  handle (\(_ :: IOError) -> return ()) $ unshareNetork -- If we run into an exception with sandboxing, just don't bother
+  withSandboxedChromeFlags True $ \chromeFlags -> do
+    mainThread <- myThreadId
+    browserProcess <- spawnCommand $ mconcat
+      [ "echo 'Starting Chromium' ; chromium "
+      , unpack $ T.unwords chromeFlags
+      , " http://localhost:3911 ; echo 'Chromium exited'"
+      ]
     let finishTest result = do
           interruptProcessGroupOf browserProcess
           throwTo mainThread result
@@ -63,7 +72,7 @@ main = do
         let f (!failures, !n) = liftIO $ if n < 3000
               then do performMajorGC
                       threadDelay 5000 -- Wait a bit to allow requestAnimationFrame to call its callback sometimes; this value was experimentally determined
-                      gcStats <- getGCStats
+                      gcStats <- getRTSStats
                       print $ currentBytesUsed gcStats
                       when (currentBytesUsed gcStats < minBytesAllowed) $ do
                         putStrLn "FAILED: currentBytesUsed < minBytesAllowed"
