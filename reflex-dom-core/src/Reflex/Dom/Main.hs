@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
@@ -46,7 +47,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
 import GHCJS.DOM
-import GHCJS.DOM.Document
+import "ghcjs-dom" GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.Node
 import GHCJS.DOM.NonElementParentNode

@@ -12,6 +12,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -140,7 +141,8 @@ import Data.Some (Some(..))
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
-import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
+import GHCJS.DOM.Debug (DomHasCallStack)
+import "ghcjs-dom" GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute, hasAttributeNS)
 import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
@@ -658,7 +660,7 @@ instance er ~ EventResult => Default (GhcjsEventSpec er) where
     }
 
 {-# INLINE makeElement #-}
-makeElement :: MonadJSM m => Document -> Text -> ElementConfig er t s -> m DOM.Element
+makeElement :: (MonadJSM m, DomHasCallStack) => Document -> Text -> ElementConfig er t s -> m DOM.Element
 makeElement doc elementTag cfg = do
   e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
     Nothing -> createElement doc elementTag
