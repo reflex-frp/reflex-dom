@@ -767,15 +767,10 @@ hydrateElement elementTag cfg child = do
   let skipAttr = "data-hydration-skip" :: DOM.JSString
       ssrAttr = "data-ssr" :: DOM.JSString
       shouldSkip :: DOM.Element -> HydrationRunnerT t m Bool
-      shouldSkip e = case cfg ^. namespace of
-        Nothing -> do
-          skip <- hasAttribute e skipAttr
-          ssr <- hasAttribute e ssrAttr
-          pure $ skip || not ssr
-        Just ns -> do
-          skip <- hasAttributeNS e (Just ns) skipAttr
-          ssr <- hasAttributeNS e (Just ns) ssrAttr
-          pure $ skip || not ssr
+      shouldSkip e = do
+        skip <- hasAttribute e skipAttr
+        ssr <- hasAttribute e ssrAttr
+        pure $ skip || not ssr
   childDom <- liftIO $ readIORef childDelayedRef
   let rawCfg = extractRawElementConfig cfg
   doc <- askDocument
