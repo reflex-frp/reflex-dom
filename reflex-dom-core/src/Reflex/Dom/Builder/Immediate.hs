@@ -141,7 +141,7 @@ import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
-import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute, hasAttributeNS)
+import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute)
 import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import GHCJS.DOM.MouseEvent
