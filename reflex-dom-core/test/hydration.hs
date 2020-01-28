@@ -22,6 +22,7 @@
 
 import Prelude hiding (fail)
 import Control.Concurrent
+import Control.Lens.Operators
 import Control.Monad hiding (fail)
 import Control.Monad.Catch
 import Control.Monad.Fail
