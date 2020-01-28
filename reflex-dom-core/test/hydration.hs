@@ -770,6 +770,15 @@ tests withDebugging wdConfig caps _selenium = do
         prerender_ (pure ()) (liftIO $ trigger "Client")
         textNode $ TextNodeConfig "Initial" $ Just e
 
+  describe "namespaces" $ session' $ do
+    it "dyn can be nested in namespaced widget" $ runWD $ do
+      testWidget (pure ()) (checkTextInTag "svg" "one") $ do
+        let svgRootCfg = def
+              & elementConfig_namespace .~ Just "http://www.w3.org/2000/svg"
+              & elementConfig_initialAttributes .~ ("width" =: "100%" <> "height" =: "100%" <> "viewBox" =: "0 0 1536 2048")
+        void $ element "svg" svgRootCfg $ do
+          dyn_ $ text "one" <$ pure ()
+
   describe "runWithReplace" $ session' $ do
     it "works" $ runWD $ do
       replaceChan :: Chan Text <- liftIO newChan
