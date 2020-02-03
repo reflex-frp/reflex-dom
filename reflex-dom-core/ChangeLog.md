@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-Support GHC 8.8.
+* Support GHC 8.8.
+* Fix attribute support for explicitly namespaced elements
 
 ## 0.5.3
 
