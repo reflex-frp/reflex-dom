@@ -1,5 +1,18 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Remove deprecation warnings for the following widgets in
+  `Reflex.Dom.Widget.Basic`:
+
+   * `Link`
+   * `button`
+   * `dtdd`
+   * `linkClass`
+   * `link`
+   * `tabDisplay`
+   * `tableDynAttr`
+
 ## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
