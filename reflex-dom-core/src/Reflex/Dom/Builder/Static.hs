@@ -55,7 +55,6 @@ import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
-import System.Random (randomRIO)
 
 data StaticDomBuilderEnv t = StaticDomBuilderEnv
   { _staticDomBuilderEnv_shouldEscape :: Bool
@@ -64,6 +63,7 @@ data StaticDomBuilderEnv t = StaticDomBuilderEnv
     -- We use this to add a "selected" attribute to the appropriate "option" child element.
     -- This is not yet a perfect simulation of what the browser does, but it is much closer than doing nothing.
     -- TODO: Handle edge cases, e.g. setting to a value for which there is no option, then adding that option dynamically afterwards.
+  , _staticDomBuilderEnv_nextRunWithReplaceKey :: IORef Int
   }
 
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
@@ -164,7 +164,7 @@ instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilde
 instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
-    key <- replaceStart
+    key <- replaceStart e
     (result0, result') <- lift $ runWithReplace (runStaticDomBuilderT a0 e) (flip runStaticDomBuilderT e <$> a')
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
@@ -174,10 +174,9 @@ instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m)
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
 
--- TODO remove this?
-replaceStart :: (DomBuilder t m, MonadIO m) => m Text
-replaceStart = do
-  str <- liftIO $ replicateM 8 $ randomRIO ('a', 'z')
+replaceStart :: (DomBuilder t m, MonadIO m) => StaticDomBuilderEnv t -> m Text
+replaceStart env = do
+  str <- show <$> liftIO (atomicModifyRef (_staticDomBuilderEnv_nextRunWithReplaceKey env) $ \k -> (succ k, k))
   let key = "-" <> T.pack str
   _ <- commentNode $ def { _commentNodeConfig_initialContents = "replace-start" <> key }
   pure key
@@ -287,7 +286,8 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     es <- newFanEventWithTrigger $ \_ _ -> return (return ())
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
-      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing
+      nextRunWithReplaceKey <- asks _staticDomBuilderEnv_nextRunWithReplaceKey
+      (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing nextRunWithReplaceKey
       attrs0 <- foldDyn applyMap (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       selectValue <- asks _staticDomBuilderEnv_selectValue
       let addSelectedAttr attrs sel = case Map.lookup "value" attrs of
@@ -341,7 +341,9 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   selectElement cfg child = do
     v <- holdDyn (cfg ^. selectElementConfig_initialValue) (cfg ^. selectElementConfig_setValue)
     (e, result) <- element "select" (_selectElementConfig_elementConfig cfg) $ do
-      (a, innerHtml) <- StaticDomBuilderT $ lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False $ Just (current v)
+      (a, innerHtml) <- StaticDomBuilderT $ do
+        nextRunWithReplaceKey <- asks _staticDomBuilderEnv_nextRunWithReplaceKey
+        lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False (Just $ current v) nextRunWithReplaceKey
       StaticDomBuilderT $ lift $ modify $ (:) innerHtml
       return a
     let wrapped = SelectElement
@@ -363,7 +365,8 @@ renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do
   runDomHost $ do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
-    let env0 = StaticDomBuilderEnv True Nothing
+    nextRunWithReplaceKey <- newRef 0
+    let env0 = StaticDomBuilderEnv True Nothing nextRunWithReplaceKey
     ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
     mPostBuildTrigger <- readRef postBuildTriggerRef
     forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
