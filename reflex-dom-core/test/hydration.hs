@@ -1,13 +1,9 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -15,10 +11,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 import Prelude hiding (fail)
 import Control.Concurrent
@@ -32,7 +32,7 @@ import Control.Monad.Ref
 import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
-import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
+import Data.Dependent.Sum (DSum(..), (==>))
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
@@ -63,7 +63,6 @@ import Test.Hspec (xit)
 import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
 import Test.WebDriver (WD(..))
-import Test.WebDriver.Exceptions (ServerError(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
