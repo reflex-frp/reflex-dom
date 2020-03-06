@@ -22,6 +22,7 @@
 
 import Prelude hiding (fail)
 import Control.Concurrent
+import qualified Control.Concurrent.Async as Async
 import Control.Lens.Operators
 import Control.Monad hiding (fail)
 import Control.Monad.Catch
@@ -77,6 +78,9 @@ import qualified Test.WebDriver.Capabilities as WD
 
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
+
+-- ORPHAN: https://github.com/kallisti-dev/hs-webdriver/pull/167
+deriving instance MonadMask WD
 
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
@@ -1397,23 +1401,26 @@ testWidgetDebug' withDebugging beforeJS afterSwitchover bodyWidget = do
         ]
       -- hSilence to get rid of ConnectionClosed logs
       silenceIfDebug = if withDebugging then id else hSilence [stderr]
-      jsaddleWarp = forkIO $ silenceIfDebug $ Warp.runSettings settings application
-  jsaddleTid <- liftIO jsaddleWarp
-  putStrLnDebug "taking waitJSaddle"
-  liftIO $ takeMVar waitJSaddle
-  putStrLnDebug "opening page"
-  WD.openPage $ "http://localhost:" <> show jsaddlePort
-  putStrLnDebug "running beforeJS"
-  a <- beforeJS
-  putStrLnDebug "putting waitBeforeJS"
-  liftIO $ putMVar waitBeforeJS ()
-  putStrLnDebug "taking waitUntilSwitchover"
-  liftIO $ takeMVar waitUntilSwitchover
-  putStrLnDebug "running afterSwitchover"
-  b <- afterSwitchover a
-  putStrLnDebug "killing jsaddle thread"
-  liftIO $ killThread jsaddleTid
-  return b
+      jsaddleWarp = silenceIfDebug $ Warp.runSettings settings application
+  withAsync' jsaddleWarp $ do
+    putStrLnDebug "taking waitJSaddle"
+    liftIO $ takeMVar waitJSaddle
+    putStrLnDebug "opening page"
+    WD.openPage $ "http://localhost:" <> show jsaddlePort
+    putStrLnDebug "running beforeJS"
+    a <- beforeJS
+    putStrLnDebug "putting waitBeforeJS"
+    liftIO $ putMVar waitBeforeJS ()
+    putStrLnDebug "taking waitUntilSwitchover"
+    liftIO $ takeMVar waitUntilSwitchover
+    putStrLnDebug "running afterSwitchover"
+    afterSwitchover a
+
+withAsync' :: (MonadIO m, MonadMask m) => IO a -> m b -> m b
+withAsync' f g = bracket
+  (liftIO $ Async.async f)
+  (liftIO . Async.uninterruptibleCancel)
+  (const g)
 
 data Key2 a where
   Key2_Int :: Int -> Key2 Int
