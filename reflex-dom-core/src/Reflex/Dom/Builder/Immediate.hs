@@ -1291,13 +1291,12 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
       go Nothing _ = do
         tn <- createTextNode doc ("" :: Text)
         insertAfterPreviousNode tn
+        HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
         pure (tn, Nothing)
       go (Just key0) mLastNode = do
         parent <- askParent
         maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
-          Nothing -> do
-            HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
-            go Nothing Nothing
+          Nothing -> go Nothing Nothing
           Just node -> DOM.castTo DOM.Comment node >>= \case
             Just comment -> do
               commentText <- fromMaybe (error "Cannot get text content of comment node") <$> Node.getTextContent comment
