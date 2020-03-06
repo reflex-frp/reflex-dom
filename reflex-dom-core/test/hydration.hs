@@ -1318,8 +1318,8 @@ withRetry a = wait 300
   where wait :: Int -> WD a
         wait 0 = a
         wait n = try a >>= \case
-          Left (_ :: SomeException) -> do
-            liftIO $ threadDelay 100000
+          Left (e :: SomeException) -> do
+            liftIO $ putStrLn ("(retrying due to " <> show e <> ")") *> threadDelay 100000
             wait $ n - 1
           Right v -> return v
 
