@@ -927,6 +927,58 @@ tests withDebugging wdConfig caps _selenium = do
             , el "span" . text <$> replace
             ]
 
+    let checkInnerHtml t x = findElemWithRetry (WD.ByTag t) >>= (`attr` "innerHTML") >>= (`shouldBe` Just x)
+    it "removes bracketing comments" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1") $ el "p" (text "inner2") <$ replace
+          text "|after"
+    it "ignores extra ending bracketing comment" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0--><!--replace-end-0-->|after"
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|inner2|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1" *> comment "replace-end-0") $ text "inner2" <$ replace
+          text "|after"
+        void $ runWithReplace blank $ el "p" blank <$ replace -- Signal tag for end of test
+    it "ignores missing ending bracketing comments" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = do
+          checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+          divEl <- findElemWithRetry (WD.ByTag "div")
+          let wrongHtml = "<!--replace-start-0-->inner1"
+          actualHtml :: String <- WD.executeJS
+            [WD.JSArg divEl, WD.JSArg wrongHtml]
+            "arguments[0].innerHTML = arguments[1]; return arguments[0].innerHTML"
+          actualHtml `shouldBe` wrongHtml
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1") $ el "p" (text "inner2") <$ replace
+          text "|after"
+
   describe "traverseDMapWithKeyWithAdjust" $ session' $ do
     let widget :: DomBuilder t m => DKey a -> Identity a -> m (Identity a)
         widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
