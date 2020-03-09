@@ -1,13 +1,9 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -15,13 +11,18 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 import Prelude hiding (fail)
 import Control.Concurrent
+import qualified Control.Concurrent.Async as Async
 import Control.Lens.Operators
 import Control.Monad hiding (fail)
 import Control.Monad.Catch
@@ -32,7 +33,7 @@ import Control.Monad.Ref
 import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
-import Data.Dependent.Sum (DSum(..), (==>), EqTag(..), ShowTag(..))
+import Data.Dependent.Sum (DSum(..), (==>))
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
@@ -63,7 +64,6 @@ import Test.Hspec (xit)
 import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
 import qualified Test.Hspec.WebDriver as WD
 import Test.WebDriver (WD(..))
-import Test.WebDriver.Exceptions (ServerError(..))
 
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Dependent.Map as DMap
@@ -78,6 +78,9 @@ import qualified Test.WebDriver.Capabilities as WD
 
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
+
+-- ORPHAN: https://github.com/kallisti-dev/hs-webdriver/pull/167
+deriving instance MonadMask WD
 
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
@@ -924,6 +927,58 @@ tests withDebugging wdConfig caps _selenium = do
             , el "span" . text <$> replace
             ]
 
+    let checkInnerHtml t x = findElemWithRetry (WD.ByTag t) >>= (`attr` "innerHTML") >>= (`shouldBe` Just x)
+    it "removes bracketing comments" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1") $ el "p" (text "inner2") <$ replace
+          text "|after"
+    it "ignores extra ending bracketing comment" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0--><!--replace-end-0-->|after"
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|inner2|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1" *> comment "replace-end-0") $ text "inner2" <$ replace
+          text "|after"
+        void $ runWithReplace blank $ el "p" blank <$ replace -- Signal tag for end of test
+    it "ignores missing ending bracketing comments" $ runWD $ do
+      replaceChan :: Chan () <- liftIO newChan
+      let
+        preSwitchover = do
+          checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+          divEl <- findElemWithRetry (WD.ByTag "div")
+          let wrongHtml = "<!--replace-start-0-->inner1"
+          actualHtml :: String <- WD.executeJS
+            [WD.JSArg divEl, WD.JSArg wrongHtml]
+            "arguments[0].innerHTML = arguments[1]; return arguments[0].innerHTML"
+          actualHtml `shouldBe` wrongHtml
+        check () = do
+          liftIO $ writeChan replaceChan () -- trigger creation of p tag
+          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      testWidget' preSwitchover check $ do
+        replace <- triggerEventWithChan replaceChan
+        el "div" $ do
+          text "before|"
+          _ <- runWithReplace (text "inner1") $ el "p" (text "inner2") <$ replace
+          text "|after"
+
   describe "traverseDMapWithKeyWithAdjust" $ session' $ do
     let widget :: DomBuilder t m => DKey a -> Identity a -> m (Identity a)
         widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
@@ -1315,8 +1370,8 @@ withRetry a = wait 300
   where wait :: Int -> WD a
         wait 0 = a
         wait n = try a >>= \case
-          Left (_ :: SomeException) -> do
-            liftIO $ threadDelay 100000
+          Left (e :: SomeException) -> do
+            liftIO $ putStrLn ("(retrying due to " <> show e <> ")") *> threadDelay 100000
             wait $ n - 1
           Right v -> return v
 
@@ -1398,23 +1453,26 @@ testWidgetDebug' withDebugging beforeJS afterSwitchover bodyWidget = do
         ]
       -- hSilence to get rid of ConnectionClosed logs
       silenceIfDebug = if withDebugging then id else hSilence [stderr]
-      jsaddleWarp = forkIO $ silenceIfDebug $ Warp.runSettings settings application
-  jsaddleTid <- liftIO jsaddleWarp
-  putStrLnDebug "taking waitJSaddle"
-  liftIO $ takeMVar waitJSaddle
-  putStrLnDebug "opening page"
-  WD.openPage $ "http://localhost:" <> show jsaddlePort
-  putStrLnDebug "running beforeJS"
-  a <- beforeJS
-  putStrLnDebug "putting waitBeforeJS"
-  liftIO $ putMVar waitBeforeJS ()
-  putStrLnDebug "taking waitUntilSwitchover"
-  liftIO $ takeMVar waitUntilSwitchover
-  putStrLnDebug "running afterSwitchover"
-  b <- afterSwitchover a
-  putStrLnDebug "killing jsaddle thread"
-  liftIO $ killThread jsaddleTid
-  return b
+      jsaddleWarp = silenceIfDebug $ Warp.runSettings settings application
+  withAsync' jsaddleWarp $ do
+    putStrLnDebug "taking waitJSaddle"
+    liftIO $ takeMVar waitJSaddle
+    putStrLnDebug "opening page"
+    WD.openPage $ "http://localhost:" <> show jsaddlePort
+    putStrLnDebug "running beforeJS"
+    a <- beforeJS
+    putStrLnDebug "putting waitBeforeJS"
+    liftIO $ putMVar waitBeforeJS ()
+    putStrLnDebug "taking waitUntilSwitchover"
+    liftIO $ takeMVar waitUntilSwitchover
+    putStrLnDebug "running afterSwitchover"
+    afterSwitchover a
+
+withAsync' :: (MonadIO m, MonadMask m) => IO a -> m b -> m b
+withAsync' f g = bracket
+  (liftIO $ Async.async f)
+  (liftIO . Async.uninterruptibleCancel)
+  (const g)
 
 data Key2 a where
   Key2_Int :: Int -> Key2 Int

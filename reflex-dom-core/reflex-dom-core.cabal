@@ -166,6 +166,7 @@ test-suite hlint
 test-suite hydration
   build-depends: base
                , aeson
+               , async
                , bytestring
                , chrome-test-utils
                , constraints
