@@ -318,8 +318,7 @@ addHydrationStepWithSetup :: (Adjustable t m, MonadIO m) => m a -> (a -> Hydrati
 addHydrationStepWithSetup setup f = getHydrationMode >>= \case
   HydrationMode_Immediate -> pure ()
   HydrationMode_Hydrating -> do
-    switchover <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_switchover
-    (s, _) <- lift $ runWithReplace setup $ return () <$ switchover
+    s <- lift setup
     addHydrationStep (f s)
 
 -- | Add a hydration step
