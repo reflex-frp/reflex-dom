@@ -40,6 +40,9 @@
 
  * Add `< 0.7` upper bound for reflex
 
+* *(Breaking change)* The mouse wheel event now is a `WheelEventResult` rather than `()`.
+  This provides information about the wheel's motion beyond the fact that it merely moved.
+
 ## 0.5.2
 
 * Update to use new dependent-sum/map packages and drop dependency on `*Tag` classes (e.g., `ShowTag`).

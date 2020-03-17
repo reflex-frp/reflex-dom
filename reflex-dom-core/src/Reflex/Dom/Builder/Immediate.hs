@@ -192,6 +192,7 @@ import qualified GHCJS.DOM.TouchEvent as TouchEvent
 import qualified GHCJS.DOM.TouchList as TouchList
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.Window as Window
+import qualified GHCJS.DOM.WheelEvent as WheelEvent
 import qualified Reflex.Patch.DMap as PatchDMap
 import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
 import qualified Reflex.Patch.MapWithMove as PatchMapWithMove
@@ -2249,7 +2250,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Touchend -> getTouchEvent
   Touchcancel -> getTouchEvent
   Mousewheel -> return ()
-  Wheel -> return ()
+  Wheel -> getWheelEvent
 
 {-# INLINABLE defaultDomWindowEventHandler #-}
 defaultDomWindowEventHandler :: DOM.Window -> EventName en -> EventM DOM.Window (EventType en) (Maybe (EventResult en))
@@ -2299,7 +2300,7 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Touchend -> getTouchEvent
   Touchcancel -> getTouchEvent
   Mousewheel -> return ()
-  Wheel -> return ()
+  Wheel -> getWheelEvent
 
 {-# INLINABLE withIsEvent #-}
 withIsEvent :: EventName en -> (IsEvent (EventType en) => r) -> r
@@ -2606,6 +2607,26 @@ getTouchEvent = do
     , _touchEventResult_shiftKey = shiftKey
     , _touchEventResult_targetTouches = targetTouches
     , _touchEventResult_touches = touches
+    }
+
+{-# INLINABLE getWheelEvent #-}
+getWheelEvent :: EventM e WheelEvent WheelEventResult
+getWheelEvent = do
+  e <- event
+  dx :: Double <- WheelEvent.getDeltaX e
+  dy :: Double <- WheelEvent.getDeltaY e
+  dz :: Double <- WheelEvent.getDeltaZ e
+  deltaMode :: Word <- WheelEvent.getDeltaMode e
+  return $ WheelEventResult
+    { _wheelEventResult_deltaX = dx
+    , _wheelEventResult_deltaY = dy
+    , _wheelEventResult_deltaZ = dz
+    , _wheelEventResult_deltaMode = case deltaMode of
+        0 -> DeltaPixel
+        1 -> DeltaLine
+        2 -> DeltaPage
+        -- See https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaMode
+        _ -> error "getWheelEvent: impossible encoding"
     }
 
 instance MonadSample t m => MonadSample t (HydrationDomBuilderT s t m) where
