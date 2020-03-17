@@ -40,8 +40,8 @@
 
  * Add `< 0.7` upper bound for reflex
 
-* *breaking change* The wheel event now is of `WheelEventResult` rather than `()`.
-  This provides information about the wheels motion beyond the fact that it merely moved.
+* *(Breaking change)* The mouse wheel event now is a `WheelEventResult` rather than `()`.
+  This provides information about the wheel's motion beyond the fact that it merely moved.
 
 ## 0.5.2
 
