@@ -1,5 +1,5 @@
 Name: reflex-dom-core
-Version: 0.5.2.0
+Version: 0.5.3
 Synopsis: Functional Reactive Web Apps with Reflex
 Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
 License: BSD3
@@ -48,7 +48,7 @@ library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 1.5,
-    base >= 4.7 && < 4.13,
+    base >= 4.7 && < 4.14,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
     blaze-builder,
@@ -64,17 +64,17 @@ library
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
-    jsaddle >=0.9.0.0 && <0.10,
+    jsaddle >= 0.9.0.0 && < 0.10,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
     lens >= 4.7 && < 5,
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
-    primitive >= 0.5 && < 0.7,
+    primitive >= 0.5 && < 0.8,
     random,
     ref-tf == 0.4.*,
-    reflex >= 0.6.2,
-    semigroups >= 0.16 && < 0.19,
+    reflex >= 0.6.2 && < 0.7,
+    semigroups >= 0.16 && < 0.20,
     stm >= 2.4 && < 2.6,
     text == 1.2.*,
     transformers >= 0.3 && < 0.6,
@@ -85,7 +85,7 @@ library
     hs-source-dirs: src-ghcjs
     build-depends:
       ghcjs-base,
-      hashable == 1.2.*
+      hashable >= 1.2 && < 1.4
   else
     hs-source-dirs: src-ghc
     if !os(windows)
@@ -93,7 +93,7 @@ library
 
   if flag(split-these)
     build-depends:
-      semialign >= 1 && < 1.1,
+      semialign >= 1 && < 1.2,
       these >= 1 && < 1.1
   else
     build-depends:
@@ -167,6 +167,7 @@ test-suite hlint
 test-suite hydration
   build-depends: base
                , aeson
+               , async
                , bytestring
                , chrome-test-utils
                , constraints
