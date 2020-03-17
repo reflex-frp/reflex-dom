@@ -17,6 +17,8 @@
    * `tabDisplay`
    * `tableDynAttr`
 
+* Fix bug in hydration when dealing with unexpected HTML ([#361](https://github.com/reflex-frp/reflex-dom/pull/361)).
+
 ## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:

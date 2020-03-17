@@ -319,8 +319,7 @@ addHydrationStepWithSetup :: (Adjustable t m, MonadIO m) => m a -> (a -> Hydrati
 addHydrationStepWithSetup setup f = getHydrationMode >>= \case
   HydrationMode_Immediate -> pure ()
   HydrationMode_Hydrating -> do
-    switchover <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_switchover
-    (s, _) <- lift $ runWithReplace setup $ return () <$ switchover
+    s <- lift setup
     addHydrationStep (f s)
 
 -- | Add a hydration step
@@ -1273,8 +1272,8 @@ hydrateComment doc t mSetContents = do
 skipToAndReplaceComment
   :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
   => Text
-  -> IORef Text
-  -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
+  -> IORef (Maybe Text)
+  -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef (Maybe Text))
 skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
   HydrationMode_Immediate -> do
     -- If we're in immediate mode, we don't try to replace an existing comment,
@@ -1282,43 +1281,50 @@ skipToAndReplaceComment prefix key0Ref = getHydrationMode >>= \case
     t <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
     append $ toNode t
     textNodeRef <- liftIO $ newIORef t
-    keyRef <- liftIO $ newIORef ""
+    keyRef <- liftIO $ newIORef Nothing
     pure (pure (), textNodeRef, keyRef)
   HydrationMode_Hydrating -> do
     doc <- askDocument
     textNodeRef <- liftIO $ newIORef $ error "textNodeRef not yet initialized"
     keyRef <- liftIO $ newIORef $ error "keyRef not yet initialized"
-    let go key0 mLastNode = do
-          parent <- askParent
-          node <- maybe (Node.getFirstChildUnchecked parent) Node.getNextSiblingUnchecked mLastNode
-          DOM.castTo DOM.Comment node >>= \case
+    let
+      go Nothing _ = do
+        tn <- createTextNode doc ("" :: Text)
+        insertAfterPreviousNode tn
+        HydrationRunnerT $ modify' $ \s -> s { _hydrationState_failed = True }
+        pure (tn, Nothing)
+      go (Just key0) mLastNode = do
+        parent <- askParent
+        maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
+          Nothing -> go Nothing Nothing
+          Just node -> DOM.castTo DOM.Comment node >>= \case
             Just comment -> do
-              commentText <- Node.getTextContentUnchecked comment
-              case T.stripPrefix (prefix <> key0) commentText of
+              commentText <- fromMaybe (error "Cannot get text content of comment node") <$> Node.getTextContent comment
+              case T.stripPrefix (prefix <> key0) commentText of -- 'key0' may be @""@ in which case we're just finding the actual key; TODO: Don't be clever.
                 Just key -> do
                   -- Replace the comment with an (invisible) text node
                   tn <- createTextNode doc ("" :: Text)
                   Node.replaceChild_ parent tn comment
-                  pure (tn, key)
+                  pure (tn, Just key)
                 Nothing -> do
-                  go key0 (Just node)
+                  go (Just key0) (Just node)
             Nothing -> do
-              go key0 (Just node)
-        switchComment = do
-          key0 <- liftIO $ readIORef key0Ref
-          (tn, key) <- go key0 =<< getPreviousNode
-          setPreviousNode $ Just $ toNode tn
-          liftIO $ do
-            writeIORef textNodeRef tn
-            writeIORef keyRef key
+              go (Just key0) (Just node)
+      switchComment = do
+        key0 <- liftIO $ readIORef key0Ref
+        (tn, key) <- go key0 =<< getPreviousNode
+        setPreviousNode $ Just $ toNode tn
+        liftIO $ do
+          writeIORef textNodeRef tn
+          writeIORef keyRef key
     pure (switchComment, textNodeRef, keyRef)
 
 {-# INLINABLE skipToReplaceStart #-}
-skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef Text)
-skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORef "")
+skipToReplaceStart :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text, IORef (Maybe Text))
+skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORef $ Just "") -- TODO: Don't rely on clever usage @""@ to make this work.
 
 {-# INLINABLE skipToReplaceEnd #-}
-skipToReplaceEnd :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => IORef Text -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text)
+skipToReplaceEnd :: (MonadJSM m, Reflex t, MonadFix m, Adjustable t m, MonadHold t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => IORef (Maybe Text) -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text)
 skipToReplaceEnd key = fmap (\(m,e,_) -> (m,e)) $ skipToAndReplaceComment "replace-end" key
 
 instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT s t m) where
