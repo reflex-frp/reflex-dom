@@ -778,7 +778,7 @@ hydrateElement elementTag cfg child = do
   wrapResult <- liftIO newEmptyMVar
   let -- Determine if we should skip an element. We currently skip elements for
       -- two reasons:
-      -- 1) it was not produced a static builder which supports hydration
+      -- 1) it was not produced by a static builder which supports hydration
       -- 2) it is explicitly marked to be skipped
       shouldSkip :: DOM.Element -> HydrationRunnerT t m Bool
       shouldSkip e = do
@@ -800,7 +800,7 @@ hydrateElement elementTag cfg child = do
           Just node -> DOM.castTo DOM.Element node >>= \case
             Nothing -> go (Just node) -- this node is not an element, skip
             Just e -> shouldSkip e >>= \case
-              True -> go (Just node) -- this element is should be skipped by hydration
+              True -> go (Just node) -- this element should be skipped by hydration
               False -> do
                 t <- Element.getTagName e
                 -- TODO: check attributes?

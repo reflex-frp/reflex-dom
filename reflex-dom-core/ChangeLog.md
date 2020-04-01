@@ -20,8 +20,8 @@
 * Fix bug in hydration when dealing with unexpected HTML ([#361](https://github.com/reflex-frp/reflex-dom/pull/361)).
 
 * Export attributes used for controlling hydration at the element level
-  * "data-ssr" is now available as `hydratableAttribute`
-  * "data-hydration-skip" is now available as `skipHydrationAttribute`
+  * "data-ssr" is now available as `Reflex.Dom.Builder.Immediate.hydratableAttribute`
+  * "data-hydration-skip" is now available as `Reflex.Dom.Builder.Immediate.skipHydrationAttribute`
 
 ## 0.5.3
 
