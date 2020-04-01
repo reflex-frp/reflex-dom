@@ -21,10 +21,10 @@ import GHCJS.DOM.Types (MonadJSM (..))
 #endif
 import Reflex
 import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate (HasDocument (..))
+import Reflex.Dom.Builder.Immediate (HasDocument (..), hydratableAttribute)
 import Reflex.Host.Class
 
--- | A DomBuilder transformer that adds "data-ssr" to all elements such that the
+-- | A DomBuilder transformer that adds an attribute to all elements such that the
 -- hydration builder knows which bits of DOM were added by us, and which were
 -- added by external scripts.
 newtype HydratableT m a = HydratableT { runHydratableT :: m a } deriving (Functor, Applicative, Monad, MonadAtomicRef, MonadFix, MonadIO)
@@ -62,8 +62,8 @@ instance PrimMonad m => PrimMonad (HydratableT m) where
 
 makeHydratable :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 makeHydratable cfg = cfg
-  { _elementConfig_initialAttributes = Map.insert "data-ssr" "" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = fmap (Map.delete "data-ssr") <$> _elementConfig_modifyAttributes cfg
+  { _elementConfig_initialAttributes = Map.insert hydratableAttribute "" $ _elementConfig_initialAttributes cfg
+  , _elementConfig_modifyAttributes = fmap (Map.delete hydratableAttribute) <$> _elementConfig_modifyAttributes cfg
   }
 
 instance PostBuild t m => PostBuild t (HydratableT m) where
