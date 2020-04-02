@@ -2,26 +2,24 @@
 
 ## Unreleased
 
-* Support GHC 8.8.
-
-* Fix attribute support for explicitly namespaced elements
-
-* Remove deprecation warnings for the following widgets in
+* ([#353](https://github.com/reflex-frp/reflex-dom/pull/353)) Support GHC 8.8.
+* ([#358](https://github.com/reflex-frp/reflex-dom/pull/358)) Fix attribute support for explicitly namespaced elements.
+* ([#363](https://github.com/reflex-frp/reflex-dom/pull/363)) Remove deprecation warnings for the following widgets in
   `Reflex.Dom.Widget.Basic`:
 
-   * `Link`
-   * `button`
-   * `dtdd`
-   * `linkClass`
-   * `link`
-   * `tabDisplay`
-   * `tableDynAttr`
+  * `Link`
+  * `button`
+  * `dtdd`
+  * `linkClass`
+  * `link`
+  * `tabDisplay`
+  * `tableDynAttr`
+* ([#361](https://github.com/reflex-frp/reflex-dom/pull/361)) Fix bug in hydration causing the JavaScript to crash when dealing with unexpected HTML.
+* ([#364](https://github.com/reflex-frp/reflex-dom/pull/364)) Export attributes used for controlling hydration at the element level:
+  * "data-ssr" is now available as `Reflex.Dom.Builder.Immediate.hydratableAttribute`.
+  * "data-hydration-skip" is now available as `Reflex.Dom.Builder.Immediate.skipHydrationAttribute`.
+* ([#348](https://github.com/reflex-frp/reflex-dom/pull/348)) **(Breaking change)** Make XHR response headers case insensitive by changing `_xhrResponse_headers :: Map Text Text` to `_xhrResponse_headers :: Map (CI Text) Text`.
 
-* Fix bug in hydration when dealing with unexpected HTML ([#361](https://github.com/reflex-frp/reflex-dom/pull/361)).
-
-* Export attributes used for controlling hydration at the element level
-  * "data-ssr" is now available as `Reflex.Dom.Builder.Immediate.hydratableAttribute`
-  * "data-hydration-skip" is now available as `Reflex.Dom.Builder.Immediate.skipHydrationAttribute`
 
 ## 0.5.3
 
