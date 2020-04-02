@@ -107,6 +107,9 @@ module Reflex.Dom.Builder.Immediate
   , WindowConfig (..)
   , Window (..)
   , wrapWindow
+  -- * Attributes for controlling hydration
+  , hydratableAttribute
+  , skipHydrationAttribute
   -- * Internal
   , traverseDMapWithKeyWithAdjust'
   , hoistTraverseWithKeyWithAdjust
@@ -137,6 +140,7 @@ import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Some (Some(..))
+import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
@@ -743,6 +747,14 @@ elementInternal elementTag cfg child = getHydrationMode >>= \case
   -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (Element er HydrationDomSpace DomTimeline, a)
   #-}
 
+-- | An attribute which causes hydration to skip over an element completely.
+skipHydrationAttribute :: IsString s => s
+skipHydrationAttribute = "data-hydration-skip"
+
+-- | An attribute which signals that an element should be hydrated.
+hydratableAttribute :: IsString s => s
+hydratableAttribute = "data-ssr"
+
 {-# INLINE hydrateElement #-}
 hydrateElement
   :: forall er t m a. (MonadJSM m, Reflex t, MonadReflexCreateTrigger t m, MonadFix m)
@@ -764,13 +776,15 @@ hydrateElement elementTag cfg child = do
         }
   result <- HydrationDomBuilderT $ lift $ runReaderT (unHydrationDomBuilderT child) env'
   wrapResult <- liftIO newEmptyMVar
-  let skipAttr = "data-hydration-skip" :: DOM.JSString
-      ssrAttr = "data-ssr" :: DOM.JSString
+  let -- Determine if we should skip an element. We currently skip elements for
+      -- two reasons:
+      -- 1) it was not produced by a static builder which supports hydration
+      -- 2) it is explicitly marked to be skipped
       shouldSkip :: DOM.Element -> HydrationRunnerT t m Bool
       shouldSkip e = do
-        skip <- hasAttribute e skipAttr
-        ssr <- hasAttribute e ssrAttr
-        pure $ skip || not ssr
+        skip <- hasAttribute e (skipHydrationAttribute :: DOM.JSString)
+        hydratable <- hasAttribute e (hydratableAttribute :: DOM.JSString)
+        pure $ skip || not hydratable
   childDom <- liftIO $ readIORef childDelayedRef
   let rawCfg = extractRawElementConfig cfg
   doc <- askDocument
@@ -786,7 +800,7 @@ hydrateElement elementTag cfg child = do
           Just node -> DOM.castTo DOM.Element node >>= \case
             Nothing -> go (Just node) -- this node is not an element, skip
             Just e -> shouldSkip e >>= \case
-              True -> go (Just node) -- this element is explicitly marked for being skipped by hydration
+              True -> go (Just node) -- this element should be skipped by hydration
               False -> do
                 t <- Element.getTagName e
                 -- TODO: check attributes?
