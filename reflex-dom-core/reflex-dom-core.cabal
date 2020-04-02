@@ -53,6 +53,7 @@ library
     bimap >= 0.3 && < 0.4,
     blaze-builder,
     bytestring == 0.10.*,
+    case-insensitive,
     containers >= 0.6 && < 0.7,
     constraints >= 0.9 && < 0.12,
     contravariant >= 1.4 && < 1.6,
