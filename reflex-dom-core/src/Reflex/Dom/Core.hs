@@ -5,6 +5,7 @@
 module Reflex.Dom.Core (module X) where
 
 import Reflex as X hiding (askEvents)
+import Reflex.Dom.Attributes as X
 import Reflex.Dom.Builder.Class as X
 import Reflex.Dom.Builder.Hydratable as X
 import Reflex.Dom.Builder.Immediate as X

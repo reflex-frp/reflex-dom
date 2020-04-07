@@ -14,15 +14,16 @@ import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Coerce
-import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
 import Reflex
+import Reflex.Dom.Attributes.Types
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (HasDocument (..))
 import Reflex.Host.Class
+import Reflex.Dom.Class
 
 -- | A DomBuilder transformer that disables all 'inputElement's,
 -- 'textAreaElement's, and 'selectElement's by adding the "disabled" HTML
@@ -63,8 +64,8 @@ instance PrimMonad m => PrimMonad (InputDisabledT m) where
 
 disableElementConfig :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 disableElementConfig cfg = cfg
-  { _elementConfig_initialAttributes = Map.insert "disabled" "disabled" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = fmap (Map.delete "disabled") <$> _elementConfig_modifyAttributes cfg
+  { _elementConfig_initialAttributes = "disabled" =: "disabled" <> _elementConfig_initialAttributes cfg
+  , _elementConfig_modifyAttributes = fmap (removeAttrFromPatch "disabled") <$> _elementConfig_modifyAttributes cfg
   }
 
 instance PostBuild t m => PostBuild t (InputDisabledT m) where

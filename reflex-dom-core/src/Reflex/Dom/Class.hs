@@ -4,8 +4,6 @@ module Reflex.Dom.Class ( module Reflex.Dom.Class
                         , module Web.KeyCode
                         ) where
 
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Reflex.Class
 import Web.KeyCode
 
@@ -13,11 +11,15 @@ import Foreign.JavaScript.TH
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
-import Prelude hiding (concat, mapM, mapM_, sequence)
+import Reflex.Dom.Attributes
+import Data.Text (Text)
+--import Control.Lens
 
 -- | Alias for Data.Map.singleton
-(=:) :: k -> a -> Map k a
-(=:) = Map.singleton
+(=:) :: AttributeName -> Text -> AttributePatch
+(=:) = setAttribute -- TODO maybe we can use At here
+--(=:) :: (At m, Monoid m) => Index m -> IxValue m -> m
+--k =: a = at k ?~ a $ mempty
 infixr 7 =: -- Ought to bind tighter than <>, which is infixr 6
 
 {-# DEPRECATED keycodeEnter "Instead of `x == keycodeEnter`, use `keyCodeLookup x == Enter`" #-}

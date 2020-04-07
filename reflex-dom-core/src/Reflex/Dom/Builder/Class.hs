@@ -43,6 +43,7 @@ import Reflex.PostBuild.Base
 import Reflex.Query.Base
 import Reflex.Query.Class
 import Reflex.Requester.Base
+import Reflex.Dom.Attributes.Types
 
 import qualified Control.Category
 import Control.Lens hiding (element)
@@ -52,12 +53,8 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
 import Data.Functor.Misc
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Maybe
 import Data.Proxy
-import Data.Semigroup
-import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
@@ -161,8 +158,6 @@ class DomBuilder t m => MountableDomBuilder t m where
   buildDomFragment :: m a -> m (DomFragment m, a)
   mountDomFragment :: DomFragment m -> Event t (DomFragment m) -> m ()
 
-type Namespace = Text
-
 data TextNodeConfig t
    = TextNodeConfig { _textNodeConfig_initialContents :: {-# UNPACK #-} !Text
                     , _textNodeConfig_setContents :: !(Maybe (Event t Text))
@@ -207,15 +202,6 @@ newtype CommentNode d t = CommentNode
   { _commentNode_raw :: RawCommentNode d
   }
 
-data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
-
-mapKeysToAttributeName :: Map Text v -> Map AttributeName v
-mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
-
--- | By default, AttributeNames are unnamespaced
-instance IsString AttributeName where
-  fromString = AttributeName Nothing . fromString
-
 data Propagation
    = Propagation_Continue
    | Propagation_Stop
@@ -255,8 +241,8 @@ stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 
 data ElementConfig er t s
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
-                   , _elementConfig_initialAttributes :: Map AttributeName Text
-                   , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
+                   , _elementConfig_initialAttributes :: AttributePatch
+                   , _elementConfig_modifyAttributes :: Maybe (Event t AttributePatch)
                    , _elementConfig_eventSpec :: EventSpec s er
                    }
 
@@ -264,7 +250,7 @@ data ElementConfig er t s
 elementConfig_namespace :: Lens' (ElementConfig er t s) (Maybe Namespace)
 elementConfig_namespace f (ElementConfig a b c d) = (\a' -> ElementConfig a' b c d) <$> f a
 {-# INLINE elementConfig_namespace #-}
-elementConfig_initialAttributes :: Lens' (ElementConfig er t s) (Map AttributeName Text)
+elementConfig_initialAttributes :: Lens' (ElementConfig er t s) AttributePatch
 elementConfig_initialAttributes f (ElementConfig a b c d) = (\b' -> ElementConfig a b' c d) <$> f b
 {-# INLINE elementConfig_initialAttributes #-}
 elementConfig_eventSpec :: Lens
@@ -368,7 +354,7 @@ extractRawElementConfig cfg = RawElementConfig
   }
 
 data RawElementConfig er t s = RawElementConfig
-  { _rawElementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
+  { _rawElementConfig_modifyAttributes :: Maybe (Event t AttributePatch)
   , _rawElementConfig_eventSpec :: EventSpec s er
   }
 
@@ -464,14 +450,14 @@ inputElementConfig_setChecked =
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
+rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t AttributePatch)
 rawElementConfig_modifyAttributes =
   let getter = fromMaybe never . _rawElementConfig_modifyAttributes
       setter t e = t { _rawElementConfig_modifyAttributes = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
+elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t AttributePatch)
 elementConfig_modifyAttributes =
   let getter = fromMaybe never . _elementConfig_modifyAttributes
       setter t e = t { _elementConfig_modifyAttributes = Just e }
@@ -492,7 +478,7 @@ selectElementConfig_setValue =
   in lens getter setter
 
 class InitialAttributes a where
-  initialAttributes :: Lens' a (Map AttributeName Text)
+  initialAttributes :: Lens' a AttributePatch
 
 instance InitialAttributes (ElementConfig er t m) where
   {-# INLINABLE initialAttributes #-}
@@ -511,7 +497,7 @@ instance InitialAttributes (SelectElementConfig er t m) where
   initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
 
 class ModifyAttributes t a | a -> t where
-  modifyAttributes :: Reflex t => Lens' a (Event t (Map AttributeName (Maybe Text)))
+  modifyAttributes :: Reflex t => Lens' a (Event t AttributePatch)
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}

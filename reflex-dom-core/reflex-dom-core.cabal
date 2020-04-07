@@ -102,6 +102,10 @@ library
     Foreign.JavaScript.TH
     Foreign.JavaScript.Orphans
     Foreign.JavaScript.Utils
+    Reflex.Dom.Attributes
+    Reflex.Dom.Attributes.Class
+    Reflex.Dom.Attributes.Style
+    Reflex.Dom.Attributes.Types
     Reflex.Dom.Builder.Class
     Reflex.Dom.Builder.Class.Events
     Reflex.Dom.Builder.Immediate

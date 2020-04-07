@@ -14,12 +14,14 @@ import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Coerce
+import Data.Monoid (Sum)
 import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
 import Reflex
+import Reflex.Dom.Attributes.Types
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (HasDocument (..), hydratableAttribute)
 import Reflex.Host.Class
@@ -60,10 +62,24 @@ instance PrimMonad m => PrimMonad (HydratableT m) where
   type PrimState (HydratableT m) = PrimState m
   primitive = lift . primitive
 
+
+newtype Hydratable = Hydratable { unHydratable :: Sum Int } deriving (Eq, Semigroup, Monoid)
+instance Group Hydratable where
+  negateG = Hydratable . negate . unHydratable
+
+instance IsAttribute Hydratable where
+  patchAttrDOM _ _ (Hydratable _) = pure ()
+  staticAttrMap (Hydratable h)
+    | h > 0 = Map.singleton hydratableAttribute ""
+    | otherwise = Map.empty
+
+setHydratable :: AttributePatch
+setHydratable = singleAttribute $ Hydratable 1
+
 makeHydratable :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 makeHydratable cfg = cfg
-  { _elementConfig_initialAttributes = Map.insert hydratableAttribute "" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = fmap (Map.delete hydratableAttribute) <$> _elementConfig_modifyAttributes cfg
+  { _elementConfig_initialAttributes = setHydratable <> _elementConfig_initialAttributes cfg
+  , _elementConfig_modifyAttributes = _elementConfig_modifyAttributes cfg
   }
 
 instance PostBuild t m => PostBuild t (HydratableT m) where

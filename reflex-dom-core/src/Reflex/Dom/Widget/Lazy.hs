@@ -8,6 +8,7 @@ module Reflex.Dom.Widget.Lazy where
 
 import Reflex.Class
 import Reflex.Collection
+import Reflex.Dom.Attributes
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
@@ -42,9 +43,9 @@ virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, Mona
   -> (Int -> k) -- ^ Index to Key function, used to determine position of Map elements
   -> m (Dynamic t (Int, Int), Event t k) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and an 'Event' of the selected key
 virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTag rowAttrs itemBuilder items indexToKey = do
-  let totalHeightStyle = fmap (toHeightStyle . (*) rowPx) maxIndex
-      containerStyle = fmap toContainer heightPx
-      viewportStyle = fmap toViewport heightPx
+  let totalHeightStyle = fmap (setAttributeMap . mapKeysToAttributeName . toHeightStyle . (*) rowPx) maxIndex
+      containerStyle = fmap (setAttributeMap . mapKeysToAttributeName . toContainer) heightPx
+      viewportStyle = fmap (setAttributeMap . mapKeysToAttributeName . toViewport) heightPx
   rec (container, sel) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ do
         let currentTop = fmap (listWrapperStyle . fst) window
         (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ selectViewListWithKey_ selected itemsInWindow $ \k v s -> do
@@ -64,15 +65,15 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
   let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
-    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
-    toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
-                                 "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
-    toContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
-    listWrapperStyle t = toStyleAttr $ "position" =: "relative" <>
-                                       "top" =: (T.pack (show t) <> "px")
-    toHeightStyle h = toStyleAttr ("height" =: (T.pack (show h) <> "px") <> "overflow" =: "hidden")
+    toStyleAttr m = Map.singleton "style" $ Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    toViewport h = toStyleAttr $ Map.singleton "overflow" "auto" <> Map.singleton "position" "absolute" <>
+                                 Map.singleton "left" "0" <> Map.singleton "right" "0" <> Map.singleton "height" (T.pack (show h) <> "px")
+    toContainer h = toStyleAttr $ Map.singleton "position" "relative" <> Map.singleton "height" (T.pack (show h) <> "px")
+    listWrapperStyle t = toStyleAttr $ Map.singleton "position" "relative" <>
+                                       Map.singleton "top" (T.pack (show t) <> "px")
+    toHeightStyle h = toStyleAttr (Map.singleton "height" (T.pack (show h) <> "px") <> Map.singleton "overflow" "hidden")
     tagWrapper elTag attrs attrsOverride c = do
-      let attrs' = zipDynWith Map.union attrsOverride attrs
+      let attrs' = fmap (setAttributeMap . mapKeysToAttributeName) $ zipDynWith Map.union attrsOverride attrs
       elDynAttr' elTag attrs' c
     findWindow sizeIncrement windowSize startingPosition =
       let (startingIndex, topOffsetPx) = startingPosition `divMod'` sizeIncrement
@@ -93,9 +94,9 @@ virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, 
   -> (k -> v -> Event t v -> m a) -- ^ The row child element builder.
   -> m (Dynamic t (Int, Int), Dynamic t (Map k a)) -- ^ A tuple containing: a 'Dynamic' of the index (based on the current scroll position) and number of items currently being rendered, and the 'Dynamic' list result
 virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBuilder = do
-  let virtualH = mkVirtualHeight <$> maxIndex
-      containerStyle = fmap mkContainer heightPx
-      viewportStyle = fmap mkViewport heightPx
+  let virtualH = setAttributeMap . mapKeysToAttributeName . mkVirtualHeight <$> maxIndex
+      containerStyle = fmap (setAttributeMap . mapKeysToAttributeName . mkContainer) heightPx
+      viewportStyle = fmap (setAttributeMap . mapKeysToAttributeName . mkViewport) heightPx
   pb <- getPostBuild
   rec (viewport, result) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ elDynAttr "div" virtualH $
         listWithKeyShallowDiff items0 itemsUpdate $ \k v e -> elAttr "div" (mkRow k) $ itemBuilder k v e
@@ -108,18 +109,18 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
   uniqWindow <- holdUniqDyn window
   return (uniqWindow, result)
   where
-    toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
-    mkViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
-                                 "left" =: "0" <> "right" =: "0" <> "height" =: (T.pack (show h) <> "px")
-    mkContainer h = toStyleAttr $ "position" =: "relative" <> "height" =: (T.pack (show h) <> "px")
+    toStyleAttr m = Map.singleton "style" $ Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
+    mkViewport h = toStyleAttr $ Map.singleton "overflow" "auto" <> Map.singleton "position" "absolute" <>
+                                 Map.singleton "left" "0" <> Map.singleton "right" "0" <> Map.singleton "height" (T.pack (show h) <> "px")
+    mkContainer h = toStyleAttr $ Map.singleton "position" "relative" <> Map.singleton "height" (T.pack (show h) <> "px")
     mkVirtualHeight h = let h' = h * rowPx --TODO: test the use of this
-                        in toStyleAttr $ "height" =: (T.pack (show h') <> "px") <>
-                                         "overflow" =: "hidden" <>
-                                         "position" =: "relative"
-    mkRow k = toStyleAttr $ "height" =: (T.pack (show rowPx) <> "px") <>
-                            "top" =: ((<>"px") $ T.pack $ show $ keyToIndex k * rowPx) <>
-                            "position" =: "absolute" <>
-                            "width" =: "100%"
+                        in toStyleAttr $ Map.singleton "height" (T.pack (show h') <> "px") <>
+                                         Map.singleton "overflow" "hidden" <>
+                                         Map.singleton "position" "relative"
+    mkRow k = setAttributeMap $ mapKeysToAttributeName $ toStyleAttr $ Map.singleton "height" (T.pack (show rowPx) <> "px") <>
+                            Map.singleton "top" ((<>"px") $ T.pack $ show $ keyToIndex k * rowPx) <>
+                            Map.singleton "position" "absolute" <>
+                            Map.singleton "width" "100%"
     findWindow sizeIncrement windowSize startingPosition =
       let (startingIndex, _) = startingPosition `divMod'` sizeIncrement
           numItems = (windowSize + sizeIncrement - 1) `div` sizeIncrement

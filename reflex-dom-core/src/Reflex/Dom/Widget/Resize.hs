@@ -8,6 +8,7 @@ module Reflex.Dom.Widget.Resize where
 
 import Reflex.Class
 import Reflex.Time
+import Reflex.Dom.Attributes
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Class
@@ -44,7 +45,7 @@ resizeDetectorWithStyle :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEv
   => Text -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
   -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
-resizeDetectorWithStyle styleString = resizeDetectorWithAttrs ("style" =: styleString)
+resizeDetectorWithStyle styleString = resizeDetectorWithAttrs (Map.singleton "style" styleString)
 
 resizeDetectorWithAttrs :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m)
   => Map Text Text -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
@@ -53,7 +54,7 @@ resizeDetectorWithAttrs :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEv
 resizeDetectorWithAttrs attrs w = do
   let childStyle = "position: absolute; left: 0; top: 0;"
       containerAttrs = "style" =: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: scroll; z-index: -1; visibility: hidden;"
-  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" (Map.unionWith (<>) attrs ("style" =: "position: relative;")) $ do
+  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" (setAttributeMap $ mapKeysToAttributeName $ Map.unionWith (<>) attrs (Map.singleton "style" "position: relative;")) $ do
     w' <- w
     elAttr "div" containerAttrs $ do
       (expand, (expandChild, _)) <- elAttr' "div" containerAttrs $ elAttr' "div" ("style" =: childStyle) $ return ()
@@ -67,7 +68,7 @@ resizeDetectorWithAttrs attrs w = do
         eoh <- getOffsetHeight e
         let ecw = eow + 10
             ech = eoh + 10
-        setAttribute (_element_raw expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
+        GHCJS.DOM.Element.setAttribute (_element_raw expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
         esw <- getScrollWidth e
         setScrollLeft e esw
         esh <- getScrollHeight e

@@ -365,7 +365,7 @@ postJson url a =
   XhrRequest "POST" url $ def { _xhrRequestConfig_headers = headerUrlEnc
                               , _xhrRequestConfig_sendData = body
                               }
-  where headerUrlEnc = "Content-type" =: "application/json"
+  where headerUrlEnc = Map.singleton "Content-type" "application/json"
         body = LT.toStrict $ B.toLazyText $ encodeToTextBuilder $ toJSON a
 
 getMay :: (Monad m, Reflex t) => (Event t a -> m (Event t b)) -> Event t (Maybe a) -> m (Event t (Maybe b))

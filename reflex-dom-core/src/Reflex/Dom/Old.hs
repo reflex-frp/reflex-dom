@@ -7,7 +7,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE LambdaCase #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
@@ -72,6 +71,7 @@ import GHCJS.DOM.Types
        (liftJSM, JSM, IsHTMLElement, IsNode)
 import qualified GHCJS.DOM.Types as DOM
 import Reflex.Class
+import Reflex.Dom.Attributes
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Widget.Basic
@@ -161,7 +161,7 @@ instance Attributes m (Map Text Text) t where
 
 addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addStaticAttributes attrs cfg = do
-  let initialAttrs = Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
+  let initialAttrs = setAttributeMap $ Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
 instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
@@ -171,8 +171,8 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
 
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addDynamicAttributes attrs cfg = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  return $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ setAttributeMap . mapKeysToAttributeName <$> attrs
+  return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
@@ -269,7 +269,7 @@ elStopPropagationNS ns elementTag en child = do
 
 elDynHtmlAttr' :: (DOM.MonadJSM m, MonadWidget t m) => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
-  let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
+  let cfg = def & initialAttributes .~ setAttributeMap (mapKeysToAttributeName attrs)
   (e, _) <- element elementTag cfg $ return ()
   postBuild <- getPostBuild
   performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) <$> leftmost [updated html, tag (current html) postBuild]
