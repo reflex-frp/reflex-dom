@@ -446,7 +446,7 @@ xhrResponse_responseText :: Lens' XhrResponse (Maybe Text)
 xhrResponse_responseText f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 y x5) <$> f x4
 {-# INLINE xhrResponse_responseText #-}
 
-xhrResponse_headers :: Lens' XhrResponse (Map Text Text)
+xhrResponse_headers :: Lens' XhrResponse (Map (CI Text) Text)
 xhrResponse_headers f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 x4 y) <$> f x5
 {-# INLINE xhrResponse_headers #-}
 
