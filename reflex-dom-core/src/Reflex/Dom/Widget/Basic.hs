@@ -60,6 +60,7 @@ module Reflex.Dom.Widget.Basic
   , partitionMapBySetLT
   ) where
 
+import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dom.Builder.Class
@@ -69,7 +70,6 @@ import Reflex.Network
 import Reflex.PostBuild.Class
 import Reflex.Workflow
 
-import Control.Arrow
 import Control.Lens hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
@@ -144,23 +144,25 @@ button t = do
 
 --TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 -- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
---   The returned Event of widget results occurs when the Dynamic does.
+--   The returned Event occurs whenever the child widget is updated, which is
+--   at post-build in addition to the times at which the input Dynamic is
+--   updated, and its value is the result of running the widget.
 --   Note:  Often, the type @a@ is an 'Event', in which case the return value is an Event-of-Events that would typically be flattened (via 'switchHold').
-dyn :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+dyn :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn = networkView
 
 -- | Like 'dyn' but discards result.
-dyn_ :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m ()
+dyn_ :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m ()
 dyn_ = void . dyn
 
 -- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
 --   The returned Dynamic of widget results occurs when the Event does.
 --   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened (via 'switchDyn').
-widgetHold :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
+widgetHold :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold = networkHold
 
 -- | Like 'widgetHold' but discards result.
-widgetHold_ :: (DomBuilder t m, MonadHold t m) => m a -> Event t (m a) -> m ()
+widgetHold_ :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m ()
 widgetHold_ z = void . widgetHold z
 
 -- | Create a DOM element
@@ -268,34 +270,10 @@ dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
         return $ if Map.null p then Nothing else Just p
   return modificationsNeeded
 
---------------------------------------------------------------------------------
--- Copied and pasted from Reflex.Widget.Class
---------------------------------------------------------------------------------
-
-{-
-schedulePostBuild x = performEvent_ . (x <$) =<< getPostBuild
-
-elDynHtml' :: DomBuilder t m => Text -> Dynamic t Text -> m (El t)
-elDynHtml' elementTag html = do
-  e <- buildEmptyElement elementTag (Map.empty :: Map Text Text)
-  schedulePostBuild $ setInnerHTML e . Just =<< sample (current html)
-  performEvent_ $ fmap (setInnerHTML e . Just) $ updated html
-  wrapElement defaultDomEventHandler e
-
-elDynHtmlAttr' :: DomBuilder t m => Text -> Map Text Text -> Dynamic t Text -> m (El t)
-elDynHtmlAttr' elementTag attrs html = do
-  e <- buildEmptyElement elementTag attrs
-  schedulePostBuild $ setInnerHTML e . Just =<< sample (current html)
-  performEvent_ $ fmap (setInnerHTML e . Just) $ updated html
-  wrapElement defaultDomEventHandler e
--}
-
 newtype Link t
   = Link { _link_clicked :: Event t ()
          }
 
--- | >>> linkClass "Click here" "link-class"
--- > <a class="link-class">Click here</a>
 linkClass :: DomBuilder t m => Text -> Text -> m (Link t)
 linkClass s c = do
   (l,_) <- elAttr' "a" ("class" =: c) $ text s
@@ -315,6 +293,7 @@ dtdd h w = do
 blank :: forall m. Monad m => m ()
 blank = return ()
 
+-- TODO: Move to an example project.
 -- | A widget to display a table with static columns and dynamic rows.
 tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
   => Text                                   -- ^ Class applied to <table> element
@@ -331,6 +310,7 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
           dAttrs <- rowAttrs k
           elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols)
 
+-- TODO: Move to an example project.
 -- | A widget to construct a tabbed view that shows only one of its child widgets at a time.
 --   Creates a header bar containing a <ul> with one <li> per child; clicking a <li> displays
 --   the corresponding child and hides all others.
