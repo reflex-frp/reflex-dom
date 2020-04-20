@@ -15,8 +15,13 @@
 -- exposed attributes as 'Data.Map.Map' 'Data.Text.Text' 'Data.Text.Text'.
 --
 -- The fine grained API is spread across submodules which encapsulate a
--- particular attribute. For implementing your own fine grained control over
--- attributes, see 'IsAttribute'.
+-- particular attribute. These functions are for carefully updating
+-- /parts/ of attributes rather than just setting them as a whole. This
+-- behaviour is particularly useful when working with external JS libraries
+-- which set certain properties (often adding classes or setting styles) without
+-- wiping them when reflex updates attributes.
+--
+-- For implementing your own fine grained control over attributes, see 'IsAttribute'.
 module Reflex.Dom.Attributes
   (
   -- * Base types
