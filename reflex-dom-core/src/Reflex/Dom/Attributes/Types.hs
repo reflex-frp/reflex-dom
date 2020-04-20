@@ -1,11 +1,7 @@
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -148,7 +144,7 @@ newtype ModifyAttrs = ModifyAttrs
   }
 
 instance Semigroup ModifyAttrs where
-  ModifyAttrs a <> ModifyAttrs b = ModifyAttrs $ DMap.unionWithKey (\k -> withAttr k (<>)) a b
+  ModifyAttrs a <> ModifyAttrs b = ModifyAttrs $ DMap.unionWithKey (`withAttr` (<>)) a b
 
 instance Monoid ModifyAttrs where
   mempty = ModifyAttrs DMap.empty

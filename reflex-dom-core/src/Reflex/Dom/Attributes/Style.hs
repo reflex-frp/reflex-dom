@@ -1,7 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -41,7 +38,7 @@ data StyleValue = StyleValue
   } deriving Eq
 
 styleValueText :: StyleValue -> Text
-styleValueText (StyleValue v mp) = maybe id (\p a -> a <> " !" <> p) mp $ v
+styleValueText (StyleValue v mp) = maybe id (\p a -> a <> " !" <> p) mp v
 
 newtype Style = Style
   { _unStyle :: Map Text StyleValue

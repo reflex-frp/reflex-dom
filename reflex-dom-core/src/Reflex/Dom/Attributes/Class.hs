@@ -1,8 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -21,7 +17,7 @@ module Reflex.Dom.Attributes.Class
   ) where
 
 import Control.Monad (when)
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import Data.Map (Map)
 import Data.Patch
 import Data.Proxy
@@ -56,7 +52,7 @@ instance IsAttribute ModifyClass where
     -- class. https://github.com/ghcjs/ghcjs-dom/issues/80
     -- Also, you can't just call add('1 2 3'), since the strings must be free of
     -- spaces.
-    flip traverse_ (Map.keys additions) $ \c -> do
+    for_ (Map.keys additions) $ \c -> do
       shouldAdd <- case settings of
         PatchSettings_PatchAlways -> pure True
         PatchSettings_CheckBeforePatching -> not <$> DOMTokenList.contains l c
