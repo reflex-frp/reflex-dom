@@ -11,25 +11,32 @@
 -- | Reflex DOM supports both coarse and fine grained control over element attributes.
 --
 -- The coarse API is in this module, whereby you can add or remove attributes
--- using 'Text'. This is similar to the old Reflex DOM API which often exposed
--- attributes as 'Data.Map.Map' 'Text' 'Text'.
+-- using 'Data.Text.Text'. This is similar to the old Reflex DOM API which often
+-- exposed attributes as 'Data.Map.Map' 'Data.Text.Text' 'Data.Text.Text'.
 --
 -- The fine grained API is spread across submodules which encapsulate a
 -- particular attribute. For implementing your own fine grained control over
--- attributes, see "Reflex.Dom.Attributes.Types".
+-- attributes, see 'IsAttribute'.
 module Reflex.Dom.Attributes
   (
   -- * Base types
     Namespace
   , AttributeName(..)
-  , AttributePatch
+  , DeclareAttrs
+  , ModifyAttrs
   -- * Functions for coarse control over attributes
+  , declareAttribute
   , setAttribute
   , removeAttribute
-  , setAttributeMap
+  , declareAttributeMap
   , mapKeysToAttributeName
   -- * Modules for fine grained control over particular attributes
   , module FineGrained
+  -- * Implementing new fine grained attributes
+  , IsAttribute(..)
+  , PatchSettings(..)
+  , singleAttribute
+  , singleModifyAttribute
   ) where
 
 import Reflex.Dom.Attributes.Types

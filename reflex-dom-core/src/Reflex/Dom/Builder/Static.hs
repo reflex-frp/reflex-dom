@@ -15,6 +15,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Static where
 
+import Data.Proxy
 import Data.IORef (IORef)
 import Blaze.ByteString.Builder.Html.Utf8
 import Control.Lens hiding (element)
@@ -49,7 +50,6 @@ import Reflex.Dom.Class
 import Reflex.Dom.Attributes.Types
 import Reflex.Dom.Main (DomHost, DomTimeline, runDomHost)
 import Reflex.Dom.Builder.Class
-import Reflex.Dynamic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Base
 import Reflex.PerformEvent.Class
@@ -289,15 +289,15 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
       nextRunWithReplaceKey <- asks _staticDomBuilderEnv_nextRunWithReplaceKey
       (result, innerHtml) <- lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv shouldEscape Nothing nextRunWithReplaceKey
-      attrs0 <- foldDyn (<>) (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
+      attrs0 <- holdIncremental (cfg ^. initialAttributes) (cfg ^. modifyAttributes)
       selectValue <- asks _staticDomBuilderEnv_selectValue
       let addSelectedAttr attrs sel = case lookupAttrInPatch "value" attrs of
             Just v | v == sel -> attrs <> "selected" =: ""
-            _ -> removeAttrFromPatch "selected" attrs
+            _ -> removeAttrFromDeclareAttrs "selected" attrs
       let attrs1 = case (elementTag, selectValue) of
-            ("option", Just sv) -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
-            _ -> current attrs0
-      let attrs2 = ffor attrs1 $ foldMapAttributePatch $ Map.foldMapWithKey (\k v -> " " <> toAttr k v) . staticAttrMap
+            ("option", Just sv) -> pull $ addSelectedAttr <$> sample (currentIncremental attrs0) <*> sample sv
+            _ -> currentIncremental attrs0
+      let attrs2 = ffor attrs1 $ Map.foldMapWithKey (\k v -> " " <> toAttr k v) . staticAttrMap (Proxy :: Proxy ModifyAttrs)
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
         then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString " />")]

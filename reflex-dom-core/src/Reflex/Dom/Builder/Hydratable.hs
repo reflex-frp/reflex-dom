@@ -8,13 +8,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Hydratable where
 
+import Data.Proxy
 import Control.Monad.Fix
 import Control.Monad.Primitive
 import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Coerce
-import Data.Monoid (Sum)
 import qualified Data.Map as Map
 import Foreign.JavaScript.TH
 #ifndef ghcjs_HOST_OS
@@ -63,18 +63,24 @@ instance PrimMonad m => PrimMonad (HydratableT m) where
   primitive = lift . primitive
 
 
-newtype Hydratable = Hydratable { unHydratable :: Sum Int } deriving (Eq, Semigroup, Monoid)
-instance Group Hydratable where
-  negateG = Hydratable . negate . unHydratable
+data Hydratable = Hydratable deriving Eq
+
+instance Semigroup Hydratable where
+  a <> _ = a
+instance Monoid Hydratable where
+  mempty = Hydratable
+
+instance Patch Hydratable where
+  type PatchTarget Hydratable = Hydratable
+  apply _ = Just
 
 instance IsAttribute Hydratable where
-  patchAttrDOM _ _ (Hydratable _) = pure ()
-  staticAttrMap (Hydratable h)
-    | h > 0 = Map.singleton hydratableAttribute ""
-    | otherwise = Map.empty
+  applyAttrPatchDOM _ _ Hydratable = pure ()
+  staticAttrMap _ Hydratable = Map.singleton hydratableAttribute ""
+  diffAttr _ _ = Nothing
 
-setHydratable :: AttributePatch
-setHydratable = singleAttribute $ Hydratable 1
+setHydratable :: DeclareAttrs
+setHydratable = singleAttribute (Proxy :: Proxy Hydratable) Hydratable
 
 makeHydratable :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 makeHydratable cfg = cfg

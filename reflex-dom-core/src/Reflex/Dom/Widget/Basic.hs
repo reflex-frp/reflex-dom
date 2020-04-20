@@ -64,14 +64,12 @@ import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dom.Attributes
-import Reflex.Dom.Attributes.Types
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
 import Reflex.Network
 import Reflex.PostBuild.Class
 import Reflex.Workflow
 
-import Control.Arrow
 import Control.Lens hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
@@ -180,7 +178,7 @@ el elementTag child = snd <$> el' elementTag child
 -- >>> elAttr "a" ("href" =: "https://reflex-frp.org") (text "Reflex-FRP!")
 -- <a href="https://reflex-frp.org">Reflex-FRP!</a>
 {-# INLINABLE elAttr #-}
-elAttr :: forall t m a. DomBuilder t m => Text -> AttributePatch -> m a -> m a
+elAttr :: forall t m a. DomBuilder t m => Text -> DeclareAttrs -> m a -> m a
 elAttr elementTag attrs child = snd <$> elAttr' elementTag attrs child
 
 -- | Create a DOM element with classes
@@ -193,10 +191,10 @@ elClass elementTag c child = snd <$> elClass' elementTag c child
 
 -- | Create a DOM element with Dynamic Attributes
 --
--- >>> elClass "div" (constDyn (addClass "row")) (return ())
+-- >>> elClass "div" (constDyn (declareClass "row")) (return ())
 -- <div class="row"></div>
 {-# INLINABLE elDynAttr #-}
-elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t AttributePatch -> m a -> m a
+elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t DeclareAttrs -> m a -> m a
 elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
 
 -- | Create a DOM element with a Dynamic Class
@@ -219,27 +217,27 @@ el' elementTag = element elementTag def
 
 -- | Create a DOM element with attributes and return the element
 {-# INLINABLE elAttr' #-}
-elAttr' :: forall t m a. DomBuilder t m => Text -> AttributePatch -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elAttr' :: forall t m a. DomBuilder t m => Text -> DeclareAttrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elAttr' elementTag attrs = element elementTag $ def
   & initialAttributes .~ attrs
 
 -- | Create a DOM element with a class and return the element
 {-# INLINABLE elClass' #-}
 elClass' :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
-elClass' elementTag c = elAttr' elementTag (addClass c)
+elClass' elementTag c = elAttr' elementTag (declareClass c)
 
 -- | Create a DOM element with Dynamic Attributes and return the element
 {-# INLINABLE elDynAttr' #-}
-elDynAttr' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t AttributePatch -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynAttr' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t DeclareAttrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elDynAttr' = elDynAttrNS' Nothing
 
 -- | Create a DOM element with a Dynamic class and return the element
 {-# INLINABLE elDynClass' #-}
 elDynClass' :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
-elDynClass' elementTag c = elDynAttr' elementTag (fmap addClass c)
+elDynClass' elementTag c = elDynAttr' elementTag (fmap declareClass c)
 
 {-# INLINABLE elDynAttrNS' #-}
-elDynAttrNS' :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t AttributePatch -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
+elDynAttrNS' :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t DeclareAttrs -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elDynAttrNS' mns elementTag attrs child = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   let cfg = def
@@ -251,25 +249,25 @@ elDynAttrNS' mns elementTag attrs child = do
   return result
 
 {-# INLINABLE elDynAttrNS #-}
-elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t AttributePatch -> m a -> m a
+elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t DeclareAttrs -> m a -> m a
 elDynAttrNS mns elementTag attrs child = fmap snd $ elDynAttrNS' mns elementTag attrs child
 
-dynamicAttributesToModifyAttributes :: PostBuild t m => Dynamic t AttributePatch -> m (Event t AttributePatch)
+dynamicAttributesToModifyAttributes :: PostBuild t m => Dynamic t DeclareAttrs -> m (Event t ModifyAttrs)
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty
 
-dynamicAttributesToModifyAttributesWithInitial :: PostBuild t m => AttributePatch -> Dynamic t AttributePatch -> m (Event t AttributePatch)
+dynamicAttributesToModifyAttributesWithInitial :: PostBuild t m => DeclareAttrs -> Dynamic t DeclareAttrs -> m (Event t ModifyAttrs)
 dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
   postBuild <- getPostBuild
   let modificationsNeeded = flip push (align postBuild $ updated d) $ \x -> do
         p <- case x of
           This () -> do
             new <- sample $ current d
-            return $ negateG attrs0 <> new
-          These () new -> return $ negateG attrs0 <> new
+            return $ diffAttr attrs0 new
+          These () new -> return $ diffAttr attrs0 new
           That new -> do
             old <- sample $ current d
-            return $ negateG old <> new
-        return $ if attributesPatchIsEmpty p then Nothing else Just p
+            return $ diffAttr old new
+        return p
   return modificationsNeeded
 
 newtype Link t
@@ -278,7 +276,7 @@ newtype Link t
 
 linkClass :: DomBuilder t m => Text -> Text -> m (Link t)
 linkClass s c = do
-  (l,_) <- elAttr' "a" (addClass c) $ text s
+  (l,_) <- elAttr' "a" (declareClass c) $ text s
   return $ Link $ domEvent Click l
 
 link :: DomBuilder t m => Text -> m (Link t)
@@ -301,10 +299,10 @@ tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBui
   => Text                                   -- ^ Class applied to <table> element
   -> [(Text, k -> Dynamic t r -> m v)]      -- ^ Columns of (header, row key -> row value -> child widget)
   -> Dynamic t (Map k r)                      -- ^ Map from row key to row value
-  -> (k -> m (Dynamic t AttributePatch)) -- ^ Function to compute <tr> element attributes from row key
+  -> (k -> m (Dynamic t DeclareAttrs)) -- ^ Function to compute <tr> element attributes from row key
   -> m (Dynamic t (Map k (Element EventResult (DomBuilderSpace m) t, [v])))        -- ^ Map from row key to (El, list of widget return values)
-tableDynAttr klass cols dRows rowAttrs = elAttr "div" (setAttribute "style" "zoom: 1; overflow: auto; background: white;") $
-    elAttr "table" (setAttribute "class" klass) $ do
+tableDynAttr klass cols dRows rowAttrs = elAttr "div" (declareAttribute "style" "zoom: 1; overflow: auto; background: white;") $
+    elAttr "table" (declareAttribute "class" klass) $ do
       el "thead" $ el "tr" $
         mapM_ (\(h, _) -> el "th" $ text h) cols
       el "tbody" $
@@ -323,20 +321,20 @@ tabDisplay :: forall t m k. (MonadFix m, DomBuilder t m, MonadHold t m, PostBuil
   -> m ()
 tabDisplay ulClass activeClass tabItems = do
   let t0 = listToMaybe $ Map.keys tabItems
-  rec currentTab :: Demux t (Maybe k) <- elAttr "ul" (setAttribute "class" ulClass) $ do
+  rec currentTab :: Demux t (Maybe k) <- elAttr "ul" (declareAttribute "class" ulClass) $ do
         tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s,_) -> headerBarLink s k $ demuxed currentTab (Just k)) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
         fmap demux $ holdDyn t0 $ fmap Just eTabClicks
   el "div" $ do
     iforM_ tabItems $ \k (_, w) -> do
       let isSelected = demuxed currentTab $ Just k
-          attrs = ffor isSelected $ \s -> if s then mempty else setAttribute "style" "display:none;"
+          attrs = ffor isSelected $ \s -> if s then mempty else declareAttribute "style" "display:none;"
       elDynAttr "div" attrs w
     return ()
   where
     headerBarLink :: Text -> k -> Dynamic t Bool -> m (Event t k)
     headerBarLink x k isSelected = do
-      let attrs = fmap (\b -> if b then setAttribute "class" activeClass else mempty) isSelected
+      let attrs = fmap (\b -> if b then declareAttribute "class" activeClass else mempty) isSelected
       elDynAttr "li" attrs $ do
         a <- link x
         return $ fmap (const k) (_link_clicked a)

@@ -241,8 +241,8 @@ stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 
 data ElementConfig er t s
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
-                   , _elementConfig_initialAttributes :: AttributePatch
-                   , _elementConfig_modifyAttributes :: Maybe (Event t AttributePatch)
+                   , _elementConfig_initialAttributes :: DeclareAttrs
+                   , _elementConfig_modifyAttributes :: Maybe (Event t ModifyAttrs)
                    , _elementConfig_eventSpec :: EventSpec s er
                    }
 
@@ -250,7 +250,7 @@ data ElementConfig er t s
 elementConfig_namespace :: Lens' (ElementConfig er t s) (Maybe Namespace)
 elementConfig_namespace f (ElementConfig a b c d) = (\a' -> ElementConfig a' b c d) <$> f a
 {-# INLINE elementConfig_namespace #-}
-elementConfig_initialAttributes :: Lens' (ElementConfig er t s) AttributePatch
+elementConfig_initialAttributes :: Lens' (ElementConfig er t s) DeclareAttrs
 elementConfig_initialAttributes f (ElementConfig a b c d) = (\b' -> ElementConfig a b' c d) <$> f b
 {-# INLINE elementConfig_initialAttributes #-}
 elementConfig_eventSpec :: Lens
@@ -354,7 +354,7 @@ extractRawElementConfig cfg = RawElementConfig
   }
 
 data RawElementConfig er t s = RawElementConfig
-  { _rawElementConfig_modifyAttributes :: Maybe (Event t AttributePatch)
+  { _rawElementConfig_modifyAttributes :: Maybe (Event t ModifyAttrs)
   , _rawElementConfig_eventSpec :: EventSpec s er
   }
 
@@ -450,14 +450,14 @@ inputElementConfig_setChecked =
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t AttributePatch)
+rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t ModifyAttrs)
 rawElementConfig_modifyAttributes =
   let getter = fromMaybe never . _rawElementConfig_modifyAttributes
       setter t e = t { _rawElementConfig_modifyAttributes = Just e }
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
-elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t AttributePatch)
+elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t ModifyAttrs)
 elementConfig_modifyAttributes =
   let getter = fromMaybe never . _elementConfig_modifyAttributes
       setter t e = t { _elementConfig_modifyAttributes = Just e }
@@ -478,7 +478,7 @@ selectElementConfig_setValue =
   in lens getter setter
 
 class InitialAttributes a where
-  initialAttributes :: Lens' a AttributePatch
+  initialAttributes :: Lens' a DeclareAttrs
 
 instance InitialAttributes (ElementConfig er t m) where
   {-# INLINABLE initialAttributes #-}
@@ -497,7 +497,7 @@ instance InitialAttributes (SelectElementConfig er t m) where
   initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
 
 class ModifyAttributes t a | a -> t where
-  modifyAttributes :: Reflex t => Lens' a (Event t AttributePatch)
+  modifyAttributes :: Reflex t => Lens' a (Event t ModifyAttrs)
 
 instance ModifyAttributes t (ElementConfig er t m) where
   {-# INLINABLE modifyAttributes #-}

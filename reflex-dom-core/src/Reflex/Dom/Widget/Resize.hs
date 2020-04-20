@@ -54,7 +54,7 @@ resizeDetectorWithAttrs :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEv
 resizeDetectorWithAttrs attrs w = do
   let childStyle = "position: absolute; left: 0; top: 0;"
       containerAttrs = "style" =: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: scroll; z-index: -1; visibility: hidden;"
-  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" (setAttributeMap $ mapKeysToAttributeName $ Map.unionWith (<>) attrs (Map.singleton "style" "position: relative;")) $ do
+  (parent, (expand, expandChild, shrink, w')) <- elAttr' "div" (declareAttributeMap $ mapKeysToAttributeName $ Map.unionWith (<>) attrs (Map.singleton "style" "position: relative;")) $ do
     w' <- w
     elAttr "div" containerAttrs $ do
       (expand, (expandChild, _)) <- elAttr' "div" containerAttrs $ elAttr' "div" ("style" =: childStyle) $ return ()

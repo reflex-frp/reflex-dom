@@ -8,22 +8,28 @@
 
 -- | Functions for adjusting parts of the style attribute.
 module Reflex.Dom.Attributes.Style
-  ( addStyle
+  (
+  -- * Declaratively specifying styles (for static or dynamic attributes)
+    declareStyle
+  , declareStyleWithPriority
+  -- * Adding or removing styles (for modifying attributes)
+  , addStyle
   , addStyleWithPriority
   , removeStyle
   ) where
 
+import Data.Map.Misc (diffMap)
+import Data.Proxy
 import Control.Lens (iforM_)
 import Control.Monad (void, when)
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 import Data.Text (Text)
 import Reflex.Dom.Attributes.Types
-import Reflex.Patch
+import Data.Patch
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import qualified GHCJS.DOM.CSSStyleDeclaration as CSSStyleDeclaration
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.ElementCSSInlineStyle as ElementCSSInlineStyle
@@ -38,11 +44,19 @@ styleValueText :: StyleValue -> Text
 styleValueText (StyleValue v mp) = maybe id (\p a -> a <> " !" <> p) mp $ v
 
 newtype Style = Style
-  { _unStyle :: GroupMap Text (SignedList StyleValue)
-  } deriving (Eq, Semigroup, Monoid, Group)
+  { _unStyle :: Map Text StyleValue
+  } deriving (Eq, Semigroup, Monoid)
 
-instance IsAttribute Style where
-  patchAttrDOM settings e (Style props) = void . runMaybeT $ do
+newtype ModifyStyle = ModifyStyle
+  { _unModifyStyle :: Map Text (Maybe StyleValue)
+  } deriving (Eq, Semigroup, Monoid)
+
+instance Patch ModifyStyle where
+  type PatchTarget ModifyStyle = Style
+  apply (ModifyStyle p) (Style a) = Style <$> apply (PatchMap p) a
+
+instance IsAttribute ModifyStyle where
+  applyAttrPatchDOM settings e (ModifyStyle props) = void . runMaybeT $ do
     -- We cast the element to a HTMLElement because it has an instance for
     -- IsElementCSSInlineStyle.
     htmlEl <- MaybeT $ DOM.castTo DOM.HTMLElement e
@@ -52,41 +66,50 @@ instance IsAttribute Style where
     -- instantiate the mixin, and thereby avoid the bug in the above ticket.
     let es = DOM.uncheckedCastTo DOM.ElementCSSInlineStyle htmlEl
     style <- lift $ ElementCSSInlineStyle.getStyle es
-    lift $ iforM_ (groupMapToMap props) $ \p -> \case
-      -- Prefer additions
-      FirstPositive (StyleValue value prio) -> do
-        liftIO $ T.putStrLn $ "Setting style property: " <> p <> ": " <> value
+    lift $ iforM_ props $ \p -> \case
+      Just (StyleValue value prio) -> do
         shouldPatch <- case settings of
           PatchSettings_PatchAlways -> pure True
           PatchSettings_CheckBeforePatching -> do
             value' <- CSSStyleDeclaration.getPropertyValue style p
             prio' <- CSSStyleDeclaration.getPropertyPriority style p
             pure $ value /= value' || prio /= prio'
-        when shouldPatch $ CSSStyleDeclaration.setProperty style p value (Nothing :: Maybe Text) -- TODO priority
-      -- Then deletions
-      FirstNegative _ -> do
-        liftIO $ T.putStrLn $ "Removing style property: " <> p
+        when shouldPatch $ CSSStyleDeclaration.setProperty style p value prio
+      Nothing -> do
         CSSStyleDeclaration.removeProperty_ style p
-      -- Or do nothing
-      Zero -> pure ()
-  staticAttrMap (Style cs) = let additions = Map.mapMaybe leftmostPositive (groupMapToMap cs) in case Map.null additions of
+  staticAttrMap _ (Style m) = case Map.null m of
     True -> Map.empty
-    False -> Map.singleton "style" $ T.intercalate ";" $ fmap (\(k, s) -> k <> ":" <> styleValueText s) $ Map.toList additions
+    False -> Map.singleton "style" $ T.intercalate ";" $ fmap (\(k, s) -> k <> ":" <> styleValueText s) $ Map.toList m
+  diffAttr (Style old) (Style new) = case diffMap old new of
+    m | Map.null m -> Nothing
+      | otherwise -> Just $ ModifyStyle m
+
+-- | Declaratively specify a style property.
+--
+-- > declareStyle "color" "red"
+declareStyle :: Text -> Text -> DeclareAttrs
+declareStyle p v = singleAttribute (Proxy :: Proxy ModifyStyle) . Style . Map.singleton p $ StyleValue v Nothing
+
+-- | Declaratively specify a style property with priority.
+--
+-- > declareStyleWithPriority "color" "red" "important"
+declareStyleWithPriority :: Text -> Text -> Text -> DeclareAttrs
+declareStyleWithPriority p v prio = singleAttribute (Proxy :: Proxy ModifyStyle) . Style . Map.singleton p $ StyleValue v (Just prio)
 
 -- | Add a style property.
 --
 -- > addStyle "color" "red"
-addStyle :: Text -> Text -> AttributePatch
-addStyle p v = singleAttribute . Style . singletonGroupMap p $ FirstPositive $ StyleValue v Nothing
+addStyle :: Text -> Text -> ModifyAttrs
+addStyle p v = singleModifyAttribute . ModifyStyle . Map.singleton p $ Just $ StyleValue v Nothing
 
 -- | Add a style property with priority.
 --
 -- > addStyleWithPriority "color" "red" "important"
-addStyleWithPriority :: Text -> Text -> Text -> AttributePatch
-addStyleWithPriority p v prio = singleAttribute . Style . singletonGroupMap p $ FirstPositive $ StyleValue v (Just prio)
+addStyleWithPriority :: Text -> Text -> Text -> ModifyAttrs
+addStyleWithPriority p v prio = singleModifyAttribute . ModifyStyle . Map.singleton p $ Just $ StyleValue v (Just prio)
 
 -- | Remove a style property.
 --
 -- > removeStyle "color"
-removeStyle :: Text -> AttributePatch
-removeStyle p = singleAttribute $ Style $ singletonGroupMap p $ FirstNegative $ StyleValue "" Nothing
+removeStyle :: Text -> ModifyAttrs
+removeStyle p = singleModifyAttribute $ ModifyStyle $ Map.singleton p Nothing

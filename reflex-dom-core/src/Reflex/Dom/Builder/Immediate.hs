@@ -140,6 +140,7 @@ import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Misc
 import Data.Functor.Product
+import Data.GADT.Compare (GCompare)
 import Data.IORef
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe
@@ -160,12 +161,12 @@ import GHCJS.DOM.UIEvent
 import Language.Javascript.JSaddle (call, eval)
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
-import Reflex.Dom.Attributes.Types (traverseAttributePatch_, patchAttrDOM, PatchSettings(..))
+import Reflex.Dom.Attributes.Types (ModifyAttrs, applyAttrPatchDOM, PatchSettings(..), toPatch)
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
 import Reflex.Host.Class
-import Reflex.Patch.DMapWithMove (PatchDMapWithMove(..))
-import Reflex.Patch.MapWithMove (PatchMapWithMove(..))
+import Data.Patch.DMapWithMove (PatchDMapWithMove(..))
+import Data.Patch.MapWithMove (PatchMapWithMove(..))
 import Reflex.PerformEvent.Base (PerformEventT)
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base (PostBuildT)
@@ -203,9 +204,9 @@ import qualified GHCJS.DOM.TouchList as TouchList
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.WheelEvent as WheelEvent
 import qualified GHCJS.DOM.Window as Window
-import qualified Reflex.Patch.DMap as PatchDMap
-import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
-import qualified Reflex.Patch.MapWithMove as PatchMapWithMove
+import qualified Data.Patch.DMap as PatchDMap
+import qualified Data.Patch.DMapWithMove as PatchDMapWithMove
+import qualified Data.Patch.MapWithMove as PatchMapWithMove
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
 #ifndef USE_TEMPLATE_HASKELL
@@ -521,7 +522,7 @@ wrap
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
   forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $
-    traverseAttributePatch_ (patchAttrDOM PatchSettings_PatchAlways e) <$> modifyAttrs
+    applyAttrPatchDOM PatchSettings_PatchAlways e <$> modifyAttrs
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- liftIO $ newIORef Nothing
     _ <- elementOnEventName en e $ do --TODO: Something safer than this cast
@@ -672,7 +673,7 @@ makeElement doc elementTag cfg = do
   e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
     Nothing -> createElement doc elementTag
     Just ens -> createElementNS doc (Just ens) elementTag
-  liftJSM $ traverseAttributePatch_ (patchAttrDOM PatchSettings_PatchAlways e) $ _elementConfig_initialAttributes cfg
+  liftJSM $ traverse_ (applyAttrPatchDOM @ModifyAttrs PatchSettings_PatchAlways e) $ toPatch $ _elementConfig_initialAttributes cfg
   pure e
 
 {-# INLINE elementImmediate #-}
@@ -812,7 +813,7 @@ hydrateElement elementTag cfg child = do
                     let shouldPatchAttrs = True -- TODO do something with this flag if hydration is much slower
                     when shouldPatchAttrs $ do
                       p <- sample $ currentIncremental incrementalAttrs
-                      liftJSM $ traverseAttributePatch_ (patchAttrDOM PatchSettings_CheckBeforePatching e) p
+                      liftJSM $ traverse_ (applyAttrPatchDOM @ModifyAttrs PatchSettings_CheckBeforePatching e) $ toPatch p
                     pure e
                   -- we came to some other statically rendered element, so something has gone wrong
                   else do
@@ -1638,7 +1639,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
 
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
 traverseDMapWithKeyWithAdjust'
-  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, DMap.GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
+  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
   => (forall a. k a -> v a -> HydrationDomBuilderT s t m (v' a))
   -> DMap k v
   -> Event t (PatchDMap k v)
@@ -1758,7 +1759,7 @@ hoistTraverseWithKeyWithAdjust
   ::
   ( Adjustable t m
   , MonadHold t m
-  , DMap.GCompare k
+  , GCompare k
   , MonadIO m
   , MonadJSM m
   , PrimMonad m

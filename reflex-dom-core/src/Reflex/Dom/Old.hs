@@ -161,7 +161,7 @@ instance Attributes m (Map Text Text) t where
 
 addStaticAttributes :: Applicative m => Map Text Text -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addStaticAttributes attrs cfg = do
-  let initialAttrs = setAttributeMap $ Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
+  let initialAttrs = declareAttributeMap $ Map.fromList $ first (AttributeName Nothing) <$> Map.toList attrs
   pure $ cfg & elementConfig_initialAttributes .~ initialAttrs
 
 instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
@@ -171,7 +171,7 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
 
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addDynamicAttributes attrs cfg = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ setAttributeMap . mapKeysToAttributeName <$> attrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ declareAttributeMap . mapKeysToAttributeName <$> attrs
   return $ cfg & elementConfig_modifyAttributes .~ modifyAttrs
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t, a)
@@ -269,7 +269,7 @@ elStopPropagationNS ns elementTag en child = do
 
 elDynHtmlAttr' :: (DOM.MonadJSM m, MonadWidget t m) => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
-  let cfg = def & initialAttributes .~ setAttributeMap (mapKeysToAttributeName attrs)
+  let cfg = def & initialAttributes .~ declareAttributeMap (mapKeysToAttributeName attrs)
   (e, _) <- element elementTag cfg $ return ()
   postBuild <- getPostBuild
   performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) <$> leftmost [updated html, tag (current html) postBuild]

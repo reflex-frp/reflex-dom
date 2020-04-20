@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -7,8 +8,10 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- | Types for creating or interacting with attributes.
 module Reflex.Dom.Attributes.Types
@@ -18,57 +21,45 @@ module Reflex.Dom.Attributes.Types
   , AttributeName(..)
 
   -- * Text based attribute functions
+  , declareAttribute
   , setAttribute
   , removeAttribute
-  , setAttributeMap
+  , declareAttributeMap
   , mapKeysToAttributeName
 
-  -- * AttributePatch
-  , AttributePatch
-  , traverseAttributePatch_
-  , foldMapAttributePatch
+  -- * Attributes
+  , DeclareAttrs
   , attributesPatchIsEmpty
-  , removeAttrFromPatch
+  , removeAttrFromDeclareAttrs
   , lookupAttrInPatch
+  , ModifyAttrs
+  , removeAttrFromModifyAttrs
+  , toPatch
 
   -- * Implementing new attributes
   , IsAttribute(..)
   , PatchSettings(..)
   , singleAttribute
-
-  -- * Utility types and functions for implementing new attributes #attribute_utility_types#
-  -- ** SignedSet
-  , SignedSet
-  , signedSetFromList
-  , positiveSetFromList
-  , negativeSetFromList
-  , splitSignedSet
-  -- ** SignedList
-  , SignedList (FirstPositive, Zero, FirstNegative)
-  , leftmostPositive
-  , leftmostPositiveMap
-  , patchAttrDOMSignedText
-  -- ** GroupMap
-  , GroupMap
-  , singletonGroupMap
-  , groupMapFromMap
-  , groupMapToMap
+  , singleModifyAttribute
   ) where
 
+import Control.Lens
 import Control.Monad (when, void)
-import Data.Dependent.Map (DMap, DSum(..))
+import Data.Dependent.Map (DMap)
+import Data.Dependent.Sum (DSum(..))
 import Data.Foldable (traverse_)
+import Data.GADT.Compare.TH (deriveGEq, deriveGCompare)
 import Data.Map (Map)
+import Data.Map.Misc (diffMap)
+import Data.Patch
+import Data.Proxy
 import Data.String (IsString(..))
 import Data.Text
 import GHCJS.DOM.Types (JSM)
-import Reflex.Patch
-import Reflex.Query.Class (SelectedCount)
 import Type.Reflection
 import qualified Data.Dependent.Map as DMap
-import qualified Data.List as L
+import qualified Data.Dependent.Map.Lens as DMap
 import qualified Data.Map as Map
-import qualified Data.Map.Merge.Lazy as Map
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Types as DOM
 
@@ -81,7 +72,7 @@ data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read
 instance IsString AttributeName where
   fromString = AttributeName Nothing . fromString
 
--- | Used for controlling 'patchAttrDOM'.
+-- | Used for controlling 'applyAttrPatchDOM'.
 data PatchSettings
   = PatchSettings_CheckBeforePatching
   -- ^ Be careful to minimise the patch. This is used for checking attrs during
@@ -93,116 +84,129 @@ data PatchSettings
   -- optional, and can be omitted to avoid an extra roundtrip.
 
 -- | Define new attributes by creating instances of this class.
--- You probably want to implement your attributes as newtypes over types from
--- [here](#attribute_utility_types) to ensure that they are law abiding.
-class (Eq a, Monoid a, Group a) => IsAttribute a where
-  -- | Patch the attributes in DOM directly
-  patchAttrDOM :: PatchSettings -> DOM.Element -> a -> JSM ()
+-- This is defined around 'Patch' so we can use 'holdIncremental'.
+-- The 'PatchTarget' is used in declarative attributes (i.e. static and
+-- 'Dynamic' based attributes), and the patch itself is used in modify
+-- attributes ('Event' based attributes).
+class (Monoid (PatchTarget a), Semigroup a, Patch a) => IsAttribute a where
+  -- | Apply an attribute patch to the given DOM element.
+  applyAttrPatchDOM :: PatchSettings -> DOM.Element -> a -> JSM ()
   -- | Produce a map representing the attributes as text.
-  staticAttrMap :: a -> Map AttributeName Text
+  staticAttrMap :: Proxy a -> PatchTarget a -> Map AttributeName Text -- TODO: is there a reason why we can't make PatchTarget injective? I'd like to get rid of 'Proxy'.
+  -- | Produce a patch by diffing two 'PatchTarget' values. The primary use of
+  -- this is to produce patches for dynamic attributes.
+  diffAttr :: PatchTarget a -> PatchTarget a -> Maybe a
 
--- | A wrapper which reveals 'IsAttribute'.
-data AnAttribute a where
-  AnAttribute :: IsAttribute a => a -> AnAttribute a
+-- | Convert attributes to an attribute patch (by setting all attributes).
+toPatch :: IsAttribute a => PatchTarget a -> Maybe a
+toPatch = diffAttr mempty
 
--- | 'AttributePatch' is a collection of individual attribute patches.
--- Patches of the same `IsAttribute` type are merged using their 'Semigroup'
+-- | The purpose of this is to ensure the ordering of traversal is predictable.
+-- We want to apply the basic attributes before the others such that the basic
+-- ones don't overwrite the finer ones.
+data AttrKey a where
+  AttrKey_BasicAttributes :: AttrKey ModBasicAttributes
+  AttrKey_Other :: IsAttribute a => TypeRep a -> AttrKey a
+
+-- | Does the same job as ArgDict but without actually needing to use ArgDict
+withAttr :: AttrKey a -> (IsAttribute a => b) -> b
+withAttr = \case
+  AttrKey_BasicAttributes -> id
+  AttrKey_Other _ -> id
+
+-- | This is just to apply the 'PatchTarget' type family in DMap values
+newtype PT a = PT { _unPT :: PatchTarget a }
+instance Semigroup (PatchTarget a) => Semigroup (PT a) where
+  PT a <> PT b = PT (a <> b)
+instance Monoid (PatchTarget a) => Monoid (PT a) where
+  mempty = PT mempty
+
+-- | A collection of individual attributes.
+-- Attributes of the same `IsAttribute` type are merged using their 'Semigroup'
 -- instance.
-newtype AttributePatch = AttributePatch
-  { unAttributePatch :: DMap TypeRep AnAttribute
--- TODO: Consider TypeRepMap.
--- + May be faster
--- - Marked as broken in nixpkgs
--- - Does not build on GHCJS yet
--- - Does not have a way of filtering (but could it?)
+newtype DeclareAttrs = DeclareAttrs
+  { unDeclareAttrs :: DMap AttrKey PT
   }
 
--- | Check if the attribute patch is empty.
-attributesPatchIsEmpty :: AttributePatch -> Bool
-attributesPatchIsEmpty = DMap.null . unAttributePatch
-
--- | Create 'AttributePatch' from a single attribute patch.
-singleAttribute :: forall a. (IsAttribute a, Typeable a) => a -> AttributePatch
-singleAttribute = AttributePatch . DMap.singleton (typeRep @a) . AnAttribute
-
--- | Traverse each attribute in the patch.
-traverseAttributePatch_ :: Applicative m => (forall a. IsAttribute a => a -> m ()) -> AttributePatch -> m ()
-traverseAttributePatch_ f = traverse_ (\(_ :=> AnAttribute a) -> f a) . DMap.toList . unAttributePatch
-
--- | Fold attributes to some value.
-foldMapAttributePatch :: Monoid m => (forall a. IsAttribute a => a -> m) -> AttributePatch -> m
-foldMapAttributePatch f = foldMap (\(_ :=> AnAttribute a) -> f a) . DMap.toList . unAttributePatch
-
 -- Unions the items together and filters them out if they are 'mempty'.
-instance Semigroup AttributePatch where
-  AttributePatch a <> AttributePatch b = AttributePatch
-    $ DMap.filterWithKey (\_ (AnAttribute x) -> x /= mempty)
-    $ DMap.unionWithKey (\_ (AnAttribute x) (AnAttribute y) -> AnAttribute (x <> y)) a b
-instance Monoid AttributePatch where
-  mempty = AttributePatch DMap.empty
-instance Group AttributePatch where
-  negateG = AttributePatch . DMap.map (\(AnAttribute a) -> AnAttribute $ negateG a) . unAttributePatch
-instance Patch AttributePatch where
-  type PatchTarget AttributePatch = AttributePatch
-  apply a b = Just $ a <> b
+instance Semigroup DeclareAttrs where
+  DeclareAttrs a <> DeclareAttrs b = DeclareAttrs
+    $ DMap.unionWithKey (\k (PT x) (PT y) -> withAttr k $ PT (x <> y)) a b
 
--- | Maintain an invertible set of elements.
-newtype SignedSet a = SignedSet { _unSignedSet :: GroupMap a SelectedCount } deriving (Eq, Semigroup, Monoid, Group)
+instance Monoid DeclareAttrs where
+  mempty = DeclareAttrs DMap.empty
 
--- | Create a 'SignedSet' from a list which is augmented with the count already.
-signedSetFromList :: Ord a => [(a, SelectedCount)] -> SignedSet a
-signedSetFromList = SignedSet . GroupMap . Map.fromList
+-- | Create 'DeclareAttrs' from a single attribute.
+singleAttribute :: forall a. (IsAttribute a, Typeable a) => Proxy a -> PatchTarget a -> DeclareAttrs
+singleAttribute Proxy = DeclareAttrs . DMap.singleton (AttrKey_Other $ typeRep @a) . PT
 
--- | Create a 'SignedSet' with these positive elements.
-positiveSetFromList :: Ord a => [a] -> SignedSet a
-positiveSetFromList = signedSetFromList . fmap (\a -> (a, 1))
+-- | A collection of individual attribute patches.
+-- Attribute patches of the same 'IsAttribute' type are merged by using their
+-- 'Semigroup' instance.
+newtype ModifyAttrs = ModifyAttrs
+  { unModifyAttrs :: DMap AttrKey Identity
+  }
 
--- | Create a 'SignedSet' with these negative elements.
-negativeSetFromList :: Ord a => [a] -> SignedSet a
-negativeSetFromList = signedSetFromList . fmap (\a -> (a, -1))
+instance Semigroup ModifyAttrs where
+  ModifyAttrs a <> ModifyAttrs b = ModifyAttrs $ DMap.unionWithKey (\k -> withAttr k (<>)) a b
 
--- | Split the signed set into the negative and positive parts.
-splitSignedSet :: SignedSet a -> ([a], [a])
-splitSignedSet (SignedSet (GroupMap m)) = (Map.keys negatives, Map.keys positives)
-  where (negatives, positives) = Map.partition (<0) m
+instance Monoid ModifyAttrs where
+  mempty = ModifyAttrs DMap.empty
 
--- | Order preserving version of 'SignedSet'. The intention of this is to
--- provide something akin to 'Maybe' which is a good group.
-data SignedList a = SignedList
-  { _signedList_positive :: [a]
-  , _signedList_negative :: [a]
-  } deriving Eq
-instance Eq a => Semigroup (SignedList a) where
-  SignedList p1 n1 <> SignedList p2 n2 = SignedList
-    { _signedList_positive = (p1 L.\\ n2) <> (p2 L.\\ n1)
-    , _signedList_negative = (n1 L.\\ p2) <> (n2 L.\\ p1)
-    }
-instance Eq a => Monoid (SignedList a) where
-  mempty = SignedList [] []
-instance Eq a => Group (SignedList a) where
-  negateG (SignedList l r) = SignedList r l
+instance IsAttribute ModifyAttrs where
+  applyAttrPatchDOM s e = DOM.liftJSM . traverse_ (\(k :=> Identity a) -> withAttr k $ applyAttrPatchDOM s e a) . DMap.toList . unModifyAttrs
+  staticAttrMap Proxy = foldMap foldAttrs . DMap.toList . unDeclareAttrs
+    where
+      foldAttrs = \case
+        AttrKey_BasicAttributes :=> PT a -> staticAttrMap (Proxy :: Proxy ModBasicAttributes) a
+        AttrKey_Other _ :=> (PT a :: PT a) -> staticAttrMap (Proxy :: Proxy a) a
+  diffAttr (DeclareAttrs olds) (DeclareAttrs news) = Just $ ModifyAttrs $ DMap.merge
+    (DMap.mapMaybeMissing $ \k (PT o) -> withAttr k $ Identity <$> diffAttr o mempty)
+    (DMap.mapMaybeMissing $ \k (PT n) -> withAttr k $ Identity <$> diffAttr mempty n)
+    (DMap.zipWithMaybeMatched $ \k (PT a) (PT b) -> withAttr k $ Identity <$> diffAttr a b)
+    olds
+    news
 
-{-# COMPLETE FirstPositive, Zero, FirstNegative #-}
+instance Patch ModifyAttrs where
+  type PatchTarget ModifyAttrs = DeclareAttrs
+  apply (ModifyAttrs p) (DeclareAttrs m) = Just $ DeclareAttrs $ DMap.merge
+    (DMap.mapMaybeMissing $ \k (Identity mods) -> withAttr k $ PT <$> apply mods mempty)
+    (DMap.mapMissing $ \_k decs -> decs)
+    (DMap.zipWithMaybeMatched $ \k (Identity a) (PT b) -> withAttr k $ PT <$> apply a b)
+    p m
 
--- | The first positive element
-pattern FirstPositive :: a -> SignedList a
-pattern FirstPositive a <- SignedList (a:_) _
-  where FirstPositive a = SignedList [a] []
+-- | Create 'ModifyAttrs' from a single attribute patch.
+singleModifyAttribute :: forall a. (IsAttribute a, Typeable a) => a -> ModifyAttrs
+singleModifyAttribute = ModifyAttrs . DMap.singleton (AttrKey_Other $ typeRep @a) . Identity
 
--- | The first negative element
-pattern FirstNegative :: a -> SignedList a
-pattern FirstNegative a <- SignedList _ (a:_)
-  where FirstNegative a = SignedList [] [a]
+-- | Check if the attribute patch is empty.
+attributesPatchIsEmpty :: ModifyAttrs -> Bool
+attributesPatchIsEmpty = DMap.null . unModifyAttrs
 
--- | The zero element
-pattern Zero :: SignedList a
-pattern Zero = SignedList [] []
+-- | A cheap way of supporting existing code which doesn't need fine grained
+-- control over the values of attributes. This allows us to keep (=:) for
+-- setting attributes (although it is no longer generalised to 'Map').
+newtype BasicAttributes = BasicAttributes
+  { unBasicAttributes :: Map AttributeName Text
+  } deriving (Semigroup, Monoid)
 
--- | Helper function for implementing 'patchAttrDOM' for your type using
--- 'SignedList'. Only the first positive or negative element is used in the patch.
-patchAttrDOMSignedText :: PatchSettings -> AttributeName -> DOM.Element -> SignedList Text -> JSM ()
-patchAttrDOMSignedText settings (AttributeName mns k) e = \case
-  FirstPositive a -> case mns of
+newtype ModBasicAttributes = ModBasicAttributes
+  { unModBasicAttributes :: PatchMap AttributeName Text
+  } deriving (Semigroup, Monoid)
+
+instance Patch ModBasicAttributes where
+  type PatchTarget ModBasicAttributes = BasicAttributes
+  apply (ModBasicAttributes p) (BasicAttributes m) = BasicAttributes <$> apply p m
+
+instance IsAttribute ModBasicAttributes where
+  applyAttrPatchDOM s e = void . Map.traverseWithKey (\k -> applyAttrPatchMaybe s k e) . unPatchMap . unModBasicAttributes
+  staticAttrMap Proxy = unBasicAttributes
+  diffAttr (BasicAttributes m) (BasicAttributes m') = Just $ ModBasicAttributes $ PatchMap $ diffMap m m'
+
+-- | Set or remove an attribute
+applyAttrPatchMaybe :: PatchSettings -> AttributeName -> DOM.Element -> Maybe Text -> JSM ()
+applyAttrPatchMaybe settings (AttributeName mns k) e = \case
+  Just a -> case mns of
     Nothing -> do
       shouldPatch <- case settings of
         PatchSettings_PatchAlways -> pure True
@@ -217,83 +221,82 @@ patchAttrDOMSignedText settings (AttributeName mns k) e = \case
           ma <- Element.getAttributeNS e (Just ns) k
           pure $ maybe True (a /=) ma
       when shouldPatch $ Element.setAttributeNS e (Just ns) k a
-  FirstNegative _ -> case mns of
+  Nothing -> case mns of
     Nothing -> Element.removeAttribute e k
     Just ns -> Element.removeAttributeNS e (Just ns) k
-  Zero -> pure ()
 
--- | Get the first positive element, if it exists.
-leftmostPositive :: SignedList a -> Maybe a
-leftmostPositive = \case
-  FirstPositive a -> Just a
-  _ -> Nothing
-
--- | Like 'leftmostPositive', but returns an empty or singleton 'Map'. Useful
--- for implementing 'staticAttrMap'.
-leftmostPositiveMap :: k -> SignedList a -> Map k a
-leftmostPositiveMap k = maybe Map.empty (Map.singleton k) . leftmostPositive
-
--- | Like 'MonoidalMap', but prunes the leaves when they become 'mempty'.
-newtype GroupMap k a = GroupMap { unGroupMap :: Map k a } deriving Eq
-instance (Ord k, Eq a, Monoid a) => Semigroup (GroupMap k a) where
-  GroupMap a <> GroupMap b = GroupMap $ Map.merge lefts rights both a b
-    where lefts = Map.preserveMissing
-          rights = Map.preserveMissing
-          both = Map.zipWithMaybeMatched $ \_ x y ->
-            let m = x <> y in if m == mempty then Nothing else Just m
-instance (Ord k, Eq a, Monoid a) => Monoid (GroupMap k a) where
-  mempty = GroupMap Map.empty
-instance (Ord k, Eq a, Group a) => Group (GroupMap k a) where
-  negateG = GroupMap . fmap negateG . unGroupMap
-
--- | Create a 'GroupMap' from a 'Map'.
-groupMapFromMap :: Map k a -> GroupMap k a
-groupMapFromMap = GroupMap
-
--- | Obtain a 'Map' from a 'GroupMap'.
-groupMapToMap :: GroupMap k a -> Map k a
-groupMapToMap = unGroupMap
-
--- | Create a 'GroupMap' with a single member.
-singletonGroupMap :: k -> a -> GroupMap k a
-singletonGroupMap k = GroupMap . Map.singleton k
-
-groupMapDelete :: Ord k => k -> GroupMap k a -> GroupMap k a
-groupMapDelete k = GroupMap . Map.delete k . unGroupMap
-
--- | A cheap way of supporting existing code which doesn't need fine grained
--- control over the values of attributes. This allows us to keep (=:) for
--- setting attributes (although it is no longer generalised to 'Map').
-newtype BasicAttributes = BasicAttributes
-  { _unBasicAttributes :: GroupMap AttributeName (SignedList Text)
-  } deriving (Eq, Semigroup, Monoid, Group)
-instance IsAttribute BasicAttributes where
-  patchAttrDOM s e (BasicAttributes m) = void $ Map.traverseWithKey (\k -> patchAttrDOMSignedText s k e) $ groupMapToMap m
-  staticAttrMap (BasicAttributes m) = Map.mapMaybe leftmostPositive $ groupMapToMap m
-
--- | Set an attribute to the given 'Text'.
-setAttribute :: AttributeName -> Text -> AttributePatch
-setAttribute k = singleAttribute . BasicAttributes . singletonGroupMap k . FirstPositive
-
--- | Remove an attribute.
-removeAttribute :: AttributeName -> AttributePatch
-removeAttribute k = singleAttribute $ BasicAttributes $ singletonGroupMap k $ FirstNegative ""
+-- | Declare an attribute with a value.
+declareAttribute :: AttributeName -> Text -> DeclareAttrs
+declareAttribute k = DeclareAttrs . DMap.singleton AttrKey_BasicAttributes . PT . BasicAttributes . Map.singleton k
 
 -- | Set an attribute using the given 'Map'.
-setAttributeMap :: Map AttributeName Text -> AttributePatch
-setAttributeMap = singleAttribute . BasicAttributes . groupMapFromMap . fmap FirstPositive
+declareAttributeMap :: Map AttributeName Text -> DeclareAttrs
+declareAttributeMap = DeclareAttrs . DMap.singleton AttrKey_BasicAttributes . PT . BasicAttributes
 
 -- | Utility function for creating un-namespaced attribute maps
 mapKeysToAttributeName :: Map Text Text -> Map AttributeName Text
 mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
 
-lookupAttrInPatch :: AttributeName -> AttributePatch -> Maybe Text
-lookupAttrInPatch k (AttributePatch dm) = case DMap.lookup (typeRep @BasicAttributes) dm of
+lookupAttrInPatch :: AttributeName -> DeclareAttrs -> Maybe Text
+lookupAttrInPatch k (DeclareAttrs dm) = case DMap.lookup AttrKey_BasicAttributes dm of
   Nothing -> Nothing
-  Just (AnAttribute (BasicAttributes (GroupMap gm))) -> (\case FirstPositive a -> Just a; _ -> Nothing) =<< Map.lookup k gm
+  Just (PT (BasicAttributes m)) -> Map.lookup k m
 
-removeAttrFromPatch :: AttributeName -> AttributePatch -> AttributePatch
-removeAttrFromPatch k (AttributePatch m) = AttributePatch $ DMap.alter f (typeRep @BasicAttributes) m
+-- | Set an attribute to the given 'Text'.
+setAttribute :: AttributeName -> Text -> ModifyAttrs
+setAttribute k = ModifyAttrs . DMap.singleton AttrKey_BasicAttributes . Identity . ModBasicAttributes . PatchMap . Map.singleton k . Just
+
+-- | Remove an attribute.
+removeAttribute :: AttributeName -> ModifyAttrs
+removeAttribute k = ModifyAttrs . DMap.singleton AttrKey_BasicAttributes $ Identity $ ModBasicAttributes $ PatchMap $ Map.singleton k Nothing
+
+-- TODO we can't really remove anything except basic attributes, so some
+-- widgets which want total control over an attribute are possibly breakable
+removeAttrFromModifyAttrs :: AttributeName -> ModifyAttrs -> ModifyAttrs
+removeAttrFromModifyAttrs k = ModifyAttrs . DMap.alter f AttrKey_BasicAttributes . unModifyAttrs
   where f = \case
           Nothing -> Nothing
-          Just (AnAttribute (BasicAttributes gm)) -> Just $ AnAttribute $ BasicAttributes $ groupMapDelete k gm
+          Just (Identity (ModBasicAttributes (PatchMap m))) -> Just $ Identity $ ModBasicAttributes $ PatchMap $ Map.delete k m
+
+-- TODO see comment for removeAttrFromModifyAttrs
+removeAttrFromDeclareAttrs :: AttributeName -> DeclareAttrs -> DeclareAttrs
+removeAttrFromDeclareAttrs k = DeclareAttrs . DMap.alter f AttrKey_BasicAttributes . unDeclareAttrs
+  where f = \case
+          Nothing -> Nothing
+          Just (PT (BasicAttributes m)) -> Just $ PT $ BasicAttributes $ Map.delete k m
+
+_PT :: Iso' (PT a) (PatchTarget a)
+_PT = iso (\(PT a) -> a) PT
+
+_BasicAttributes :: Iso' BasicAttributes (Map AttributeName Text)
+_BasicAttributes = iso unBasicAttributes BasicAttributes
+
+_DeclareAttrs :: Iso' DeclareAttrs (DMap AttrKey PT)
+_DeclareAttrs = iso unDeclareAttrs DeclareAttrs
+
+type instance Index DeclareAttrs = AttributeName
+type instance IxValue DeclareAttrs = Text
+instance Ixed DeclareAttrs where
+  ix k = _DeclareAttrs . DMap.dmix AttrKey_BasicAttributes . _PT . _BasicAttributes . ix k
+instance At DeclareAttrs where
+  at k f = _DeclareAttrs $ DMap.dmat AttrKey_BasicAttributes g
+    where g (Just (PT (BasicAttributes m))) = Just . PT . BasicAttributes <$> at k f m
+          g Nothing = Just . PT . BasicAttributes <$> at k f mempty
+
+_ModBasicAttributes :: Iso' ModBasicAttributes (Map AttributeName (Maybe Text))
+_ModBasicAttributes = iso (unPatchMap . unModBasicAttributes) (ModBasicAttributes . PatchMap)
+
+_ModifyAttrs :: Iso' ModifyAttrs (DMap AttrKey Identity)
+_ModifyAttrs = iso unModifyAttrs ModifyAttrs
+
+type instance Index ModifyAttrs = AttributeName
+type instance IxValue ModifyAttrs = Maybe Text
+instance Ixed ModifyAttrs where
+  ix k = _ModifyAttrs . DMap.dmix AttrKey_BasicAttributes . _Wrapped . _ModBasicAttributes . ix k
+instance At ModifyAttrs where
+  at k f = _ModifyAttrs $ DMap.dmat AttrKey_BasicAttributes g
+    where g (Just (Identity (ModBasicAttributes (PatchMap m)))) = Just . Identity . ModBasicAttributes . PatchMap <$> at k f m
+          g Nothing = Just . Identity . ModBasicAttributes . PatchMap <$> at k f mempty
+
+deriveGEq ''AttrKey
+deriveGCompare ''AttrKey

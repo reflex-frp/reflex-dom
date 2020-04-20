@@ -30,12 +30,8 @@ import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified GHCJS.DOM.GlobalEventHandlers as Events
-import GHCJS.DOM.EventM (on)
-import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
@@ -92,7 +88,7 @@ instance Reflex t => Default (TextInputConfig t) where
 {-# INLINABLE textInput #-}
 textInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextInputConfig t -> m (TextInput t)
 textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName . Map.insert "type" inputType) dAttrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName . Map.insert "type" inputType) dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialValue .~ initial
     & inputElementConfig_setValue .~ eSetValue
@@ -150,7 +146,7 @@ data RangeInput t
 {-# INLINABLE rangeInput #-}
 rangeInput :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => RangeInputConfig t -> m (RangeInput t)
 rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName . Map.insert "type" "range") dAttrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName . Map.insert "type" "range") dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialValue .~ (T.pack . show $ initial)
     & inputElementConfig_setValue .~ (T.pack . show <$> eSetValue)
@@ -188,7 +184,7 @@ data TextArea t
 {-# INLINABLE textArea #-}
 textArea :: (DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace) => TextAreaConfig t -> m (TextArea t)
 textArea (TextAreaConfig initial eSet attrs) = do
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName) attrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName) attrs
   i <- textAreaElement $ def
     & textAreaElementConfig_initialValue .~ initial
     & textAreaElementConfig_setValue .~ eSet
@@ -225,11 +221,11 @@ checkbox :: (DomBuilder t m, PostBuild t m) => Bool -> CheckboxConfig t -> m (Ch
 checkbox checked config = do
   let permanentAttrs = Map.singleton "type" "checkbox"
       dAttrs = Map.delete "checked" . Map.union permanentAttrs <$> _checkboxConfig_attributes config
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName) dAttrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName) dAttrs
   i <- inputElement $ def
     & inputElementConfig_initialChecked .~ checked
     & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
-    & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ setAttributeMap (mapKeysToAttributeName permanentAttrs)
+    & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ declareAttributeMap (mapKeysToAttributeName permanentAttrs)
     & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
   return $ Checkbox
     { _checkbox_value = _inputElement_checked i
@@ -296,7 +292,7 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
   let permanentAttrs = Map.singleton "type" "checkbox"
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName . Map.union permanentAttrs) dAttrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName . Map.union permanentAttrs) dAttrs
   postBuild <- getPostBuild
   let filters :: DMap EventName (GhcjsEventFilter CheckboxViewEventResult)
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
@@ -306,7 +302,7 @@ checkboxView dAttrs dValue = do
       elementConfig :: ElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
       elementConfig = (def :: ElementConfig EventResult t (DomBuilderSpace m))
         { _elementConfig_modifyAttributes = Just modifyAttrs
-        , _elementConfig_initialAttributes = setAttributeMap $ mapKeysToAttributeName permanentAttrs
+        , _elementConfig_initialAttributes = declareAttributeMap $ mapKeysToAttributeName permanentAttrs
         , _elementConfig_eventSpec = GhcjsEventSpec
             { _ghcjsEventSpec_filters = filters
             , _ghcjsEventSpec_handler = GhcjsEventHandler $ \(en, GhcjsDomEvent evt) -> case en of
@@ -343,7 +339,7 @@ fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, Trig
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
-      dAttrs = setAttributeMap . mapKeysToAttributeName . insertType <$> _fileInputConfig_attributes config
+      dAttrs = declareAttributeMap . mapKeysToAttributeName . insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   let filters = DMap.singleton Change . GhcjsEventFilter $ \_ -> do
         return . (,) mempty $ return . Just $ EventResult ()
@@ -437,7 +433,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   let (indexedOptions, ixKeys) = splitDynPure $ ffor optionsWithAddedKeys $ \os ->
         let xs = fmap (\(ix, (k, v)) -> ((ix, k), ((ix, k), v))) $ zip [0::Int ..] $ Map.toList os
         in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
-  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (setAttributeMap . mapKeysToAttributeName) attrs
+  modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (declareAttributeMap . mapKeysToAttributeName) attrs
   let cfg = def
         & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ modifyAttrs
         & selectElementConfig_setValue .~ fmap (T.pack . show) (attachPromptlyDynWithMaybe (flip Bimap.lookupR) ixKeys setK)
