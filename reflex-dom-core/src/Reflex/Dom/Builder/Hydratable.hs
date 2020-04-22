@@ -8,6 +8,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Hydratable where
 
+import Data.Proxy
 import Control.Monad.Fix
 import Control.Monad.Primitive
 import Control.Monad.Ref
@@ -20,6 +21,7 @@ import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
 import Reflex
+import Reflex.Dom.Attributes.Types
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (HasDocument (..), hydratableAttribute)
 import Reflex.Host.Class
@@ -60,10 +62,30 @@ instance PrimMonad m => PrimMonad (HydratableT m) where
   type PrimState (HydratableT m) = PrimState m
   primitive = lift . primitive
 
+
+data Hydratable = Hydratable deriving Eq
+
+instance Semigroup Hydratable where
+  a <> _ = a
+instance Monoid Hydratable where
+  mempty = Hydratable
+
+instance Patch Hydratable where
+  type PatchTarget Hydratable = Hydratable
+  apply _ = Just
+
+instance IsAttribute Hydratable where
+  applyAttrPatchDOM _ _ Hydratable = pure ()
+  staticAttrMap _ Hydratable = Map.singleton hydratableAttribute ""
+  diffAttr _ _ = Nothing
+
+setHydratable :: DeclareAttrs
+setHydratable = singleAttribute (Proxy :: Proxy Hydratable) Hydratable
+
 makeHydratable :: Reflex t => ElementConfig er t m -> ElementConfig er t m
 makeHydratable cfg = cfg
-  { _elementConfig_initialAttributes = Map.insert hydratableAttribute "" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = fmap (Map.delete hydratableAttribute) <$> _elementConfig_modifyAttributes cfg
+  { _elementConfig_initialAttributes = setHydratable <> _elementConfig_initialAttributes cfg
+  , _elementConfig_modifyAttributes = _elementConfig_modifyAttributes cfg
   }
 
 instance PostBuild t m => PostBuild t (HydratableT m) where

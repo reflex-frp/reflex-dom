@@ -283,7 +283,62 @@ tests withDebugging wdConfig caps _selenium = do
         (e, ()) <- element "div" conf $ text "hello world"
         let click = domEvent Click e
         return ()
-
+    it "can patch initial attrs" $ runWD $ do
+      let preSwitchover = do
+            a <- findElemWithRetry (WD.ById "a")
+            assertAttr a "should-be-ignored" (Just "ignore")
+            assertAttr a "should-be-updated" (Just "wrong")
+            assertAttr a "should-be-readded" Nothing
+            pure a
+          check a = do
+            assertAttr a "should-be-ignored" (Just "ignore")
+            assertAttr a "should-be-updated" (Just "right")
+            assertAttr a "should-be-readded" (Just "hello")
+      testWidget' preSwitchover check $ do
+        elAttr "div" ("id" =: "a" <> "should-be-readded" =: "hello" <> "should-be-updated" =: "right") $ text "a"
+        el "script" $ text $ T.unlines
+          [ "var a = document.getElementById('a');"
+          , "a.removeAttribute('should-be-readded');"
+          , "a.setAttribute('should-be-updated', 'wrong');"
+          , "a.setAttribute('should-be-ignored', 'ignore');"
+          ]
+    it "can ignore extra attrs when patching" $ runWD $ do
+      let preSwitchover = do
+            a <- findElemWithRetry (WD.ById "a")
+            assertAttr a "should-be-ignored" (Just "test")
+            pure a
+          check a = do
+            assertAttr a "should-be-ignored" (Just "test")
+      testWidget' preSwitchover check $ do
+        let conf = def
+              & initialAttributes .~ "id" =: "a"
+        element "div" conf $ text "a"
+        el "script" $ text $ T.unlines
+          [ "var a = document.getElementById('a');"
+          , "a.setAttribute('should-be-ignored', 'test');"
+          ]
+    it "can patch modify attrs from postbuild" $ runWD $ do
+      let preSwitchover = do
+            a <- findElemWithRetry (WD.ById "a")
+            assertAttr a "pb-untouched" (Just "untouched")
+            assertAttr a "pb-update" (Just "wrong") -- check it was altered by JS
+            assertAttr a "pb-remove" Nothing -- check it was deleted by JS
+            pure a
+          check a = do
+            assertAttr a "pb-untouched" (Just "untouched")
+            assertAttr a "pb-update" (Just "update")
+            assertAttr a "pb-remove" (Just "remove")
+      testWidget' preSwitchover check $ do
+        pb <- getPostBuild
+        let conf = def
+              & initialAttributes .~ "id" =: "a"
+              & modifyAttributes .~ (("pb-untouched" =: Just "untouched" <> "pb-update" =: Just "update" <> "pb-remove" =: Just "remove") <$ pb)
+        element "div" conf $ text "a"
+        el "script" $ text $ T.unlines
+          [ "var a = document.getElementById('a');"
+          , "a.removeAttribute('pb-remove');"
+          , "a.setAttribute('pb-update', 'wrong');"
+          ]
   describe "inputElement" $ do
     describe "hydration" $ session' $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
@@ -1331,7 +1386,7 @@ shouldBeWithRetryM m expected = withRetry $ do
   got `shouldBe` expected
 
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
-assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
+assertAttr e k v = liftIO . assertEqual ("Incorrect attribute value: " <> T.unpack k) v =<< WD.attr e k
 
 elementShouldBeRemoved :: WD.Element -> WD ()
 elementShouldBeRemoved e = withRetry $ do
