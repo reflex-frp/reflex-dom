@@ -12,7 +12,7 @@ import Foreign.JavaScript.TH
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 
--- | Previously an alias for Data.Map.singleton, but now generalised to 'At'
+-- | Previously an alias for 'Data.Map.singleton', but now generalised to 'At'
 (=:) :: (At m, Monoid m) => Index m -> IxValue m -> m
 k =: a = at k ?~ a $ mempty
 infixr 7 =: -- Ought to bind tighter than <>, which is infixr 6
