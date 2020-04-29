@@ -80,6 +80,11 @@ run jsm = do
         startMainWidget a startPage jsm
     }
   forever $ threadDelay 1000000000
+#elif defined(wasm32_HOST_ARCH)
+import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
+import Language.Javascript.JSaddle (JSM)
+run :: JSM () -> IO ()
+run = Wasm.run 0
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
 #endif
