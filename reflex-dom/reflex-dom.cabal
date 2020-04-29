@@ -81,11 +81,11 @@ library
         else
           if flag(webkit2gtk)
             build-depends:
-              jsaddle-webkit2gtk
+              jsaddle-webkit2gtk >= 0.9.7 && < 0.10
           else
             if !os(android)
               build-depends:
-                jsaddle-webkit2gtk
+                jsaddle-webkit2gtk >= 0.9.7 && < 0.10
 
   exposed-modules:
     Reflex.Dom
