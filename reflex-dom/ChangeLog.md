@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## Unreleased
+
+* ([#366](https://github.com/reflex-frp/reflex-dom/pull/366)) Bump bounds for `reflex` to include 0.7.
+
 ## 0.5.3
 
 * On Android, enable prompting the user for geolocation
@@ -18,4 +22,5 @@
 ## 0.5
 
 * Re-export new hydration widget "mainWidget" functions.
+
 * The use-warp flag now properly takes precedence on macOS.
