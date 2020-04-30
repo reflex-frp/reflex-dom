@@ -59,7 +59,7 @@ library
   build-depends:
     base >= 4.7 && < 4.13,
     bytestring == 0.10.*,
-    reflex >= 0.6.2 && < 0.7,
+    reflex >= 0.6.2 && < 0.8,
     reflex-dom-core >=0.5.2 && < 0.6,
     text == 1.2.*
   if !impl(ghcjs)
@@ -74,13 +74,18 @@ library
           jsaddle,
           jsaddle-wkwebview
       else
-        if flag(webkit2gtk)
+        if arch(wasm32)
           build-depends:
-            jsaddle-webkit2gtk
+            jsaddle,
+            jsaddle-wasm
         else
-          if !os(android)
+          if flag(webkit2gtk)
             build-depends:
               jsaddle-webkit2gtk
+          else
+            if !os(android)
+              build-depends:
+                jsaddle-webkit2gtk
 
   exposed-modules:
     Reflex.Dom
