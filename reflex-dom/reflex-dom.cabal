@@ -47,7 +47,7 @@ library
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
-      aeson >= 1.4.4 && < 1.5,
+      aeson >= 1.4 && < 1.5,
       android-activity == 0.1.*,
       data-default == 0.7.*,
       jsaddle >= 0.9.6 && < 0.10
