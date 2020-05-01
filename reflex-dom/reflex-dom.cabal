@@ -77,7 +77,7 @@ library
         if arch(wasm32)
           build-depends:
             jsaddle >= 0.9.6 && < 0.10,
-            jsaddle-wasm
+            jsaddle-wasm >= 0.1 && < 0.2
         else
           if flag(webkit2gtk)
             build-depends:
