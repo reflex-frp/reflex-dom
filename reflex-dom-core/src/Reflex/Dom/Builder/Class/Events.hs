@@ -152,7 +152,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'BeforecopyTag = ()
   EventResultType 'CopyTag = ()
   EventResultType 'BeforepasteTag = ()
-  EventResultType 'PasteTag = Text
+  EventResultType 'PasteTag = Maybe Text
   EventResultType 'ResetTag = ()
   EventResultType 'SearchTag = ()
   EventResultType 'SelectstartTag = ()

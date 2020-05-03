@@ -2501,7 +2501,7 @@ windowOnEventName en e = case en of
   Beforecopy -> const $ return $ return () --TODO
   Copy -> const $ return $ return () --TODO
   Beforepaste -> const $ return $ return () --TODO
-  Paste -> on e Events.paste
+  Paste -> const $ return $ return () --TODO
   Reset -> on e Events.reset
   Search -> on e Events.search
   Selectstart -> const $ return $ return () --TODO
@@ -2569,13 +2569,13 @@ getMouseEventCoords = do
   bisequence (getClientX e, getClientY e)
 
 {-# INLINABLE getPasteData #-}
-getPasteData :: EventM e ClipboardEvent Text
+getPasteData :: EventM e ClipboardEvent (Maybe Text)
 getPasteData = do
   e <- event
   mdt <- ClipboardEvent.getClipboardData e
   case mdt of
-    Nothing -> return ""
-    Just dt -> DataTransfer.getData dt ("text" :: Text)
+    Nothing -> return Nothing
+    Just dt -> Just <$> DataTransfer.getData dt ("text" :: Text)
 
 {-# INLINABLE getTouchEvent #-}
 getTouchEvent :: EventM e TouchEvent TouchEventResult
