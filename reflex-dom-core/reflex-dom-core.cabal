@@ -149,7 +149,7 @@ library
     build-depends:
       dependent-sum >= 0.6,
       dependent-sum-template >= 0.1 && < 0.2,
-      template-haskell >= 2.14.0 && < 2.15
+      template-haskell >= 2.12.0 && < 2.15
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
     other-modules:
