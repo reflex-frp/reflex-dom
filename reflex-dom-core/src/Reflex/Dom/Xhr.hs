@@ -153,7 +153,7 @@ import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
-import Data.IORef (newIORef, writeIORef, readIORef)
+import Data.IORef (newIORef, atomicModifyIORef')
 #if MIN_VERSION_aeson(1,0,0)
 import Data.Aeson.Text
 #else
@@ -271,8 +271,8 @@ newXMLHttpRequestWithError req cb = do
       status <- xmlHttpRequestGetStatus xhr
       statusText <- xmlHttpRequestGetStatusText xhr
       when (readyState == 4) $
-        handled <- liftIO $ readIORef alreadyHandled
-        liftIO $ writeIORef alreadyHandled True
+        handled <- liftIO $ atomicModifyIORef' alreadyHandled $
+          \handled -> (True, handled)
         unless handled $ do
           t <- if rt == Just XhrResponseType_Text || isNothing rt
                then xmlHttpRequestGetResponseText xhr
