@@ -153,7 +153,7 @@ import Control.Lens
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
-import Data.IORef (newIORef, atomicModifyIORef')
+import Data.IORef (newIORef, writeIORef, readIORef)
 #if MIN_VERSION_aeson(1,0,0)
 import Data.Aeson.Text
 #else
@@ -270,26 +270,27 @@ newXMLHttpRequestWithError req cb = do
       readyState <- xmlHttpRequestGetReadyState xhr
       status <- xmlHttpRequestGetStatus xhr
       statusText <- xmlHttpRequestGetStatusText xhr
-      handled <- liftIO $ atomicModifyIORef' alreadyHandled $ \handled ->
-        if readyState == 4 then (True, handled) else (handled, handled)
-      when (readyState == 4 && not handled) $ do
-        t <- if rt == Just XhrResponseType_Text || isNothing rt
-             then xmlHttpRequestGetResponseText xhr
-             else return Nothing
-        r <- xmlHttpRequestGetResponse xhr
-        h <- case _xhrRequestConfig_responseHeaders c of
-          AllHeaders -> parseAllHeadersString <$>
-            xmlHttpRequestGetAllResponseHeaders xhr
-          OnlyHeaders xs -> traverse (xmlHttpRequestGetResponseHeader xhr)
-            (Map.fromSet id xs)
-        _ <- liftJSM $ cb $ Right
-             XhrResponse { _xhrResponse_status = status
-                         , _xhrResponse_statusText = statusText
-                         , _xhrResponse_response = r
-                         , _xhrResponse_responseText = t
-                         , _xhrResponse_headers = h
-                         }
-        return ()
+      when (readyState == 4) $
+        handled <- liftIO $ readIORef alreadyHandled
+        liftIO $ writeIORef alreadyHandled True
+        unless handled $ do
+          t <- if rt == Just XhrResponseType_Text || isNothing rt
+               then xmlHttpRequestGetResponseText xhr
+               else return Nothing
+          r <- xmlHttpRequestGetResponse xhr
+          h <- case _xhrRequestConfig_responseHeaders c of
+            AllHeaders -> parseAllHeadersString <$>
+              xmlHttpRequestGetAllResponseHeaders xhr
+            OnlyHeaders xs -> traverse (xmlHttpRequestGetResponseHeader xhr)
+              (Map.fromSet id xs)
+          _ <- liftJSM $ cb $ Right
+               XhrResponse { _xhrResponse_status = status
+                           , _xhrResponse_statusText = statusText
+                           , _xhrResponse_response = r
+                           , _xhrResponse_responseText = t
+                           , _xhrResponse_headers = h
+                           }
+          return ()
     _ <- xmlHttpRequestSend xhr (_xhrRequestConfig_sendData c)
     return ()
   return xhr
