@@ -47,17 +47,17 @@ library
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
-      aeson,
+      aeson >= 1.4 && < 1.5,
       android-activity == 0.1.*,
       data-default == 0.7.*,
-      jsaddle
+      jsaddle >= 0.9.6 && < 0.10
     c-sources: cbits/MainWidget.c
     include-dirs: cbits/include
     install-includes: MainWidget.h
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.13,
+    base >= 4.7 && < 4.14,
     bytestring == 0.10.*,
     reflex >= 0.6.2 && < 0.8,
     reflex-dom-core >=0.5.2 && < 0.6,
@@ -65,27 +65,27 @@ library
   if !impl(ghcjs)
     if flag(use-warp) && (os(linux) || os(osx))
       build-depends:
-        jsaddle,
-        jsaddle-warp
+        jsaddle >= 0.9.6 && < 0.10,
+        jsaddle-warp >= 0.9.6 && < 0.10
     else
       if os(osx) || os(ios)
         build-depends:
           data-default == 0.7.*,
-          jsaddle,
-          jsaddle-wkwebview
+          jsaddle >= 0.9.6 && < 0.10,
+          jsaddle-wkwebview >= 0.9.6 && < 0.10
       else
         if arch(wasm32)
           build-depends:
-            jsaddle,
-            jsaddle-wasm
+            jsaddle >= 0.9.6 && < 0.10,
+            jsaddle-wasm >= 0.1 && < 0.2
         else
           if flag(webkit2gtk)
             build-depends:
-              jsaddle-webkit2gtk
+              jsaddle-webkit2gtk >= 0.9.6 && < 0.10
           else
             if !os(android)
               build-depends:
-                jsaddle-webkit2gtk
+                jsaddle-webkit2gtk >= 0.9.6 && < 0.10
 
   exposed-modules:
     Reflex.Dom

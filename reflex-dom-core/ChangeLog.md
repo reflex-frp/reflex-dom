@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* ([#374](https://github.com/reflex-frp/reflex-dom/pull/374)) Provide text clipboard data as value of Paste event.
 * ([#353](https://github.com/reflex-frp/reflex-dom/pull/353)) Support GHC 8.8.
 * ([#358](https://github.com/reflex-frp/reflex-dom/pull/358)) Fix attribute support for explicitly namespaced elements.
 * ([#363](https://github.com/reflex-frp/reflex-dom/pull/363)) Remove deprecation warnings for the following widgets in
