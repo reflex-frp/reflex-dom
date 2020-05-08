@@ -144,6 +144,7 @@ import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
+import GHCJS.DOM.ClipboardEvent as ClipboardEvent
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute)
 import GHCJS.DOM.EventM (EventM, event, on)
@@ -179,6 +180,7 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
+import qualified GHCJS.DOM.DataTransfer as DataTransfer
 import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
 import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
 import qualified GHCJS.DOM.Element as Element
@@ -2255,7 +2257,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Beforecopy -> return ()
   Copy -> return ()
   Beforepaste -> return ()
-  Paste -> return ()
+  Paste -> getPasteData
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
@@ -2305,7 +2307,7 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Beforecopy -> return ()
   Copy -> return ()
   Beforepaste -> return ()
-  Paste -> return ()
+  Paste -> getPasteData
   Reset -> return ()
   Search -> return ()
   Selectstart -> return ()
@@ -2581,6 +2583,15 @@ getMouseEventCoords :: EventM e MouseEvent (Int, Int)
 getMouseEventCoords = do
   e <- event
   bisequence (getClientX e, getClientY e)
+
+{-# INLINABLE getPasteData #-}
+getPasteData :: EventM e ClipboardEvent (Maybe Text)
+getPasteData = do
+  e <- event
+  mdt <- ClipboardEvent.getClipboardData e
+  case mdt of
+    Nothing -> return Nothing
+    Just dt -> Just <$> DataTransfer.getData dt ("text" :: Text)
 
 {-# INLINABLE getTouchEvent #-}
 getTouchEvent :: EventM e TouchEvent TouchEventResult
