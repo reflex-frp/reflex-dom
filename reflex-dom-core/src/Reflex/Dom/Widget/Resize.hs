@@ -37,19 +37,19 @@ import qualified GHCJS.DOM.Types as DOM
 -- This function can cause strange scrollbars to appear in some circumstances.
 -- These can be hidden with pseudo selectors, for example, in webkit browsers:
 -- .wrapper *::-webkit-scrollbar { width: 0px; background: transparent; }
-resizeDetector :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m) => m a -> m (Event t (), a)
+resizeDetector :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m) => m a -> m (Event t (Maybe Double, Maybe Double), a)
 resizeDetector = resizeDetectorWithStyle ""
 
 resizeDetectorWithStyle :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m)
   => Text -- ^ A css style string. Warning: It should not contain the "position" style attribute.
   -> m a -- ^ The embedded widget
-  -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
+  -> m (Event t (Maybe Double, Maybe Double), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithStyle styleString = resizeDetectorWithAttrs ("style" =: styleString)
 
 resizeDetectorWithAttrs :: (MonadJSM m, DomBuilder t m, PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, DomBuilderSpace m ~ GhcjsDomSpace, MonadJSM (Performable m), MonadFix m)
   => Map Text Text -- ^ A map of attributes. Warning: It should not modify the "position" style attribute.
   -> m a -- ^ The embedded widget
-  -> m (Event t (), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
+  -> m (Event t (Maybe Double, Maybe Double), a) -- ^ An 'Event' that fires on resize, and the result of the embedded widget
 resizeDetectorWithAttrs attrs w = do
   let childStyle = "position: absolute; left: 0; top: 0;"
       containerAttrs = "style" =: "position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: scroll; z-index: -1; visibility: hidden;"
@@ -91,4 +91,4 @@ resizeDetectorWithAttrs attrs w = do
   size0 <- performEvent $ fmap (const $ liftJSM reset) pb
   rec resize <- performEventAsync $ fmap (\d cb -> (liftIO . cb) =<< liftJSM (resetIfChanged d)) $ tag (current dimensions) $ leftmost [expandScroll, shrinkScroll]
       dimensions <- holdDyn (Nothing, Nothing) $ leftmost [ size0, fmapMaybe id resize ]
-  return (fmapMaybe void resize, w')
+  return (updated dimensions, w')
