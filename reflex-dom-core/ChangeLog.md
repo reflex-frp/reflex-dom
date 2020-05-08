@@ -43,7 +43,9 @@
    * `CheckboxConfig`
    * `FileInput`
 
- * Add `< 0.7` upper bound for reflex
+* Add `< 0.7` upper bound for reflex
+
+* Fix the static rendering of which dropdown value is selected, see [#310](https://github.com/reflex-frp/reflex-dom/issues/310).
 
 * *(Breaking change)* The mouse wheel event now is a `WheelEventResult` rather than `()`.
   This provides information about the wheel's motion beyond the fact that it merely moved.
