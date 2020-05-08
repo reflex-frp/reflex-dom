@@ -1314,7 +1314,7 @@ tests withDebugging wdConfig caps _selenium = do
         fetchElement e = do
            val <- WD.attr e "value"
            sel <- WD.attr e "selected"
-           return (fromMaybe "" val, sel /= Nothing)
+           return (fromMaybe "" val, isJust sel)
     -- The "aa" test case is important,  but a good test implementation probably needs to avoid selenium,  because HTML parsers will insert a "selected" attribute on the first "option" tag if no selected attributes are present;  thus as written, this erroneously succeeds on the old implementation (but properly implemented, should fail)
     -- Thus, it would appear that we do actually need a HTML5 or maybe XML parser for this test suite.
     xit "statically renders initial values (on aa)" $ runWD $ do
