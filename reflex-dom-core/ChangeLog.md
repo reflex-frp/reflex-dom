@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.6.0.0
 
 * ([#374](https://github.com/reflex-frp/reflex-dom/pull/374)) Provide text clipboard data as value of Paste event.
 * ([#353](https://github.com/reflex-frp/reflex-dom/pull/353)) Support GHC 8.8.

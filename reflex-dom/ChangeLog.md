@@ -1,8 +1,9 @@
 # Revision history for reflex-dom
 
-## Unreleased
+## 0.5.3.1
 
 * ([#366](https://github.com/reflex-frp/reflex-dom/pull/366)) Bump bounds for `reflex` to include 0.7.
+* Bump bounds for `reflex-dom-core` to include 0.6.
 
 ## 0.5.3
 
