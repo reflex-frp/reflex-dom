@@ -27,9 +27,16 @@ let
           (self: super: {
             _dep = super._dep // {
               reflex-dom = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [
-                "release.nix"
                 ".git"
                 "dist"
+                "dist-newstyle"
+              ]) && !(builtins.elem path [
+                ./CONTRIBUTING.md
+                ./FAQ.md
+                ./Quickref.md
+                ./README.md
+                ./release.nix
+                ./test
               ])) ./.;
             };
           })
