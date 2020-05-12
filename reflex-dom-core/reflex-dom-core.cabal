@@ -153,16 +153,12 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.6,
       dependent-sum-template >= 0.1 && < 0.2,
-      template-haskell >= 2.12.0 && < 2.15
+      template-haskell >= 2.12.0 && < 2.16
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
     other-modules:
       Reflex.Dom.Builder.Class.TH
-  else
-    build-depends:
-      dependent-sum == 0.6.*
 
 test-suite hlint
   build-depends: base, hlint
