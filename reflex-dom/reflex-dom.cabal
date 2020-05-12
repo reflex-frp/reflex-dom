@@ -153,7 +153,19 @@ executable sortableList
   default-language: Haskell2010
 
 executable benchmark
-  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum
+  build-depends: base
+               , containers
+               , dependent-map
+               , dependent-sum
+               , ghc-prim
+               , ghcjs-dom
+               , mtl
+               , prim-uniq
+               , random
+               , reflex
+               , reflex-dom
+               , text
+               , transformers
   hs-source-dirs: .
   main-is: benchmark.hs
   ghc-options: -O2 -fspecialise-aggressively
@@ -162,7 +174,20 @@ executable benchmark
   default-language: Haskell2010
 
 executable krausest
-  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
+  build-depends: base
+               , containers
+               , dependent-map
+               , dependent-sum
+               , ghc-prim
+               , ghcjs-dom
+               , mtl
+               , prim-uniq
+               , random
+               , reflex
+               , reflex-dom
+               , text
+               , transformers
+               , vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
   ghc-options: -O2 -fspecialise-aggressively
