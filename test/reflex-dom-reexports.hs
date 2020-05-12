@@ -57,7 +57,7 @@ parseCabalExports file = do
     osConfVar = case System.Info.os of
       "linux" -> Just Dist.Linux
       "darwin" -> Just Dist.OSX
-      _ -> error "Unrecgonized System.Info.os"
+      _ -> error "Unrecognized System.Info.os"
     archConfVar = Just Dist.X86_64
     evalConfVar v = Right $ case v of
       OS osVar -> Just osVar == osConfVar
