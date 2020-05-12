@@ -4,6 +4,7 @@
     let
       ghc = pkgs.haskellPackages.ghcWithPackages (p: [p.Cabal]);
     in ''
-      ${ghc}/bin/runhaskell ${./reflex-dom-reexports.hs} ${../reflex-dom/reflex-dom.cabal} ${../reflex-dom-core/reflex-dom-core.cabal} > "$out"
+      ${ghc}/bin/runhaskell ${./reflex-dom-reexports.hs} ${../reflex-dom/reflex-dom.cabal} ${../reflex-dom-core/reflex-dom-core.cabal}
+      touch "$out"
     '');
 }
