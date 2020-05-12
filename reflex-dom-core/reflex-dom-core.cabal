@@ -1,7 +1,13 @@
 Name: reflex-dom-core
 Version: 0.5.3
 Synopsis: Functional Reactive Web Apps with Reflex
-Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+Description:
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
+  .
+  The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
+  correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
+  Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
+  All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
