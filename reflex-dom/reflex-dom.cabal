@@ -91,10 +91,12 @@ library
     Reflex.Dom
     Reflex.Dom.Internal
   reexported-modules:
-      Foreign.JavaScript.TH
-    , Foreign.JavaScript.Orphans
+      Foreign.JavaScript.Orphans
+    , Foreign.JavaScript.TH
+    , Foreign.JavaScript.Utils
     , Reflex.Dom.Builder.Class
     , Reflex.Dom.Builder.Class.Events
+    , Reflex.Dom.Builder.Hydratable
     , Reflex.Dom.Builder.Immediate
     , Reflex.Dom.Builder.InputDisabled
     , Reflex.Dom.Builder.Static
@@ -102,14 +104,19 @@ library
     , Reflex.Dom.Core
     , Reflex.Dom.Location
     , Reflex.Dom.Main
+    , Reflex.Dom.Modals.Class
     , Reflex.Dom.Old
+    , Reflex.Dom.Prerender
+    , Reflex.Dom.Time
     , Reflex.Dom.WebSocket
+    , Reflex.Dom.WebSocket.Query
     , Reflex.Dom.Widget
     , Reflex.Dom.Widget.Basic
     , Reflex.Dom.Widget.Input
     , Reflex.Dom.Widget.Lazy
     , Reflex.Dom.Widget.Resize
     , Reflex.Dom.Xhr
+    , Reflex.Dom.Xhr.FormData
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings

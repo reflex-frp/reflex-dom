@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+* ([#379](https://github.com/reflex-frp/reflex-dom/pull/379)) Re-export all modules from `reflex-dom-core`. The newly re-exported modules are:
+    * `Foreign.JavaScript.Utils`
+    * `Reflex.Dom.Builder.Hydratable`
+    * `Reflex.Dom.Modals.Class`
+    * `Reflex.Dom.Prerender`
+    * `Reflex.Dom.Time`
+    * `Reflex.Dom.WebSocket.Query`
+    * `Reflex.Dom.Xhr.FormData`
 * ([#366](https://github.com/reflex-frp/reflex-dom/pull/366)) Bump bounds for `reflex` to include 0.7.
 
 ## 0.5.3
