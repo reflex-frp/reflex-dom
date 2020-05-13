@@ -14,6 +14,7 @@ import Data.GADT.Compare.TH
 import Data.GADT.Compare
        (GOrdering(..), (:~:)(..), GEq(..), GCompare(..))
 #endif
+import Data.Text (Text)
 
 data EventTag
    = AbortTag
@@ -151,7 +152,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'BeforecopyTag = ()
   EventResultType 'CopyTag = ()
   EventResultType 'BeforepasteTag = ()
-  EventResultType 'PasteTag = ()
+  EventResultType 'PasteTag = Maybe Text
   EventResultType 'ResetTag = ()
   EventResultType 'SearchTag = ()
   EventResultType 'SelectstartTag = ()
@@ -159,7 +160,17 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'TouchmoveTag = TouchEventResult
   EventResultType 'TouchendTag = TouchEventResult
   EventResultType 'TouchcancelTag = TouchEventResult
-  EventResultType 'WheelTag = ()
+  EventResultType 'WheelTag = WheelEventResult
+
+data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
+  deriving (Show, Read, Eq, Ord, Bounded, Enum)
+
+data WheelEventResult = WheelEventResult
+  { _wheelEventResult_deltaX :: Double
+  , _wheelEventResult_deltaY :: Double
+  , _wheelEventResult_deltaZ :: Double
+  , _wheelEventResult_deltaMode :: DeltaMode
+  } deriving (Show, Read, Eq, Ord)
 
 data TouchEventResult = TouchEventResult
   { _touchEventResult_altKey :: Bool

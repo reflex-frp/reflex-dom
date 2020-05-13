@@ -159,6 +159,8 @@ import Data.Aeson.Text
 import Data.Aeson.Encode
 #endif
 import qualified Data.ByteString.Lazy as BL
+import Data.CaseInsensitive (CI)
+import qualified Data.CaseInsensitive as CI
 import Data.Default
 import qualified Data.List as L
 import Data.Map (Map)
@@ -198,12 +200,12 @@ data XhrResponse
                  , _xhrResponse_statusText :: Text
                  , _xhrResponse_response :: Maybe XhrResponseBody
                  , _xhrResponse_responseText :: Maybe Text
-                 , _xhrResponse_headers :: Map Text Text
+                 , _xhrResponse_headers :: Map (CI Text) Text
                  }
    deriving (Typeable)
 
 data XhrResponseHeaders =
-    OnlyHeaders (Set.Set Text) -- ^ Parse a subset of headers from the XHR Response
+    OnlyHeaders (Set.Set (CI Text)) -- ^ Parse a subset of headers from the XHR Response
   | AllHeaders -- ^ Parse all headers from the XHR Response
   deriving (Show, Read, Eq, Ord, Typeable)
 
@@ -275,7 +277,7 @@ newXMLHttpRequestWithError req cb = do
           AllHeaders -> parseAllHeadersString <$>
             xmlHttpRequestGetAllResponseHeaders xhr
           OnlyHeaders xs -> traverse (xmlHttpRequestGetResponseHeader xhr)
-            (Map.fromSet id xs)
+            (Map.fromSet CI.original xs)
         _ <- liftJSM $ cb $ Right
              XhrResponse { _xhrResponse_status = status
                          , _xhrResponse_statusText = statusText
@@ -288,10 +290,10 @@ newXMLHttpRequestWithError req cb = do
     return ()
   return xhr
 
-parseAllHeadersString :: Text -> Map Text Text
+parseAllHeadersString :: Text -> Map (CI Text) Text
 parseAllHeadersString s = Map.fromList $ fmap (stripBoth . T.span (/=':')) $
   L.dropWhileEnd T.null $ T.splitOn (T.pack "\r\n") s
-  where stripBoth (txt1, txt2) = (T.strip txt1, T.strip $ T.drop 1 txt2)
+  where stripBoth (txt1, txt2) = (CI.mk $ T.strip txt1, T.strip $ T.drop 1 txt2)
 
 newXMLHttpRequest :: (HasJSContext m, MonadJSM m, IsXhrPayload a) => XhrRequest a -> (XhrResponse -> JSM ()) -> m XMLHttpRequest
 newXMLHttpRequest req cb = newXMLHttpRequestWithError req $ mapM_ cb
@@ -444,7 +446,7 @@ xhrResponse_responseText :: Lens' XhrResponse (Maybe Text)
 xhrResponse_responseText f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 y x5) <$> f x4
 {-# INLINE xhrResponse_responseText #-}
 
-xhrResponse_headers :: Lens' XhrResponse (Map Text Text)
+xhrResponse_headers :: Lens' XhrResponse (Map (CI Text) Text)
 xhrResponse_headers f (XhrResponse x1 x2 x3 x4 x5) = (\y -> XhrResponse x1 x2 x3 x4 y) <$> f x5
 {-# INLINE xhrResponse_headers #-}
 

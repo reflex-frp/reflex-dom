@@ -1,7 +1,13 @@
 Name: reflex-dom-core
-Version: 0.5.3
+Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
-Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+Description:
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
+  .
+  The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
+  correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
+  Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
+  All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
@@ -48,11 +54,12 @@ library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 1.5,
-    base >= 4.7 && < 4.13,
+    base >= 4.7 && < 4.14,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.4,
-    blaze-builder,
+    blaze-builder >= 0.4.1 && < 0.5,
     bytestring == 0.10.*,
+    case-insensitive < 1.3,
     containers >= 0.6 && < 0.7,
     constraints >= 0.9 && < 0.12,
     contravariant >= 1.4 && < 1.6,
@@ -69,11 +76,11 @@ library
     lens >= 4.7 && < 5,
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
-    primitive >= 0.5 && < 0.7,
-    random,
+    primitive >= 0.5 && < 0.8,
+    random >= 1.1 && < 1.2,
     ref-tf == 0.4.*,
-    reflex >= 0.6.2 && < 0.7,
-    semigroups >= 0.16 && < 0.19,
+    reflex >= 0.6.2 && < 0.8,
+    semigroups >= 0.16 && < 0.20,
     stm >= 2.4 && < 2.6,
     text == 1.2.*,
     transformers >= 0.3 && < 0.6,
@@ -84,7 +91,7 @@ library
     hs-source-dirs: src-ghcjs
     build-depends:
       ghcjs-base,
-      hashable == 1.2.*
+      hashable >= 1.2 && < 1.4
   else
     hs-source-dirs: src-ghc
     if !os(windows)
@@ -92,7 +99,7 @@ library
 
   if flag(split-these)
     build-depends:
-      semialign >= 1 && < 1.1,
+      semialign >= 1 && < 1.2,
       these >= 1 && < 1.1
   else
     build-depends:
@@ -146,16 +153,12 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.6,
       dependent-sum-template >= 0.1 && < 0.2,
-      template-haskell
+      template-haskell >= 2.12.0 && < 2.16
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
     other-modules:
       Reflex.Dom.Builder.Class.TH
-  else
-    build-depends:
-      dependent-sum == 0.6.*
 
 test-suite hlint
   build-depends: base, hlint
@@ -166,6 +169,7 @@ test-suite hlint
 test-suite hydration
   build-depends: base
                , aeson
+               , async
                , bytestring
                , chrome-test-utils
                , constraints
