@@ -1,3 +1,4 @@
+cabal-version: 1.24
 Name: reflex-dom-core
 Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
@@ -15,7 +16,6 @@ Maintainer: ryan.trinkle@gmail.com
 Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
-Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
 extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
@@ -139,6 +139,7 @@ library
     Reflex.Dom.Xhr.ResponseType
     Reflex.Dom.Xhr.Exception
 
+  default-language: Haskell98
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
 
@@ -165,6 +166,7 @@ test-suite hlint
   hs-source-dirs: test
   main-is: hlint.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
 
 test-suite hydration
   build-depends: base
@@ -211,6 +213,7 @@ test-suite hydration
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
   if !os(linux) || !arch(x86_64) || flag(profile-reflex)
     buildable: False
 
@@ -230,6 +233,7 @@ test-suite gc
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
   if !os(linux) || !arch(x86_64)
     buildable: False
 
