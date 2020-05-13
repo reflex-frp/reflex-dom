@@ -1,3 +1,4 @@
+cabal-version: 1.24
 Name: reflex-dom
 Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
@@ -17,7 +18,6 @@ Maintainer: ryan.trinkle@gmail.com
 Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
-cabal-version: >=1.24
 extra-source-files:
   java/org/reflexfrp/reflexdom/MainWidget.java
   ChangeLog.md
@@ -43,6 +43,11 @@ flag expose-all-unfoldings
 
 flag build-examples
   description: Build the executables in ./examples
+  default: False
+  manual: True
+
+flag wasm32
+  description: Build for wasm32 architecture
   default: False
   manual: True
 
@@ -79,7 +84,7 @@ library
           jsaddle >= 0.9.6 && < 0.10,
           jsaddle-wkwebview >= 0.9.6 && < 0.10
       else
-        if arch(wasm32)
+        if flag(wasm32)
           build-depends:
             jsaddle >= 0.9.6 && < 0.10,
             jsaddle-wasm >= 0.1 && < 0.2
