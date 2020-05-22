@@ -57,7 +57,7 @@ startMainWidget a url jsm = do
         \     return JSON.parse(jsaddle.syncMessage(JSON.stringify(a)));\n\
         \ });\n\
         \ return function(batch) {\n\
-        \  core.processReq(batch);\n\
+        \  for (req of batch) { core.processReq(req); }\n\
         \ };\n\
         \})();\n\
         \jsaddle.postReady();\n"
