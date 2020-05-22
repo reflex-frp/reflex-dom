@@ -52,6 +52,7 @@ flag split-these
 
 library reflex-dom-core
   hs-source-dirs: src
+  visibility: public
   build-depends:
     aeson >= 0.8 && < 1.5,
     base >= 4.7 && < 4.14,
@@ -169,6 +170,7 @@ library reflex-dom-core
 
 library reflex-dom-core-selenium
   hs-source-dirs: reflex-dom-core-selenium
+  visibility: public
   build-depends:
     aeson >= 0.8 && < 1.5,
     base >= 4.7 && < 4.14,
