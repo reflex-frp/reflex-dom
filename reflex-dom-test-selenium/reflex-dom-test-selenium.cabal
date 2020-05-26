@@ -1,0 +1,60 @@
+cabal-version: 1.24
+Name: reflex-dom-test-selenium
+Version: 0.0.0.1
+Synopsis: Testing framework for selenium tests
+Description:
+License: BSD3
+License-file: LICENSE
+Author: Ryan Trinkle
+Maintainer: ryan.trinkle@gmail.com
+Stability: Experimental
+Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
+Build-type: Simple
+
+library
+  hs-source-dirs: src
+  build-depends:
+    -- aeson >= 0.8 && < 1.5,
+    -- base >= 4.7 && < 4.14,
+    -- bifunctors >= 4.2 && < 6,
+    -- bimap >= 0.3 && < 0.4,
+    -- blaze-builder >= 0.4.1 && < 0.5,
+    -- bytestring == 0.10.*,
+    -- case-insensitive < 1.3,
+    -- containers >= 0.6 && < 0.7,
+    -- constraints >= 0.9 && < 0.12,
+    -- contravariant >= 1.4 && < 1.6,
+    -- data-default >= 0.5 && < 0.8,
+    -- dependent-map >= 0.3 && < 0.4,
+    -- dependent-sum >= 0.6 && < 0.7,
+    -- dependent-sum-template >= 0.1 && < 0.2,
+    -- directory >= 1.2 && < 1.4,
+    -- exception-transformers == 0.4.*,
+    -- ghcjs-dom >= 0.9.1.0 && < 0.10,
+    -- jsaddle >= 0.9.0.0 && < 0.10,
+    -- process,
+    -- chrome-test-utils,
+    -- async,
+    -- jsaddle-warp,
+    -- -- keycode-0.2 has a bug on firefox
+    -- keycode >= 0.2.1 && < 0.3,
+    -- lens >= 4.7 && < 5,
+    -- monad-control >= 1.0.1 && < 1.1,
+    -- mtl >= 2.1 && < 2.3,
+    -- primitive >= 0.5 && < 0.8,
+    -- random >= 1.1 && < 1.2,
+    -- ref-tf == 0.4.*,
+    -- reflex >= 0.6.2 && < 0.8,
+    -- semigroups >= 0.16 && < 0.20,
+    -- stm >= 2.4 && < 2.6,
+    -- text == 1.2.*,
+    -- transformers >= 0.3 && < 0.6,
+    -- network-uri >= 2.6.1 && < 2.7,
+    -- webdriver,
+    -- zenc == 0.1.*
+
+  exposed-modules:
+    Reflex.Dom.Test.Selenium
+
+  default-language: Haskell98
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
