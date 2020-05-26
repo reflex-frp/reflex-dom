@@ -127,7 +127,6 @@ library
     Reflex.Dom.Modals.Class
     Reflex.Dom.Old
     Reflex.Dom.Prerender
-    Reflex.Dom.Test.Screenshot
     Reflex.Dom.Time
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
@@ -247,11 +246,3 @@ source-repository head
   type: git
   location: https://github.com/reflex-frp/reflex-dom
   subdir: reflex-dom-core
-
-executable testScreenshot
-  build-depends: base
-               , reflex-dom-core
-  hs-source-dirs: examples
-  main-is: testScreenshot.hs
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
-  default-language: Haskell2010
