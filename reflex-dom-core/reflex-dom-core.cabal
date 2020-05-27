@@ -71,10 +71,6 @@ library
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
     jsaddle >= 0.9.0.0 && < 0.10,
-    process,
-    chrome-test-utils,
-    async,
-    jsaddle-warp,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
     lens >= 4.7 && < 5,
@@ -89,7 +85,6 @@ library
     text == 1.2.*,
     transformers >= 0.3 && < 0.6,
     network-uri >= 2.6.1 && < 2.7,
-    webdriver,
     zenc == 0.1.*
 
   if impl(ghcjs)
