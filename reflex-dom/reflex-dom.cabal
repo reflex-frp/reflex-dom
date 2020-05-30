@@ -221,6 +221,7 @@ executable new
                , jsaddle
                , data-default
                , async
+               , ref-tf
   hs-source-dirs: benchmarks
   main-is: new.hs
   ghc-options: -O2 -fspecialise-aggressively
