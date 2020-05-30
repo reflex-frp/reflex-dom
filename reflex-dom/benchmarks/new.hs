@@ -37,7 +37,7 @@ instance Applicative m => Monoid (Sequence m) where
   mempty = Sequence $ pure ()
 
 --TODO: This builds up a rather large action in its event; it would be better if we could inline this action more thoroughly into the surrounding program, and only send a piece of data back with the event
-newtype LazyBuilder build t m a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence build, Event t (Sequence build)) m) a }
+newtype LazyBuilder build t m a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence (EventWriterT t (Sequence build) build)) m) a }
   deriving (Functor, Applicative, Monad)
 
 --dyn' :: Dynamic t (m a) -> m (Dynamic t b)
@@ -52,27 +52,24 @@ instance DomSpace LazyDomSpace where
   type EventSpec LazyDomSpace = Const ()
   type RawTextNode LazyDomSpace = ()
 
-instance (Reflex t, Monad m, Applicative build) => NotReady t (LazyBuilder build t m) where
+instance (Reflex t, Monad m, Monad build) => NotReady t (LazyBuilder build t m) where
   notReadyUntil = undefined
   notReady = undefined
 
-instance (Reflex t, Monad m, Applicative build) => Adjustable t (LazyBuilder build t m)
+instance (Reflex t, Monad m, Monad build) => Adjustable t (LazyBuilder build t m)
 
 instance (Reflex t, build ~ JSM, MonadIO m) => DomBuilder t (LazyBuilder build t m) where
   type DomBuilderSpace (LazyBuilder build t m) = LazyDomSpace
   textNode cfg = LazyBuilder $ do
     (doc, nodeRef) <- ask
-    thisRef :: IORef Text <- liftIO $ newIORef $ error "textNode: thisRef not yet initialized"
     let create = Sequence $ do
           node <- liftIO $ readIORef nodeRef
           this <- createTextNode doc $ _textNodeConfig_initialContents cfg
           appendChild node this
+          tellEvent $ fromMaybe never (_textNodeConfig_setContents cfg) <&> \t -> Sequence $ do
+            setNodeValue this $ Just t
           pure ()
-        update = fromMaybe never (_textNodeConfig_setContents cfg) <&> \t -> Sequence $ do
-          this <- liftIO $ readIORef thisRef
-          setNodeValue this $ Just t
-          pure ()
-    tell (create, update)
+    tell create
     pure $ TextNode ()
   commentNode = undefined
   element = undefined
@@ -95,8 +92,12 @@ main = do
   withAsync jsmRunner $ \_ -> do
     env <- takeMVar envVar
     runHeadlessApp $ do
-      ((), (a0, a')) <- runWriterT $ runReaderT (unLazyBuilder testWidget) env
-      liftIO $ writeChan toRun $ unSequence a0
+      ((), Sequence a0) <- runWriterT $ runReaderT (unLazyBuilder testWidget) env
+      a'Var <- liftIO newEmptyMVar
+      liftIO $ writeChan toRun $ do
+        ((), a') <- runEventWriterT a0
+        liftIO $ putMVar a'Var a'
+      a' <- liftIO $ takeMVar a'Var
       performEvent_ $ liftIO . writeChan toRun . unSequence <$> a'
       pure never
 
