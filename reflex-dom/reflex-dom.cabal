@@ -203,6 +203,32 @@ executable krausest
     buildable: False
   default-language: Haskell2010
 
+executable new
+  build-depends: base
+               , containers
+               , dependent-map
+               , dependent-sum
+               , ghc-prim
+               , ghcjs-dom
+               , mtl
+               , prim-uniq
+               , random
+               , reflex
+               , reflex-dom
+               , text
+               , transformers
+               , vector
+               , jsaddle
+               , data-default
+               , async
+  hs-source-dirs: benchmarks
+  main-is: new.hs
+  ghc-options: -O2 -fspecialise-aggressively
+  if impl(ghcjs)
+    ghcjs-options: -dedupe
+    cpp-options: -DGHCJS_BROWSER -DGHCJS_GC_INTERVAL=60000
+  default-language: Haskell2010
+
 source-repository head
   type: git
   location: https://github.com/reflex-frp/reflex-dom
