@@ -36,7 +36,7 @@ instance Applicative m => Monoid (Sequence m) where
   mempty = Sequence $ pure ()
 
 --TODO: This builds up a rather large action in its event; it would be better if we could inline this action more thoroughly into the surrounding program, and only send a piece of data back with the event
-newtype LazyBuilder build t m a = LazyBuilder { unLazyBuilder :: ReaderT (Document, Node) (WriterT (Sequence (EventWriterT t (Sequence build) build)) m) a }
+newtype LazyBuilder build t a = LazyBuilder { unLazyBuilder :: ReaderT (Document, Node) (Writer (Sequence (EventWriterT t (Sequence build) build))) a }
   deriving (Functor, Applicative, Monad)
 
 --dyn' :: Dynamic t (m a) -> m (Dynamic t b)
@@ -51,14 +51,14 @@ instance DomSpace LazyDomSpace where
   type EventSpec LazyDomSpace = Const ()
   type RawTextNode LazyDomSpace = ()
 
-instance (Reflex t, Monad m, Monad build) => NotReady t (LazyBuilder build t m) where
+instance (Reflex t, Monad build) => NotReady t (LazyBuilder build t) where
   notReadyUntil = undefined
   notReady = undefined
 
-instance (Reflex t, Monad m, Monad build) => Adjustable t (LazyBuilder build t m)
+instance (Reflex t, Monad build) => Adjustable t (LazyBuilder build t)
 
-instance (Reflex t, build ~ JSM, MonadIO m) => DomBuilder t (LazyBuilder build t m) where
-  type DomBuilderSpace (LazyBuilder build t m) = LazyDomSpace
+instance (Reflex t, build ~ JSM) => DomBuilder t (LazyBuilder build t) where
+  type DomBuilderSpace (LazyBuilder build t) = LazyDomSpace
   textNode cfg = LazyBuilder $ do
     (doc, parent) <- ask
     let create = Sequence $ do
@@ -94,7 +94,7 @@ main = do
       bodyElement <- getBodyUnchecked globalDoc
       pure (globalDoc, toNode bodyElement)
     runHeadlessApp $ do
-      ((), Sequence a0) <- runWriterT $ runReaderT (unLazyBuilder testWidget) env
+      let ((), Sequence a0) = runWriter $ runReaderT (unLazyBuilder testWidget) env
       ((), a') <- runJSM $ runEventWriterT a0
       performEvent_ $ liftIO . writeChan toRun . unSequence <$> a'
       pure never
