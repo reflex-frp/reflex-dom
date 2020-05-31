@@ -12,6 +12,17 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC
+      -ddump-to-file
+      -ddump-simpl
+      -dsuppress-idinfo
+      -dsuppress-coercions
+      -dsuppress-type-applications
+      -dsuppress-uniques
+      -dsuppress-module-prefixes
+#-}
+
+module Main (main) where
 
 import Reflex.Host.Headless
 import Reflex.Dom
@@ -89,25 +100,24 @@ class MonadHold t m => MonadUnique t m where
   uniqueIORef :: a -> m (IORef a)
 
 --TODO: This builds up a rather large action in its event; it would be better if we could inline this action more thoroughly into the surrounding program, and only send a piece of data back with the event
-newtype LazyBuilder build t a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence (WriterT (Sequence build) (PullM t)), Event t (Sequence build)) (UniqueM t)) a }
+newtype LazyBuilder build t a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence (WriterT (Sequence build) (PullM t))) (EventWriterT t (Sequence build) (UniqueM t))) a }
   deriving (Functor, Applicative, Monad, MonadFix)
 
 dyn' :: (Reflex t, t ~ SpiderTimeline x, Spider.HasSpiderTimeline x, Applicative build) => Dynamic t (LazyBuilder build t a) -> LazyBuilder build t (Dynamic t a)
 dyn' child = LazyBuilder $ do
   env@(doc, parentRef) <- ask
-  processedChild <- lift $ lift $ uniqueDynamicOccurrences $ runWriterT . flip runReaderT env . unLazyBuilder <$> child
-  let result = fst <$> processedChild
-      childBuilders = snd <$> processedChild
-      childCreate = fst <$> childBuilders
-      childUpdate = snd <$> childBuilders
+  processedChild <- lift $ lift $ lift $ uniqueDynamicOccurrences $ runEventWriterT . runWriterT . flip runReaderT env . unLazyBuilder <$> child
+  let result = fst . fst <$> processedChild
+      childCreate = snd . fst <$> processedChild
+      childUpdate = snd <$> processedChild
   let create = Sequence $ do
         --Need to sample promptly
         Sequence a <- lift $ sample $ current childCreate
         b <- lift $ sample $ pull $ execWriterT a
         tell b
-      update = never --TODO
-  tell (create, update)
-  pure $ fst <$> processedChild
+  tell create
+  --TODO: tellEvent update
+  pure result
 
 data LazyDomSpace
 
@@ -124,21 +134,22 @@ instance (Reflex t, Monad build) => NotReady t (LazyBuilder build t) where
 
 instance (Reflex t, Monad build) => Adjustable t (LazyBuilder build t)
 
-instance (Reflex t, t ~ SpiderTimeline x, Spider.HasSpiderTimeline x, build ~ JSM) => DomBuilder t (LazyBuilder build t) where
-  type DomBuilderSpace (LazyBuilder build t) = LazyDomSpace
+instance (Spider.HasSpiderTimeline x) => DomBuilder (SpiderTimeline x) (LazyBuilder JSM (SpiderTimeline x)) where
+  type DomBuilderSpace (LazyBuilder JSM (SpiderTimeline x)) = LazyDomSpace
+  {-# INLINE textNode #-}
   textNode cfg = LazyBuilder $ do
     (doc, parentRef) <- ask
-    thisRef <- lift $ lift $ uniqueIORef $ error "textNode: not initialized"
+    thisRef <- lift $ lift $ lift $ uniqueIORef $ error "textNode: not initialized"
     let create = Sequence $ tell $ Sequence $ do
           this <- createTextNode doc $ _textNodeConfig_initialContents cfg
           liftIO $ writeIORef thisRef this
           parent <- liftIO $ readIORef parentRef
           appendChild parent this
           pure ()
-        update = fromMaybe never (_textNodeConfig_setContents cfg) <&> \t -> Sequence $ do
-          this <- liftIO $ readIORef thisRef
-          setNodeValue this $ Just t
-    tell (create, update)
+    tell create
+    lift $ lift $ forM_ (_textNodeConfig_setContents cfg) $ \e -> tellEvent $ e <&> \t -> Sequence $ do
+      this <- liftIO $ readIORef thisRef
+      setNodeValue this $ Just t
     pure $ TextNode thisRef
   commentNode = undefined
   element = undefined
@@ -166,15 +177,23 @@ main = do
       bodyRef <- liftIO $ newIORef $ toNode body
       pure (doc, bodyRef)
     runHeadlessApp' $ do
-      ((), (Sequence a0, a')) <- lift $ lift $ PerformEventT $ lift $ Spider.SpiderHostFrame $ (\(Spider.SpiderPushM x) -> x) $ unUniqueM $ runWriterT $ runReaderT (unLazyBuilder testWidget) env
+      (((), Sequence a0), a') <- lift $ lift $ PerformEventT $ lift $ Spider.SpiderHostFrame $ (\(Spider.SpiderPushM x) -> x) $ unUniqueM $ runEventWriterT $ runWriterT $ runReaderT (unLazyBuilder testWidget) env
       runJSM . unSequence =<< sample (pull $ execWriterT a0)
       performEvent_ $ liftIO . runJSM . unSequence <$> a'
       pure never
 
 testWidget :: (MonadFix m, DomBuilder t m, m ~ LazyBuilder JSM (SpiderTimeline x), Spider.HasSpiderTimeline x) => m ()
 testWidget = do
-  rec dyn' v
-      v <- pure $ pure $ text "Qwer"
+  text "A"
+  text "B"
+  text "C"
+  text "D"
+  text "E"
+  text "F"
+  text "G"
+  text "H"
+  text "I"
+  text "J"
   pure ()
 
 runHeadlessApp'
