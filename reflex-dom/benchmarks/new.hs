@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -59,41 +60,54 @@ deriving instance Reflex t => MonadFix (UniqueM t)
 deriving instance Reflex t => MonadSample t (UniqueM t)
 deriving instance Reflex t => MonadHold t (UniqueM t)
 instance Spider.HasSpiderTimeline x => MonadUnique (SpiderTimeline x) (UniqueM (SpiderTimeline x)) where
+  {-# NOINLINE uniqueOccurrences #-}
   uniqueOccurrences e = UniqueM $ do
     let e' = pushAlways unUniqueM e
     Spider.SpiderPushM $ Spider.EventM $ Control.Exception.evaluate e'
     --TODO: Write a test that if we run uniqueOccurrences twice, then fill one of the IORefs, the other IORef doesn't get filled
+  {-# NOINLINE uniqueDynamicOccurrences #-}
+  uniqueDynamicOccurrences d = UniqueM $ do
+    d' <- buildDynamic (unUniqueM =<< sample (current d)) $ pushAlways unUniqueM (updated d)
+    Spider.SpiderPushM $ Spider.EventM $ Control.Exception.evaluate d'
   uniqueIORef = UniqueM . Spider.SpiderPushM . Spider.EventM . newIORef
 
 instance Spider.HasSpiderTimeline x => MonadUnique (SpiderTimeline x) (Spider.SpiderHostFrame x) where
+  {-# NOINLINE uniqueOccurrences #-}
   uniqueOccurrences e = Spider.SpiderHostFrame $ do
     let e' = pushAlways unUniqueM e
     Spider.EventM $ Control.Exception.evaluate e'
     --TODO: Write a test that if we run uniqueOccurrences twice, then fill one of the IORefs, the other IORef doesn't get filled
+  {-# NOINLINE uniqueDynamicOccurrences #-}
+  uniqueDynamicOccurrences d = Spider.SpiderHostFrame $ do
+    d' <- buildDynamic (unUniqueM =<< sample (current d)) $ pushAlways unUniqueM (updated d)
+    Spider.EventM $ Control.Exception.evaluate d'
   uniqueIORef = Spider.SpiderHostFrame . Spider.EventM . newIORef
 
 class MonadHold t m => MonadUnique t m where
   uniqueOccurrences :: Event t (UniqueM t a) -> m (Event t a)
+  uniqueDynamicOccurrences :: Dynamic t (UniqueM t a) -> m (Dynamic t a)
   uniqueIORef :: a -> m (IORef a)
 
 --TODO: This builds up a rather large action in its event; it would be better if we could inline this action more thoroughly into the surrounding program, and only send a piece of data back with the event
-newtype LazyBuilder build t a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence build, Event t (Sequence build)) (UniqueM t)) a }
-  deriving (Functor, Applicative, Monad)
+newtype LazyBuilder build t a = LazyBuilder { unLazyBuilder :: ReaderT (Document, IORef Node) (WriterT (Sequence (WriterT (Sequence build) (PullM t)), Event t (Sequence build)) (UniqueM t)) a }
+  deriving (Functor, Applicative, Monad, MonadFix)
 
-{-
-dyn' :: Dynamic t (m a) -> m (Dynamic t b)
-dyn' child = do
-  env@(doc, parent) <- ask
-  let processedChild = runWriter . flip runReaderT env <$> child
-  tell $ Sequence $ do
-    (_, Sequence buildChild0) <- sample $ current processedChild
-    ((), updateChild0) <- runEventWriterT buildChild0
-    updateChild <- switchHoldPromptOnly updateChild0
-    let newChild = updated processedChild
-    tellEvent $ leftmost [updated processedChild]
-  pure $ fst =<< processedChild
---dyn' d = Builder (fst <$> sample (current d), leftmost [ undefined <$> updated d, switch (snd <$> current d) ], trd =<< d)
--}
+dyn' :: (Reflex t, t ~ SpiderTimeline x, Spider.HasSpiderTimeline x, Applicative build) => Dynamic t (LazyBuilder build t a) -> LazyBuilder build t (Dynamic t a)
+dyn' child = LazyBuilder $ do
+  env@(doc, parentRef) <- ask
+  processedChild <- lift $ lift $ uniqueDynamicOccurrences $ runWriterT . flip runReaderT env . unLazyBuilder <$> child
+  let result = fst <$> processedChild
+      childBuilders = snd <$> processedChild
+      childCreate = fst <$> childBuilders
+      childUpdate = snd <$> childBuilders
+  let create = Sequence $ do
+        --Need to sample promptly
+        Sequence a <- lift $ sample $ current childCreate
+        b <- lift $ sample $ pull $ execWriterT a
+        tell b
+      update = never --TODO
+  tell (create, update)
+  pure $ fst <$> processedChild
 
 data LazyDomSpace
 
@@ -102,7 +116,7 @@ instance Default a => Default (Const a b) where
 
 instance DomSpace LazyDomSpace where
   type EventSpec LazyDomSpace = Const ()
-  type RawTextNode LazyDomSpace = ()
+  type RawTextNode LazyDomSpace = IORef Text
 
 instance (Reflex t, Monad build) => NotReady t (LazyBuilder build t) where
   notReadyUntil = undefined
@@ -115,7 +129,7 @@ instance (Reflex t, t ~ SpiderTimeline x, Spider.HasSpiderTimeline x, build ~ JS
   textNode cfg = LazyBuilder $ do
     (doc, parentRef) <- ask
     thisRef <- lift $ lift $ uniqueIORef $ error "textNode: not initialized"
-    let create = Sequence $ do
+    let create = Sequence $ tell $ Sequence $ do
           this <- createTextNode doc $ _textNodeConfig_initialContents cfg
           liftIO $ writeIORef thisRef this
           parent <- liftIO $ readIORef parentRef
@@ -125,7 +139,7 @@ instance (Reflex t, t ~ SpiderTimeline x, Spider.HasSpiderTimeline x, build ~ JS
           this <- liftIO $ readIORef thisRef
           setNodeValue this $ Just t
     tell (create, update)
-    pure $ TextNode ()
+    pure $ TextNode thisRef
   commentNode = undefined
   element = undefined
   inputElement = undefined
@@ -153,13 +167,15 @@ main = do
       pure (doc, bodyRef)
     runHeadlessApp' $ do
       ((), (Sequence a0, a')) <- lift $ lift $ PerformEventT $ lift $ Spider.SpiderHostFrame $ (\(Spider.SpiderPushM x) -> x) $ unUniqueM $ runWriterT $ runReaderT (unLazyBuilder testWidget) env
-      runJSM a0
+      runJSM . unSequence =<< sample (pull $ execWriterT a0)
       performEvent_ $ liftIO . runJSM . unSequence <$> a'
       pure never
 
-testWidget :: DomBuilder t m => m ()
+testWidget :: (MonadFix m, DomBuilder t m, m ~ LazyBuilder JSM (SpiderTimeline x), Spider.HasSpiderTimeline x) => m ()
 testWidget = do
-  text "Qwer"
+  rec dyn' v
+      v <- pure $ pure $ text "Qwer"
+  pure ()
 
 runHeadlessApp'
   :: (forall x. Spider.HasSpiderTimeline x => TriggerEventT
