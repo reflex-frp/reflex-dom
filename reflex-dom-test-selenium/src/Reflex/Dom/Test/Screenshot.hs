@@ -32,7 +32,6 @@ import Reflex.Dom.Core
 import System.IO (stderr)
 import System.IO.Silently (hSilence)
 import System.Process (std_in, std_out, std_err, createProcess, proc, StdStream (..), terminateProcess)
-import System.Which (staticWhich)
 import qualified Data.Text as T
 
 import qualified Control.Concurrent.Async as Async
@@ -50,13 +49,15 @@ import qualified Test.WebDriver.Capabilities as WD
 deriving instance MonadMask WD
 
 testWithSelenium
-  :: Bool
+  :: FilePath
+  -- ^ Path to the chromium executable
+  -> Bool
   -- ^ True means that the browser is invoked in headless mode, False means that
   -- the user can see the interaction happening on the browser (useful for debugging).
   -> SpecWith (WdTestSession a)
   -- ^ The tests we want to write in the selenium session
   -> IO ()
-testWithSelenium isHeadless actualTests = do
+testWithSelenium chromium isHeadless actualTests = do
   handle (\(_ :: IOError) -> return ()) $ unshareNetork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags isHeadless $ \chromeFlags -> do
     withSeleniumServer $ \selenium -> do
@@ -92,9 +93,6 @@ withSeleniumServer f = do
     { _selenium_portNumber = seleniumPort
     , _selenium_stopServer = stopServer
     }
-
-chromium :: FilePath
-chromium = $(staticWhich "chromium")
 
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags =
