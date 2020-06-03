@@ -47,7 +47,7 @@ failureLimit = 0
 
 main :: IO ()
 main = do
-  handle (\(_ :: IOError) -> return ()) $ unshareNetork -- If we run into an exception with sandboxing, just don't bother
+  handle (\(_ :: IOError) -> return ()) $ unshareNetwork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags True $ \chromeFlags -> do
     mainThread <- myThreadId
     browserProcess <- spawnCommand $ mconcat
