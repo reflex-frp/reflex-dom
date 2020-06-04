@@ -24,7 +24,7 @@ module Reflex.Dom.Prerender
 
 import Control.Monad.Primitive (PrimMonad(..))
 import Control.Monad.Reader
-import Control.Monad.Ref (MonadRef(..))
+import Control.Monad.Ref (MonadRef(..), MonadAtomicRef(..))
 import Data.IORef (IORef, newIORef)
 import Data.Semigroup (Semigroup)
 import Data.Text (Text)
@@ -165,6 +165,8 @@ instance Monad m => MonadRef (UnrunnableT js t m) where
   newRef _ = unrunnable
   readRef _ = unrunnable
   writeRef _ _ = unrunnable
+instance Monad m => MonadAtomicRef (UnrunnableT js t m) where
+  atomicModifyRef _ _ = unrunnable
 instance Monad m => HasDocument (UnrunnableT js t m) where
   askDocument = unrunnable
 instance Monad m => HasJSContext (UnrunnableT js t m) where
