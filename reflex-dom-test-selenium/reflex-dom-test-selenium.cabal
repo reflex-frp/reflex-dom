@@ -19,22 +19,23 @@ library
     bytestring == 0.10.*,
     chrome-test-utils,
     exceptions,
+    hspec-core,
+    hspec-webdriver >= 1.2.1,
+    http-types,
     jsaddle >= 0.9.0.0 && < 0.10,
     jsaddle-warp,
-    http-types,
     network,
-    reflex-dom-core,
     process,
+    reflex-dom-core,
     silently,
+    text == 1.2.*,
     wai,
     warp,
-    text == 1.2.*,
-    websockets,
-    hspec-webdriver,
-    webdriver
+    webdriver,
+    websockets
 
   exposed-modules:
-    Reflex.Dom.Test.Screenshot
+    Reflex.Dom.Test.Selenium
 
   default-language: Haskell98
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
