@@ -3,6 +3,10 @@ Name: reflex-dom
 Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
+  Web applications without callbacks or side-effects.
+  Reflex-DOM brings the power of functional reactive programming (FRP) to the web.
+  Build HTML and other Document Object Model (DOM) data with a pure functional interface.
+  .
   Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
   .
   The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
