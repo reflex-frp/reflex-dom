@@ -4,8 +4,6 @@
 
 Web applications without callbacks or side-effects. Reflex-DOM brings the power of [Functional Reactive Programming (FRP)](https://wiki.haskell.org/Functional_Reactive_Programming) to the web. Build [HTML](https://developer.mozilla.org/en-US/docs/Web/HTML) and other [Document Object Model (DOM)](https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model) data with a pure functional interface.
 
-### A Framework for Functional Reactive Web Apps in Haskell
-
 Reflex-DOM is a framework for building web applications in [Haskell](https://www.haskell.org/), based on the [Functional Reactive Programming](https://wiki.haskell.org/Functional_Reactive_Programming) library [Reflex](https://github.com/reflex-frp/reflex).
 
 **Visit https://reflex-frp.org/ for more information, tutorials, documentation and [examples](https://examples.reflex-frp.org/).**
