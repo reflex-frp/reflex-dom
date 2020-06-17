@@ -1,54 +1,47 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.6.0.0
 
-* ([#374](https://github.com/reflex-frp/reflex-dom/pull/374)) Provide text clipboard data as value of Paste event.
+* ([#375](https://github.com/reflex-frp/reflex-dom/pull/375)) **(Breaking change)** Expose resized dimensions from `resizeDetector`, `resizeDetectorWithStyle`, and `resizeDetectorWithAttrs` from `Reflex.Dom.Widget.Resize`.
+* ([#374](https://github.com/reflex-frp/reflex-dom/pull/374)) **(Breaking change)** Provide text clipboard data as value of `Paste` event.
+* ([#348](https://github.com/reflex-frp/reflex-dom/pull/348)) **(Breaking change)** Make XHR response headers case insensitive by changing `_xhrResponse_headers :: Map Text Text` to `_xhrResponse_headers :: Map (CI Text) Text`.
+* ([#225](https://github.com/reflex-frp/reflex-dom/pull/225)) **(Breaking change)** Add a functional dependency to `HasDomEvent`.
+* ([#342](https://github.com/reflex-frp/reflex-dom/issues/342)) **(Breaking change)** The mouse wheel event is now a `WheelEventResult` rather than `()`. This provides information about the wheel's motion beyond the fact that it merely moved.
 * ([#353](https://github.com/reflex-frp/reflex-dom/pull/353)) Support GHC 8.8.
 * ([#358](https://github.com/reflex-frp/reflex-dom/pull/358)) Fix attribute support for explicitly namespaced elements.
 * ([#363](https://github.com/reflex-frp/reflex-dom/pull/363)) Remove deprecation warnings for the following widgets in
   `Reflex.Dom.Widget.Basic`:
-
-  * `Link`
-  * `button`
-  * `dtdd`
-  * `linkClass`
-  * `link`
-  * `tabDisplay`
-  * `tableDynAttr`
+    * `Link`
+    * `button`
+    * `dtdd`
+    * `linkClass`
+    * `link`
+    * `tabDisplay`
+    * `tableDynAttr`
 * ([#361](https://github.com/reflex-frp/reflex-dom/pull/361)) Fix bug in hydration causing the JavaScript to crash when dealing with unexpected HTML.
+* ([#310](https://github.com/reflex-frp/reflex-dom/issues/310)) Fix the static rendering of which dropdown value is selected.
 * ([#364](https://github.com/reflex-frp/reflex-dom/pull/364)) Export attributes used for controlling hydration at the element level:
   * "data-ssr" is now available as `Reflex.Dom.Builder.Immediate.hydratableAttribute`.
   * "data-hydration-skip" is now available as `Reflex.Dom.Builder.Immediate.skipHydrationAttribute`.
-* ([#348](https://github.com/reflex-frp/reflex-dom/pull/348)) **(Breaking change)** Make XHR response headers case insensitive by changing `_xhrResponse_headers :: Map Text Text` to `_xhrResponse_headers :: Map (CI Text) Text`.
-* ([#225](https://github.com/reflex-frp/reflex-dom/pull/225)) **(Breaking change)** Add a functional dependency to `HasDomEvent`.
 * ([#366](https://github.com/reflex-frp/reflex-dom/pull/366)) Bump bounds for `reflex` to include 0.7.
-
 
 ## 0.5.3
 
 * Deprecate a number of old inflexible widget helpers in `Reflex.Dom.Widget.Basic`:
-
-   * `Link`
-   * `button`
-   * `dtdd`
-   * `linkClass`
-   * `link`
-   * `tabDisplay`
-   * `tableDynAttr`
+    * `Link`
+    * `button`
+    * `dtdd`
+    * `linkClass`
+    * `link`
+    * `tabDisplay`
+    * `tableDynAttr`
 
   And in `Reflex.Dom.Widget.Input`:
-
-   * `TextInput`
-   * `TextAreaConfig`
-   * `CheckboxConfig`
-   * `FileInput`
-
-* Add `< 0.7` upper bound for reflex
-
-* Fix the static rendering of which dropdown value is selected, see [#310](https://github.com/reflex-frp/reflex-dom/issues/310).
-
-* *(Breaking change)* The mouse wheel event now is a `WheelEventResult` rather than `()`.
-  This provides information about the wheel's motion beyond the fact that it merely moved.
+    * `TextInput`
+    * `TextAreaConfig`
+    * `CheckboxConfig`
+    * `FileInput`
+* Add `< 0.7` upper bound for `reflex`.
 
 ## 0.5.2
 
