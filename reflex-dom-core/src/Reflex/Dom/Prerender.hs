@@ -211,6 +211,7 @@ instance Monad m => MonadHold t (UnrunnableT js t m) where
   holdIncremental _ _ = unrunnable
   buildDynamic _ _ = unrunnable
   headE _ = unrunnable
+  now = unrunnable
 instance Monad m => MonadSample t (UnrunnableT js t m) where
   sample _ = unrunnable
 instance Monad m => MonadIO (UnrunnableT js t m) where
