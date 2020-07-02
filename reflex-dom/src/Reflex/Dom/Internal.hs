@@ -9,6 +9,10 @@ module Reflex.Dom.Internal
   , mainWidget
   , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
   , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+
+#if defined(ANDROID)
+  , runAndroid
+#endif
   ) where
 
 import Data.ByteString (ByteString)
@@ -70,10 +74,13 @@ import System.IO
 import Language.Javascript.JSaddle (JSM)
 
 run :: JSM () -> IO ()
-run jsm = do
+run = runAndroid def
+
+runAndroid :: ActivityCallbacks -> JSM () -> IO ()
+runAndroid activityCallbacks jsm = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
-  continueWithCallbacks $ def
+  continueWithCallbacks $ activityCallbacks
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
         let startPage = fromString "file:///android_asset/index.html"
