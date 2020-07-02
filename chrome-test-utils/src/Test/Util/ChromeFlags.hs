@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Test.Util.ChromeFlags where
 
+import Data.Semigroup
 import Data.Text
 import System.IO.Temp
 

@@ -82,6 +82,7 @@ import Control.Monad.Trans.Control
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Coerce (coerce)
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 

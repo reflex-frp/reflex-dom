@@ -56,6 +56,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Proxy
+import Data.Semigroup
 import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion

@@ -30,8 +30,12 @@ import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified GHCJS.DOM.GlobalEventHandlers as Events
+import GHCJS.DOM.EventM (on)
+import qualified GHCJS.DOM.FileList as FileList
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
