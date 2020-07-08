@@ -315,18 +315,18 @@ tests withDebugging wdConfig caps _selenium = do
           pure ()
     describe "hydration" $ session' $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
-        inputRef <- newRef ("" :: Text)
+        inputRef <- newRef ("hello " :: Text)
         testWidget'
           (do
             e <- findElemWithRetry $ WD.ByTag "input"
-            WD.sendKeys "hello world" e
+            WD.sendKeys "world" e
             pure e)
           (\e -> do
             WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
             WD.click =<< findElemWithRetry (WD.ByTag "button")
             readRef inputRef `shouldBeWithRetryM` "hello world"
           ) $ do
-          e <- inputElement def
+          e <- inputElement $ def & inputElementConfig_initialValue .~ "hello "
           click <- button "save"
           performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "captures user input after switchover" $ runWD $ do
