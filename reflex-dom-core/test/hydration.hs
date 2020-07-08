@@ -290,6 +290,29 @@ tests withDebugging wdConfig caps _selenium = do
         return ()
 
   describe "inputElement" $ do
+    describe "static renderer" $ session' $ do
+      it "sets value attribute" $ runWD $ do
+        let checkStatic = do
+              e <- findElemWithRetry $ WD.ByTag "input"
+              WD.attr e "value" `shouldBeWithRetryM` Just "test"
+              pure e
+            checkHydrated e = do
+              WD.attr e "value" `shouldBeWithRetryM` Just "test"
+        testWidget' checkStatic checkHydrated $ void $ inputElement $ def
+          & inputElementConfig_initialValue .~ "test"
+      it "updates value attribute at postBuild" $ runWD $ do
+        let checkStatic = do
+              e <- findElemWithRetry $ WD.ByTag "input"
+              WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
+              pure e
+            checkHydrated e = do
+              WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
+        testWidget' checkStatic checkHydrated $ do
+          pb <- getPostBuild
+          _ <- inputElement $ def
+            & inputElementConfig_initialValue .~ "test"
+            & inputElementConfig_setValue .~ ("test-updated" <$ pb)
+          pure ()
     describe "hydration" $ session' $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("" :: Text)
@@ -475,6 +498,29 @@ tests withDebugging wdConfig caps _selenium = do
             liftIO $ writeRef filesRef names
 
   describe "textAreaElement" $ do
+    describe "static renderer" $ session' $ do
+      it "sets value attribute" $ runWD $ do
+        let checkStatic = do
+              e <- findElemWithRetry $ WD.ByTag "textarea"
+              WD.attr e "value" `shouldBeWithRetryM` Just "test"
+              pure e
+            checkHydrated e = do
+              WD.attr e "value" `shouldBeWithRetryM` Just "test"
+        testWidget' checkStatic checkHydrated $ void $ textAreaElement $ def
+          & textAreaElementConfig_initialValue .~ "test"
+      it "updates value attribute at postBuild" $ runWD $ do
+        let checkStatic = do
+              e <- findElemWithRetry $ WD.ByTag "textarea"
+              WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
+              pure e
+            checkHydrated e = do
+              WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
+        testWidget' checkStatic checkHydrated $ do
+          pb <- getPostBuild
+          _ <- textAreaElement $ def
+            & textAreaElementConfig_initialValue .~ "test"
+            & textAreaElementConfig_setValue .~ ("test-updated" <$ pb)
+          pure ()
     describe "hydration" $ session' $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("" :: Text)

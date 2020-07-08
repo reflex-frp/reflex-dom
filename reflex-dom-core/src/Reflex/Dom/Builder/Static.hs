@@ -311,7 +311,14 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       return (e, result)
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
-    (e, _result) <- element "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
+    -- Tweak the config to update the "value" attribute appropriately.
+    -- TODO: warn upon overwriting values.
+    let adjustedConfig = (_inputElementConfig_elementConfig cfg)
+          & elementConfig_initialAttributes %~ Map.insert "value" (_inputElementConfig_initialValue cfg)
+          & elementConfig_modifyAttributes %~ (case _inputElementConfig_setValue cfg of
+              Nothing -> id
+              Just e -> \e' -> (Map.singleton "value" . Just <$> e) <> e')
+    (e, _result) <- element "input" adjustedConfig $ return ()
     let v0 = constDyn $ cfg ^. inputElementConfig_initialValue
     let c0 = constDyn $ cfg ^. inputElementConfig_initialChecked
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
@@ -327,8 +334,14 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
-    --TODO: Support setValue event
-    (e, _domElement) <- element "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    -- Tweak the config to update the "value" attribute appropriately.
+    -- TODO: warn upon overwriting values.
+    let adjustedConfig = (_textAreaElementConfig_elementConfig cfg)
+          & elementConfig_initialAttributes %~ Map.insert "value" (_textAreaElementConfig_initialValue cfg)
+          & elementConfig_modifyAttributes %~ (case _textAreaElementConfig_setValue cfg of
+              Nothing -> id
+              Just e -> \e' -> (Map.singleton "value" . Just <$> e) <> e')
+    (e, _domElement) <- element "textarea" adjustedConfig $ return ()
     let v0 = constDyn $ cfg ^. textAreaElementConfig_initialValue
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
     return $ TextAreaElement
