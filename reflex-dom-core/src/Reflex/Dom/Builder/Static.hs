@@ -37,6 +37,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
+import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -334,14 +335,11 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       }
   {-# INLINABLE textAreaElement #-}
   textAreaElement cfg = do
-    -- Tweak the config to update the "value" attribute appropriately.
-    -- TODO: warn upon overwriting values.
-    let adjustedConfig = (_textAreaElementConfig_elementConfig cfg)
-          & elementConfig_initialAttributes %~ Map.insert "value" (_textAreaElementConfig_initialValue cfg)
-          & elementConfig_modifyAttributes %~ (case _textAreaElementConfig_setValue cfg of
-              Nothing -> id
-              Just e -> \e' -> (Map.singleton "value" . Just <$> e) <> e')
-    (e, _domElement) <- element "textarea" adjustedConfig $ return ()
+    (e, _domElement) <- element "textarea" (_textAreaElementConfig_elementConfig cfg) $ do
+      -- Set the initial value
+      void $ textNode $ def
+        & textNodeConfig_initialContents .~ _textAreaElementConfig_initialValue cfg
+        & textNodeConfig_setContents .~ fromMaybe never (_textAreaElementConfig_setValue cfg)
     let v0 = constDyn $ cfg ^. textAreaElementConfig_initialValue
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
     return $ TextAreaElement
