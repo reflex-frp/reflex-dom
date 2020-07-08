@@ -312,16 +312,28 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       return (e, result)
   {-# INLINABLE inputElement #-}
   inputElement cfg = do
-    -- Tweak the config to update the "value" attribute appropriately.
+    -- Tweak the config to update the "value" and "checked" attributes appropriately.
     -- TODO: warn upon overwriting values.
-    let adjustedConfig = (_inputElementConfig_elementConfig cfg)
-          & elementConfig_initialAttributes %~ Map.insert "value" (_inputElementConfig_initialValue cfg)
-          & elementConfig_modifyAttributes %~ (case _inputElementConfig_setValue cfg of
-              Nothing -> id
-              Just e -> \e' -> (Map.singleton "value" . Just <$> e) <> e')
+    let setInitialValue = Map.insert "value" (_inputElementConfig_initialValue cfg)
+        setUpdatedValue updatedAttrs = case _inputElementConfig_setValue cfg of
+          Nothing -> updatedAttrs
+          Just e -> (Map.singleton "value" . Just <$> e) <> updatedAttrs
+        setInitialChecked = case _inputElementConfig_initialChecked cfg of
+          True -> Map.insert "checked" "checked"
+          False -> id
+        setUpdatedChecked updatedAttrs = case _inputElementConfig_setChecked cfg of
+          Nothing -> updatedAttrs
+          Just e -> (Map.singleton "checked" (Just "checked") <$ e) <> updatedAttrs
+        adjustedConfig = (_inputElementConfig_elementConfig cfg)
+          & elementConfig_initialAttributes %~ setInitialValue . setInitialChecked
+          & elementConfig_modifyAttributes %~ setUpdatedValue . setUpdatedChecked
     (e, _result) <- element "input" adjustedConfig $ return ()
-    let v0 = constDyn $ cfg ^. inputElementConfig_initialValue
-    let c0 = constDyn $ cfg ^. inputElementConfig_initialChecked
+    v0 <- case _inputElementConfig_setValue cfg of
+      Nothing -> pure $ constDyn (cfg ^. inputElementConfig_initialValue)
+      Just e -> holdDyn (cfg ^. inputElementConfig_initialValue) e
+    c0 <- case _inputElementConfig_setChecked cfg of
+      Nothing -> pure $ constDyn $ _inputElementConfig_initialChecked cfg
+      Just e -> holdDyn (_inputElementConfig_initialChecked cfg) e
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
     return $ InputElement
       { _inputElement_value = v0

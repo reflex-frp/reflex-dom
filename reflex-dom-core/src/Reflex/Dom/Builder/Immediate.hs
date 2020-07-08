@@ -11,6 +11,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE PolyKinds #-}
@@ -321,7 +322,7 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationRunnerT t m) where
 -- done *before* the switchover to immediate mode - this is most likely some
 -- form of 'hold' which we want to remove after hydration is done
 {-# INLINABLE addHydrationStepWithSetup #-}
-addHydrationStepWithSetup :: (Adjustable t m, MonadIO m) => m a -> (a -> HydrationRunnerT t m ()) -> HydrationDomBuilderT s t m ()
+addHydrationStepWithSetup :: MonadIO m => m a -> (a -> HydrationRunnerT t m ()) -> HydrationDomBuilderT s t m ()
 addHydrationStepWithSetup setup f = getHydrationMode >>= \case
   HydrationMode_Immediate -> pure ()
   HydrationMode_Hydrating -> do
@@ -926,14 +927,28 @@ inputElementInternal cfg = getHydrationMode >>= \case
   doc <- askDocument
   -- Expected initial value from config
   let v0 = _inputElementConfig_initialValue cfg
-  addHydrationStep $ do
+      c0 = _inputElementConfig_initialChecked cfg
+      valuesAtSwitchover = do
+        v <- maybe (pure $ pure v0) (hold v0) (_inputElementConfig_setValue cfg)
+        c <- maybe (pure $ pure c0) (hold c0) (_inputElementConfig_setChecked cfg)
+        pure (v, c)
+  addHydrationStepWithSetup valuesAtSwitchover $ \(switchoverValue', switchoverChecked') -> do
+    switchoverValue <- sample switchoverValue'
+    switchoverChecked <- sample switchoverChecked'
     domElement <- liftIO $ readIORef domElementRef
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
         getValue = Input.getValue domInputElement
-    -- The browser might have messed with the value, or the user could have
-    -- altered it before activation, so we set it if it isn't what we expect
-    liftJSM getValue >>= \v0' -> do
-      when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+    -- Fire the appropriate events if the value has changed somehow
+    liftJSM getValue >>= \realValue -> liftIO $ if
+      -- The user could have altered the value before switchover
+      | realValue /= switchoverValue -> triggerChangeByUI realValue
+      -- When the value has been updated by setValue before switchover, but
+      -- the user hasn't entered text, we must send an update here to remain
+      -- in sync. This is because the later requestDomAction based on the
+      -- setValue event will not capture events happening before postBuild,
+      -- because this code runs after switchover.
+      | v0 /= switchoverValue -> triggerChangeBySetValue switchoverValue
+      | otherwise -> pure ()
     -- Watch for user interaction and trigger event accordingly
     requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
     for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
@@ -947,7 +962,19 @@ inputElementInternal cfg = getHydrationMode >>= \case
           ]
     liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
     requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
-    Input.setChecked domInputElement $ _inputElementConfig_initialChecked cfg
+    -- Fire the appropriate events if the checked state has changed somehow
+    liftJSM (Input.getChecked domInputElement) >>= \realChecked -> liftIO $ if
+      -- The user could have clicked the checkbox before switchover, we only
+      -- detect cases where they flipped the state
+      | realChecked /= switchoverChecked -> triggerCheckedChangedByUI realChecked
+      -- When the checked state has been updated by setChecked before
+      -- switchover, but the user hasn't changed the state, we must send an
+      -- update here to remain in sync. This is because the later
+      -- requestDomAction based on the setChecked event will not capture
+      -- events happening before postBuild, because this code runs after
+      -- switchover.
+      | c0 /= switchoverChecked -> triggerCheckedChangedBySetChecked switchoverChecked
+      | otherwise -> pure ()
     _ <- liftJSM $ domInputElement `on` Events.click $ do
       liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
     for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
@@ -960,7 +987,7 @@ inputElementInternal cfg = getHydrationMode >>= \case
       let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
       liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
     return ()
-  checked' <- holdDyn (_inputElementConfig_initialChecked cfg) $ leftmost
+  checked' <- holdDyn c0 $ leftmost
     [ checkedChangedBySetChecked
     , checkedChangedByUI
     ]
