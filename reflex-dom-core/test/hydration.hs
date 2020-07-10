@@ -1760,7 +1760,7 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
   ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
   waitBeforeJS <- liftIO newEmptyMVar -- Empty until JS should be run
-  onFailure <- if hardFailure then (\tid -> throwTo tid HydrationFailedException) <$> liftIO myThreadId else pure $ pure ()
+  onFailure <- if hardFailure then (`throwTo` HydrationFailedException) <$> liftIO myThreadId else pure $ pure ()
   waitUntilSwitchover <- liftIO newEmptyMVar -- Empty until switchover
   let entryPoint = do
         putStrLnDebug "taking waitBeforeJS"

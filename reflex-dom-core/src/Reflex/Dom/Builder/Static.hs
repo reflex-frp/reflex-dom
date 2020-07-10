@@ -324,7 +324,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
         setUpdatedChecked updatedAttrs = case _inputElementConfig_setChecked cfg of
           Nothing -> updatedAttrs
           Just e -> (Map.singleton "checked" (Just "checked") <$ e) <> updatedAttrs
-        adjustedConfig = (_inputElementConfig_elementConfig cfg)
+        adjustedConfig = _inputElementConfig_elementConfig cfg
           & elementConfig_initialAttributes %~ setInitialValue . setInitialChecked
           & elementConfig_modifyAttributes %~ setUpdatedValue . setUpdatedChecked
     (e, _result) <- element "input" adjustedConfig $ return ()
