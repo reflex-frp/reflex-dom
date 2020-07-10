@@ -64,23 +64,24 @@ mainHydrationWidgetWithHead = mainHydrationWidgetWithHead'
 {-# INLINABLE mainHydrationWidgetWithHead' #-}
 -- | Warning: `mainHydrationWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
 mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ())
+mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ()) (pure ())
 
 {-# INLINE mainHydrationWidgetWithSwitchoverAction #-}
-mainHydrationWidgetWithSwitchoverAction :: JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidgetWithSwitchoverAction :: IO () -> JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
 mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverAction'
 
 {-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
 -- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
-mainHydrationWidgetWithSwitchoverAction' :: JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body = do
-  runHydrationWidgetWithHeadAndBody switchoverAction $ \appendHead appendBody -> do
+mainHydrationWidgetWithSwitchoverAction' :: IO () -> JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithSwitchoverAction' onFailure switchoverAction head' body = do
+  runHydrationWidgetWithHeadAndBody onFailure switchoverAction $ \appendHead appendBody -> do
     appendHead head'
     appendBody body
 
 {-# INLINABLE attachHydrationWidget #-}
 attachHydrationWidget
-  :: JSM ()
+  :: IO ()
+  -> JSM ()
   -> JSContextSingleton ()
   -> ( Event DomTimeline ()
     -> IORef HydrationMode
@@ -89,7 +90,7 @@ attachHydrationWidget
     -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
      )
   -> IO (a, FireCommand DomTimeline DomHost)
-attachHydrationWidget switchoverAction jsSing w = do
+attachHydrationWidget onFailure switchoverAction jsSing w = do
   hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
   rootNodesRef <- liftIO $ newIORef []
   events <- newChan
@@ -105,7 +106,7 @@ attachHydrationWidget switchoverAction jsSing w = do
     rootNodes <- liftIO $ readIORef rootNodesRef
     let delayedAction = do
           for_ (reverse rootNodes) $ \(rootNode, runner) -> do
-            let hydrate = runHydrationRunnerT runner Nothing rootNode events
+            let hydrate = runHydrationRunnerT runner onFailure Nothing rootNode events
             void $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
           liftIO $ writeIORef hydrationMode HydrationMode_Immediate
           runWithJSContextSingleton (DOM.liftJSM switchoverAction) jsSing
@@ -120,17 +121,18 @@ type DomCoreWidget x = PostBuildT DomTimeline (WithJSContextSingleton x (Perform
 
 {-# INLINABLE runHydrationWidgetWithHeadAndBody #-}
 runHydrationWidgetWithHeadAndBody
-  :: JSM ()
+  :: IO ()
+  -> JSM ()
   -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head" --TODO: test invoking this more than once
       -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body" --TODO: test invoking this more than once
       -> FloatingWidget () ()
      )
   -> JSM ()
-runHydrationWidgetWithHeadAndBody switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
+runHydrationWidgetWithHeadAndBody onFailure switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
   globalDoc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked globalDoc
   bodyElement <- getBodyUnchecked globalDoc
-  (events, fc) <- liftIO . attachHydrationWidget switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
+  (events, fc) <- liftIO . attachHydrationWidget onFailure switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
         hydrateDom n w = do

@@ -328,16 +328,16 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
           & elementConfig_initialAttributes %~ setInitialValue . setInitialChecked
           & elementConfig_modifyAttributes %~ setUpdatedValue . setUpdatedChecked
     (e, _result) <- element "input" adjustedConfig $ return ()
-    v0 <- case _inputElementConfig_setValue cfg of
+    v <- case _inputElementConfig_setValue cfg of
       Nothing -> pure $ constDyn (cfg ^. inputElementConfig_initialValue)
-      Just e -> holdDyn (cfg ^. inputElementConfig_initialValue) e
-    c0 <- case _inputElementConfig_setChecked cfg of
+      Just ev -> holdDyn (cfg ^. inputElementConfig_initialValue) ev
+    c <- case _inputElementConfig_setChecked cfg of
       Nothing -> pure $ constDyn $ _inputElementConfig_initialChecked cfg
-      Just e -> holdDyn (_inputElementConfig_initialChecked cfg) e
+      Just ev -> holdDyn (_inputElementConfig_initialChecked cfg) ev
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
     return $ InputElement
-      { _inputElement_value = v0
-      , _inputElement_checked = c0
+      { _inputElement_value = v
+      , _inputElement_checked = c
       , _inputElement_checkedChange = never
       , _inputElement_input = never
       , _inputElement_hasFocus = hasFocus
@@ -352,10 +352,12 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       void $ textNode $ def
         & textNodeConfig_initialContents .~ _textAreaElementConfig_initialValue cfg
         & textNodeConfig_setContents .~ fromMaybe never (_textAreaElementConfig_setValue cfg)
-    let v0 = constDyn $ cfg ^. textAreaElementConfig_initialValue
+    v <- case _textAreaElementConfig_setValue cfg of
+      Nothing -> pure $ constDyn (cfg ^. textAreaElementConfig_initialValue)
+      Just ev -> holdDyn (cfg ^. textAreaElementConfig_initialValue) ev
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
     return $ TextAreaElement
-      { _textAreaElement_value = v0
+      { _textAreaElement_value = v
       , _textAreaElement_input = never
       , _textAreaElement_hasFocus = hasFocus
       , _textAreaElement_element = e

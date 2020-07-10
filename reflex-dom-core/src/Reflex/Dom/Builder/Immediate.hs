@@ -292,11 +292,12 @@ localRunner (HydrationRunnerT m) s parent = do
 {-# INLINABLE runHydrationRunnerT #-}
 runHydrationRunnerT
   :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
-  => HydrationRunnerT t m a -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
-runHydrationRunnerT (HydrationRunnerT m) s parent events = flip runDomRenderHookT events $ flip runReaderT parent $ do
+  => HydrationRunnerT t m a -> IO () -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
+runHydrationRunnerT (HydrationRunnerT m) onFailure s parent events = flip runDomRenderHookT events $ flip runReaderT parent $ do
   (a, s') <- runStateT m (HydrationState s False)
   traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
   when (_hydrationState_failed s') $ liftIO $ putStrLn "reflex-dom warning: hydration failed: the DOM was not as expected at switchover time. This may be due to invalid HTML which the browser has altered upon parsing, some external JS altering the DOM, or the page being served from an outdated cache."
+  when (_hydrationState_failed s') $ liftIO onFailure
   pure a
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (HydrationRunnerT t m) where
@@ -938,17 +939,15 @@ inputElementInternal cfg = getHydrationMode >>= \case
     domElement <- liftIO $ readIORef domElementRef
     let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
         getValue = Input.getValue domInputElement
-    -- Fire the appropriate events if the value has changed somehow
-    liftJSM getValue >>= \realValue -> liftIO $ if
-      -- The user could have altered the value before switchover
-      | realValue /= switchoverValue -> triggerChangeByUI realValue
-      -- When the value has been updated by setValue before switchover, but
-      -- the user hasn't entered text, we must send an update here to remain
-      -- in sync. This is because the later requestDomAction based on the
-      -- setValue event will not capture events happening before postBuild,
-      -- because this code runs after switchover.
-      | v0 /= switchoverValue -> triggerChangeBySetValue switchoverValue
-      | otherwise -> pure ()
+    -- When the value has been updated by setValue before switchover, we must
+    -- send an update here to remain in sync. This is because the later
+    -- requestDomAction based on the setValue event will not capture events
+    -- happening before postBuild, because this code runs after switchover.
+    when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
+    -- The user could have altered the value before switchover. This must be
+    -- triggered after the setValue one in order for the events to be in the
+    -- correct order.
+    liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
     -- Watch for user interaction and trigger event accordingly
     requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
     for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
@@ -962,19 +961,17 @@ inputElementInternal cfg = getHydrationMode >>= \case
           ]
     liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
     requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
-    -- Fire the appropriate events if the checked state has changed somehow
-    liftJSM (Input.getChecked domInputElement) >>= \realChecked -> liftIO $ if
-      -- The user could have clicked the checkbox before switchover, we only
-      -- detect cases where they flipped the state
-      | realChecked /= switchoverChecked -> triggerCheckedChangedByUI realChecked
-      -- When the checked state has been updated by setChecked before
-      -- switchover, but the user hasn't changed the state, we must send an
-      -- update here to remain in sync. This is because the later
-      -- requestDomAction based on the setChecked event will not capture
-      -- events happening before postBuild, because this code runs after
-      -- switchover.
-      | c0 /= switchoverChecked -> triggerCheckedChangedBySetChecked switchoverChecked
-      | otherwise -> pure ()
+    -- When the checked state has been updated by setChecked before
+    -- switchover, we must send an update here to remain in sync. This is
+    -- because the later requestDomAction based on the setChecked event will not
+    -- capture events happening before postBuild, because this code runs after
+    -- switchover.
+    when (c0 /= switchoverChecked) $ liftIO $ triggerCheckedChangedBySetChecked switchoverChecked
+    -- The user could have clicked the checkbox before switchover, we only
+    -- detect cases where they flipped the state. This must be triggered after
+    -- the setValue one in order for the events to be in the correct order.
+    liftJSM (Input.getChecked domInputElement) >>= \realChecked -> when (realChecked /= switchoverChecked) $
+      liftIO $ triggerCheckedChangedByUI realChecked
     _ <- liftJSM $ domInputElement `on` Events.click $ do
       liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
     for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
@@ -1059,14 +1056,21 @@ textAreaElementInternal cfg = getHydrationMode >>= \case
   doc <- askDocument
   -- Expected initial value from config
   let v0 = _textAreaElementConfig_initialValue cfg
-  addHydrationStep $ do
+      valueAtSwitchover = maybe (pure $ pure v0) (hold v0) (_textAreaElementConfig_setValue cfg)
+  addHydrationStepWithSetup valueAtSwitchover $ \switchoverValue' -> do
+    switchoverValue <- sample switchoverValue'
     domElement <- liftIO $ readIORef domElementRef
     let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
         getValue = TextArea.getValue domTextAreaElement
-    -- The browser might have messed with the value, or the user could have
-    -- altered it before activation, so we set it if it isn't what we expect
-    liftJSM getValue >>= \v0' -> do
-      when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+    -- When the value has been updated by setValue before switchover, we must
+    -- send an update here to remain in sync. This is because the later
+    -- requestDomAction based on the setValue event will not capture events
+    -- happening before postBuild, because this code runs after switchover.
+    when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
+    -- The user could have altered the value before switchover. This must be
+    -- triggered after the setValue one in order for the events to be in the
+    -- correct order.
+    liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
     -- Watch for user interaction and trigger event accordingly
     requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
     for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
