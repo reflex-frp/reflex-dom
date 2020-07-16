@@ -1,12 +1,14 @@
 { reflex-platform-fun ? import ./dep/reflex-platform
+, supportedSystems ? ["x86_64-linux" "x86_64-darwin"]
 }:
 
 let
   native-reflex-platform = reflex-platform-fun {};
   inherit (native-reflex-platform.nixpkgs) lib;
-  systems = ["x86_64-linux" "x86_64-darwin"];
 
-  perPlatform = lib.genAttrs systems (system: let
+  tests = system: import ./test { pkgs = (reflex-platform-fun { inherit system; }).nixpkgs; };
+
+  perPlatform = lib.genAttrs supportedSystems (system: let
     reflex-platform = reflex-platform-fun { inherit system; };
     compilers = [
       "ghc"
@@ -25,15 +27,22 @@ let
           (self: super: {
             _dep = super._dep // {
               reflex-dom = builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [
-                "release.nix"
                 ".git"
                 "dist"
+                "dist-newstyle"
+              ]) && !(builtins.elem path [
+                ./CONTRIBUTING.md
+                ./FAQ.md
+                ./Quickref.md
+                ./README.md
+                ./release.nix
+                ./test
               ])) ./.;
             };
           })
         ];
       };
-      all = {
+      all = tests system // {
         inherit (reflex-platform.${ghc})
           reflex-dom-core
           reflex-dom

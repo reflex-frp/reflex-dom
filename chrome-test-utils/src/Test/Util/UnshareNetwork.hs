@@ -4,8 +4,8 @@ import System.Linux.Namespaces
 import System.Posix
 import System.Process
 
-unshareNetork :: IO ()
-unshareNetork = do
+unshareNetwork :: IO ()
+unshareNetwork = do
   uid <- getEffectiveUserID
   unshare [User, Network]
   writeUserMappings Nothing [UserMapping 0 uid 1]

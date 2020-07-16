@@ -1,7 +1,18 @@
+cabal-version: 1.24
 Name: reflex-dom-core
-Version: 0.5.3
+Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
-Description: Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine
+Description:
+  Web applications without callbacks or side-effects.
+  Reflex-DOM brings the power of functional reactive programming (FRP) to the web.
+  Build HTML and other Document Object Model (DOM) data with a pure functional interface.
+  .
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
+  .
+  The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
+  correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
+  Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
+  All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
@@ -9,7 +20,6 @@ Maintainer: ryan.trinkle@gmail.com
 Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
-Cabal-version: >=1.9.2
 -- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
 extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
                     src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
@@ -50,16 +60,16 @@ library
     aeson >= 0.8 && < 1.5,
     base >= 4.7 && < 4.14,
     bifunctors >= 4.2 && < 6,
-    bimap >= 0.3 && < 0.4,
-    blaze-builder,
+    bimap >= 0.3 && < 0.5,
+    blaze-builder >= 0.4.1 && < 0.5,
     bytestring == 0.10.*,
     case-insensitive < 1.3,
     containers >= 0.6 && < 0.7,
-    constraints >= 0.9 && < 0.12,
+    constraints >= 0.9 && < 0.13,
     contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
     dependent-map >= 0.3 && < 0.4,
-    dependent-sum >= 0.6 && < 0.7,
+    dependent-sum >= 0.6 && < 0.8,
     dependent-sum-template >= 0.1 && < 0.2,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
@@ -71,7 +81,7 @@ library
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.3,
     primitive >= 0.5 && < 0.8,
-    random,
+    random >= 1.1 && < 1.2,
     ref-tf == 0.4.*,
     reflex >= 0.6.2 && < 0.8,
     semigroups >= 0.16 && < 0.20,
@@ -94,7 +104,7 @@ library
   if flag(split-these)
     build-depends:
       semialign >= 1 && < 1.2,
-      these >= 1 && < 1.1
+      these >= 1 && < 1.2
   else
     build-depends:
       these >= 0.4 && < 0.9
@@ -133,6 +143,7 @@ library
     Reflex.Dom.Xhr.ResponseType
     Reflex.Dom.Xhr.Exception
 
+  default-language: Haskell98
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
 
@@ -147,22 +158,19 @@ library
 
   if flag(use-template-haskell)
     build-depends:
-      dependent-sum >= 0.6,
       dependent-sum-template >= 0.1 && < 0.2,
-      template-haskell
+      template-haskell >= 2.12.0 && < 2.16
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
     other-modules:
       Reflex.Dom.Builder.Class.TH
-  else
-    build-depends:
-      dependent-sum == 0.6.*
 
 test-suite hlint
   build-depends: base, hlint
   hs-source-dirs: test
   main-is: hlint.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
 
 test-suite hydration
   build-depends: base
@@ -209,6 +217,7 @@ test-suite hydration
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
   if !os(linux) || !arch(x86_64) || flag(profile-reflex)
     buildable: False
 
@@ -228,6 +237,7 @@ test-suite gc
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0
+  default-language: Haskell98
   if !os(linux) || !arch(x86_64)
     buildable: False
 
