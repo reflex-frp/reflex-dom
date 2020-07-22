@@ -1,6 +1,9 @@
 package org.reflexfrp.reflexdom;
 
 import android.annotation.TargetApi;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -18,14 +21,10 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.graphics.Bitmap;
-import java.io.IOException;
 import java.io.InputStream;
-import android.content.Intent;
-import android.content.ActivityNotFoundException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import systems.obsidian.HaskellActivity;
 
