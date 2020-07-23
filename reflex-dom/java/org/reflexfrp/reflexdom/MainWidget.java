@@ -1,6 +1,7 @@
 package org.reflexfrp.reflexdom;
 
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -10,11 +11,13 @@ import android.os.Handler;
 import android.util.Log;
 import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
+import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -61,7 +64,7 @@ public class MainWidget {
 
       // Re-route / to /android_asset
       @Override
-      public WebResourceResponse shouldInterceptRequest (WebView view, WebResourceRequest request) {
+      public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
         Uri uri = request.getUrl();
         if(!uri.getScheme().equals("file"))
           return null;
@@ -127,10 +130,34 @@ public class MainWidget {
       public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
         callback.invoke(origin, true, false);
       }
+
+      @Override
+      public boolean onConsoleMessage(ConsoleMessage cm) {
+        Log.d("JSADDLEJS", String.format("%s @ %d: %s", cm.message(), cm.lineNumber(), cm.sourceId()));
+        return true;
+      }
+
+      // file upload callback (Android 5.0 (API level 21) -- current)
+      @Override
+      public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams) {
+        final boolean allowMultiple = fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+
+        a.setFileUploadCallback(filePathCallback);
+
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+
+        if (allowMultiple) {
+          i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+
+        i.setType("*/*");
+        a.startActivityForResult(Intent.createChooser(i, "Choose a File"), a.REQUEST_CODE_FILE_PICKER);
+        return true;
+      }
     });
 
     wv.addJavascriptInterface(new JSaddleCallbacks(jsaddleCallbacks), "jsaddle");
-
     wv.loadUrl(url);
 
     final Handler hnd = new Handler();
