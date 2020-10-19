@@ -205,7 +205,7 @@ instance Monad m => MonadReflexCreateTrigger t (UnrunnableT js t m) where
   newFanEventWithTrigger _ = unrunnable
 instance Monad m => MonadFix (UnrunnableT js t m) where
   mfix _ = unrunnable
-instance Monad m => MonadHold t (UnrunnableT js t m) where
+instance (Monad m, MonadHold t m) => MonadHold t (UnrunnableT js t m) where
   hold _ _ = unrunnable
   holdDyn _ _ = unrunnable
   holdIncremental _ _ = unrunnable
@@ -228,7 +228,7 @@ instance (Reflex t, Monad m) => DomRenderHook t (UnrunnableT js t m) where
   withRenderHook _ _ = unrunnable
   requestDomAction _ = unrunnable
   requestDomAction_ _ = unrunnable
-instance (Reflex t, Monad m) => Prerender JS' t (UnrunnableT js t m) where
+instance (Reflex t, Monad m, MonadHold t m) => Prerender JS' t (UnrunnableT js t m) where
   type Client (UnrunnableT js t m) = UnrunnableT js t m
   prerender _ _ = unrunnable
 
