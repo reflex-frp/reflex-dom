@@ -15,7 +15,7 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
-import GHCJS.DOM.EventM (EventM, on)
+import GHCJS.DOM.EventM (EventM, on, onSync)
 import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, XMLHttpRequestProgressEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
 import GHCJS.DOM.XMLHttpRequest
@@ -114,7 +114,7 @@ xmlHttpRequestOntimeout :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent
 xmlHttpRequestOntimeout = (`on` timeout)
 
 xmlHttpRequestOnreadystatechange :: XMLHttpRequest -> EventM XMLHttpRequest Event () -> JSM (JSM ())
-xmlHttpRequestOnreadystatechange = (`on` readyStateChange)
+xmlHttpRequestOnreadystatechange = (`onSync` readyStateChange)
 
 xmlHttpRequestSetTimeout :: MonadJSM m => XMLHttpRequest -> Word -> m ()
 xmlHttpRequestSetTimeout = setTimeout
