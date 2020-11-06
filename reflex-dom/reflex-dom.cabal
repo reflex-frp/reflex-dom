@@ -74,7 +74,7 @@ library
     base >= 4.7 && < 4.14,
     bytestring == 0.10.*,
     reflex >= 0.6.2 && < 0.8,
-    reflex-dom-core == 0.6.0.0,
+    reflex-dom-core == 0.6.1.0,
     text == 1.2.*
   if !impl(ghcjs)
     if flag(use-warp) && (os(linux) || os(osx))
