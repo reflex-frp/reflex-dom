@@ -140,6 +140,7 @@ import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Some (Some(..))
+import Data.GADT.Compare (GCompare)
 import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
@@ -1662,7 +1663,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, Ra
 
 {-# INLINABLE traverseDMapWithKeyWithAdjust' #-}
 traverseDMapWithKeyWithAdjust'
-  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, DMap.GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
+  :: forall s t m (k :: * -> *) v v'. (Adjustable t m, MonadHold t m, MonadFix m, MonadJSM m, PrimMonad m, GCompare k, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document)
   => (forall a. k a -> v a -> HydrationDomBuilderT s t m (v' a))
   -> DMap k v
   -> Event t (PatchDMap k v)
@@ -1782,7 +1783,7 @@ hoistTraverseWithKeyWithAdjust
   ::
   ( Adjustable t m
   , MonadHold t m
-  , DMap.GCompare k
+  , GCompare k
   , MonadIO m
   , MonadJSM m
   , PrimMonad m

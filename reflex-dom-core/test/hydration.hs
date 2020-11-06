@@ -137,7 +137,7 @@ deriving instance MonadFail WD
 
 main :: IO ()
 main = do
-  unshareNetork
+  unshareNetwork
   isHeadless <- (== Nothing) <$> lookupEnv "NO_HEADLESS"
   withSandboxedChromeFlags isHeadless $ \chromeFlags -> do
     withSeleniumServer $ \selenium -> do
