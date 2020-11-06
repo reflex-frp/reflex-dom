@@ -8,6 +8,7 @@
 * Fix ([#467](https://github.com/reflex-frp/reflex-dom/issues/467)): Prevent multiple firings of XHR response event
 * Updates for GHC 8.10
 * Move `HasSetValue` from Reflex.Dom.Widget.Input to Reflex.Dom.Builder.Class and add an instance for `TextAreaElementConfig`
+* Add `now` to the `MonadHold` instance for `UnrunnableT`
 
 
 ## 0.6.0.0
