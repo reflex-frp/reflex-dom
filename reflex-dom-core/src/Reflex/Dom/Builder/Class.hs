@@ -744,3 +744,11 @@ instance HasDocument m => HasDocument (DynamicWriterT t w m)
 instance HasDocument m => HasDocument (PostBuildT t m)
 instance HasDocument m => HasDocument (RequesterT t request response m)
 instance HasDocument m => HasDocument (QueryT t q m)
+
+class HasSetValue a where
+  type SetValue a :: *
+  setValue :: Lens' a (SetValue a)
+  
+instance Reflex t => HasSetValue (TextAreaElementConfig er t m) where
+  type SetValue (TextAreaElementConfig er t m) = Event t Text
+  setValue = textAreaElementConfig_setValue
