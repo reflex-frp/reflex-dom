@@ -1,10 +1,20 @@
+cabal-version: 1.24
 Name: reflex-dom
-Version: 0.5.3
+Version: 0.6.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
-  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine.
+  Web applications without callbacks or side-effects.
+  Reflex-DOM brings the power of functional reactive programming (FRP) to the web.
+  Build HTML and other Document Object Model (DOM) data with a pure functional interface.
   .
-  For hackage documentation, please see: <https://hackage.haskell.org/package/reflex-dom-core>.
+  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
+  .
+  The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
+  correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
+  Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
+  All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
+  .
+  For Hackage documentation, please see: <https://hackage.haskell.org/package/reflex-dom-core>.
 License: BSD3
 License-file: LICENSE
 Author: Ryan Trinkle
@@ -12,7 +22,6 @@ Maintainer: ryan.trinkle@gmail.com
 Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
-cabal-version: >=1.24
 extra-source-files:
   java/org/reflexfrp/reflexdom/MainWidget.java
   ChangeLog.md
@@ -41,55 +50,67 @@ flag build-examples
   default: False
   manual: True
 
+flag wasm32
+  description: Build for wasm32 architecture
+  default: False
+  manual: True
+
 library
   hs-source-dirs: src
   if os(android)
     hs-source-dirs: src-android
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
-      aeson,
+      aeson >= 1.4 && < 1.5,
       android-activity == 0.1.*,
       data-default == 0.7.*,
-      jsaddle
+      jsaddle >= 0.9.6 && < 0.10
     c-sources: cbits/MainWidget.c
     include-dirs: cbits/include
     install-includes: MainWidget.h
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.13,
+    base >= 4.7 && < 4.14,
     bytestring == 0.10.*,
-    reflex >= 0.6.2 && < 0.7,
-    reflex-dom-core >=0.5.2 && < 0.6,
+    reflex >= 0.6.2 && < 0.8,
+    reflex-dom-core == 0.6.0.0,
     text == 1.2.*
   if !impl(ghcjs)
     if flag(use-warp) && (os(linux) || os(osx))
       build-depends:
-        jsaddle,
-        jsaddle-warp
+        jsaddle >= 0.9.6 && < 0.10,
+        jsaddle-warp >= 0.9.6 && < 0.10
     else
       if os(osx) || os(ios)
         build-depends:
           data-default == 0.7.*,
-          jsaddle,
-          jsaddle-wkwebview
+          jsaddle >= 0.9.6 && < 0.10,
+          jsaddle-wkwebview >= 0.9.6 && < 0.10
       else
-        if flag(webkit2gtk)
+        if flag(wasm32)
           build-depends:
-            jsaddle-webkit2gtk
+            jsaddle >= 0.9.6 && < 0.10,
+            jsaddle-wasm >= 0.1 && < 0.2
         else
-          if !os(android)
+          if flag(webkit2gtk)
             build-depends:
-              jsaddle-webkit2gtk
+              jsaddle-webkit2gtk >= 0.9.6 && < 0.10
+          else
+            if !os(android)
+              build-depends:
+                jsaddle-webkit2gtk >= 0.9.6 && < 0.10
 
   exposed-modules:
     Reflex.Dom
     Reflex.Dom.Internal
   reexported-modules:
-      Foreign.JavaScript.TH
-    , Foreign.JavaScript.Orphans
+      Foreign.JavaScript.Orphans
+    , Foreign.JavaScript.TH
+    , Foreign.JavaScript.Utils
     , Reflex.Dom.Builder.Class
     , Reflex.Dom.Builder.Class.Events
+    , Reflex.Dom.Builder.Hydratable
     , Reflex.Dom.Builder.Immediate
     , Reflex.Dom.Builder.InputDisabled
     , Reflex.Dom.Builder.Static
@@ -97,14 +118,19 @@ library
     , Reflex.Dom.Core
     , Reflex.Dom.Location
     , Reflex.Dom.Main
+    , Reflex.Dom.Modals.Class
     , Reflex.Dom.Old
+    , Reflex.Dom.Prerender
+    , Reflex.Dom.Time
     , Reflex.Dom.WebSocket
+    , Reflex.Dom.WebSocket.Query
     , Reflex.Dom.Widget
     , Reflex.Dom.Widget.Basic
     , Reflex.Dom.Widget.Input
     , Reflex.Dom.Widget.Lazy
     , Reflex.Dom.Widget.Resize
     , Reflex.Dom.Xhr
+    , Reflex.Dom.Xhr.FormData
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings
@@ -136,7 +162,19 @@ executable sortableList
   default-language: Haskell2010
 
 executable benchmark
-  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum
+  build-depends: base
+               , containers
+               , dependent-map
+               , dependent-sum
+               , ghc-prim
+               , ghcjs-dom
+               , mtl
+               , prim-uniq
+               , random
+               , reflex
+               , reflex-dom
+               , text
+               , transformers
   hs-source-dirs: .
   main-is: benchmark.hs
   ghc-options: -O2 -fspecialise-aggressively
@@ -145,7 +183,20 @@ executable benchmark
   default-language: Haskell2010
 
 executable krausest
-  build-depends: base, reflex, reflex-dom, text, prim-uniq, dependent-map, containers, transformers, mtl, ghcjs-dom, ghc-prim, random, dependent-sum, vector
+  build-depends: base
+               , containers
+               , dependent-map
+               , dependent-sum
+               , ghc-prim
+               , ghcjs-dom
+               , mtl
+               , prim-uniq
+               , random
+               , reflex
+               , reflex-dom
+               , text
+               , transformers
+               , vector
   hs-source-dirs: benchmarks
   main-is: krausest.hs
   ghc-options: -O2 -fspecialise-aggressively

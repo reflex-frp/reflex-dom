@@ -15,8 +15,9 @@ import qualified Data.Text as T
 import Reflex.Dom
 import System.Random
 import qualified Data.Map as Map
-import Data.Dependent.Map (DMap (..), DSum (..))
+import Data.Dependent.Map (DMap (..))
 import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Sum (DSum (..))
 import Data.Functor.Misc
 import Data.Functor.Identity
 import Data.Functor.Compose

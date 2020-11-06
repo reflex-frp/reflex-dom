@@ -1,5 +1,5 @@
 Name: chrome-test-utils
-Version: 0.4
+Version: 0.5
 Synopsis: Utilities to write headless Chromium tests
 License: BSD3
 License-file: LICENSE

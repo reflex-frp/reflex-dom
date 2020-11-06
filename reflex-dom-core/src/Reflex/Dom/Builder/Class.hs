@@ -638,7 +638,7 @@ instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive 
 
 -- * Convenience functions
 
-class HasDomEvent t target eventName where
+class HasDomEvent t target eventName | target -> t where
   type DomEventType target eventName :: *
   domEvent :: EventName eventName -> target -> Event t (DomEventType target eventName)
 
