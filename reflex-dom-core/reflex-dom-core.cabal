@@ -1,6 +1,6 @@
 cabal-version: 1.24
 Name: reflex-dom-core
-Version: 0.6.0.0
+Version: 0.6.1.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Web applications without callbacks or side-effects.
@@ -68,7 +68,7 @@ library
     constraints >= 0.9 && < 0.13,
     contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.8,
-    dependent-map >= 0.3 && < 0.4,
+    dependent-map >= 0.3 && < 0.5,
     dependent-sum >= 0.6 && < 0.8,
     dependent-sum-template >= 0.1 && < 0.2,
     directory >= 1.2 && < 1.4,
@@ -83,7 +83,7 @@ library
     primitive >= 0.5 && < 0.8,
     random >= 1.1 && < 1.2,
     ref-tf == 0.4.*,
-    reflex >= 0.6.2 && < 0.8,
+    reflex >= 0.8 && < 0.9,
     semigroups >= 0.16 && < 0.20,
     stm >= 2.4 && < 2.6,
     text == 1.2.*,
