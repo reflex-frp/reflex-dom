@@ -1,1 +1,1 @@
-packages: reflex-dom-core, reflex-dom
+packages: chrome-test-utils, reflex-dom-core, reflex-dom, reflex-dom-test-selenium

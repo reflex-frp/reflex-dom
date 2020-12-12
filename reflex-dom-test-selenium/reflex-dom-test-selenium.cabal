@@ -1,0 +1,41 @@
+cabal-version: 1.24
+Name: reflex-dom-test-selenium
+Version: 0.0.0.1
+Synopsis: Testing framework for selenium tests
+Description:
+License: BSD3
+License-file: LICENSE
+Author: Ryan Trinkle
+Maintainer: ryan.trinkle@gmail.com
+Stability: Experimental
+Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
+Build-type: Simple
+
+library
+  hs-source-dirs: src
+  build-depends:
+    async,
+    base >= 4.7 && < 4.14,
+    bytestring == 0.10.*,
+    chrome-test-utils,
+    exceptions,
+    hspec-core,
+    hspec-webdriver >= 1.2.1,
+    http-types,
+    jsaddle >= 0.9.0.0 && < 0.10,
+    jsaddle-warp,
+    network,
+    process,
+    reflex-dom-core,
+    silently,
+    text == 1.2.*,
+    wai,
+    warp,
+    webdriver,
+    websockets
+
+  exposed-modules:
+    Reflex.Dom.Test.Selenium
+
+  default-language: Haskell98
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively

@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.1.0
+
+* Update for new dependent-map and dependent-sum (after the "some" package split)
+
 ## 0.6.0.0
 
 * ([#379](https://github.com/reflex-frp/reflex-dom/pull/379)) Re-export all modules from `reflex-dom-core`. The newly re-exported modules are:
