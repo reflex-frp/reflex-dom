@@ -1,5 +1,16 @@
 # Revision history for reflex-dom-core
 
+## 0.6.1.0
+
+* Bump version bounds
+* Update for new dependent-map and dependent-sum version (after the "some" package split)
+* Add `MonadAtomicRef` instance for `UnrunnableT`
+* Fix ([#467](https://github.com/reflex-frp/reflex-dom/issues/467)): Prevent multiple firings of XHR response event
+* Updates for GHC 8.10
+* Move `HasSetValue` from Reflex.Dom.Widget.Input to Reflex.Dom.Builder.Class and add an instance for `TextAreaElementConfig`
+* Add `now` to the `MonadHold` instance for `UnrunnableT`
+
+
 ## 0.6.0.0
 
 * ([#375](https://github.com/reflex-frp/reflex-dom/pull/375)) **(Breaking change)** Expose resized dimensions from `resizeDetector`, `resizeDetectorWithStyle`, and `resizeDetectorWithAttrs` from `Reflex.Dom.Widget.Resize`.

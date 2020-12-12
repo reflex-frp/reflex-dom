@@ -629,9 +629,6 @@ instance HasAttributes (FileInputConfig t) where
   type Attrs (FileInputConfig t) = Dynamic t (Map Text Text)
   attributes = fileInputConfig_attributes
 
-class HasSetValue a where
-  type SetValue a :: *
-  setValue :: Lens' a (SetValue a)
 
 instance HasSetValue (TextAreaConfig t) where
   type SetValue (TextAreaConfig t) = Event t Text
