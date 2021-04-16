@@ -9,6 +9,13 @@ module Reflex.Dom.Internal
   , mainWidget
   , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
   , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+
+#if defined(ANDROID)
+  , runAndroid
+#endif
+#if defined(MIN_VERSION_jsaddle_wkwebview)
+  , runApple
+#endif
   ) where
 
 import Data.ByteString (ByteString)
@@ -43,21 +50,28 @@ run jsm = do
 import Data.Default
 import Data.Monoid ((<>))
 import Language.Javascript.JSaddle (JSM)
-import Language.Javascript.JSaddle.WKWebView (run', mainBundleResourcePath)
+import Language.Javascript.JSaddle.WKWebView (AppDelegateConfig, run', mainBundleResourcePath)
 import Language.Javascript.JSaddle.WKWebView.Internal (jsaddleMainHTMLWithBaseURL)
 
--- TODO: upstream to jsaddle-wkwebview
 run :: JSM () -> IO ()
-run jsm = do
+run = runApple def
+
+-- TODO: upstream to jsaddle-wkwebview
+runApple :: AppDelegateConfig -> JSM () -> IO ()
+runApple cfg jsm = do
   let indexHtml = "<!DOCTYPE html><html><head></head><body></body></html>"
   baseUrl <- mainBundleResourcePath >>= \case
     Nothing -> do
-      putStrLn "Reflex.Dom.run: unable to find main bundle resource path. Assets may not load properly."
+      putStrLn "Reflex.Dom.runApple: unable to find main bundle resource path. Assets may not load properly."
       return ""
     Just p -> return $ "file://" <> p <> "/index.html"
-  run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
+  run' cfg $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
 #else
-import Language.Javascript.JSaddle.WKWebView (run)
+import Language.Javascript.JSaddle (JSM)
+import Language.Javascript.JSaddle.WKWebView (AppDelegateConfig, run, runWithAppConfig)
+
+runApple :: AppDelegateConfig -> JSM () -> IO ()
+runApple = runWithAppConfig
 #endif
 #elif defined(ANDROID)
 import Android.HaskellActivity
@@ -70,10 +84,13 @@ import System.IO
 import Language.Javascript.JSaddle (JSM)
 
 run :: JSM () -> IO ()
-run jsm = do
+run = runAndroid def
+
+runAndroid :: ActivityCallbacks -> JSM () -> IO ()
+runAndroid activityCallbacks jsm = do
   hSetBuffering stdout LineBuffering
   hSetBuffering stderr LineBuffering
-  continueWithCallbacks $ def
+  continueWithCallbacks $ activityCallbacks
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
         let startPage = fromString "file:///android_asset/index.html"
