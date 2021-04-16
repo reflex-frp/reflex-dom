@@ -1772,7 +1772,7 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
               liftIO $ putMVar waitUntilSwitchover ()
               putStrLnDebug "put waitUntilSwitchover"
         putStrLnDebug "running mainHydrationWidgetWithSwitchoverAction"
-        mainHydrationWidgetWithSwitchoverAction onFailure switchOverAction blank bodyWidget
+        mainHydrationWidgetWithSwitchoverActionWithFailure' onFailure switchOverAction blank bodyWidget
         putStrLnDebug "syncPoint after mainHydrationWidgetWithSwitchoverAction"
         syncPoint
   application <- liftIO $ jsaddleOr defaultConnectionOptions entryPoint $ \_ sendResponse -> do

@@ -64,22 +64,41 @@ mainHydrationWidgetWithHead = mainHydrationWidgetWithHead'
 {-# INLINABLE mainHydrationWidgetWithHead' #-}
 -- | Warning: `mainHydrationWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
 mainHydrationWidgetWithHead' :: HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ()) (pure ())
+mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ())
 
 {-# INLINE mainHydrationWidgetWithSwitchoverAction #-}
-mainHydrationWidgetWithSwitchoverAction :: IO () -> JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
+mainHydrationWidgetWithSwitchoverAction :: JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
 mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverAction'
 
 {-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
 -- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
-mainHydrationWidgetWithSwitchoverAction' :: IO () -> JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
-mainHydrationWidgetWithSwitchoverAction' onFailure switchoverAction head' body = do
-  runHydrationWidgetWithHeadAndBody onFailure switchoverAction $ \appendHead appendBody -> do
+mainHydrationWidgetWithSwitchoverAction' :: JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithSwitchoverAction' = mainHydrationWidgetWithSwitchoverActionWithFailure' (pure ())
+
+
+{-# INLINABLE mainHydrationWidgetWithSwitchoverActionWithFailure' #-}
+-- | Warning: `mainHydrationWidgetWithSwitchoverActionWithFaiilure'` is provided only as performance tweak. It is expected to disappear in future releases.
+mainHydrationWidgetWithSwitchoverActionWithFailure' :: IO () -> JSM () -> HydrationWidget () () -> HydrationWidget () () -> JSM ()
+mainHydrationWidgetWithSwitchoverActionWithFailure' onFailure switchoverAction head' body = do
+  runHydrationWidgetWithHeadAndBodyWithFailure onFailure switchoverAction $ \appendHead appendBody -> do
     appendHead head'
     appendBody body
 
 {-# INLINABLE attachHydrationWidget #-}
 attachHydrationWidget
+  :: JSM ()
+  -> JSContextSingleton ()
+  -> ( Event DomTimeline ()
+    -> IORef HydrationMode
+    -> Maybe (IORef [(Node, HydrationRunnerT DomTimeline (DomCoreWidget ()) ())])
+    -> EventChannel
+    -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
+     )
+  -> IO (a, FireCommand DomTimeline DomHost)
+attachHydrationWidget = attachHydrationWidgetWithFailure (pure ())
+
+{-# INLINABLE attachHydrationWidgetWithFailure #-}
+attachHydrationWidgetWithFailure
   :: IO ()
   -> JSM ()
   -> JSContextSingleton ()
@@ -90,7 +109,7 @@ attachHydrationWidget
     -> PerformEventT DomTimeline DomHost (a, IORef (Maybe (EventTrigger DomTimeline ())))
      )
   -> IO (a, FireCommand DomTimeline DomHost)
-attachHydrationWidget onFailure switchoverAction jsSing w = do
+attachHydrationWidgetWithFailure onFailure switchoverAction jsSing w = do
   hydrationMode <- liftIO $ newIORef HydrationMode_Hydrating
   rootNodesRef <- liftIO $ newIORef []
   events <- newChan
@@ -106,7 +125,7 @@ attachHydrationWidget onFailure switchoverAction jsSing w = do
     rootNodes <- liftIO $ readIORef rootNodesRef
     let delayedAction = do
           for_ (reverse rootNodes) $ \(rootNode, runner) -> do
-            let hydrate = runHydrationRunnerT runner onFailure Nothing rootNode events
+            let hydrate = runHydrationRunnerTWithFailure runner onFailure Nothing rootNode events
             void $ runWithJSContextSingleton (runPostBuildT hydrate never) jsSing
           liftIO $ writeIORef hydrationMode HydrationMode_Immediate
           runWithJSContextSingleton (DOM.liftJSM switchoverAction) jsSing
@@ -121,6 +140,16 @@ type DomCoreWidget x = PostBuildT DomTimeline (WithJSContextSingleton x (Perform
 
 {-# INLINABLE runHydrationWidgetWithHeadAndBody #-}
 runHydrationWidgetWithHeadAndBody
+  :: JSM ()
+  -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head" --TODO: test invoking this more than once
+      -> (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to body" --TODO: test invoking this more than once
+      -> FloatingWidget () ()
+     )
+  -> JSM ()
+runHydrationWidgetWithHeadAndBody = runHydrationWidgetWithHeadAndBodyWithFailure (pure ())
+
+{-# INLINABLE runHydrationWidgetWithHeadAndBodyWithFailure #-}
+runHydrationWidgetWithHeadAndBodyWithFailure
   :: IO ()
   -> JSM ()
   -> (   (forall c. HydrationWidget () c -> FloatingWidget () c) -- "Append to head" --TODO: test invoking this more than once
@@ -128,11 +157,11 @@ runHydrationWidgetWithHeadAndBody
       -> FloatingWidget () ()
      )
   -> JSM ()
-runHydrationWidgetWithHeadAndBody onFailure switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
+runHydrationWidgetWithHeadAndBodyWithFailure onFailure switchoverAction app = withJSContextSingletonMono $ \jsSing -> do
   globalDoc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked globalDoc
   bodyElement <- getBodyUnchecked globalDoc
-  (events, fc) <- liftIO . attachHydrationWidget onFailure switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
+  (events, fc) <- liftIO . attachHydrationWidgetWithFailure onFailure switchoverAction jsSing $ \switchover hydrationMode hydrationResult events -> do
     (postBuild, postBuildTriggerRef) <- newEventWithTriggerRef
     let hydrateDom :: DOM.Node -> HydrationWidget () c -> FloatingWidget () c
         hydrateDom n w = do

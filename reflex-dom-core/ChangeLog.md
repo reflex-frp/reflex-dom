@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## 0.6.2.0
+
+* ([#400](https://github.com/reflex-frp/reflex-dom/pull/400/files)) Set value of input elements in static renderer
+
 ## 0.6.1.0
 
 * Bump version bounds
