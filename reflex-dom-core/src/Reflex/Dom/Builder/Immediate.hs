@@ -295,12 +295,7 @@ localRunner (HydrationRunnerT m) s parent = do
 runHydrationRunnerT
   :: (MonadRef m, Ref m ~ IORef, Monad m, PerformEvent t m, MonadFix m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m))
   => HydrationRunnerT t m a -> Maybe Node -> Node -> Chan [DSum (EventTriggerRef t) TriggerInvocation] -> m a
-runHydrationRunnerT m = runHydrationRunnerTWithFailure m (pure ()) -- (HydrationRunnerT m) onFailure s parent events = flip runDomRenderHookT events $ flip runReaderT parent $ do
-  -- (a, s') <- runStateT m (HydrationState s False)
-  -- traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
-  -- when (_hydrationState_failed s') $ liftIO $ putStrLn "reflex-dom warning: hydration failed: the DOM was not as expected at switchover time. This may be due to invalid HTML which the browser has altered upon parsing, some external JS altering the DOM, or the page being served from an outdated cache."
-  -- when (_hydrationState_failed s') $ liftIO onFailure
-  -- pure a
+runHydrationRunnerT m = runHydrationRunnerTWithFailure m (pure ())
 
 {-# INLINABLE runHydrationRunnerTWithFailure #-}
 runHydrationRunnerTWithFailure
