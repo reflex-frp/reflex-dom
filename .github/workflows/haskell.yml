@@ -40,8 +40,11 @@ jobs:
     - name: Install dependencies
       run: |
         cabal update
-        cabal build --only-dependencies --enable-tests --enable-benchmarks all
+        cabal build --only-dependencies --enable-tests --enable-benchmarks reflex-dom-core
+        cabal build --only-dependencies --enable-tests --enable-benchmarks reflex-dom
     - name: Build
-      run: cabal build --enable-tests --enable-benchmarks all
+      run: |
+        cabal build --enable-tests --enable-benchmarks reflex-dom-core
+        cabal build --enable-tests --enable-benchmarks reflex-dom
     - name: Run tests
       run: cabal test all
