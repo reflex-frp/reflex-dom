@@ -54,6 +54,16 @@ flag split-these
   manual:      False
   default:     True
 
+flag hydration-tests
+  description: Whether to run the hydration tests (currently only available on linux)
+  default: True
+  manual: True
+
+flag gc-tests
+  description: Whether to run the gc tests (currently only available on linux)
+  default: True
+  manual: True
+
 library
   hs-source-dirs: src
   build-depends:
@@ -218,7 +228,7 @@ test-suite hydration
   main-is: hydration.hs
   type: exitcode-stdio-1.0
   default-language: Haskell98
-  if !os(linux) || !arch(x86_64) || flag(profile-reflex)
+  if !os(linux) || !arch(x86_64) || flag(profile-reflex) || !flag(hydration-tests)
     buildable: False
 
 -- broken test on base 4.11 & ghc 8.4.3
@@ -238,7 +248,7 @@ test-suite gc
   main-is: gc.hs
   type: exitcode-stdio-1.0
   default-language: Haskell98
-  if !os(linux) || !arch(x86_64)
+  if !os(linux) || !arch(x86_64) || !flag(gc-tests)
     buildable: False
 
 source-repository head

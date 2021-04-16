@@ -15,7 +15,7 @@ library
   hs-source-dirs: src
   build-depends:
     async,
-    base >= 4.7 && < 4.14,
+    base >= 4.7 && < 4.15,
     bytestring == 0.10.*,
     chrome-test-utils,
     exceptions,
