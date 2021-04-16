@@ -1,1 +1,5 @@
-packages: chrome-test-utils, reflex-dom-core, reflex-dom, reflex-dom-test-selenium
+packages:
+  reflex-dom-core/
+  reflex-dom/
+  chrome-test-utils/
+  reflex-dom-test-selenium/
