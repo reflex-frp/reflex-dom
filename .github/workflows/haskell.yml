@@ -35,6 +35,8 @@ jobs:
           ${{ runner.os }}-${{ matrix.ghc }}-
           ${{ runner.os }}
 
+    - name: Set up cabal project file to avoid webkit2gtk
+      run: cp cabal.project-nogtk cabal.project
     - name: Install dependencies
       run: |
         cabal update
