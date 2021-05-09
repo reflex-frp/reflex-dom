@@ -12,6 +12,7 @@ import Data.Default
 import Data.Map (Map)
 import Data.Text (Text)
 import Data.Traversable
+import Data.Foldable
 import qualified GHCJS.DOM.FormData as FD
 import Foreign.JavaScript.TH
 import GHCJS.DOM.File (getName)
@@ -20,9 +21,11 @@ import Language.Javascript.JSaddle.Monad (MonadJSM, liftJSM)
 import Reflex
 import Reflex.Dom.Xhr
 
--- | A FormData value may be a blob/file or a string. The file can optionally be provided with filename.
-data FormValue blob = FormValue_Text Text
-                    | FormValue_File blob (Maybe Text) -- maybe filename
+-- | A FormData value may be a blob/file, a string, or a list of such values. The file can optionally be provided with filename.
+data FormValue blob
+  = FormValue_Text Text
+  | FormValue_File blob (Maybe Text) -- maybe filename
+  | FormValue_List [FormValue blob]
 
 -- | Performs a POST request with the provided FormData payload
 postForms
@@ -35,10 +38,13 @@ postForms
 postForms url payload = do
   performMkRequestsAsync $ ffor payload $ \fs -> for fs $ \u -> liftJSM $ do
     fd <- FD.newFormData Nothing
-    iforM_ u $ \k v -> case v of
+    iforM_ u $ \k v -> appendFormValue k v fd
+    return $ xhrRequest "POST" url $ def & xhrRequestConfig_sendData .~ fd
+  where
+    appendFormValue k v fd = case v of
       FormValue_Text t -> FD.append fd k t
       FormValue_File b fn -> FD.appendBlob fd k b fn
-    return $ xhrRequest "POST" url $ def & xhrRequestConfig_sendData .~ fd
+      FormValue_List vs' -> forM_ vs' $ \v' -> appendFormValue k v' fd
 
 -- | Converts a File (e.g., the output of a 'FileInput') into a 'FormValue'. The filename will be included if it is available.
 fileToFormValue :: MonadJSM m => File -> m (FormValue File)
