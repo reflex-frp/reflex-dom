@@ -176,7 +176,9 @@ library
       Reflex.Dom.Builder.Class.TH
 
 test-suite hlint
-  build-depends: base, hlint
+  build-depends:
+    base,
+    hlint >= 3.0 && < 4.0
   hs-source-dirs: test
   main-is: hlint.hs
   type: exitcode-stdio-1.0

@@ -1,4 +1,4 @@
-import Language.Haskell.HLint3 (hlint)
+import Language.Haskell.HLint (hlint)
 import System.Exit (exitFailure, exitSuccess)
 
 main :: IO ()
