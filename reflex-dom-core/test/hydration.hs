@@ -154,13 +154,13 @@ main = do
       withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
       let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
-      hspec (tests withDebugging wdConfig [chromeCaps'] selenium) `finally` _selenium_stopServer selenium
+      hspec (tests withDebugging wdConfig [(chromeCaps', "chrome")] selenium) `finally` _selenium_stopServer selenium
 
-tests :: Bool -> WD.WDConfig -> [Capabilities] -> Selenium -> Spec
+tests :: Bool -> WD.WDConfig -> [(Capabilities, String)] -> Selenium -> Spec
 tests withDebugging wdConfig caps _selenium = do
   let putStrLnDebug :: MonadIO m => Text -> m ()
       putStrLnDebug m = when withDebugging $ liftIO $ putStrLn $ T.unpack m
-      session' = sessionWith wdConfig "" . using (map (,"") caps)
+      session' t = sessionWith wdConfig t . using caps
       runWD m = runWDOptions (WdOptions False) $ do
         putStrLnDebug "before"
         r <- m
@@ -172,7 +172,7 @@ tests withDebugging wdConfig caps _selenium = do
       testWidget = testWidgetDebug True withDebugging
       testWidget' :: WD a -> (a -> WD b) -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> WD b
       testWidget' = testWidgetDebug' True withDebugging
-  describe "text" $ session' $ do
+  session' "text" $ do
     it "works" $ runWD $ do
       testWidgetStatic (checkBodyText "hello world") $ do
         text "hello world"
@@ -233,7 +233,7 @@ tests withDebugging wdConfig caps _selenium = do
         click <- button ""
         void $ textNode $ TextNodeConfig "initial" $ Just $ "after" <$ click
 
-  describe "element" $ session' $ do
+  session' "element" $ do
     it "works with domEvent Click" $ runWD $ do
       clickedRef <- liftIO $ newRef False
       testWidget' (findElemWithRetry $ WD.ByTag "div") WD.click $ do
@@ -297,8 +297,8 @@ tests withDebugging wdConfig caps _selenium = do
         let click = domEvent Click e
         return ()
 
-  describe "inputElement" $ do
-    describe "static renderer" $ session' $ do
+  session' "inputElement" $ do
+    describe "static renderer" $ do
       it "sets value attribute" $ runWD $ do
         let checkStatic = do
               e <- findElemWithRetry $ WD.ByTag "input"
@@ -355,7 +355,7 @@ tests withDebugging wdConfig caps _selenium = do
             & inputElementConfig_initialChecked .~ False
             & inputElementConfig_setChecked .~ (True <$ pb)
           pure ()
-    describe "hydration" $ session' $ do
+    describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("hello " :: Text)
         testWidget'
@@ -593,8 +593,7 @@ tests withDebugging wdConfig caps _selenium = do
           el "p" $ dynText $ _inputElement_value e
           performEvent_ $ consRef valRef <$> updated (_inputElement_value e)
           performEvent_ $ consRef inputRef <$> _inputElement_input e
-
-    describe "hydration/immediate" $ session' $ do
+    describe "hydration/immediate" $ do
       it "captures user input after switchover" $ runWD $ do
         inputRef :: IORef Text <- newRef ""
         let checkValue = do
@@ -674,8 +673,8 @@ tests withDebugging wdConfig caps _selenium = do
             names <- liftJSM $ traverse File.getName fs
             liftIO $ writeRef filesRef names
 
-  describe "textAreaElement" $ do
-    describe "static renderer" $ session' $ do
+  session' "textAreaElement" $ do
+    describe "static renderer" $ do
       it "sets value attribute" $ runWD $ do
         let checkStatic = do
               e <- findElemWithRetry $ WD.ByTag "textarea"
@@ -698,7 +697,7 @@ tests withDebugging wdConfig caps _selenium = do
             & textAreaElementConfig_initialValue .~ "test"
             & textAreaElementConfig_setValue .~ ("test-updated" <$ pb)
           pure ()
-    describe "hydration" $ session' $ do
+    describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         testWidget'
@@ -847,7 +846,7 @@ tests withDebugging wdConfig caps _selenium = do
           e <- textAreaElement $ def & textAreaElementConfig_setValue .~ ("pb" <$ pb)
           el "p" $ dynText $ _textAreaElement_value e
 
-    describe "hydration/immediate" $ session' $ do
+    describe "hydration/immediate" $ do
       it "captures user input after switchover" $ runWD $ do
         inputRef :: IORef Text <- newRef ""
         let checkValue = do
@@ -889,13 +888,13 @@ tests withDebugging wdConfig caps _selenium = do
             performEvent_ $ liftIO . writeRef valueByUIRef <$> _textAreaElement_input e
             performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
 
-  describe "selectElement" $ do
+  session' "selectElement" $ do
     let options :: DomBuilder t m => m ()
         options = do
           elAttr "option" ("value" =: "one" <> "id" =: "one") $ text "one"
           elAttr "option" ("value" =: "two" <> "id" =: "two") $ text "two"
           elAttr "option" ("value" =: "three" <> "id" =: "three") $ text "three"
-    describe "hydration" $ session' $ do
+    describe "hydration" $ do
       it "sets initial value correctly" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         let setup = do
@@ -969,7 +968,7 @@ tests withDebugging wdConfig caps _selenium = do
           performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
           performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
-    describe "hydration/immediate" $ session' $ do
+    describe "hydration/immediate" $ do
       it "captures user input after switchover" $ runWD $ do
         inputRef :: IORef Text <- newRef ""
         let checkValue = do
@@ -1015,7 +1014,7 @@ tests withDebugging wdConfig caps _selenium = do
             performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
             performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
-  describe "prerender" $ session' $ do
+  session' "prerender" $ do
     it "works in simple case" $ runWD $ do
       testWidget (checkBodyText "One") (checkBodyText "Two") $ do
         prerender_ (text "One") (text "Two")
@@ -1084,7 +1083,7 @@ tests withDebugging wdConfig caps _selenium = do
         prerender_ (pure ()) (liftIO $ trigger "Client")
         textNode $ TextNodeConfig "Initial" $ Just e
 
-  describe "namespaces" $ session' $ do
+  session' "namespaces" $ do
     it "dyn can be nested in namespaced widget" $ runWD $ do
       testWidget (pure ()) (checkTextInTag "svg" "one") $ do
         let svgRootCfg = def
@@ -1093,7 +1092,7 @@ tests withDebugging wdConfig caps _selenium = do
         void $ element "svg" svgRootCfg $ do
           dyn_ $ text "one" <$ pure ()
 
-  describe "runWithReplace" $ session' $ do
+  session' "runWithReplace" $ do
     it "works" $ runWD $ do
       replaceChan :: Chan Text <- liftIO newChan
       let setup = findElemWithRetry $ WD.ByTag "div"
@@ -1291,7 +1290,7 @@ tests withDebugging wdConfig caps _selenium = do
           _ <- runWithReplace (text "inner1") $ el "p" (text "inner2") <$ replace
           text "|after"
 
-  describe "traverseDMapWithKeyWithAdjust" $ session' $ do
+  session' "traverseDMapWithKeyWithAdjust" $ do
     let widget :: DomBuilder t m => DKey a -> Identity a -> m (Identity a)
         widget k (Identity v) = elAttr "li" ("id" =: textKey k) $ do
           elClass "span" "key" $ text $ textKey k
@@ -1394,7 +1393,7 @@ tests withDebugging wdConfig caps _selenium = do
           (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `H.shouldBe` keyMap
 
-  describe "traverseIntMapWithKeyWithAdjust" $ session' $ do
+  session' "traverseIntMapWithKeyWithAdjust" $ do
     let textKeyInt k = "key" <> T.pack (show k)
         intMap = IntMap.fromList
           [ (1, "one")
@@ -1501,7 +1500,7 @@ tests withDebugging wdConfig caps _selenium = do
           (dmap, _evt) <- traverseIntMapWithKeyWithAdjust widget intMap $ leftmost [postBuildPatch <$ pb, replace]
           liftIO $ dmap `H.shouldBe` intMap
 
-  describe "traverseDMapWithKeyWithAdjustWithMove" $ session' $ do
+  session' "traverseDMapWithKeyWithAdjustWithMove" $ do
     let widget :: DomBuilder t m => Key2 a -> Identity a -> m (Identity a)
         widget k (Identity v) = elAttr "li" ("id" =: textKey2 k) $ do
           elClass "span" "key" $ text $ textKey2 k
@@ -1581,8 +1580,8 @@ tests withDebugging wdConfig caps _selenium = do
           (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
           liftIO $ assertEqual "DMap" initMap dmap
 
-  describe "hydrating invalid HTML" $ session' $ do
-    it "can hydrate list in paragraph" $ runWD $ do
+  session' "hydrating invalid HTML" $ do
+    xit "can hydrate list in paragraph" $ runWD $ do
       let preSwitchover = do
             checkBodyText "before\ninner\nafter"
             -- Two <p> tags should be present
@@ -1611,7 +1610,7 @@ tests withDebugging wdConfig caps _selenium = do
   -- TODO: This test presupposes the exact set of labels that "dropdown" places in the "value" fields to distinguish options.
   -- This dependence on internal implementation details is undesirable in a test case, but seems fairly tricky to avoid.
   -- It seems expedient for the time being to expect this test case to be updated, should those implementation details ever change.
-  describe "dropdown" $ session' $ do
+  session' "dropdown" $ do
     let doTest expectedOpts (initialValue :: Text) = do
           let doCheck = do
                 es <- findElemsWithRetry $ WD.ByTag "option"
