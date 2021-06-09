@@ -20,6 +20,14 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
+-- Notice to those working on this test suite:
+-- It doesn't appear to be possible to use --match to run a particular test, in
+-- this situation the test may hang before reaching our code. This seems to
+-- happen when the test is not the first test in the block. As a workaround, you
+-- can just comment out the other tests. Also, using `xit` will cause the same
+-- issue. `xit` tests must be the last tests in the session, or the session will
+-- hang in the following test.
+
 import Prelude hiding (fail)
 import Control.Concurrent
 import qualified Control.Concurrent.Async as Async
