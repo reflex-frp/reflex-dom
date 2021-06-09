@@ -178,7 +178,7 @@ library
 test-suite hlint
   build-depends:
     base,
-    hlint >= 3.0 && < 4.0
+    hlint >= 2.0 && < 4.0
   hs-source-dirs: test
   main-is: hlint.hs
   type: exitcode-stdio-1.0
