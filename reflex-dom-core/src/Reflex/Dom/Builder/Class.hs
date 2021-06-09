@@ -9,11 +9,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 #if !MIN_VERSION_base(4,9,0)
 {-# LANGUAGE ImpredicativeTypes #-}
+#else
+{-# LANGUAGE Rank2Types #-} -- Implied by ImpredicativeTypes
 #endif
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}

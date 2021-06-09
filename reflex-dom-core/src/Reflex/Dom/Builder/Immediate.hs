@@ -2,7 +2,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -1877,14 +1876,14 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
   getHydrationMode >>= \case
     HydrationMode_Hydrating -> addHydrationStepWithSetup (holdIncremental children0 children') $ \children -> do
       dm :: DMap k (Compose (TraverseChild t m (Some k)) v') <- sample $ currentIncremental children
-      phs <- traverse id $ weakenDMapWith (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode . getCompose) dm
+      phs <- sequenceA $ weakenDMapWith (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode . getCompose) dm
       liftIO $ writeIORef placeholders $! phs
       insertAfterPreviousNode lastPlaceholder
     HydrationMode_Immediate -> do
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
             pure $ _traverseChildImmediate_placeholder i
-      phs <- traverse id $ weakenDMapWith (either (error "impossible") activate . _traverseChild_mode . getCompose) children0
+      phs <- sequenceA $ weakenDMapWith (either (error "impossible") activate . _traverseChild_mode . getCompose) children0
       liftIO $ writeIORef placeholders $! phs
       append $ toNode lastPlaceholder
   requestDomAction_ $ ffor children' $ \p -> do

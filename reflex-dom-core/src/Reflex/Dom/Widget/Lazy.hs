@@ -117,7 +117,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
                                          "overflow" =: "hidden" <>
                                          "position" =: "relative"
     mkRow k = toStyleAttr $ "height" =: (T.pack (show rowPx) <> "px") <>
-                            "top" =: ((<>"px") $ T.pack $ show $ keyToIndex k * rowPx) <>
+                            "top" =: (<> "px") (T.pack $ show $ keyToIndex k * rowPx) <>
                             "position" =: "absolute" <>
                             "width" =: "100%"
     findWindow sizeIncrement windowSize startingPosition =
