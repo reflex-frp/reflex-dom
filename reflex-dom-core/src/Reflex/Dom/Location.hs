@@ -22,7 +22,7 @@ module Reflex.Dom.Location
 import Reflex
 import Reflex.Dom.Builder.Immediate (wrapDomEvent)
 
-import Control.Lens ((^.))
+import Lens.Micro.GHC ((^.))
 import Control.Monad ((>=>))
 import Control.Monad.Fix (MonadFix)
 import Data.Align (align)

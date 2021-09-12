@@ -46,10 +46,9 @@ module Reflex.Dom.Old
 
 import Control.Arrow (first)
 #ifdef USE_TEMPLATE_HASKELL
-import Control.Lens (makeLenses, (%~), (&), (.~), (^.))
-#else
-import Control.Lens (Lens, Lens', (%~), (&), (.~), (^.))
+import Lens.Micro.TH (makeLenses)
 #endif
+import Lens.Micro.GHC ((%~), (&), (.~), (^.))
 import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class

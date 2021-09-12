@@ -71,7 +71,7 @@ import Reflex.PostBuild.Class
 import Reflex.Workflow
 
 import Control.Arrow
-import Control.Lens hiding (children, element)
+import Lens.Micro.GHC hiding (children, element)
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Data.Align
 import Data.Default
@@ -89,6 +89,7 @@ import qualified Data.Text as T
 import Data.These
 import Data.Traversable
 import Prelude hiding (mapM, mapM_, sequence, sequence_)
+import qualified Data.Map as M
 
 -- | Breaks the given Map into pieces based on the given Set.  Each piece will contain only keys that are less than the key of the piece, and greater than or equal to the key of the piece with the next-smaller key.  There will be one additional piece containing all keys from the original Map that are larger or equal to the largest key in the Set.
 -- Either k () is used instead of Maybe k so that the resulting map of pieces is sorted so that the additional piece has the largest key.
@@ -323,11 +324,11 @@ tabDisplay :: forall t m k. (MonadFix m, DomBuilder t m, MonadHold t m, PostBuil
 tabDisplay ulClass activeClass tabItems = do
   let t0 = listToMaybe $ Map.keys tabItems
   rec currentTab :: Demux t (Maybe k) <- elAttr "ul" ("class" =: ulClass) $ do
-        tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s,_) -> headerBarLink s k $ demuxed currentTab (Just k)) tabItems
+        tabClicksList :: [Event t k] <- mapM (\(k, (s,_)) -> headerBarLink s k $ demuxed currentTab (Just k)) (M.toList tabItems)
         let eTabClicks :: Event t k = leftmost tabClicksList
         fmap demux $ holdDyn t0 $ fmap Just eTabClicks
   el "div" $ do
-    iforM_ tabItems $ \k (_, w) -> do
+    forM_ (M.toList tabItems) $ \(k, (_, w)) -> do
       let isSelected = demuxed currentTab $ Just k
           attrs = ffor isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
       elDynAttr "div" attrs w

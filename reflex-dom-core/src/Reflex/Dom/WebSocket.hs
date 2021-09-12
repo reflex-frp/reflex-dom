@@ -40,7 +40,7 @@ import Reflex.TriggerEvent.Class
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
-import Control.Lens
+import Lens.Micro.GHC
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
 import Control.Monad.State
@@ -58,6 +58,9 @@ import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
 import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+#ifdef USE_TEMPLATE_HASKELL
+import Lens.Micro.TH
+#endif
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]

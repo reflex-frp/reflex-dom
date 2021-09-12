@@ -18,7 +18,7 @@ module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) 
 
 import Prelude
 
-import Control.Lens hiding (element, ix)
+import Lens.Micro.GHC ( (&), (.~) )
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -50,7 +50,9 @@ import Reflex.Dynamic
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
 import qualified Text.Read as T
-
+#ifdef USE_TEMPLATE_HASKELL
+import Lens.Micro.TH
+#endif
 import qualified GHCJS.DOM.Event as Event
 import qualified GHCJS.DOM.HTMLInputElement as Input
 

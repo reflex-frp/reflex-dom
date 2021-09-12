@@ -17,7 +17,7 @@ module Reflex.Dom.Builder.Static where
 
 import Data.IORef (IORef)
 import Blaze.ByteString.Builder.Html.Utf8
-import Control.Lens hiding (element)
+import Lens.Micro.GHC
 import Control.Monad.Exception
 import Control.Monad.Identity
 import Control.Monad.Primitive

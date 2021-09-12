@@ -12,7 +12,7 @@ For example:
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import Control.Lens ((&), (%~), (.~))
+import Lens.Micro ((&), (%~), (.~))
 import Data.Proxy
 import Reflex.Dom
 

@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-import Control.Lens
+import Lens.Micro.GHC
 import Control.Monad.Identity
 import Control.Monad.IO.Class
 import Data.Dependent.Map (DMap)

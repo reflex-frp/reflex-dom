@@ -7,7 +7,7 @@ module Reflex.Dom.Xhr.FormData
   )
   where
 
-import Control.Lens
+import Lens.Micro.GHC
 import Data.Default
 import Data.Map (Map)
 import Data.Text (Text)
@@ -19,6 +19,8 @@ import GHCJS.DOM.Types (File, IsBlob)
 import Language.Javascript.JSaddle.Monad (MonadJSM, liftJSM)
 import Reflex
 import Reflex.Dom.Xhr
+import qualified Data.Map as M
+import Control.Monad
 
 -- | A FormData value may be a blob/file or a string. The file can optionally be provided with filename.
 data FormValue blob = FormValue_Text Text
@@ -35,7 +37,7 @@ postForms
 postForms url payload = do
   performMkRequestsAsync $ ffor payload $ \fs -> for fs $ \u -> liftJSM $ do
     fd <- FD.newFormData Nothing
-    iforM_ u $ \k v -> case v of
+    forM_ (M.toList u) $ \(k, v) -> case v of
       FormValue_Text t -> FD.append fd k t
       FormValue_File b fn -> FD.appendBlob fd k b fn
     return $ xhrRequest "POST" url $ def & xhrRequestConfig_sendData .~ fd
