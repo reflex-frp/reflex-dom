@@ -332,7 +332,6 @@ tabDisplay ulClass activeClass tabItems = do
       let isSelected = demuxed currentTab $ Just k
           attrs = ffor isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
       elDynAttr "div" attrs w
-    return ()
   where
     headerBarLink :: Text -> k -> Dynamic t Bool -> m (Event t k)
     headerBarLink x k isSelected = do
