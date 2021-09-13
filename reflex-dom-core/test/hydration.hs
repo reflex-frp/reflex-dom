@@ -31,7 +31,7 @@
 import Prelude hiding (fail)
 import Control.Concurrent
 import qualified Control.Concurrent.Async as Async
-import Lens.Micro ((^.))
+import Lens.Micro ((^.), (?~))
 import Control.Monad hiding (fail)
 import Control.Monad.Catch
 import Control.Monad.Fail
