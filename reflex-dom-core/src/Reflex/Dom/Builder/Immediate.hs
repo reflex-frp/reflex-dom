@@ -215,7 +215,6 @@ import Lens.Micro.TH
 
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
-import qualified Data.Map as M
 
 instance MonadJSM m => MonadJSM (HydrationRunnerT t m) where
   {-# INLINABLE liftJSM' #-}
@@ -530,7 +529,7 @@ wrap
   -> RawElementConfig er t s
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
-  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor (M.toList <$> modifyAttrs) $ mapM_ $ \(AttributeName mAttrNamespace n, mv) -> case mAttrNamespace of
+  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor (Map.toList <$> modifyAttrs) $ mapM_ $ \(AttributeName mAttrNamespace n, mv) -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
@@ -683,7 +682,7 @@ makeElement doc elementTag cfg = do
   e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
     Nothing -> createElement doc elementTag
     Just ens -> createElementNS doc (Just ens) elementTag
-  forM_ (M.toList $ cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n, v) -> case mAttrNamespace of
+  forM_ (Map.toList $ cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n, v) -> case mAttrNamespace of
     Nothing -> setAttribute e n v
     Just ans -> setAttributeNS e (Just ans) n v
   pure e
