@@ -77,7 +77,7 @@ library
     reflex-dom-core >= 0.6.1.0 && <0.7,
     text == 1.2.*
   if !impl(ghcjs)
-    if flag(use-warp) && (os(linux) || os(osx))
+    if flag(use-warp)
       build-depends:
         jsaddle >= 0.9.6 && < 0.10,
         jsaddle-warp >= 0.9.6 && < 0.10
