@@ -73,7 +73,7 @@ data SeleniumSetupConfig = SeleniumSetupConfig
 --    webdriver tests here
 withSeleniumSpec :: SeleniumSetupConfig -> ((forall multi. SpecWith (WdTestSession multi) -> Spec) -> IO a) -> IO a
 withSeleniumSpec config runSpec = do
-  liftIO $ handle (\(_ :: IOError) -> return ()) $ unshareNetork -- If we run into an exception with sandboxing, just don't bother
+  liftIO $ handle (\(_ :: IOError) -> return ()) $ unshareNetwork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags (_seleniumSetupConfig_headless config) $ \chromeFlags -> do
     withSeleniumServer (_seleniumSetupConfig_seleniumPort config) $ do
       let browserPath = T.strip $ T.pack $ _seleniumSetupConfig_chromiumPath config
