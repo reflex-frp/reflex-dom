@@ -156,7 +156,7 @@ import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnc
 import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import GHCJS.DOM.UIEvent
 #ifndef ghcjs_HOST_OS
-import Language.Javascript.JSaddle (call, eval)
+import Language.Javascript.JSaddle (call, eval) -- Avoid using eval in ghcjs. Use ffi instead
 #endif
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
@@ -463,8 +463,9 @@ getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationD
 -- | Remove all nodes after given node
 removeSubsequentNodes :: (MonadJSM m, IsNode n) => n -> m ()
 #ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2021-11-06)
 foreign import javascript unsafe
-  "(function(n) { while (n['nextSibling']) { (n['parentNode'])['removeChild'](n['nextSibling']); }; })"
+  "(function() { var n = $1; while (n['nextSibling']) { n['parentNode']['removeChild'](n['nextSibling']); }; })()"
   removeSubsequentNodes_ :: DOM.Node -> IO ()
 removeSubsequentNodes n = liftJSM $ removeSubsequentNodes_ (toNode n)
 #else
@@ -485,8 +486,9 @@ deleteBetweenExclusive s e = liftJSM $ do
 --   and e will not be moved
 extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
 #ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2021-11-06)
 foreign import javascript unsafe
-  "(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })"
+  "(function() { var df = $1; var s = $2; var e = $3; var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })()"
   extractBetweenExclusive_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
 extractBetweenExclusive df s e = liftJSM $ extractBetweenExclusive_ df (toNode s) (toNode e)
 #else
