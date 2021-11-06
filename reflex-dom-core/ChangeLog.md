@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Remove calls to `eval` in Reflex.Dom.Builder.Immediate when compiling with ghcjs
+
 ## 0.6.2.1
 
 * Fix hlint complaints with newer GHC.
