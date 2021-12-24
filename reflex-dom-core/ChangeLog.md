@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.6.3.0
 
 * Remove calls to `eval` in Reflex.Dom.Builder.Immediate when compiling with ghcjs
 
