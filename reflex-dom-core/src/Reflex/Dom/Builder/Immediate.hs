@@ -155,7 +155,9 @@ import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
 import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
 import GHCJS.DOM.UIEvent
-import Language.Javascript.JSaddle (call, eval)
+#ifndef ghcjs_HOST_OS
+import Language.Javascript.JSaddle (call, eval) -- Avoid using eval in ghcjs. Use ffi instead
+#endif
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
@@ -460,9 +462,17 @@ getHydrationMode = liftIO . readIORef =<< HydrationDomBuilderT (asks _hydrationD
 
 -- | Remove all nodes after given node
 removeSubsequentNodes :: (MonadJSM m, IsNode n) => n -> m ()
+#ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2021-11-06)
+foreign import javascript unsafe
+  "(function() { var n = $1; while (n['nextSibling']) { n['parentNode']['removeChild'](n['nextSibling']); }; })()"
+  removeSubsequentNodes_ :: DOM.Node -> IO ()
+removeSubsequentNodes n = liftJSM $ removeSubsequentNodes_ (toNode n)
+#else
 removeSubsequentNodes n = liftJSM $ do
   f <- eval ("(function(n) { while (n.nextSibling) { (n.parentNode).removeChild(n.nextSibling); }; })" :: Text)
   void $ call f f [n]
+#endif
 
 -- | s and e must both be children of the same node and s must precede e;
 --   all nodes between s and e will be removed, but s and e will not be removed
@@ -475,9 +485,17 @@ deleteBetweenExclusive s e = liftJSM $ do
 --   nodes between s and e will be moved into the given DocumentFragment, but s
 --   and e will not be moved
 extractBetweenExclusive :: (MonadJSM m, IsNode start, IsNode end) => DOM.DocumentFragment -> start -> end -> m ()
+#ifdef ghcjs_HOST_OS
+--NOTE: Although wrapping this javascript in a function seems unnecessary, GHCJS's optimizer will break it if it is entered without that wrapping (as of 2021-11-06)
+foreign import javascript unsafe
+  "(function() { var df = $1; var s = $2; var e = $3; var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })()"
+  extractBetweenExclusive_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
+extractBetweenExclusive df s e = liftJSM $ extractBetweenExclusive_ df (toNode s) (toNode e)
+#else
 extractBetweenExclusive df s e = liftJSM $ do
   f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
   void $ call f f (df, s, e)
+#endif
 
 -- | s and e must both be children of the same node and s must precede e;
 --   s and all nodes between s and e will be removed, but e will not be removed
