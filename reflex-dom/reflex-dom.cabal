@@ -131,7 +131,8 @@ library
     , Reflex.Dom.Widget.Resize
     , Reflex.Dom.Xhr
     , Reflex.Dom.Xhr.FormData
-  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans -fPIC
+  cc-options: -fPIC
   if flag(expose-all-unfoldings)
     ghc-options: -fexpose-all-unfoldings
   if flag(use-reflex-optimizer)

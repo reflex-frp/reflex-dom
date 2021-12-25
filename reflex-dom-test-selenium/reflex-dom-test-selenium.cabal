@@ -19,7 +19,8 @@ library
     bytestring == 0.10.*,
     chrome-test-utils,
     exceptions,
-    hspec-core,
+    -- Until hspec-webdriver supports newer hspec-core versions
+    hspec-core < 2.8,
     hspec-webdriver >= 1.2.1,
     http-types,
     jsaddle >= 0.9.0.0 && < 0.10,
