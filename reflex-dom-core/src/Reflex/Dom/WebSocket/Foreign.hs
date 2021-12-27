@@ -53,15 +53,14 @@ closeWebSocket :: JSWebSocket -> Word -> Text -> JSM ()
 closeWebSocket (JSWebSocket ws) code reason = DOM.close ws (Just code) (Just reason)
 
 newWebSocket
-  :: a
-  -> Text -- url
+  :: Text -- url
   -> [Text] -- protocols
   -> (Either ByteString JSVal -> JSM ()) -- onmessage
   -> JSM () -- onopen
   -> JSM () -- onerror
   -> ((Bool, Word, Text) -> JSM ()) -- onclose
   -> JSM JSWebSocket
-newWebSocket _ url protocols onMessage onOpen onError onClose = do
+newWebSocket url protocols onMessage onOpen onError onClose = do
   let onOpenWrapped = fun $ \_ _ _ -> onOpen
       onErrorWrapped = fun $ \_ _ _ -> onError
       onCloseWrapped = fun $ \_ _ (e:_) -> do

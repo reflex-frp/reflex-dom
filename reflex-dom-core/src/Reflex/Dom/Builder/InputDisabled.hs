@@ -15,7 +15,6 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Coerce
 import qualified Data.Map as Map
-import Foreign.JavaScript.TH
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
@@ -101,14 +100,6 @@ instance DomBuilder t m => DomBuilder t (InputDisabledT m) where
     lift $ selectElement cfg' $ runInputDisabledT child
 
 instance HasDocument m => HasDocument (InputDisabledT m)
-
-instance HasJSContext m => HasJSContext (InputDisabledT m) where
-  type JSContextPhantom (InputDisabledT m) = JSContextPhantom m
-  askJSContext = lift askJSContext
-
-instance HasJS js m => HasJS js (InputDisabledT m) where
-  type JSX (InputDisabledT m) = JSX m
-  liftJS = lift . liftJS
 
 instance DomRenderHook t m => DomRenderHook t (InputDisabledT m) where
   withRenderHook f = InputDisabledT . withRenderHook f . runInputDisabledT

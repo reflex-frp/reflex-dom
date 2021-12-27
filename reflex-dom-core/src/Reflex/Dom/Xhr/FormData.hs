@@ -26,7 +26,7 @@ data FormValue blob = FormValue_Text Text
 
 -- | Performs a POST request with the provided FormData payload
 postForms
-  :: ( IsBlob blob, HasJSContext (Performable m), MonadJSM (Performable m)
+  :: ( IsBlob blob, MonadJSM (Performable m)
      , PerformEvent t m, TriggerEvent t m
      , Traversable f)
   => Text -- ^ The target url

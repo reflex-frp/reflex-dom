@@ -107,9 +107,9 @@ chromeConfig fp flags =
 --------------------------------------------------------------------------------
 
 -- | The environment in which your widgets can be tested
-type TestWidget js t m =
+type TestWidget t m =
   (DomBuilder t m, MonadHold t m, PostBuild t m
-  , Prerender js t m, PerformEvent t m, TriggerEvent t m
+  , Prerender t m, PerformEvent t m, TriggerEvent t m
   , MonadFix m, MonadIO (Performable m), MonadIO m)
 
 -- | Configuration of individual tests

@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Breaking change: Remove HasJSContext and MonadJS. This change also removes the `js` type parameter from `Prerender`. Change `Prerender js t m` to `Prerender t m`.
+
 ## 0.6.3.0
 
 * Remove calls to `eval` in Reflex.Dom.Builder.Immediate when compiling with ghcjs

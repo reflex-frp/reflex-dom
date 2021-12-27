@@ -45,19 +45,17 @@ import qualified GHCJS.DOM.Document as Document
 import qualified GHCJS.DOM.Node as Node
 import qualified GHCJS.DOM.Types as DOM
 
-type PrerenderClientConstraint js t m =
+type PrerenderClientConstraint t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
   , DomRenderHook t m
   , HasDocument m
   , TriggerEvent t m
-  , PrerenderBaseConstraints js t m
+  , PrerenderBaseConstraints t m
   )
 
-type PrerenderBaseConstraints js t m =
-  ( HasJSContext (Performable m)
-  , HasJSContext m
-  , MonadFix m
+type PrerenderBaseConstraints t m =
+  ( MonadFix m
   , MonadHold t m
   , MonadJSM (Performable m)
   , MonadJSM m
@@ -70,18 +68,16 @@ type PrerenderBaseConstraints js t m =
   , PrimMonad m
   , Ref (Performable m) ~ IORef
   , Ref m ~ IORef
-  , HasJS js m
-  , HasJS js (Performable m)
   )
 
 -- | Render the first widget on the server, and the second on the client. The
 -- hydration builder will run *both* widgets.
 prerender_
-  :: (Functor m, Reflex t, Prerender js t m)
+  :: (Functor m, Reflex t, Prerender t m)
   => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
-class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, Prerender js t (Client m)) => Prerender js t m | m -> t js where
+class (PrerenderClientConstraint t (Client m), Client (Client m) ~ Client m, Prerender t (Client m)) => Prerender t m | m -> t where
   -- | Monad in which the client widget is built
   type Client m :: * -> *
   -- | Render the first widget on the server, and the second on the client. The
@@ -89,11 +85,11 @@ class (PrerenderClientConstraint js t (Client m), Client (Client m) ~ Client m, 
   -- switchover time.
   prerender :: m a -> Client m a -> m (Dynamic t a)
 
-instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints js t m) => Prerender js t (HydrationDomBuilderT GhcjsDomSpace t m) where
+instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
   prerender _ client = pure <$> client
 
-instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prerender js t (HydrationDomBuilderT HydrationDomSpace t m) where
+instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
   -- | PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
   type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)
@@ -132,14 +128,14 @@ instance (Adjustable t m, PrerenderBaseConstraints js t m, ReflexHost t) => Prer
         insertBefore df =<< deleteToPrerenderEnd doc
     holdDyn a0 a'
 
-newtype UnrunnableT js t m a = UnrunnableT (ReaderT Void m a)
+newtype UnrunnableT t m a = UnrunnableT (ReaderT Void m a)
   deriving (Functor, Applicative, Monad, MonadTrans)
 
-unrunnable :: UnrunnableT js t m a
+unrunnable :: UnrunnableT t m a
 unrunnable = UnrunnableT $ ReaderT $ \case {}
 
-instance (Reflex t, Monad m) => DomBuilder t (UnrunnableT js t m) where
-  type DomBuilderSpace (UnrunnableT js t m) = GhcjsDomSpace
+instance (Reflex t, Monad m) => DomBuilder t (UnrunnableT t m) where
+  type DomBuilderSpace (UnrunnableT t m) = GhcjsDomSpace
   textNode _ = unrunnable
   commentNode _ = unrunnable
   element _ _ _ = unrunnable
@@ -148,106 +144,79 @@ instance (Reflex t, Monad m) => DomBuilder t (UnrunnableT js t m) where
   selectElement _ _ = unrunnable
   placeRawElement _ = unrunnable
   wrapRawElement _ _ = unrunnable
-instance (Reflex t, Monad m) => NotReady t (UnrunnableT js t m) where
+instance (Reflex t, Monad m) => NotReady t (UnrunnableT t m) where
   notReadyUntil _ = unrunnable
   notReady = unrunnable
-instance (Reflex t, Monad m) => Adjustable t (UnrunnableT js t m) where
+instance (Reflex t, Monad m) => Adjustable t (UnrunnableT t m) where
   runWithReplace _ _ = unrunnable
   traverseIntMapWithKeyWithAdjust _ _ _ = unrunnable
   traverseDMapWithKeyWithAdjust _ _ _ = unrunnable
   traverseDMapWithKeyWithAdjustWithMove _ _ _ = unrunnable
-instance (Reflex t, Monad m) => PerformEvent t (UnrunnableT js t m) where
-  type Performable (UnrunnableT js t m) = UnrunnableT js t m
+instance (Reflex t, Monad m) => PerformEvent t (UnrunnableT t m) where
+  type Performable (UnrunnableT t m) = UnrunnableT t m
   performEvent _ = unrunnable
   performEvent_ _ = unrunnable
-instance Monad m => MonadRef (UnrunnableT js t m) where
-  type Ref (UnrunnableT js t m) = Ref IO
+instance Monad m => MonadRef (UnrunnableT t m) where
+  type Ref (UnrunnableT t m) = Ref IO
   newRef _ = unrunnable
   readRef _ = unrunnable
   writeRef _ _ = unrunnable
-instance Monad m => MonadAtomicRef (UnrunnableT js t m) where
+instance Monad m => MonadAtomicRef (UnrunnableT t m) where
   atomicModifyRef _ _ = unrunnable
-instance Monad m => HasDocument (UnrunnableT js t m) where
+instance Monad m => HasDocument (UnrunnableT t m) where
   askDocument = unrunnable
-instance Monad m => HasJSContext (UnrunnableT js t m) where
-  type JSContextPhantom (UnrunnableT js t m) = ()
-  askJSContext = unrunnable
-instance Monad m => HasJS JS' (UnrunnableT js t m) where
-  type JSX (UnrunnableT js t m) = UnrunnableT js t m
-  liftJS _ = unrunnable
-instance Monad m => MonadJS JS' (UnrunnableT js t m) where
-  runJS _ _ = unrunnable
-  forkJS _ = unrunnable
-  mkJSUndefined = unrunnable
-  isJSNull _ = unrunnable
-  isJSUndefined _ = unrunnable
-  fromJSBool _ = unrunnable
-  fromJSString _ = unrunnable
-  fromJSArray _ = unrunnable
-  fromJSUint8Array _ = unrunnable
-  fromJSNumber _ = unrunnable
-  withJSBool _ _ = unrunnable
-  withJSString _ _ = unrunnable
-  withJSNumber _ _ = unrunnable
-  withJSArray _ _ = unrunnable
-  withJSUint8Array _ _ = unrunnable
-  mkJSFun _ = unrunnable
-  freeJSFun _ = unrunnable
-  setJSProp _ _ _ = unrunnable
-  getJSProp _ _ = unrunnable
-  withJSNode _ _ = unrunnable
-instance Monad m => TriggerEvent t (UnrunnableT js t m) where
+instance Monad m => TriggerEvent t (UnrunnableT t m) where
   newTriggerEvent = unrunnable
   newTriggerEventWithOnComplete = unrunnable
   newEventWithLazyTriggerWithOnComplete _ = unrunnable
-instance Monad m => MonadReflexCreateTrigger t (UnrunnableT js t m) where
+instance Monad m => MonadReflexCreateTrigger t (UnrunnableT t m) where
   newEventWithTrigger _ = unrunnable
   newFanEventWithTrigger _ = unrunnable
-instance Monad m => MonadFix (UnrunnableT js t m) where
+instance Monad m => MonadFix (UnrunnableT t m) where
   mfix _ = unrunnable
-instance (Monad m, MonadHold t m) => MonadHold t (UnrunnableT js t m) where
+instance (Monad m, MonadHold t m) => MonadHold t (UnrunnableT t m) where
   hold _ _ = unrunnable
   holdDyn _ _ = unrunnable
   holdIncremental _ _ = unrunnable
   buildDynamic _ _ = unrunnable
   headE _ = unrunnable
   now = unrunnable
-instance Monad m => MonadSample t (UnrunnableT js t m) where
+instance Monad m => MonadSample t (UnrunnableT t m) where
   sample _ = unrunnable
-instance Monad m => MonadIO (UnrunnableT js t m) where
+instance Monad m => MonadIO (UnrunnableT t m) where
   liftIO _ = unrunnable
 #ifndef ghcjs_HOST_OS
-instance Monad m => MonadJSM (UnrunnableT js t m) where
+instance Monad m => MonadJSM (UnrunnableT t m) where
   liftJSM' _ = unrunnable
 #endif
-instance (Reflex t, Monad m) => PostBuild t (UnrunnableT js t m) where
+instance (Reflex t, Monad m) => PostBuild t (UnrunnableT t m) where
   getPostBuild = unrunnable
-instance Monad m => PrimMonad (UnrunnableT js t m) where
-  type PrimState (UnrunnableT js t m) = PrimState IO
+instance Monad m => PrimMonad (UnrunnableT t m) where
+  type PrimState (UnrunnableT t m) = PrimState IO
   primitive _ = unrunnable
-instance (Reflex t, Monad m) => DomRenderHook t (UnrunnableT js t m) where
+instance (Reflex t, Monad m) => DomRenderHook t (UnrunnableT t m) where
   withRenderHook _ _ = unrunnable
   requestDomAction _ = unrunnable
   requestDomAction_ _ = unrunnable
-instance (Reflex t, Monad m, MonadHold t m) => Prerender JS' t (UnrunnableT js t m) where
-  type Client (UnrunnableT js t m) = UnrunnableT js t m
+instance (Reflex t, Monad m, MonadHold t m) => Prerender t (UnrunnableT t m) where
+  type Client (UnrunnableT t m) = UnrunnableT t m
   prerender _ _ = unrunnable
 
-instance (SupportsStaticDomBuilder t m) => Prerender JS' t (StaticDomBuilderT t m) where
-  type Client (StaticDomBuilderT t m) = UnrunnableT JS' t m
+instance (SupportsStaticDomBuilder t m) => Prerender t (StaticDomBuilderT t m) where
+  type Client (StaticDomBuilderT t m) = UnrunnableT t m
   prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
     a <- server
     _ <- commentNode $ CommentNodeConfig endMarker Nothing
     pure $ pure a
 
-instance (Prerender js t m, Monad m) => Prerender js t (ReaderT r m) where
+instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
   type Client (ReaderT r m) = ReaderT r (Client m)
   prerender server client = do
     r <- ask
     lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender js t (DynamicWriterT t w m) where
+instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
   type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
@@ -256,7 +225,7 @@ instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerende
     tellDyn w
     pure a
 
-instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (EventWriterT t w m) where
+instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWriterT t w m) where
   type Client (EventWriterT t w m) = EventWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runEventWriterT server) (runEventWriterT client)
@@ -265,7 +234,7 @@ instance (Prerender js t m, Monad m, Reflex t, Semigroup w) => Prerender js t (E
     tellEvent w
     pure a
 
-instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT t request response m) where
+instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t request response m) where
   type Client (RequesterT t request response m) = RequesterT t request response (Client m)
   prerender server client = mdo
     let fannedResponses = fanInt responses
@@ -277,7 +246,7 @@ instance (Prerender js t m, MonadFix m, Reflex t) => Prerender js t (RequesterT 
     responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switchPromptlyDyn requestsDyn
     return result
 
-instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender js t (QueryT t q m) where
+instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
   prerender server client = mdo
     result <- queryDyn query
@@ -286,15 +255,15 @@ instance (Prerender js t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, 
         query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
     pure a
 
-instance (Prerender js t m, Monad m) => Prerender js t (InputDisabledT m) where
+instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
   type Client (InputDisabledT m) = InputDisabledT (Client m)
   prerender (InputDisabledT server) (InputDisabledT client) = InputDisabledT $ prerender server client
 
-instance (Prerender js t m, Monad m) => Prerender js t (HydratableT m) where
+instance (Prerender t m, Monad m) => Prerender t (HydratableT m) where
   type Client (HydratableT m) = HydratableT (Client m)
   prerender (HydratableT server) (HydratableT client) = HydratableT $ prerender server client
 
-instance (Prerender js t m, Monad m, ReflexHost t) => Prerender js t (PostBuildT t m) where
+instance (Prerender t m, Monad m, ReflexHost t) => Prerender t (PostBuildT t m) where
   type Client (PostBuildT t m) = PostBuildT t (Client m)
   prerender server client = PostBuildT $ do
     pb <- ask
