@@ -7,7 +7,7 @@ module Foreign.JavaScript.Utils
   , js_jsonParse
   ) where
 
-import Control.Lens
+import Lens.Micro.GHC
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS

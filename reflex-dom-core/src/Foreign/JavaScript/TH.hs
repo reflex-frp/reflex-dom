@@ -60,7 +60,7 @@ import Foreign.C.Types
 import Foreign.Ptr
 import Text.Encoding.Z
 #else
-import Control.Lens.Operators ((^.))
+import Lens.Micro.GHC ((^.))
 import Data.Word (Word8)
 import GHCJS.DOM.Types (JSVal, MonadJSM (..), liftJSM, runJSM, toJSString, toJSVal)
 import Language.Javascript.JSaddle (Function (..), array, eval, freeFunction, function, js, js1, jss, valBool,

@@ -31,13 +31,13 @@ import Reflex.Profiled
 #endif
 
 import Control.Concurrent
-import Control.Lens
 import Control.Monad
 import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
 import Control.Monad.Ref
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
 import Data.Foldable (for_)
+import Data.Functor.Identity
 import Data.IORef
 import Data.Maybe
 import Data.Monoid ((<>))

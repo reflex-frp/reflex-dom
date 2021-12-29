@@ -119,7 +119,7 @@ module Reflex.Dom.Builder.Immediate
 
 import Control.Concurrent
 import Control.Exception (bracketOnError)
-import Control.Lens (Identity(..), imapM_, iforM_, (^.), makeLenses)
+import Lens.Micro.GHC ( (^.) )
 import Control.Monad.Exception
 import Control.Monad.Primitive
 import Control.Monad.Reader
@@ -133,6 +133,7 @@ import Data.FastMutableIntMap (PatchIntMap (..))
 import Data.Foldable (for_, traverse_)
 import Data.Functor.Compose
 import Data.Functor.Constant
+import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.Functor.Product
 import Data.GADT.Compare (GCompare)
@@ -210,7 +211,8 @@ import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
 #ifndef USE_TEMPLATE_HASKELL
 import Data.Functor.Contravariant (phantom)
-import Control.Lens (Lens', Getter)
+#else
+import Lens.Micro.TH
 #endif
 
 #ifndef ghcjs_HOST_OS
@@ -545,7 +547,7 @@ wrap
   -> RawElementConfig er t s
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
-  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor (Map.toList <$> modifyAttrs) $ mapM_ $ \(AttributeName mAttrNamespace n, mv) -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
   eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
@@ -698,7 +700,7 @@ makeElement doc elementTag cfg = do
   e <- uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
     Nothing -> createElement doc elementTag
     Just ens -> createElementNS doc (Just ens) elementTag
-  iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
+  forM_ (Map.toList $ cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n, v) -> case mAttrNamespace of
     Nothing -> setAttribute e n v
     Just ans -> setAttributeNS e (Just ans) n v
   pure e

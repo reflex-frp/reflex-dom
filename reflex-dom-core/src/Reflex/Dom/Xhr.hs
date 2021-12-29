@@ -5,9 +5,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-#ifdef USE_TEMPLATE_HASKELL
+
 {-# LANGUAGE TemplateHaskell #-}
-#endif
+
 
 -- | A module for performing asynchronous HTTP calls from JavaScript
 -- using the
@@ -149,15 +149,15 @@ import Reflex.Dom.Xhr.ResponseType
 
 import Control.Concurrent
 import Control.Exception (handle)
-import Control.Lens
+import Lens.Micro.GHC
 import Control.Monad hiding (forM)
 import Control.Monad.IO.Class
 import Data.Aeson
-#if MIN_VERSION_aeson(1,0,0)
+
 import Data.Aeson.Text
-#else
-import Data.Aeson.Encode
-#endif
+
+
+
 import qualified Data.ByteString.Lazy as BL
 import Data.CaseInsensitive (CI)
 import qualified Data.CaseInsensitive as CI
@@ -175,7 +175,11 @@ import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
 import Data.Typeable
 
+import Lens.Micro.TH
+
+
 import Language.Javascript.JSaddle.Monad (JSM, askJSM, runJSM, MonadJSM, liftJSM)
+import qualified Data.Map as M
 
 data XhrRequest a
    = XhrRequest { _xhrRequest_method :: Text
@@ -261,7 +265,7 @@ newXMLHttpRequestWithError req cb = do
       True
       (fromMaybe "" $ _xhrRequestConfig_user c)
       (fromMaybe "" $ _xhrRequestConfig_password c)
-    iforM_ (_xhrRequestConfig_headers c) $ xmlHttpRequestSetRequestHeader xhr
+    forM_ (M.toList $ _xhrRequestConfig_headers c) $ uncurry (xmlHttpRequestSetRequestHeader xhr)
     maybe (return ()) (xmlHttpRequestSetResponseType xhr . fromResponseType) rt
     xmlHttpRequestSetWithCredentials xhr creds
     _ <- xmlHttpRequestOnreadystatechange xhr $ do

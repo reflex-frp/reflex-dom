@@ -46,7 +46,7 @@ import Reflex.Query.Class
 import Reflex.Requester.Base
 
 import qualified Control.Category
-import Control.Lens hiding (element)
+import Lens.Micro.GHC
 import Control.Monad.Reader
 import qualified Control.Monad.State as Lazy
 import Control.Monad.State.Strict
@@ -749,7 +749,7 @@ instance HasDocument m => HasDocument (QueryT t q m)
 class HasSetValue a where
   type SetValue a :: *
   setValue :: Lens' a (SetValue a)
-  
+
 instance Reflex t => HasSetValue (TextAreaElementConfig er t m) where
   type SetValue (TextAreaElementConfig er t m) = Event t Text
   setValue = textAreaElementConfig_setValue

@@ -4,7 +4,8 @@ module Reflex.Dom.Class ( module Reflex.Dom.Class
                         , module Web.KeyCode
                         ) where
 
-import Control.Lens
+import Lens.Micro
+import Lens.Micro.Internal
 import Reflex.Class
 import Web.KeyCode
 
