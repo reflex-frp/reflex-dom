@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.1.1-r1
+
+* Loosen reflex-dom-core version bounds to allow reflex-dom-core 0.7.*
+
 ## 0.6.1.1
 
 * Compile with -fPIC

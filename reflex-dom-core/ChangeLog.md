@@ -3,6 +3,7 @@
 ## 0.7.0.0
 
 * Breaking change: Remove HasJSContext and MonadJS. This change also removes the `js` type parameter from `Prerender`. Change `Prerender js t m` to `Prerender t m`.
+  * `Reflex.Dom.WebSocket.Foreign.newWebSocket` takes one fewer argument: the first argument used to be a js context
 
 ## 0.6.3.0
 
