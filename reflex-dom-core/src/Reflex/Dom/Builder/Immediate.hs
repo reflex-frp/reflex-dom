@@ -141,7 +141,6 @@ import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Some (Some(..))
-import Data.GADT.Compare (GCompare)
 import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
@@ -2207,10 +2206,6 @@ instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => 
   {-# INLINABLE newEventWithLazyTriggerWithOnComplete #-}
   newEventWithLazyTriggerWithOnComplete f = DomRenderHookT . lift $ newEventWithLazyTriggerWithOnComplete f
 
-instance HasJSContext m => HasJSContext (HydrationDomBuilderT s t m) where
-  type JSContextPhantom (HydrationDomBuilderT s t m) = JSContextPhantom m
-  askJSContext = lift askJSContext
-
 instance MonadRef m => MonadRef (HydrationDomBuilderT s t m) where
   type Ref (HydrationDomBuilderT s t m) = Ref m
   {-# INLINABLE newRef #-}
@@ -2223,10 +2218,6 @@ instance MonadRef m => MonadRef (HydrationDomBuilderT s t m) where
 instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT s t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
-
-instance (HasJS x m, ReflexHost t) => HasJS x (HydrationDomBuilderT s t m) where
-  type JSX (HydrationDomBuilderT s t m) = JSX m
-  liftJS = lift . liftJS
 
 type family EventType en where
   EventType 'AbortTag = UIEvent

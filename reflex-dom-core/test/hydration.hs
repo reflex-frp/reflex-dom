@@ -166,11 +166,11 @@ tests withDebugging wdConfig caps _selenium = do
         r <- m
         putStrLnDebug "after"
         return r
-      testWidgetStatic :: WD b -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> WD b
+      testWidgetStatic :: WD b -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidgetStatic = testWidgetStaticDebug withDebugging
-      testWidget :: WD () -> WD b -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> WD b
+      testWidget :: WD () -> WD b -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidget = testWidgetDebug True withDebugging
-      testWidget' :: WD a -> (a -> WD b) -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ()) -> WD b
+      testWidget' :: WD a -> (a -> WD b) -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidget' = testWidgetDebug' True withDebugging
   session' "text" $ do
     it "works" $ runWD $ do
@@ -1653,7 +1653,7 @@ withSeleniumServer f = do
     , _selenium_stopServer = stopServer
     }
 
-triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender js t m) => Chan a -> m (Event t a)
+triggerEventWithChan :: (Reflex t, TriggerEvent t m, Prerender t m) => Chan a -> m (Event t a)
 triggerEventWithChan chan = do
   (e, trigger) <- newTriggerEvent
   -- In prerender because we only want to do this on the client
@@ -1716,13 +1716,13 @@ withRetry a = wait 300
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
 
-type TestWidget js t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender js t m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadIO m)
+type TestWidget t m = (DomBuilder t m, MonadHold t m, PostBuild t m, Prerender t m, PerformEvent t m, TriggerEvent t m, MonadFix m, MonadIO (Performable m), MonadIO m)
 
 testWidgetStaticDebug
   :: Bool
   -> WD b
   -- ^ Webdriver commands to run before JS runs and after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing
   -> WD b
 testWidgetStaticDebug withDebugging w = testWidgetDebug True withDebugging (void w) w
@@ -1735,7 +1735,7 @@ testWidgetDebug
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing
   -> WD b
 testWidgetDebug hardFailure withDebugging beforeJS afterSwitchover =
@@ -1752,7 +1752,7 @@ testWidgetDebug'
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> (a -> WD b)
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget = do

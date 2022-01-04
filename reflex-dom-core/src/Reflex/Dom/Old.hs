@@ -63,7 +63,6 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Foreign.JavaScript.TH
 import qualified GHCJS.DOM.Element as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
@@ -118,8 +117,6 @@ type MonadWidgetConstraints t m =
   , DOM.MonadJSM (Performable m)
 #endif
   , TriggerEvent t m
-  , HasJSContext m
-  , HasJSContext (Performable m)
   , HasDocument m
   , MonadRef m
   , Ref m ~ Ref IO
