@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Add a variant of `postForms` that allows the `XhrRequestConfig` to be specified.
+
 ## 0.7.0.0
 
 * Breaking change: Remove HasJSContext and MonadJS. This change also removes the `js` type parameter from `Prerender`. Change `Prerender js t m` to `Prerender t m`.
