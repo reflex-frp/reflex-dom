@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.7.0.1
 
 * Add a variant of `postForms` that allows the `XhrRequestConfig` to be specified.
 
