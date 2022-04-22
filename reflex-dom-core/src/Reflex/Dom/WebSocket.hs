@@ -62,18 +62,21 @@ data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
                      , _webSocketConfig_close :: Event t (Word, Text)
                      , _webSocketConfig_reconnect :: Bool
+                     , _webSocketConfig_reconnectEv :: Event t ()
+                     -- ^An event to fire to reconnect a disconnected websocket. To use, set `reconnect` to `False`.
+                     -- If you'd prefer to use `reconnect`, set to `never`.
                      , _webSocketConfig_protocols :: [Text]
                      }
 
 instance Reflex t => Default (WebSocketConfig t a) where
-  def = WebSocketConfig never never True []
+  def = WebSocketConfig never never True never []
 
 type WebSocket t = RawWebSocket t ByteString
 
 data RawWebSocket t a
    = RawWebSocket { _webSocket_recv :: Event t a
                   , _webSocket_open :: Event t ()
-                  , _webSocket_error :: Event t () -- eror event does not carry any data and is always
+                  , _webSocket_error :: Event t () -- error event does not carry any data and is always
                                                    -- followed by termination of the connection
                                                    -- for details see the close event
                   , _webSocket_close :: Event t ( Bool -- wasClean
@@ -115,6 +118,8 @@ webSocket' url config onRawMessage = do
     case mws of
       Nothing -> return ()
       Just ws -> closeWebSocket ws (fromIntegral code) reason
+  unless (_webSocketConfig_reconnect config) $
+    performEvent_ $ ffor (_webSocketConfig_reconnectEv config) $ \() -> liftJSM start
 
   ctx <- askJSM
   _ <- liftIO $ forkIO $ forever $ do
