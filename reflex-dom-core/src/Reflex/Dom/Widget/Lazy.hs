@@ -45,24 +45,25 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
   let totalHeightStyle = fmap (toHeightStyle . (*) rowPx) maxIndex
       containerStyle = fmap toContainer heightPx
       viewportStyle = fmap toViewport heightPx
-  rec (container, sel) <- elDynAttr "div" containerStyle $ elDynAttr' "div" viewportStyle $ do
-        let currentTop = fmap (listWrapperStyle . fst) window
-        (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ selectViewListWithKey_ selected itemsInWindow $ \k v s -> do
-            (li,_) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v s
-            return $ fmap (const k) (domEvent Click li)
-        return lis
-      selected <- holdDyn (indexToKey i0) sel
-      pb <- getPostBuild
-      scrollPosition <- holdDyn 0 $ leftmost [ round <$> domEvent Scroll container
-                                             , fmap (const (i0 * rowPx)) pb
-                                             ]
-      let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
-          itemsInWindow = zipDynWith (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
-  postBuild <- getPostBuild
-  performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i ->
-    setScrollTop (_element_raw container) (i * rowPx)
-  let indexAndLength = fmap snd window
-  return (indexAndLength, sel)
+  pb <- getPostBuild
+  elDynAttr "div" containerStyle $ do
+    rec (viewport, sel) <- elDynAttr' "div" viewportStyle $ do
+          let currentTop = fmap (listWrapperStyle . fst) window
+          (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ selectViewListWithKey_ selected itemsInWindow $ \k v s -> do
+              (li,_) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v s
+              return $ fmap (const k) (domEvent Click li)
+          return lis
+        selected <- holdDyn (indexToKey i0) sel
+        scrollPosition <- holdDyn 0 $ leftmost [ round <$> domEvent Scroll viewport
+                                               , fmap (const (i0 * rowPx)) pb
+                                               ]
+        let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
+            itemsInWindow = zipDynWith (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
+    delayed <- delay 0.25 pb
+    performEvent_ $ ffor (leftmost [setI, i0 <$ delayed]) $ \i ->
+      setScrollTop (_element_raw viewport) (i * rowPx)
+    let indexAndLength = fmap snd window
+    return (indexAndLength, sel)
   where
     toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     toViewport h = toStyleAttr $ "overflow" =: "auto" <> "position" =: "absolute" <>
