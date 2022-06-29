@@ -27,6 +27,7 @@ import Control.Monad.Reader
 import Control.Monad.Ref (MonadRef(..), MonadAtomicRef(..))
 import Data.IORef (IORef, newIORef)
 import Data.Semigroup (Semigroup)
+import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Void
 import Foreign.JavaScript.TH
@@ -246,7 +247,7 @@ instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t requ
     responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switchPromptlyDyn requestsDyn
     return result
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Additive q, Query q, Eq q) => Prerender t (QueryT t q m) where
+instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Commutative q, Query q, Eq q) => Prerender t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
   prerender server client = mdo
     result <- queryDyn query
