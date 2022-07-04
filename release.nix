@@ -23,6 +23,23 @@ let
       reflex-platform = reflex-platform-fun {
         inherit system;
         haskellOverlays = [
+          (self: super: {
+            commutative-semigroups = self.callHackageDirect {
+              pkg = "commutative-semigroups";
+              ver = "0.1.0.0";
+              sha256 = "0xmv20n3iqjc64xi3c91bwqrg8x79sgipmflmk21zz4rj9jdkv8i";
+            } {};
+            reflex = self.callHackageDirect {
+              pkg = "reflex";
+              ver = "0.8.2.1";
+              sha256 = "10d1qkqwaqp9zaswmziaqgz60ifg5383d2i2ml2cqccn8943h26b";
+            } {};
+            patch = self.callHackageDirect {
+              pkg = "patch";
+              ver = "0.0.7.0";
+              sha256 = "0yr2hk3fpwjxi1z0n384k3aq9b3z00c02bbwqybcj3n20l4k17l6";
+            } {};
+          })
           # Use this package's source for reflex
           (self: super: {
             _dep = super._dep // {

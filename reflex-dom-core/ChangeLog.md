@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## 0.7.0.2
+
+* Require reflex >= 0.8.2.1 and switch to `commutative-semigroups`
+
 ## 0.7.0.1
 
 * Add a variant of `postForms` that allows the `XhrRequestConfig` to be specified.

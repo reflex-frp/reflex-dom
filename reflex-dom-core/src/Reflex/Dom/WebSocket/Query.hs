@@ -4,6 +4,7 @@ module Reflex.Dom.WebSocket.Query (cropQueryT, runWebSocketQuery) where
 
 import Data.Default
 import Control.Monad.Fix
+import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Aeson
 import Reflex
@@ -11,7 +12,7 @@ import Reflex.Dom.WebSocket
 import Data.Maybe
 import Language.Javascript.JSaddle.Types (MonadJSM)
 
-runWebSocketQuery :: (MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t, ToJSON q, MonadFix m, Query q, FromJSON (QueryResult q), Additive q, Group q, Eq q)
+runWebSocketQuery :: (MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t, ToJSON q, MonadFix m, Query q, FromJSON (QueryResult q), Commutative q, Group q, Eq q)
                   => QueryT t q m a
                   -> Text -- ^ WebSocket url
                   -> m a
@@ -22,7 +23,7 @@ runWebSocketQuery app url = do
       let updatedRequest = leftmost [updated request, tag (current request) postBuild]
   return a
 
-cropQueryT :: (Reflex t, MonadHold t m, MonadFix m, Query q, Additive q, Group q, Eq q)
+cropQueryT :: (Reflex t, MonadHold t m, MonadFix m, Query q, Commutative q, Group q, Eq q)
            => QueryT t q m a
            -> Event t (QueryResult q)
            -> m (a, Dynamic t q)
