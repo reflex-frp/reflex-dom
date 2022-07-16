@@ -3,6 +3,7 @@
 ## 0.6.1.1-r1
 
 * Loosen reflex-dom-core version bounds to allow reflex-dom-core 0.7.*
+* Loosen aeson version bounds to allow aeson 2.0.*
 
 ## 0.6.1.1
 
