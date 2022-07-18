@@ -82,6 +82,7 @@ library
     dependent-sum >= 0.6 && < 0.8,
     dependent-sum-template >= 0.1 && < 0.2,
     directory >= 1.2 && < 1.4,
+    exceptions,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
     jsaddle >= 0.9.0.0 && < 0.10,

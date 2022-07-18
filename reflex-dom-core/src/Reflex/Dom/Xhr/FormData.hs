@@ -16,7 +16,7 @@ import qualified GHCJS.DOM.FormData as FD
 import Foreign.JavaScript.TH
 import GHCJS.DOM.File (getName)
 import GHCJS.DOM.Types (File, IsBlob)
-import Language.Javascript.JSaddle.Monad (MonadJSM, liftJSM)
+import Language.Javascript.JSaddle.Types (MonadJSM, liftJSM)
 import Reflex
 import Reflex.Dom.Xhr
 

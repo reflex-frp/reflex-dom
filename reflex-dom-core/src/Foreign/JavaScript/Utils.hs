@@ -7,6 +7,7 @@ module Foreign.JavaScript.Utils
   , js_jsonParse
   ) where
 
+import Control.Exception (catch)
 import Control.Lens
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -20,7 +21,7 @@ import qualified JavaScript.TypedArray.ArrayBuffer as JS
 import Language.Javascript.JSaddle.Types (JSString, JSM, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
 #ifdef ghcjs_HOST_OS
 import Control.Exception (SomeException)
-import Language.Javascript.JSaddle (fromJSVal, catch)
+import Language.Javascript.JSaddle (fromJSVal)
 import System.IO.Unsafe
 #else
 import qualified Data.ByteString.Lazy as LBS
