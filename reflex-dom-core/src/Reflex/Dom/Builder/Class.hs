@@ -58,6 +58,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Proxy
 import Data.Semigroup
+import Data.Semigroup.Commutative
 import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
@@ -618,7 +619,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder 
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Additive q, Eq q) => DomBuilder t (QueryT t q m) where
+instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Commutative q, Eq q) => DomBuilder t (QueryT t q m) where
   type DomBuilderSpace (QueryT t q m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
