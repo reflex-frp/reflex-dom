@@ -10,6 +10,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
@@ -84,11 +85,11 @@ class (PrerenderClientConstraint t (Client m), Client (Client m) ~ Client m, Pre
   -- | Render the first widget on the server, and the second on the client. The
   -- hydration builder will run *both* widgets, updating the result dynamic at
   -- switchover time.
-  prerender :: m a -> Client m a -> m (Dynamic t a)
+  prerender :: m a -> Client m a -> m (a, Event t a)
 
 instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type Client (HydrationDomBuilderT GhcjsDomSpace t m) = HydrationDomBuilderT GhcjsDomSpace t m
-  prerender _ client = pure <$> client
+  prerender _ client = (, never) <$> client
 
 instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
   -- | PostBuildT is needed here because we delay running the client builder
@@ -127,7 +128,7 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
       HydrationMode_Hydrating -> addHydrationStep $ do
         liftIO . trigger <=< lift $ runHydrationDomBuilderT (runPostBuildT client $ void a') clientEnv events
         insertBefore df =<< deleteToPrerenderEnd doc
-    holdDyn a0 a'
+    pure (a0, a')
 
 newtype UnrunnableT t m a = UnrunnableT (ReaderT Void m a)
   deriving (Functor, Applicative, Monad, MonadTrans)
@@ -209,7 +210,7 @@ instance (SupportsStaticDomBuilder t m) => Prerender t (StaticDomBuilderT t m) w
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
     a <- server
     _ <- commentNode $ CommentNodeConfig endMarker Nothing
-    pure $ pure a
+    pure (a, never)
 
 instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
   type Client (ReaderT r m) = ReaderT r (Client m)
@@ -217,25 +218,23 @@ instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
     r <- ask
     lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
+instance (Prerender t m, MonadHold t m, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
   type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
   prerender server client = do
-    x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
-    let (a, w') = splitDynPure x
-        w = join w'
-    tellDyn w
-    pure a
+    ((a0, w0), ev) <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
+    let (aEv, wEv) = (fmap fst ev, fmap snd ev)
+    tellDyn . join =<< holdDyn w0 wEv
+    pure (a0, aEv)
 
-instance (Prerender t m, Monad m, Reflex t, Semigroup w) => Prerender t (EventWriterT t w m) where
+instance (Prerender t m, MonadHold t m, Semigroup w) => Prerender t (EventWriterT t w m) where
   type Client (EventWriterT t w m) = EventWriterT t w (Client m)
   prerender server client = do
-    x <- lift $ prerender (runEventWriterT server) (runEventWriterT client)
-    let (a, w') = splitDynPure x
-        w = switch $ current w'
-    tellEvent w
-    pure a
+    ((a0, w0), ev) <- lift $ prerender (runEventWriterT server) (runEventWriterT client)
+    let (aEv, wEv) = (fmap fst ev, fmap snd ev)
+    tellEvent =<< switchHold w0 wEv
+    pure (a0, aEv)
 
-instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t request response m) where
+instance (Prerender t m, MonadFix m, MonadHold t m) => Prerender t (RequesterT t request response m) where
   type Client (RequesterT t request response m) = RequesterT t request response (Client m)
   prerender server client = mdo
     let fannedResponses = fanInt responses
@@ -243,18 +242,22 @@ instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t requ
         withFannedResponses w selector = do
           (x, e) <- runRequesterT w (selectInt fannedResponses selector)
           pure (x, fmapCheap (IntMap.singleton selector) e)
-    (result, requestsDyn) <- fmap splitDynPure $ lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
-    responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switchPromptlyDyn requestsDyn
-    return result
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Commutative q, Query q, Eq q) => Prerender t (QueryT t q m) where
+    ((result0, requests0), ev) <- lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
+    let (resultsEv, requestsEv) = (fmap fst ev, fmap snd ev)
+    reqs <- switchHoldPromptly requests0 requestsEv
+    responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry reqs
+    return (result0, resultsEv)
+
+instance (Prerender t m, MonadHold t m, MonadFix m, Group q, Commutative q, Query q, Eq q) => Prerender t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
   prerender server client = mdo
     result <- queryDyn query
-    x <- lift $ prerender (runQueryT server result) (runQueryT client result)
-    let (a, inc) = splitDynPure x
-        query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
-    pure a
+    ((a0, inc0), ev) <- lift $ prerender (runQueryT server result) (runQueryT client result)
+    let (aEv, incEv) = (fmap fst ev, fmap snd ev)
+    inc <- holdDyn inc0 incEv
+    let query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
+    pure (a0, aEv)
 
 instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
   type Client (InputDisabledT m) = InputDisabledT (Client m)
