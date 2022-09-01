@@ -734,7 +734,6 @@ class Monad m => HasDocument m where
     :: ( m ~ f m'
        , RawDocument (DomBuilderSpace m) ~ RawDocument (DomBuilderSpace m')
        , MonadTrans f
-       , Monad m'
        , HasDocument m'
        )
     => m (RawDocument (DomBuilderSpace m))

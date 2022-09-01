@@ -289,7 +289,7 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 
 -- | Create a view only checkbox
 {-# INLINABLE checkboxView #-}
-checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
   let permanentAttrs = "type" =: "checkbox"
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
@@ -335,7 +335,7 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+fileInput :: forall t m. (MonadIO m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"

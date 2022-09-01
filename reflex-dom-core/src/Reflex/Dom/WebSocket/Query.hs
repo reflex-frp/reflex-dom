@@ -12,7 +12,7 @@ import Reflex.Dom.WebSocket
 import Data.Maybe
 import Language.Javascript.JSaddle.Types (MonadJSM)
 
-runWebSocketQuery :: (MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t, ToJSON q, MonadFix m, Query q, FromJSON (QueryResult q), Commutative q, Group q, Eq q)
+runWebSocketQuery :: (MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, ToJSON q, MonadFix m, Query q, FromJSON (QueryResult q), Commutative q, Group q, Eq q)
                   => QueryT t q m a
                   -> Text -- ^ WebSocket url
                   -> m a
