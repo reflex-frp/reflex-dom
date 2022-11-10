@@ -153,7 +153,13 @@ import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
-import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent, Callback (..), RequestAnimationFrameCallback (..))
+import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent, RequestAnimationFrameCallback (..))
+#ifdef ghcjs_HOST_OS
+import GHCJS.Foreign.Callback (releaseCallback)
+#else
+import Language.Javascript.JSaddle.Types (freeSyncCallback)
+#endif
+import Language.Javascript.JSaddle.Object (Function (..))
 import GHCJS.DOM.UIEvent
 import GHCJS.DOM.Window (requestAnimationFrame)
 import Language.Javascript.JSaddle (freeFunction)
@@ -372,9 +378,13 @@ inAnimationFrameWithRef animationFrameHandlerRef f = do
     -- to run the handlers in the next animation frame.
     when wasEmpty $ do
         win <- DOM.currentWindowUnchecked
-        rec cb@(RequestAnimationFrameCallback (Callback fCb)) <- newRequestAnimationFrameCallbackSync $ \t -> do
+        rec cb@(RequestAnimationFrameCallback innerCb) <- newRequestAnimationFrameCallbackSync $ \t -> do
               -- This is a one off handler so free it when it runs
-              freeFunction fCb
+#ifdef ghcjs_HOST_OS
+              releaseCallback innerCb
+#else
+              freeSyncCallback innerCb
+#endif
               -- Take the list of handers and empty it
               handlersToRun <- atomicModifyRef' animationFrameHandlerRef $ \old -> ([], old)
               -- Exectute handlers in the order
