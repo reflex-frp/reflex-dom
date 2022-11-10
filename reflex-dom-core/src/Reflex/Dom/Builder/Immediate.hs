@@ -383,7 +383,8 @@ inAnimationFrameWithRef animationFrameHandlerRef f = do
 #ifdef ghcjs_HOST_OS
               releaseCallback innerCb
 #else
-              freeSyncCallback innerCb
+              let DOM.Callback innerCbFunction = innerCb
+              freeSyncCallback $ functionCallback innerCbFunction
 #endif
               -- Take the list of handers and empty it
               handlersToRun <- atomicModifyRef' animationFrameHandlerRef $ \old -> ([], old)
