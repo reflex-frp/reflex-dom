@@ -145,6 +145,7 @@ import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
+import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.ClipboardEvent as ClipboardEvent
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute)
@@ -152,8 +153,10 @@ import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
-import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
+import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent, Callback (..), RequestAnimationFrameCallback (..))
 import GHCJS.DOM.UIEvent
+import GHCJS.DOM.Window (requestAnimationFrame)
+import Language.Javascript.JSaddle (freeFunction)
 #ifndef ghcjs_HOST_OS
 import Language.Javascript.JSaddle (call, eval) -- Avoid using eval in ghcjs. Use ffi instead
 #endif
@@ -355,6 +358,31 @@ newtype DomRenderHookT t m a = DomRenderHookT { unDomRenderHookT :: RequesterT t
 #endif
            )
 
+inAnimationFrameWithRef
+  :: Ref JSM [Double -> JSM ()]
+  -> (Double -> JSM ())
+  -> JSM ()
+inAnimationFrameWithRef animationFrameHandlerRef f = do
+    -- Add this handler to the list to be run by the callback
+    -- It is important to do sync here, otherwise we may end up having race
+    -- liftIO does a sync internally
+    wasEmpty <- atomicModifyRef' animationFrameHandlerRef $ \old ->
+      (f : old, null old)
+    -- If this was the first handler added set up a callback
+    -- to run the handlers in the next animation frame.
+    when wasEmpty $ do
+        win <- DOM.currentWindowUnchecked
+        rec cb@(RequestAnimationFrameCallback (Callback fCb)) <- newRequestAnimationFrameCallbackSync $ \t -> do
+              -- This is a one off handler so free it when it runs
+              freeFunction fCb
+              -- Take the list of handers and empty it
+              handlersToRun <- atomicModifyRef' animationFrameHandlerRef $ \old -> ([], old)
+              -- Exectute handlers in the order
+              forM_ (reverse handlersToRun) (\handler -> handler t)
+        -- Add the callback function
+        void $ requestAnimationFrame win cb
+    return ()
+
 {-# INLINABLE runDomRenderHookT #-}
 runDomRenderHookT
   :: (MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m), MonadRef m, Ref m ~ IORef)
@@ -362,15 +390,16 @@ runDomRenderHookT
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
 runDomRenderHookT (DomRenderHookT a) events = do
+  animationFrameHandlerRef <- newRef []
+  let runInAnimationFrame f x = void . inAnimationFrameWithRef animationFrameHandlerRef $ \_ -> do
+        v <- synchronously x
+        void . liftIO $ f v
   flip runTriggerEventT events $ do
     rec (result, req) <- runRequesterT a rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
           traverseRequesterData (fmap Identity) rm
     return result
   where
-    runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
-        v <- synchronously x
-        void . liftIO $ f v
 
 instance MonadTrans (DomRenderHookT t) where
   {-# INLINABLE lift #-}
