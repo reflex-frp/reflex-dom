@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Xhr.FormData
   ( postForms
+  , postForms'
   , FormValue (..)
   , fileToFormValue
   )
@@ -32,13 +33,24 @@ postForms
   => Text -- ^ The target url
   -> Event t (f (Map Text (FormValue blob))) -- ^ Maps of text keys and values that will be sent as "FormData"
   -> m (Event t (f XhrResponse))
-postForms url payload = do
+postForms t = postForms' t def
+
+-- | Like 'postForms' but doesn't use a default 'XhrRequestConfig', so a custom one can be provided.
+postForms'
+  :: ( IsBlob blob, MonadJSM (Performable m)
+     , PerformEvent t m, TriggerEvent t m
+     , Traversable f)
+  => Text -- ^ The target url
+  -> XhrRequestConfig a
+  -> Event t (f (Map Text (FormValue blob))) -- ^ Maps of text keys and values that will be sent as "FormData"
+  -> m (Event t (f XhrResponse))
+postForms' url cfg payload = do
   performMkRequestsAsync $ ffor payload $ \fs -> for fs $ \u -> liftJSM $ do
     fd <- FD.newFormData Nothing
     iforM_ u $ \k v -> case v of
       FormValue_Text t -> FD.append fd k t
       FormValue_File b fn -> FD.appendBlob fd k b fn
-    return $ xhrRequest "POST" url $ def & xhrRequestConfig_sendData .~ fd
+    return $ xhrRequest "POST" url $ cfg & xhrRequestConfig_sendData .~ fd
 
 -- | Converts a File (e.g., the output of a 'FileInput') into a 'FormValue'. The filename will be included if it is available.
 fileToFormValue :: MonadJSM m => File -> m (FormValue File)

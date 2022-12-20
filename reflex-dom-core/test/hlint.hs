@@ -21,6 +21,7 @@ main = do
     , "--ignore=Use <$>"
     , "--ignore=Reduce duplication" --TODO: Re-enable this test
     , "--ignore=Use list comprehension"
+    , "--ignore=Evaluate"
     , "--cpp-define=USE_TEMPLATE_HASKELL"
     ]
   if null ideas then exitSuccess else exitFailure
