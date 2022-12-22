@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/obsidiansystems/jsaddle.git",
+  "rev": "1e6c9e8d75e71f609a1b875f2a8fa88c752c0889",
+  "path": "/nix/store/wvm6vcd6yg74m2s662wlxl5pgzvq6030-jsaddle-1e6c9e8",
+  "sha256": "1203rm8d1pkcywl0wnkmk7qpkdsibcw5rkx3jx89slfk25irqmra",
+  "fetchSubmodules": false,
+  "deepClone": false,
+  "leaveDotGit": false
+}
