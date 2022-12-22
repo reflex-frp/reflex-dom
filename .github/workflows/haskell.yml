@@ -17,10 +17,10 @@ jobs:
         swap-size-gb: 10
     - uses: actions/checkout@v3
     - uses: actions/checkout@v3
-        with:
-          repository: obsidiansystems/jsaddle
-          ref: aa/ghc94
-          path: jsaddle
+      with:
+        repository: obsidiansystems/jsaddle
+        ref: aa/ghc94
+        path: jsaddle
     - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
