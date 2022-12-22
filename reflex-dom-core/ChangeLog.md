@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Loosen version bounds of ref-tf and constraints
+* 
 ## 0.7.0.2
 
 * Require reflex >= 0.8.2.1 and switch to `commutative-semigroups`
