@@ -1,7 +1,7 @@
 packages:
   reflex-dom-core/
   reflex-dom/
-  jsaddle/
+  jsaddle/jsaddle
 
 package reflex-dom-core
   flags: -hydration-tests -gc-tests
