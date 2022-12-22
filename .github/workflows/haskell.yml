@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: pierotofy/set-swap-space@v1.0
       with:
-        swap-size-gb: 16
+        swap-size-gb: 10
     - uses: actions/checkout@v2
     - uses: haskell/actions/setup@v1
       with:
