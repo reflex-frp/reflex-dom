@@ -8,3 +8,8 @@ source-repository-package
   type: git
   location: https://github.com/dfordivam/hspec-webdriver-clone
   tag: 0d748b7bb7cd74dce0a55a1ec86b01dbb8a71cd8
+
+source-repository-package
+  type: git
+  location: https://github.com/obsidiansystmes/jsaddle
+  tag: 27462ef5fc44953b170e49098aa8e3cfcae68033

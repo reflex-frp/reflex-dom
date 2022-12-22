@@ -9,4 +9,4 @@ builtins.filterSource (path: type: !(builtins.elem (baseNameOf path) [
   ./README.md
   ./release.nix
   ./test
-])) ./.
+])) ./reflex-dom-core

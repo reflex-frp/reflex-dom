@@ -170,7 +170,7 @@ library
   if flag(use-template-haskell)
     build-depends:
       dependent-sum-template >= 0.1 && < 0.2,
-      template-haskell >= 2.12.0 && < 2.17
+      template-haskell >= 2.12.0 && < 2.20
     other-extensions: TemplateHaskell
     cpp-options: -DUSE_TEMPLATE_HASKELL
     other-modules:
