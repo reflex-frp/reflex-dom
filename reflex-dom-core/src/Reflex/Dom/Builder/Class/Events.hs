@@ -11,8 +11,9 @@ module Reflex.Dom.Builder.Class.Events where
 #ifdef USE_TEMPLATE_HASKELL
 import Data.GADT.Compare.TH
 #else
+import Data.Type.Equality ((:~:)(..))
 import Data.GADT.Compare
-       (GOrdering(..), (:~:)(..), GEq(..), GCompare(..))
+       (GOrdering(..), GEq(..), GCompare(..))
 #endif
 import Data.Text (Text)
 
