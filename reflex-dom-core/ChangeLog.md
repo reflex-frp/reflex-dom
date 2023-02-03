@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-* Loosen version bounds of ref-tf and constraints
-* 
+* Loosen version bounds of aeson, ref-tf and constraints
+
 ## 0.7.0.2
 
 * Require reflex >= 0.8.2.1 and switch to `commutative-semigroups`
