@@ -41,8 +41,6 @@ public class MainWidget {
     a.setContentView(wv);
     final WebSettings ws = wv.getSettings();
     ws.setJavaScriptEnabled(true);
-    ws.setAllowFileAccessFromFileURLs(true);
-    ws.setAllowUniversalAccessFromFileURLs(true);
     ws.setDomStorageEnabled(true);
     wv.setWebContentsDebuggingEnabled(true);
     // allow video to play without user interaction
@@ -64,7 +62,8 @@ public class MainWidget {
         @Override
         public WebResourceResponse shouldInterceptRequest (WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
-            if(!uri.getScheme().equals("file"))
+	    Log.i("reflex", uri.toString());
+            if(!uri.getScheme().equals("file") && !uri.getEncodedAuthority().equals("appassets.androidplatform.net"))
                 return null;
 
             String path = uri.getPath();

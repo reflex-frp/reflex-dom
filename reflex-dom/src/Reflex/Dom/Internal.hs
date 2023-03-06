@@ -76,7 +76,7 @@ run jsm = do
   continueWithCallbacks $ def
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
-        let startPage = fromString "file:///android_asset/index.html"
+        let startPage = fromString "https:///appassets.androidplatform.net/index.html"
         startMainWidget a startPage jsm
     }
   forever $ threadDelay 1000000000
