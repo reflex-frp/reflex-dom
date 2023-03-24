@@ -86,7 +86,7 @@ public class MainWidget {
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            if( url != null && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+            if( url != null && !url.startsWith("http://appassets.androidplatform.net") && !url.startsWith("https://appassets.androidplatform.net") && !url.startsWith("file://")) {
                 try {
                     view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                 }
@@ -143,6 +143,26 @@ public class MainWidget {
               wv.evaluateJavascript(jsStr, null);
             }
           });
+      }
+      public final void goBack() {
+        hnd.post(new Runnable() {
+          @Override
+	  public void run() {
+            if(wv.canGoBack()) {
+              wv.goBack();
+            } else {
+              a.defaultOnBackPressed();
+            }
+	  }
+	});
+      }
+      public final void clearHistory() {
+        hnd.post(new Runnable() {
+          @Override
+	  public void run() {
+            wv.clearHistory();
+	  }
+        });
       }
     };
   }
