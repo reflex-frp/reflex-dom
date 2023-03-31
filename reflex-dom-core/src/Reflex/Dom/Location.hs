@@ -13,10 +13,12 @@ module Reflex.Dom.Location
   , getLocationUrl
   , manageHistory
   , manageHistory'
+  , manageHistoryExposingExternalUpdates
   , HistoryCommand (..)
   , HistoryStateUpdate (..)
   , HistoryItem (..)
   , getLocationUri
+  , popHistoryState
   ) where
 
 import Reflex
@@ -170,7 +172,15 @@ manageHistory'
   -- ^ Don't do anything until this event has fired
   -> Event t HistoryCommand
   -> m (Dynamic t HistoryItem)
-manageHistory' switchover runCmd = do
+manageHistory' switchover runCmd = fst <$> manageHistoryExposingExternalUpdates switchover runCmd
+
+manageHistoryExposingExternalUpdates
+  :: (MonadFix m, MonadJSM m, TriggerEvent t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m))
+  => Event t ()
+  -- ^ Don't do anything until this event has fired
+  -> Event t HistoryCommand
+  -> m (Dynamic t HistoryItem, Event t HistoryItem)
+manageHistoryExposingExternalUpdates switchover runCmd = do
   window <- DOM.currentWindowUnchecked
   location <- Window.getLocation window
   history <- Window.getHistory window
@@ -196,5 +206,16 @@ manageHistory' switchover runCmd = do
   itemSetInternal <- performEvent $ ffor itemSetInternal' $ \cmd -> liftJSM $ do
     runHistoryCommand history cmd
     getCurrentHistoryItem
-  holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
+  currentHistoryItem <- holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
+  pure (currentHistoryItem, itemSetExternal)
 --TODO: Handle title setting better
+
+popHistoryState
+  :: (PerformEvent t m, MonadJSM (Performable m))
+  => Event t ()
+  -> m ()
+popHistoryState evt =
+  performEvent_ $ ffor evt $ \_ -> do
+    window <- DOM.currentWindowUnchecked
+    history <- Window.getHistory window
+    History.back history

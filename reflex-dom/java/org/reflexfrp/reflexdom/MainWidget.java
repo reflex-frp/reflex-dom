@@ -156,14 +156,6 @@ public class MainWidget {
 	  }
 	});
       }
-      public final void clearHistory() {
-        hnd.post(new Runnable() {
-          @Override
-	  public void run() {
-            wv.clearHistory();
-	  }
-        });
-      }
     };
   }
 

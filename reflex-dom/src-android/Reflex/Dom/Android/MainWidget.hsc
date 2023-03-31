@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Android.MainWidget
   ( startMainWidget
-  , clearHistory
   , goBack
   , JSExecutor(..)
   , withGlobalJSExecutor
@@ -82,7 +81,6 @@ withGlobalJSExecutor f = liftIO $ do
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_start" startMainWidget_ :: HaskellActivity -> CString -> Ptr JSaddleCallbacksPtrs -> IO JSExecutor
 
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_runJS" runJS :: JSExecutor -> CString -> CSize -> IO ()
-foreign import ccall safe "Reflex_Dom_Android_MainWidget_clearHistory" clearHistory :: JSExecutor -> IO ()
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_back" goBack :: JSExecutor -> IO ()
 
 data JSaddleCallbacks = JSaddleCallbacks

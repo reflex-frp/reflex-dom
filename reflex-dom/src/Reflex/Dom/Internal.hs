@@ -9,7 +9,6 @@ module Reflex.Dom.Internal
   , mainWidget
   , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
   , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
-  , clearHistory -- Doesn't really belong here, but we need it.
   ) where
 
 import Data.ByteString (ByteString)
@@ -40,8 +39,6 @@ run jsm = do
   putStrLn $ "Running jsaddle-warp server on port " <> show port
   JW.run port jsm
 
-clearHistory :: JSM ()
-clearHistory = pure ()
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 #if defined(ios_HOST_OS)
 import Data.Default
@@ -61,8 +58,6 @@ run jsm = do
     Just p -> return $ "file://" <> p <> "/index.html"
   run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
 
-clearHistory :: JSM ()
-clearHistory = pure ()
 #else
 import Language.Javascript.JSaddle.WKWebView (run)
 #endif
@@ -76,8 +71,7 @@ import Data.Default
 import Data.IORef
 import Data.Maybe
 import Data.String
-import Reflex.Dom.Android.MainWidget hiding (clearHistory)
-import qualified Reflex.Dom.Android.MainWidget
+import Reflex.Dom.Android.MainWidget
 import System.IO
 import System.IO.Unsafe
 import Language.Javascript.JSaddle (JSM, eval)
@@ -95,9 +89,6 @@ run jsm = do
     }
   forever $ threadDelay 1000000000
 
-clearHistory :: MonadIO m => m ()
-clearHistory = withGlobalJSExecutor Reflex.Dom.Android.MainWidget.clearHistory
-
 triggerBackButton :: MonadIO m => m ()
 triggerBackButton = withGlobalJSExecutor goBack
 
@@ -107,13 +98,9 @@ import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
 run = Wasm.run 0
 
-clearHistory :: JSM ()
-clearHistory = pure ()
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
 
-clearHistory :: Monad m => m ()
-clearHistory = pure ()
 #endif
 
 mainWidget :: (forall x. Widget x ()) -> IO ()
