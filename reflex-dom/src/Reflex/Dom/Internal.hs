@@ -76,6 +76,12 @@ import System.IO
 import System.IO.Unsafe
 import Language.Javascript.JSaddle (JSM, eval)
 
+#if defined(ANDROID_INSECURE)
+indexUri = "http://appassets.androidplatform.net/index.html"
+#else
+indexUri = "https://appassets.androidplatform.net/index.html"
+#endif
+
 run :: JSM () -> IO ()
 run jsm = do
   hSetBuffering stdout LineBuffering
@@ -83,7 +89,7 @@ run jsm = do
   continueWithCallbacks $ def
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
-        let startPage = fromString "https:///appassets.androidplatform.net/index.html"
+        let startPage = fromString indexUri
         startMainWidget a startPage jsm
     , _activityCallbacks_onBackPressed = triggerBackButton
     }
