@@ -6,24 +6,26 @@ jobs:
   build:
     strategy:
       matrix:
-        ghc: ['8.4.4', '8.6.5', '8.8.4', '8.10.2']
-        os: ['ubuntu-latest', 'macos-latest']
-        exclude:
-          # There are some linker warnings in 802 on darwin that
-          # cause compilation to fail
-          # See https://github.com/NixOS/nixpkgs/issues/25139
-          - ghc: '8.0.2'
-            os: 'macos-latest'
+        ghc: ['8.4.4', '8.6.5', '8.8.4', '8.10.7', '9.2.5', '9.4.3']
+        os: ['ubuntu-latest']
     runs-on: ${{ matrix.os }}
 
     name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1
+    - uses: pierotofy/set-swap-space@v1.0
+      with:
+        swap-size-gb: 10
+    - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+      with:
+        repository: obsidiansystems/jsaddle
+        ref: aa/ghc94
+        path: jsaddle
+    - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
     - name: Cache
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       env:
         cache-name: cache-cabal
       with:
@@ -38,9 +40,7 @@ jobs:
     - name: Set up cabal project file to avoid webkit2gtk
       run: cp cabal.project-nogtk cabal.project
     - name: Install dependencies
-      run: |
-        cabal update
-        cabal build --only-dependencies --enable-tests --enable-benchmarks all
+      run: cabal build --only-dependencies --enable-tests --enable-benchmarks all
     - name: Build
       run: cabal build --enable-tests --enable-benchmarks all
     - name: Run tests
