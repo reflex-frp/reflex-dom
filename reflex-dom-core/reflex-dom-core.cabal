@@ -67,7 +67,7 @@ flag gc-tests
 library
   hs-source-dirs: src
   build-depends:
-    aeson >= 0.8 && < 2.1,
+    aeson >= 0.8 && < 2.2,
     base >= 4.7 && < 4.15,
     bifunctors >= 4.2 && < 6,
     bimap >= 0.3 && < 0.5,
