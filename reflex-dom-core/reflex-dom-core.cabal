@@ -1,6 +1,6 @@
 cabal-version: 1.24
 Name: reflex-dom-core
-Version: 0.7.0.2
+Version: 0.7.0.3
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Web applications without callbacks or side-effects.

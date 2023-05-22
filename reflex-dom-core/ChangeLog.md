@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.7.0.3
 
 * Loosen version bounds of aeson, ref-tf and constraints
 
