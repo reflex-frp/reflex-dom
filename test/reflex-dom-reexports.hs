@@ -14,7 +14,11 @@ import Distribution.PackageDescription.Parsec (runParseResult)
 import qualified Distribution.System as Dist
 import Distribution.Types.BuildInfo (buildable, defaultExtensions, defaultLanguage, hsSourceDirs, options)
 import Distribution.Types.CondTree (simplifyCondTree)
+#if MIN_VERSION_Cabal(3,2,0)
+import Distribution.Types.ConfVar (ConfVar(Arch, Impl, OS), condLibrary)
+#else
 import Distribution.Types.GenericPackageDescription (ConfVar(Arch, Impl, OS), condLibrary)
+#endif
 import Distribution.Types.Library (exposedModules, libBuildInfo, reexportedModules)
 import Distribution.Types.ModuleReexport (ModuleReexport, moduleReexportOriginalName, moduleReexportOriginalPackage)
 import Distribution.Types.PackageName (mkPackageName)
