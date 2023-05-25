@@ -27,7 +27,7 @@ import GHCJS.DOM.Element
 import GHCJS.DOM.Types (MonadJSM)
 
 -- |A list view for long lists. Creates a scrollable element and only renders child row elements near the current scroll position.
-virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+virtualListWithSelection :: forall t m k v. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k, Eq v)
   => Dynamic t Int -- ^ The height of the visible region in pixels
   -> Int -- ^ The height of each row in pixels
   -> Dynamic t Int -- ^ The total number of items
@@ -81,7 +81,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           preItems = min startingIndex numItems
       in (topPx - preItems * sizeIncrement, (startingIndex - preItems, preItems + numItems * 2))
 
-virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k, Eq v)
   => Dynamic t Int -- ^ A 'Dynamic' of the visible region's height in pixels
   -> Int -- ^ The fixed height of each row in pixels
   -> Dynamic t Int -- ^ A 'Dynamic' of the total number of items
@@ -126,7 +126,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       in (startingIndex, numItems)
 
 virtualListBuffered
-  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
+  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k, Eq v)
   => Int
   -> Dynamic t Int
   -> Int
