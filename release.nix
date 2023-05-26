@@ -15,7 +15,6 @@ let
       "ghcjs"
     ] ++ lib.optionals (reflex-platform.androidSupport) [
       "ghcAndroidAarch64"
-      "ghcAndroidAarch32"
     ] ++ lib.optionals (reflex-platform.iosSupport) [
       "ghcIosAarch64"
     ];
