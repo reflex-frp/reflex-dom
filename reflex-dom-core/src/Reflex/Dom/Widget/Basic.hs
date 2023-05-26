@@ -296,7 +296,7 @@ blank = return ()
 
 -- TODO: Move to an example project.
 -- | A widget to display a table with static columns and dynamic rows.
-tableDynAttr :: forall t m r k v. (Ord k, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
+tableDynAttr :: forall t m r k v. (Ord k, Eq r, DomBuilder t m, MonadHold t m, PostBuild t m, MonadFix m)
   => Text                                   -- ^ Class applied to <table> element
   -> [(Text, k -> Dynamic t r -> m v)]      -- ^ Columns of (header, row key -> row value -> child widget)
   -> Dynamic t (Map k r)                      -- ^ Map from row key to row value

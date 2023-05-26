@@ -5,6 +5,7 @@ module Main where
 
 import Control.Monad (when)
 import Data.List (intercalate)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, isNothing, mapMaybe)
 import qualified Data.Set as Set
 import Distribution.Compiler (CompilerFlavor(GHC))
@@ -14,7 +15,12 @@ import Distribution.PackageDescription.Parsec (runParseResult)
 import qualified Distribution.System as Dist
 import Distribution.Types.BuildInfo (buildable, defaultExtensions, defaultLanguage, hsSourceDirs, options)
 import Distribution.Types.CondTree (simplifyCondTree)
+#if MIN_VERSION_Cabal(3,2,0)
+import Distribution.Types.ConfVar (ConfVar(Arch, Impl, OS))
+import Distribution.Types.GenericPackageDescription (condLibrary)
+#else
 import Distribution.Types.GenericPackageDescription (ConfVar(Arch, Impl, OS), condLibrary)
+#endif
 import Distribution.Types.Library (exposedModules, libBuildInfo, reexportedModules)
 import Distribution.Types.ModuleReexport (ModuleReexport, moduleReexportOriginalName, moduleReexportOriginalPackage)
 import Distribution.Types.PackageName (mkPackageName)
@@ -70,4 +76,4 @@ parseCabalExports file = do
       let (_, lib) = simplifyCondTree evalConfVar condLib
       in (exposedModules lib, reexportedModules lib)
     Right Nothing -> error $ "Haskell package has no library component: " <> file
-    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (map show errors)
+    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (map show (NE.toList errors))
