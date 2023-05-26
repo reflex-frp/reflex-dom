@@ -31,13 +31,13 @@ let
             } {};
             reflex = self.callHackageDirect {
               pkg = "reflex";
-              ver = "0.8.2.1";
-              sha256 = "10d1qkqwaqp9zaswmziaqgz60ifg5383d2i2ml2cqccn8943h26b";
+              ver = "0.9.0.1";
+              sha256 = "sha256-HhBBElxwfzGt1tOMCtYLT9Ody9mvaDb2ppuy3qFWLPs=";
             } {};
             patch = self.callHackageDirect {
               pkg = "patch";
-              ver = "0.0.7.0";
-              sha256 = "0yr2hk3fpwjxi1z0n384k3aq9b3z00c02bbwqybcj3n20l4k17l6";
+              ver = "0.0.8.2";
+              sha256 = "sha256-7+dwuBNo33XPsBo5DhFD4oyKBWrOvTHUyA6RJyHGH5g=";
             } {};
           })
           # Use this package's source for reflex

@@ -5,6 +5,7 @@ module Main where
 
 import Control.Monad (when)
 import Data.List (intercalate)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe, isNothing, mapMaybe)
 import qualified Data.Set as Set
 import Distribution.Compiler (CompilerFlavor(GHC))
@@ -75,4 +76,4 @@ parseCabalExports file = do
       let (_, lib) = simplifyCondTree evalConfVar condLib
       in (exposedModules lib, reexportedModules lib)
     Right Nothing -> error $ "Haskell package has no library component: " <> file
-    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (map show errors)
+    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (map show (NE.toList errors))
