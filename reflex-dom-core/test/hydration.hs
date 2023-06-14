@@ -89,9 +89,6 @@ import qualified Test.WebDriver.Capabilities as WD
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 
--- ORPHAN: https://github.com/kallisti-dev/hs-webdriver/pull/167
-deriving instance MonadMask WD
-
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
 
