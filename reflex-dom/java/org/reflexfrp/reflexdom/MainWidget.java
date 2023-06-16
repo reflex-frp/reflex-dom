@@ -45,6 +45,9 @@ public class MainWidget {
     ws.setAllowUniversalAccessFromFileURLs(true);
     ws.setDomStorageEnabled(true);
     wv.setWebContentsDebuggingEnabled(true);
+    // allow file access on newer android
+    ws.setAllowContentAccess(true);
+    ws.setAllowFileAccess(true);
     // allow video to play without user interaction
     wv.getSettings().setMediaPlaybackRequiresUserGesture(false);
     final AtomicBoolean jsaddleLoaded = new AtomicBoolean(false);
