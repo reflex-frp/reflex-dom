@@ -1,6 +1,6 @@
 ## [Reflex-DOM](https://reflex-frp.org)
 
-[![Haskell](https://img.shields.io/badge/language-Haskell-orange.svg)](https://haskell.org) [![Hackage](https://img.shields.io/hackage/v/reflex-dom.svg)](https://hackage.haskell.org/package/reflex-dom) [![Hackage CI](https://matrix.hackage.haskell.org/api/v2/packages/reflex-dom/badge)](https://matrix.hackage.haskell.org/#/package/reflex-dom) [![BSD3 License](https://img.shields.io/badge/license-BSD3-blue.svg)](https://github.com/reflex-frp/reflex-dom/blob/master/LICENSE)
+[![Haskell](https://img.shields.io/badge/language-Haskell-orange.svg)](https://haskell.org) [![Hackage](https://img.shields.io/hackage/v/reflex-dom.svg)](https://hackage.haskell.org/package/reflex-dom) [![BSD3 License](https://img.shields.io/badge/license-BSD3-blue.svg)](https://github.com/reflex-frp/reflex-dom/blob/master/LICENSE)
 
 Web applications without callbacks or side-effects. Reflex-DOM brings the power of [Functional Reactive Programming (FRP)](https://wiki.haskell.org/Functional_Reactive_Programming) to the web. Build [HTML](https://developer.mozilla.org/en-US/docs/Web/HTML) and other [Document Object Model (DOM)](https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model) data with a pure functional interface.
 
