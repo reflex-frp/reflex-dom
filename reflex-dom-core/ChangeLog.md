@@ -1,9 +1,15 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.8.0.0
 
-* Loosen version bounds of ref-tf and constraints
-* 
+* Support reflex 0.9
+* *Breaking change*: tableDynAttr now requires an `Eq` constraint on the row value type
+* *Breaking change*: all of the virtualList functions in Reflex.Dom.Widget.Lazy now require an `Eq` constraint on the row value type
+
+## 0.7.0.3
+
+* Loosen version bounds of aeson, ref-tf and constraints
+
 ## 0.7.0.2
 
 * Require reflex >= 0.8.2.1 and switch to `commutative-semigroups`

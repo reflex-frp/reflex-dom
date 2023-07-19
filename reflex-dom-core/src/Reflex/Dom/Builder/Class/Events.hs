@@ -12,7 +12,8 @@ module Reflex.Dom.Builder.Class.Events where
 import Data.GADT.Compare.TH
 #else
 import Data.GADT.Compare
-       (GOrdering(..), (:~:)(..), GEq(..), GCompare(..))
+       (GOrdering(..), GEq(..), GCompare(..))
+import Data.Type.Equality ((:~:)(..))
 #endif
 import Data.Text (Text)
 
