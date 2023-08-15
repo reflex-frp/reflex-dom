@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## 0.8.0.0-r1
+
+* Loosen lens version bounds
+
 ## 0.8.0.0
 
 * Support reflex 0.9
