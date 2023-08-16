@@ -98,8 +98,9 @@ import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
 run = Wasm.run 0
 
-#else
+#elif defined(MIN_VERSION_jsaddle_webkit2gtk)
 import Language.Javascript.JSaddle.WebKitGTK (run)
+#else
 
 #endif
 
