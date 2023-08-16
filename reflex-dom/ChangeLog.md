@@ -2,7 +2,7 @@
 
 ## 0.6.2.0
 
-* [#458](https://github.com/reflex-frp/reflex-dom/pull/458): Allow file access on newer android
+* Allow file access on newer android
 
 ## 0.6.1.1-r1
 
