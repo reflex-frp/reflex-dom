@@ -62,7 +62,7 @@ library
     other-modules: Reflex.Dom.Android.MainWidget
     build-depends:
       aeson >= 1.4 && < 2.2,
-      android-activity == 0.1.*,
+      android-activity == 0.2.*,
       data-default == 0.7.*,
       jsaddle >= 0.9.6 && < 0.10
     c-sources: cbits/MainWidget.c

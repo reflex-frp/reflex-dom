@@ -2,6 +2,7 @@
 
 ## 0.6.3.0
 
+* Use android-activity 0.2
 * Fix bug in android back button handler
 
 ## 0.6.2.0
