@@ -145,6 +145,7 @@ import Data.String (IsString)
 import Data.Text (Text)
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
+import GHCJS.DOM.RequestAnimationFrameCallback
 import GHCJS.DOM.ClipboardEvent as ClipboardEvent
 import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, createElementNS, createTextNode, createComment)
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute)
@@ -152,8 +153,16 @@ import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
-import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent)
+import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, KeyboardEvent, Node, TouchEvent, WheelEvent, uncheckedCastTo, ClipboardEvent, RequestAnimationFrameCallback (..))
+#ifdef ghcjs_HOST_OS
+import GHCJS.Foreign.Callback (releaseCallback)
+#else
+import Language.Javascript.JSaddle.Types (freeSyncCallback)
+#endif
+import Language.Javascript.JSaddle.Object (Function (..))
 import GHCJS.DOM.UIEvent
+import GHCJS.DOM.Window (requestAnimationFrame)
+import Language.Javascript.JSaddle (freeFunction)
 #ifndef ghcjs_HOST_OS
 import Language.Javascript.JSaddle (call, eval) -- Avoid using eval in ghcjs. Use ffi instead
 #endif
@@ -162,8 +171,8 @@ import Reflex.Class as Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dynamic
 import Reflex.Host.Class
-import Reflex.Patch.DMapWithMove (PatchDMapWithMove(..))
-import Reflex.Patch.MapWithMove (PatchMapWithMove(..))
+import Data.Patch.DMapWithMove (PatchDMapWithMove(..))
+import Data.Patch.MapWithMove (PatchMapWithMove(..))
 import Reflex.PerformEvent.Base (PerformEventT)
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Base (PostBuildT)
@@ -202,9 +211,9 @@ import qualified GHCJS.DOM.TouchList as TouchList
 import qualified GHCJS.DOM.Types as DOM
 import qualified GHCJS.DOM.Window as Window
 import qualified GHCJS.DOM.WheelEvent as WheelEvent
-import qualified Reflex.Patch.DMap as PatchDMap
-import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
-import qualified Reflex.Patch.MapWithMove as PatchMapWithMove
+import qualified Data.Patch.DMap as PatchDMap
+import qualified Data.Patch.DMapWithMove as PatchDMapWithMove
+import qualified Data.Patch.MapWithMove as PatchMapWithMove
 import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
 
 #ifndef USE_TEMPLATE_HASKELL
@@ -355,6 +364,36 @@ newtype DomRenderHookT t m a = DomRenderHookT { unDomRenderHookT :: RequesterT t
 #endif
            )
 
+inAnimationFrameWithRef
+  :: Ref JSM [Double -> JSM ()]
+  -> (Double -> JSM ())
+  -> JSM ()
+inAnimationFrameWithRef animationFrameHandlerRef f = do
+    -- Add this handler to the list to be run by the callback
+    -- It is important to do sync here, otherwise we may end up having race
+    -- liftIO does a sync internally
+    wasEmpty <- atomicModifyRef' animationFrameHandlerRef $ \old ->
+      (f : old, null old)
+    -- If this was the first handler added set up a callback
+    -- to run the handlers in the next animation frame.
+    when wasEmpty $ do
+        win <- DOM.currentWindowUnchecked
+        rec cb@(RequestAnimationFrameCallback innerCb) <- newRequestAnimationFrameCallbackSync $ \t -> do
+              -- This is a one off handler so free it when it runs
+#ifdef ghcjs_HOST_OS
+              releaseCallback innerCb
+#else
+              let DOM.Callback innerCbFunction = innerCb
+              freeSyncCallback $ functionCallback innerCbFunction
+#endif
+              -- Take the list of handers and empty it
+              handlersToRun <- atomicModifyRef' animationFrameHandlerRef $ \old -> ([], old)
+              -- Exectute handlers in the order
+              forM_ (reverse handlersToRun) (\handler -> handler t)
+        -- Add the callback function
+        void $ requestAnimationFrame win cb
+    return ()
+
 {-# INLINABLE runDomRenderHookT #-}
 runDomRenderHookT
   :: (MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadJSM m, MonadJSM (Performable m), MonadRef m, Ref m ~ IORef)
@@ -362,15 +401,16 @@ runDomRenderHookT
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -> m a
 runDomRenderHookT (DomRenderHookT a) events = do
+  animationFrameHandlerRef <- newRef []
+  let runInAnimationFrame f x = void . inAnimationFrameWithRef animationFrameHandlerRef $ \_ -> do
+        v <- synchronously x
+        void . liftIO $ f v
   flip runTriggerEventT events $ do
     rec (result, req) <- runRequesterT a rsp
         rsp <- performEventAsync $ ffor req $ \rm f -> liftJSM $ runInAnimationFrame f $
           traverseRequesterData (fmap Identity) rm
     return result
   where
-    runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
-        v <- synchronously x
-        void . liftIO $ f v
 
 instance MonadTrans (DomRenderHookT t) where
   {-# INLINABLE lift #-}
@@ -944,94 +984,94 @@ inputElementInternal cfg = getHydrationMode >>= \case
     , _inputElement_raw = ()
     }
   HydrationMode_Hydrating -> do
-  ((e, _), domElementRef) <- hydrateElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
-  (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
-  (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
-  (focusChange, triggerFocusChange) <- newTriggerEvent
-  (checkedChangedByUI, triggerCheckedChangedByUI) <- newTriggerEvent
-  (checkedChangedBySetChecked, triggerCheckedChangedBySetChecked) <- newTriggerEvent
-  (fileChange, triggerFileChange) <- newTriggerEvent
-  doc <- askDocument
-  -- Expected initial value from config
-  let v0 = _inputElementConfig_initialValue cfg
-      c0 = _inputElementConfig_initialChecked cfg
-      valuesAtSwitchover = do
-        v <- maybe (pure $ pure v0) (hold v0) (_inputElementConfig_setValue cfg)
-        c <- maybe (pure $ pure c0) (hold c0) (_inputElementConfig_setChecked cfg)
-        pure (v, c)
-  addHydrationStepWithSetup valuesAtSwitchover $ \(switchoverValue', switchoverChecked') -> do
-    switchoverValue <- sample switchoverValue'
-    switchoverChecked <- sample switchoverChecked'
-    domElement <- liftIO $ readIORef domElementRef
-    let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
-        getValue = Input.getValue domInputElement
-    -- When the value has been updated by setValue before switchover, we must
-    -- send an update here to remain in sync. This is because the later
-    -- requestDomAction based on the setValue event will not capture events
-    -- happening before postBuild, because this code runs after switchover.
-    when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
-    -- The user could have altered the value before switchover. This must be
-    -- triggered after the setValue one in order for the events to be in the
-    -- correct order.
-    liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
-    -- Watch for user interaction and trigger event accordingly
-    requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
-    for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
-      requestDomAction_ $ ffor eSetValue $ \v' -> do
-        Input.setValue domInputElement v'
-        v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-        liftIO $ triggerChangeBySetValue v
-    let focusChange' = leftmost
-          [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-          , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-          ]
-    liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-    requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
-    -- When the checked state has been updated by setChecked before
-    -- switchover, we must send an update here to remain in sync. This is
-    -- because the later requestDomAction based on the setChecked event will not
-    -- capture events happening before postBuild, because this code runs after
-    -- switchover.
-    when (c0 /= switchoverChecked) $ liftIO $ triggerCheckedChangedBySetChecked switchoverChecked
-    -- The user could have clicked the checkbox before switchover, we only
-    -- detect cases where they flipped the state. This must be triggered after
-    -- the setValue one in order for the events to be in the correct order.
-    liftJSM (Input.getChecked domInputElement) >>= \realChecked -> when (realChecked /= switchoverChecked) $
-      liftIO $ triggerCheckedChangedByUI realChecked
-    _ <- liftJSM $ domInputElement `on` Events.click $ do
-      liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
-    for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
-      requestDomAction $ ffor eNewchecked $ \newChecked -> do
-        oldChecked <- Input.getChecked domInputElement
-        Input.setChecked domInputElement newChecked
-        when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
-    _ <- liftJSM $ domInputElement `on` Events.change $ do
-      mfiles <- Input.getFiles domInputElement
-      let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
-      liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
-    return ()
-  checked' <- holdDyn c0 $ leftmost
-    [ checkedChangedBySetChecked
-    , checkedChangedByUI
-    ]
-  checked <- holdUniqDyn checked'
-  let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
-  hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
-  v <- holdDyn v0 $ leftmost
-    [ valueChangedBySetValue
-    , valueChangedByUI
-    ]
-  files <- holdDyn mempty fileChange
-  return $ InputElement
-    { _inputElement_value = v
-    , _inputElement_checked = checked
-    , _inputElement_checkedChange = checkedChangedByUI
-    , _inputElement_input = valueChangedByUI
-    , _inputElement_hasFocus = hasFocus
-    , _inputElement_element = e
-    , _inputElement_raw = ()
-    , _inputElement_files = files
-    }
+    ((e, _), domElementRef) <- hydrateElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+    (checkedChangedByUI, triggerCheckedChangedByUI) <- newTriggerEvent
+    (checkedChangedBySetChecked, triggerCheckedChangedBySetChecked) <- newTriggerEvent
+    (fileChange, triggerFileChange) <- newTriggerEvent
+    doc <- askDocument
+    -- Expected initial value from config
+    let v0 = _inputElementConfig_initialValue cfg
+        c0 = _inputElementConfig_initialChecked cfg
+        valuesAtSwitchover = do
+          v <- maybe (pure $ pure v0) (hold v0) (_inputElementConfig_setValue cfg)
+          c <- maybe (pure $ pure c0) (hold c0) (_inputElementConfig_setChecked cfg)
+          pure (v, c)
+    addHydrationStepWithSetup valuesAtSwitchover $ \(switchoverValue', switchoverChecked') -> do
+      switchoverValue <- sample switchoverValue'
+      switchoverChecked <- sample switchoverChecked'
+      domElement <- liftIO $ readIORef domElementRef
+      let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
+          getValue = Input.getValue domInputElement
+      -- When the value has been updated by setValue before switchover, we must
+      -- send an update here to remain in sync. This is because the later
+      -- requestDomAction based on the setValue event will not capture events
+      -- happening before postBuild, because this code runs after switchover.
+      when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
+      -- The user could have altered the value before switchover. This must be
+      -- triggered after the setValue one in order for the events to be in the
+      -- correct order.
+      liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+      for_ (_inputElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
+          Input.setValue domInputElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+      -- When the checked state has been updated by setChecked before
+      -- switchover, we must send an update here to remain in sync. This is
+      -- because the later requestDomAction based on the setChecked event will not
+      -- capture events happening before postBuild, because this code runs after
+      -- switchover.
+      when (c0 /= switchoverChecked) $ liftIO $ triggerCheckedChangedBySetChecked switchoverChecked
+      -- The user could have clicked the checkbox before switchover, we only
+      -- detect cases where they flipped the state. This must be triggered after
+      -- the setValue one in order for the events to be in the correct order.
+      liftJSM (Input.getChecked domInputElement) >>= \realChecked -> when (realChecked /= switchoverChecked) $
+        liftIO $ triggerCheckedChangedByUI realChecked
+      _ <- liftJSM $ domInputElement `on` Events.click $ do
+        liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
+      for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
+        requestDomAction $ ffor eNewchecked $ \newChecked -> do
+          oldChecked <- Input.getChecked domInputElement
+          Input.setChecked domInputElement newChecked
+          when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
+      _ <- liftJSM $ domInputElement `on` Events.change $ do
+        mfiles <- Input.getFiles domInputElement
+        let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0..] . fromIntegral =<< FileList.getLength xs
+        liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
+      return ()
+    checked' <- holdDyn c0 $ leftmost
+      [ checkedChangedBySetChecked
+      , checkedChangedByUI
+      ]
+    checked <- holdUniqDyn checked'
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
+    v <- holdDyn v0 $ leftmost
+      [ valueChangedBySetValue
+      , valueChangedByUI
+      ]
+    files <- holdDyn mempty fileChange
+    return $ InputElement
+      { _inputElement_value = v
+      , _inputElement_checked = checked
+      , _inputElement_checkedChange = checkedChangedByUI
+      , _inputElement_input = valueChangedByUI
+      , _inputElement_hasFocus = hasFocus
+      , _inputElement_element = e
+      , _inputElement_raw = ()
+      , _inputElement_files = files
+      }
 
 {-# INLINE textAreaElementImmediate #-}
 textAreaElementImmediate
@@ -1075,54 +1115,54 @@ textAreaElementInternal cfg = getHydrationMode >>= \case
     , _textAreaElement_raw = ()
     }
   HydrationMode_Hydrating -> do
-  ((e, _), domElementRef) <- hydrateElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
-  (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
-  (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
-  (focusChange, triggerFocusChange) <- newTriggerEvent
-  doc <- askDocument
-  -- Expected initial value from config
-  let v0 = _textAreaElementConfig_initialValue cfg
-      valueAtSwitchover = maybe (pure $ pure v0) (hold v0) (_textAreaElementConfig_setValue cfg)
-  addHydrationStepWithSetup valueAtSwitchover $ \switchoverValue' -> do
-    switchoverValue <- sample switchoverValue'
-    domElement <- liftIO $ readIORef domElementRef
-    let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
-        getValue = TextArea.getValue domTextAreaElement
-    -- When the value has been updated by setValue before switchover, we must
-    -- send an update here to remain in sync. This is because the later
-    -- requestDomAction based on the setValue event will not capture events
-    -- happening before postBuild, because this code runs after switchover.
-    when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
-    -- The user could have altered the value before switchover. This must be
-    -- triggered after the setValue one in order for the events to be in the
-    -- correct order.
-    liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
-    -- Watch for user interaction and trigger event accordingly
-    requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
-    for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
-      requestDomAction_ $ ffor eSetValue $ \v' -> do
-        TextArea.setValue domTextAreaElement v'
-        v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-        liftIO $ triggerChangeBySetValue v
-    let focusChange' = leftmost
-          [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-          , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-          ]
-    liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-    requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
-  let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
-  hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
-  v <- holdDyn v0 $ leftmost
-    [ valueChangedBySetValue
-    , valueChangedByUI
-    ]
-  return $ TextAreaElement
-    { _textAreaElement_value = v
-    , _textAreaElement_input = valueChangedByUI
-    , _textAreaElement_hasFocus = hasFocus
-    , _textAreaElement_element = e
-    , _textAreaElement_raw = ()
-    }
+    ((e, _), domElementRef) <- hydrateElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+    doc <- askDocument
+    -- Expected initial value from config
+    let v0 = _textAreaElementConfig_initialValue cfg
+        valueAtSwitchover = maybe (pure $ pure v0) (hold v0) (_textAreaElementConfig_setValue cfg)
+    addHydrationStepWithSetup valueAtSwitchover $ \switchoverValue' -> do
+      switchoverValue <- sample switchoverValue'
+      domElement <- liftIO $ readIORef domElementRef
+      let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
+          getValue = TextArea.getValue domTextAreaElement
+      -- When the value has been updated by setValue before switchover, we must
+      -- send an update here to remain in sync. This is because the later
+      -- requestDomAction based on the setValue event will not capture events
+      -- happening before postBuild, because this code runs after switchover.
+      when (v0 /= switchoverValue) $ liftIO $ triggerChangeBySetValue switchoverValue
+      -- The user could have altered the value before switchover. This must be
+      -- triggered after the setValue one in order for the events to be in the
+      -- correct order.
+      liftJSM getValue >>= \realValue -> when (realValue /= switchoverValue) $ liftIO $ triggerChangeByUI realValue
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Input)
+      for_ (_textAreaElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
+          TextArea.setValue domTextAreaElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
+    v <- holdDyn v0 $ leftmost
+      [ valueChangedBySetValue
+      , valueChangedByUI
+      ]
+    return $ TextAreaElement
+      { _textAreaElement_value = v
+      , _textAreaElement_input = valueChangedByUI
+      , _textAreaElement_hasFocus = hasFocus
+      , _textAreaElement_element = e
+      , _textAreaElement_raw = ()
+      }
 
 {-# INLINE selectElementImmediate #-}
 selectElementImmediate
@@ -1170,47 +1210,47 @@ selectElementInternal cfg child = getHydrationMode >>= \case
     , _selectElement_raw = ()
     }, result)
   HydrationMode_Hydrating -> do
-  ((e, result), domElementRef) <- hydrateElement "select" (cfg ^. selectElementConfig_elementConfig) child
-  (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
-  (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
-  (focusChange, triggerFocusChange) <- newTriggerEvent
-  doc <- askDocument
-  -- Expected initial value from config
-  let v0 = _selectElementConfig_initialValue cfg
-  addHydrationStep $ do
-    domElement <- liftIO $ readIORef domElementRef
-    let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
-        getValue = Select.getValue domSelectElement
-    -- The browser might have messed with the value, or the user could have
-    -- altered it before activation, so we set it if it isn't what we expect
-    liftJSM getValue >>= \v0' -> do
-      when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
-    -- Watch for user interaction and trigger event accordingly
-    requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Change)
-    for_ (_selectElementConfig_setValue cfg) $ \eSetValue ->
-      requestDomAction_ $ ffor eSetValue $ \v' -> do
-        Select.setValue domSelectElement v'
-        v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
-        liftIO $ triggerChangeBySetValue v
-    let focusChange' = leftmost
-          [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
-          , True <$ Reflex.select (_element_events e) (WrapArg Focus)
-          ]
-    liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
-    requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
-  let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
-  hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
-  v <- holdDyn v0 $ leftmost
-    [ valueChangedBySetValue
-    , valueChangedByUI
-    ]
-  return $ (,result) $ SelectElement
-    { _selectElement_value = v
-    , _selectElement_change = valueChangedByUI
-    , _selectElement_hasFocus = hasFocus
-    , _selectElement_element = e
-    , _selectElement_raw = ()
-    }
+    ((e, result), domElementRef) <- hydrateElement "select" (cfg ^. selectElementConfig_elementConfig) child
+    (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
+    (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
+    (focusChange, triggerFocusChange) <- newTriggerEvent
+    doc <- askDocument
+    -- Expected initial value from config
+    let v0 = _selectElementConfig_initialValue cfg
+    addHydrationStep $ do
+      domElement <- liftIO $ readIORef domElementRef
+      let domSelectElement = uncheckedCastTo DOM.HTMLSelectElement domElement
+          getValue = Select.getValue domSelectElement
+      -- The browser might have messed with the value, or the user could have
+      -- altered it before activation, so we set it if it isn't what we expect
+      liftJSM getValue >>= \v0' -> do
+        when (v0' /= v0) $ liftIO $ triggerChangeByUI v0'
+      -- Watch for user interaction and trigger event accordingly
+      requestDomAction_ $ (liftJSM getValue >>= liftIO . triggerChangeByUI) <$ Reflex.select (_element_events e) (WrapArg Change)
+      for_ (_selectElementConfig_setValue cfg) $ \eSetValue ->
+        requestDomAction_ $ ffor eSetValue $ \v' -> do
+          Select.setValue domSelectElement v'
+          v <- getValue -- We get the value after setting it in case the browser has mucked with it somehow
+          liftIO $ triggerChangeBySetValue v
+      let focusChange' = leftmost
+            [ False <$ Reflex.select (_element_events e) (WrapArg Blur)
+            , True <$ Reflex.select (_element_events e) (WrapArg Focus)
+            ]
+      liftIO . triggerFocusChange =<< Node.isSameNode (toNode domElement) . fmap toNode =<< Document.getActiveElement doc
+      requestDomAction_ $ liftIO . triggerFocusChange <$> focusChange'
+    let initialFocus = False -- Assume it isn't focused, but we update the actual focus state at switchover
+    hasFocus <- holdUniqDyn =<< holdDyn initialFocus focusChange
+    v <- holdDyn v0 $ leftmost
+      [ valueChangedBySetValue
+      , valueChangedByUI
+      ]
+    return $ (,result) $ SelectElement
+      { _selectElement_value = v
+      , _selectElement_change = valueChangedByUI
+      , _selectElement_hasFocus = hasFocus
+      , _selectElement_element = e
+      , _selectElement_raw = ()
+      }
 
 {-# INLINE textNodeImmediate #-}
 textNodeImmediate

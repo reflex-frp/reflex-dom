@@ -9,6 +9,7 @@ module Reflex.Dom.Xhr.Foreign (
 ) where
 
 import Control.Exception (throwIO)
+import Control.Monad.Catch (catch, throwM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -20,7 +21,6 @@ import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, XMLHttpRequestProgressEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 import Prelude hiding (error)
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
@@ -69,7 +69,7 @@ newtype XhrPayload = XhrPayload { unXhrPayload :: JSVal }
 
 -- This used to be a non blocking call, but now it uses an interruptible ffi
 xmlHttpRequestSend :: IsXhrPayload payload => XMLHttpRequest -> payload -> JSM ()
-xmlHttpRequestSend self p = sendXhrPayload self p `JS.catch` (liftIO . throwIO . convertException)
+xmlHttpRequestSend self p = sendXhrPayload self p `catch` (throwM . convertException)
 
 
 xmlHttpRequestSetRequestHeader :: (ToJSString header, ToJSString value, MonadJSM m)

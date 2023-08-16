@@ -24,10 +24,10 @@ import Foreign.Marshal.Utils
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
-import Language.Javascript.JSaddle (JSM)
+import Language.Javascript.JSaddle (JSM, runJSM)
 import Language.Javascript.JSaddle.Run (runJavaScript)
-import Language.Javascript.JSaddle.Run.Files (initState, runBatch, ghcjsHelpers)
 import System.IO.Unsafe
+import Language.Javascript.JSaddle.Run.Files (jsaddleCoreJs, ghcjsHelpers)
 
 #include "MainWidget.h"
 
@@ -39,9 +39,9 @@ startMainWidget a url jsm = do
         executor <- readIORef executorRef
         BSU.unsafeUseAsCStringLen (LBS.toStrict $ "runJSaddleBatch(" <> encode batch <> ");") $ \(cstr, len) -> do
           runJS executor cstr (fromIntegral len)
-  (processResult, processSyncResult, start) <- runJavaScript go jsm
+  (processResult, processSyncResult, env) <- runJavaScript go
   callbacks <- new <=< jsaddleCallbacksToPtrs $ JSaddleCallbacks
-    { _jsaddleCallbacks_jsaddleStart = void $ forkIO start
+    { _jsaddleCallbacks_jsaddleStart = void $ forkIO $ runJSM jsm env
     , _jsaddleCallbacks_jsaddleResult = \s -> do
         case decode $ LBS.fromStrict s of
           Nothing -> error $ "jsaddle message decode failed: " <> show s
@@ -50,12 +50,15 @@ startMainWidget a url jsm = do
         case decode $ LBS.fromStrict s of
           Nothing -> error $ "jsaddle message decode failed: " <> show s
           Just r -> LBS.toStrict . encode <$> processSyncResult r
-    , _jsaddleCallbacks_jsaddleJsData = LBS.toStrict $ ghcjsHelpers <> "\
+    , _jsaddleCallbacks_jsaddleJsData = LBS.toStrict $ jsaddleCoreJs <> ghcjsHelpers <> "\
         \runJSaddleBatch = (function() {\n\
-        \ " <> initState <> "\n\
+        \ var core = jsaddleCoreJs(window, function(a) {\n\
+        \     jsaddle.postMessage(JSON.stringify(a));\n\
+        \   }, function(a) {\n\
+        \     return JSON.parse(jsaddle.syncMessage(JSON.stringify(a)));\n\
+        \ }, 20);\n\
         \ return function(batch) {\n\
-        \ " <> runBatch (\a -> "jsaddle.postMessage(JSON.stringify(" <> a <> "));")
-                  (Just (\a -> "JSON.parse(jsaddle.syncMessage(JSON.stringify(" <> a <> ")))")) <> "\
+        \  core.processReqs(batch);\n\
         \ };\n\
         \})();\n\
         \jsaddle.postReady();\n"

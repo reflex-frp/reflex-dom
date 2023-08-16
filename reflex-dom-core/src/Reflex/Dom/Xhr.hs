@@ -175,7 +175,7 @@ import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
 import Data.Typeable
 
-import Language.Javascript.JSaddle.Monad (JSM, askJSM, runJSM, MonadJSM, liftJSM)
+import Language.Javascript.JSaddle.Types (JSM, askJSM, runJSM, MonadJSM, liftJSM)
 
 data XhrRequest a
    = XhrRequest { _xhrRequest_method :: Text
