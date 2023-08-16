@@ -150,8 +150,6 @@ public class MainWidget {
 	  public void run() {
             if(wv.canGoBack()) {
               wv.goBack();
-            } else {
-              a.defaultOnBackPressed();
             }
 	  }
 	});

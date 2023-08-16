@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.3.0
+
+* Fix bug in android back button handler
+
 ## 0.6.2.0
 
 * [#452](https://github.com/reflex-frp/reflex-dom/pull/452) Allow file access on newer android, following usage recommended by the [official docs](https://developer.android.com/reference/androidx/webkit/WebViewAssetLoader)
