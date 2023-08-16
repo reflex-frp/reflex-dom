@@ -4,7 +4,7 @@
 
 let
   native-reflex-platform = reflex-platform-fun {};
-  inherit (native-reflex-platform.nixpkgs) lib;
+  inherit (native-reflex-platform.nixpkgs) lib haskell;
 
   tests = system: import ./test { pkgs = (reflex-platform-fun { inherit system; }).nixpkgs; };
 
@@ -55,11 +55,13 @@ let
                 ./test
               ])) ./.;
             };
+            reflex-dom-core_disable-use-template-haskell = haskell.lib.disableCabalFlag super.reflex-dom-core "use-template-haskell";
           })
         ];
       };
       all = tests system // {
         inherit (reflex-platform.${ghc})
+          reflex-dom-core_disable-use-template-haskell
           reflex-dom-core
           reflex-dom
           ;
