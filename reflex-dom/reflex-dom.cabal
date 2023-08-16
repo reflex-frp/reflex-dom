@@ -104,6 +104,7 @@ library
   exposed-modules:
     Reflex.Dom
     Reflex.Dom.Internal
+    Reflex.Dom.Location.Platform
   reexported-modules:
       Foreign.JavaScript.Orphans
     , Foreign.JavaScript.TH

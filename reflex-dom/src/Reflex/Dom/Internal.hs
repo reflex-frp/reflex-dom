@@ -38,6 +38,7 @@ run jsm = do
   port <- maybe 3003 read <$> lookupEnv "JSADDLE_WARP_PORT"
   putStrLn $ "Running jsaddle-warp server on port " <> show port
   JW.run port jsm
+
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 #if defined(ios_HOST_OS)
 import Data.Default
@@ -56,18 +57,24 @@ run jsm = do
       return ""
     Just p -> return $ "file://" <> p <> "/index.html"
   run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
+
 #else
 import Language.Javascript.JSaddle.WKWebView (run)
 #endif
 #elif defined(ANDROID)
 import Android.HaskellActivity
 import Control.Monad
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Concurrent
+import Language.Javascript.JSaddle (JSM)
 import Data.Default
+import Data.IORef
+import Data.Maybe
 import Data.String
 import Reflex.Dom.Android.MainWidget
 import System.IO
-import Language.Javascript.JSaddle (JSM)
+import System.IO.Unsafe
+import Language.Javascript.JSaddle (JSM, eval)
 
 run :: JSM () -> IO ()
 run jsm = do
@@ -78,15 +85,22 @@ run jsm = do
         a <- getHaskellActivity
         let startPage = fromString "https://appassets.androidplatform.net/index.html"
         startMainWidget a startPage jsm
+    , _activityCallbacks_onBackPressed = triggerBackButton
     }
   forever $ threadDelay 1000000000
+
+triggerBackButton :: MonadIO m => m ()
+triggerBackButton = withGlobalJSExecutor goBack
+
 #elif defined(wasm32_HOST_ARCH)
 import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
 import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
 run = Wasm.run 0
+
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)
+
 #endif
 
 mainWidget :: (forall x. Widget x ()) -> IO ()

@@ -2,7 +2,8 @@
 
 ## 0.6.2.0
 
-* Allow file access on newer android
+* [#452](https://github.com/reflex-frp/reflex-dom/pull/452) Allow file access on newer android, following usage recommended by the [official docs](https://developer.android.com/reference/androidx/webkit/WebViewAssetLoader)
+* [#453](https://github.com/reflex-frp/reflex-dom/pull/453) History management for android
 
 ## 0.6.1.1-r1
 
