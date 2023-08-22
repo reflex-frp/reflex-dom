@@ -249,11 +249,11 @@ instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t requ
 
 instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Commutative q, Query q, Eq q) => Prerender t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)
-  prerender server client = mdo
-    result <- queryDyn query
+  prerender server client = do
+    result <- askQueryResult
     x <- lift $ prerender (runQueryT server result) (runQueryT client result)
     let (a, inc) = splitDynPure x
-        query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
+    tellQueryDyn $ incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
     pure a
 
 instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
