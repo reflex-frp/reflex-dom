@@ -766,8 +766,8 @@ elementInternal
   -> HydrationDomBuilderT HydrationDomSpace t m (Element er HydrationDomSpace t, a)
 elementInternal elementTag cfg child = getHydrationMode >>= \case
   HydrationMode_Immediate -> do
-    (Element es _, result) <- elementImmediate elementTag cfg child
-    return (Element es (), result)
+    (Element es raw, result) <- elementImmediate elementTag cfg child
+    return (Element es raw, result)
   HydrationMode_Hydrating -> fst <$> hydrateElement elementTag cfg child
 
 {-# SPECIALIZE elementInternal
@@ -870,7 +870,8 @@ hydrateElement elementTag cfg child = do
       tryReadMVar cleanup >>= \case
         Nothing -> killThread threadId
         Just c -> c
-  return ((Element es (), result), e')
+  e <- liftIO $ readIORef e'
+  return ((Element es e, result), e')
 
 {-# SPECIALIZE hydrateElement
   :: Text
@@ -940,8 +941,8 @@ inputElementInternal
   => InputElementConfig er t HydrationDomSpace -> HydrationDomBuilderT HydrationDomSpace t m (InputElement er HydrationDomSpace t)
 inputElementInternal cfg = getHydrationMode >>= \case
   HydrationMode_Immediate -> ffor (inputElementImmediate cfg) $ \result -> result
-    { _inputElement_element = Element (_element_events $ _inputElement_element result) ()
-    , _inputElement_raw = ()
+    { _inputElement_element = Element (_element_events $ _inputElement_element result) (_element_raw $ _inputElement_element result)
+    , _inputElement_raw = _inputElement_raw result
     }
   HydrationMode_Hydrating -> do
   ((e, _), domElementRef) <- hydrateElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
@@ -1029,7 +1030,7 @@ inputElementInternal cfg = getHydrationMode >>= \case
     , _inputElement_input = valueChangedByUI
     , _inputElement_hasFocus = hasFocus
     , _inputElement_element = e
-    , _inputElement_raw = ()
+    , _inputElement_raw = DOM.uncheckedCastTo DOM.HTMLInputElement $ _element_raw e
     , _inputElement_files = files
     }
 
@@ -1071,8 +1072,8 @@ textAreaElementInternal
     => TextAreaElementConfig er t HydrationDomSpace -> HydrationDomBuilderT HydrationDomSpace t m (TextAreaElement er HydrationDomSpace t)
 textAreaElementInternal cfg = getHydrationMode >>= \case
   HydrationMode_Immediate -> ffor (textAreaElementImmediate cfg) $ \result -> result
-    { _textAreaElement_element = Element (_element_events $ _textAreaElement_element result) ()
-    , _textAreaElement_raw = ()
+    { _textAreaElement_element = Element (_element_events $ _textAreaElement_element result) (_element_raw $ _textAreaElement_element result)
+    , _textAreaElement_raw = _textAreaElement_raw result
     }
   HydrationMode_Hydrating -> do
   ((e, _), domElementRef) <- hydrateElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
@@ -1121,7 +1122,7 @@ textAreaElementInternal cfg = getHydrationMode >>= \case
     , _textAreaElement_input = valueChangedByUI
     , _textAreaElement_hasFocus = hasFocus
     , _textAreaElement_element = e
-    , _textAreaElement_raw = ()
+    , _textAreaElement_raw = DOM.uncheckedCastTo DOM.HTMLTextAreaElement $ _element_raw e
     }
 
 {-# INLINE selectElementImmediate #-}
@@ -1166,8 +1167,8 @@ selectElementInternal
     -> HydrationDomBuilderT HydrationDomSpace t m (SelectElement er HydrationDomSpace t, a)
 selectElementInternal cfg child = getHydrationMode >>= \case
   HydrationMode_Immediate -> ffor (selectElementImmediate cfg child) $ \(e, result) -> (e
-    { _selectElement_element = Element (_element_events $ _selectElement_element e) ()
-    , _selectElement_raw = ()
+    { _selectElement_element = Element (_element_events $ _selectElement_element e) $ _element_raw $ _selectElement_element e
+    , _selectElement_raw = _selectElement_raw e
     }, result)
   HydrationMode_Hydrating -> do
   ((e, result), domElementRef) <- hydrateElement "select" (cfg ^. selectElementConfig_elementConfig) child
@@ -1209,7 +1210,7 @@ selectElementInternal cfg child = getHydrationMode >>= \case
     , _selectElement_change = valueChangedByUI
     , _selectElement_hasFocus = hasFocus
     , _selectElement_element = e
-    , _selectElement_raw = ()
+    , _selectElement_raw = DOM.uncheckedCastTo DOM.HTMLSelectElement $ _element_raw e
     }
 
 {-# INLINE textNodeImmediate #-}
@@ -1423,10 +1424,10 @@ instance DomSpace HydrationDomSpace where
   type RawDocument HydrationDomSpace = DOM.Document
   type RawTextNode HydrationDomSpace = ()
   type RawCommentNode HydrationDomSpace = ()
-  type RawElement HydrationDomSpace = ()
-  type RawInputElement HydrationDomSpace = ()
-  type RawTextAreaElement HydrationDomSpace = ()
-  type RawSelectElement HydrationDomSpace = ()
+  type RawElement HydrationDomSpace = DOM.Element
+  type RawInputElement HydrationDomSpace = DOM.HTMLInputElement
+  type RawTextAreaElement HydrationDomSpace = DOM.HTMLTextAreaElement
+  type RawSelectElement HydrationDomSpace = DOM.HTMLSelectElement
   addEventSpecFlags _ en f es = es
     { _ghcjsEventSpec_filters =
         let f' = Just . GhcjsEventFilter . \case
@@ -1455,8 +1456,14 @@ instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT H
   textAreaElement = textAreaElementInternal
   {-# INLINABLE selectElement #-}
   selectElement = selectElementInternal
-  placeRawElement () = pure ()
-  wrapRawElement () _cfg = pure $ Element (EventSelector $ const never) ()
+  placeRawElement _ = pure ()
+  wrapRawElement e rawCfg = do
+    events <- askEvents
+    ctx <- askJSM
+    eventTriggerRefs <- wrap events e rawCfg
+    es <- newFanEventWithTrigger $ triggerBody ctx rawCfg events eventTriggerRefs e
+    pure $ Element es e
+
 
 instance SupportsHydrationDomBuilder t m => DomBuilder t (HydrationDomBuilderT GhcjsDomSpace t m) where
   type DomBuilderSpace (HydrationDomBuilderT GhcjsDomSpace t m) = GhcjsDomSpace
