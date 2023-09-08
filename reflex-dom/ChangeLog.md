@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.3.1
+
+* Don't depend on webkit2gtk on android
+
 ## 0.6.3.0
 
 * Use android-activity 0.2
