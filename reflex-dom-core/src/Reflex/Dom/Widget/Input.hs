@@ -30,7 +30,6 @@ import Data.Functor.Misc
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)

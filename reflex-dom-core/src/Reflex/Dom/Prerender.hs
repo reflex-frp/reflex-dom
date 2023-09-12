@@ -30,7 +30,6 @@ import Data.Semigroup (Semigroup)
 import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Void
-import Foreign.JavaScript.TH
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
