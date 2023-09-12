@@ -10,6 +10,7 @@ let
 
   perPlatform = lib.genAttrs supportedSystems (system: let
     reflex-platform = reflex-platform-fun { inherit system; };
+    ghcVersionCompat = import ./ghc-compat.nix { inherit system; };
     compilers = [
       "ghc"
       "ghcjs"
@@ -59,7 +60,7 @@ let
           })
         ];
       };
-      all = tests system // {
+      all = tests system // ghcVersionCompat // {
         inherit (reflex-platform.${ghc})
           reflex-dom-core_disable-use-template-haskell
           reflex-dom-core
