@@ -113,6 +113,7 @@ library
     , Reflex.Dom.Builder.Static
     , Reflex.Dom.Class
     , Reflex.Dom.Core
+    , Reflex.Dom.Event
     , Reflex.Dom.Location
     , Reflex.Dom.Main
     , Reflex.Dom.Modals.Class
