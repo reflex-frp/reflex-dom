@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.3.1-r1
+
+* Require reflex-dom-core >= 0.8.1.0
+
 ## 0.6.3.1
 
 * Don't depend on webkit2gtk on android
