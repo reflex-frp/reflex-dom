@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## 0.8.1.0
+
+* Add functions for managing history (popHistoryState and manageHistoryExposingExternalUpdates)
+
 ## 0.8.0.0-r1
 
 * Loosen lens version bounds
