@@ -51,6 +51,7 @@ import Control.Monad.Reader
 import qualified Control.Monad.State as Lazy
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
+import Control.Monad.Fix
 import Data.Default
 import Data.Functor.Misc
 import Data.Map (Map)

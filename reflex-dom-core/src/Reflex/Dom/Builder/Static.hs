@@ -22,6 +22,8 @@ import Control.Monad.Exception
 import Control.Monad.Identity
 import Control.Monad.Primitive
 import Control.Monad.Ref
+import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Reader
 import Data.ByteString (ByteString)

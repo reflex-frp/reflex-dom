@@ -24,6 +24,8 @@ module Reflex.Dom.Prerender
 
 import Control.Monad.Primitive (PrimMonad(..))
 import Control.Monad.Reader
+import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.Ref (MonadRef(..), MonadAtomicRef(..))
 import Data.IORef (IORef, newIORef)
 import Data.Semigroup (Semigroup)
