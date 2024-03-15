@@ -20,6 +20,7 @@ import Prelude
 
 import Control.Lens hiding (element, ix)
 import Control.Monad.Fix
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.Bimap as Bimap

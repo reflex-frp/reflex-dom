@@ -71,11 +71,11 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.15,
-    bytestring == 0.10.*,
+    base >= 4.7 && < 4.20,
+    bytestring >= 0.10 && <= 0.12,
     reflex >= 0.8 && < 1,
     reflex-dom-core >= 0.6.1.0 && <0.9,
-    text == 1.2.*
+    text >= 1.2 && < 2.1
   if !impl(ghcjs)
     if flag(use-warp)
       build-depends:

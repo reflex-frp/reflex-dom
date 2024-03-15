@@ -125,6 +125,8 @@ import Control.Monad.Primitive
 import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.State.Strict (StateT, mapStateT, get, modify', gets, runStateT)
+import Control.Monad.Fix
+import Control.Monad
 import Data.Bitraversable
 import Data.Default
 import Data.Dependent.Map (DMap)

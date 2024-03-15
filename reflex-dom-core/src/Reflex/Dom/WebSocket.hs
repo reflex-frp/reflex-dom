@@ -43,6 +43,7 @@ import Control.Lens
 import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Control.Monad
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
