@@ -25,7 +25,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 #ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE JavaScriptFFI #-}
 #endif
 {-# LANGUAGE ViewPatterns #-}
 

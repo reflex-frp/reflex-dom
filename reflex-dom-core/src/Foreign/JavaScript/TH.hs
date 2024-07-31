@@ -10,7 +10,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 #ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE JavaScriptFFI #-}
 #endif
 module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
 #ifdef USE_TEMPLATE_HASKELL
