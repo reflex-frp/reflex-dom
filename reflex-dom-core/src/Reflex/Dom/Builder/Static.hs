@@ -36,6 +36,7 @@ import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Kind (Type)
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
 import Data.Maybe (fromMaybe)
