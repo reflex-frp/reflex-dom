@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Reflex.Dom.Builder.Static where
 
 import Data.IORef (IORef)
@@ -40,7 +41,6 @@ import Data.Kind (Type)
 import qualified Data.Map as Map
 import Data.Map.Misc (applyMap)
 import Data.Maybe (fromMaybe)
-import Data.Kind (Type)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T

@@ -6,44 +6,45 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE LambdaCase #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
-{-# LANGUAGE TypeOperators #-}
+
 module Reflex.Dom.Old
-       ( MonadWidget
-       , El
-       , ElConfig (..)
-       , elConfig_namespace
-       , elConfig_attributes
-       , _el_clicked
-       , _el_element
-       , _el_events
-       , addVoidAction
-       , AttributeMap
-       , Attributes (..)
-       , buildElement
-       , buildElementNS
-       , buildEmptyElement
-       , buildEmptyElementNS
-       , elDynHtml'
-       , elDynHtmlAttr'
-       , elStopPropagationNS
-       , elWith
-       , elWith'
-       , emptyElWith
-       , emptyElWith'
-       , namedNodeMapGetNames
-       , nodeClear
-       , onEventName
-       , schedulePostBuild
-       , text'
-       , unsafePlaceElement
-       , WidgetHost
-       , wrapElement
-       ) where
+  ( MonadWidget
+  , El
+  , ElConfig (..)
+  , elConfig_namespace
+  , elConfig_attributes
+  , _el_clicked
+  , _el_element
+  , _el_events
+  , addVoidAction
+  , AttributeMap
+  , Attributes (..)
+  , buildElement
+  , buildElementNS
+  , buildEmptyElement
+  , buildEmptyElementNS
+  , elDynHtml'
+  , elDynHtmlAttr'
+  , elStopPropagationNS
+  , elWith
+  , elWith'
+  , emptyElWith
+  , emptyElWith'
+  , namedNodeMapGetNames
+  , nodeClear
+  , onEventName
+  , schedulePostBuild
+  , text'
+  , unsafePlaceElement
+  , WidgetHost
+  , wrapElement
+  ) where
 
 import Control.Arrow (first)
 #ifdef USE_TEMPLATE_HASKELL

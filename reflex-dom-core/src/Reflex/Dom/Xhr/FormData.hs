@@ -1,12 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Reflex.Dom.Xhr.FormData
   ( postForms
   , postForms'
   , FormValue (..)
   , fileToFormValue
-  )
-  where
+  ) where
 
 import Control.Lens
 import Data.Default

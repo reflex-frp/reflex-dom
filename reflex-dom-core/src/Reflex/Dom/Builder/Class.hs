@@ -24,11 +24,12 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Reflex.Dom.Builder.Class
-       ( module Reflex.Dom.Builder.Class
-       , module Reflex.Dom.Builder.Class.Events
-       , module Reflex.NotReady.Class
-       ) where
+  ( module Reflex.Dom.Builder.Class
+  , module Reflex.Dom.Builder.Class.Events
+  , module Reflex.NotReady.Class
+  ) where
 
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex

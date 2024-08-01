@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fspecialise-aggressively #-}
+
 module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)

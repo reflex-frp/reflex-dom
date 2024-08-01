@@ -15,7 +15,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
+
+module Reflex.Dom.Widget.Input
+  ( module Reflex.Dom.Widget.Input
+  , def, (&), (.~)
+  ) where
 
 import Prelude
 

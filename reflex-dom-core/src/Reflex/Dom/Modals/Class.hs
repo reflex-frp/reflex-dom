@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+
 module Reflex.Dom.Modals.Class where
 
 import Reflex

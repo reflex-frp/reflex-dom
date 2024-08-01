@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Reflex.Dom.Xhr.Foreign (
-    XMLHttpRequest
+module Reflex.Dom.Xhr.Foreign
+  ( XMLHttpRequest
   , XMLHttpRequestResponseType(..)
   , module Reflex.Dom.Xhr.Foreign
-) where
+  ) where
 
 import Control.Exception (throwIO)
 import Control.Monad.IO.Class (MonadIO(..))

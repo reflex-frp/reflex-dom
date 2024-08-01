@@ -9,6 +9,7 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Widget.Basic
   (
   -- * Displaying Values

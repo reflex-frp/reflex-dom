@@ -1,8 +1,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Reflex.Dom.Class ( module Reflex.Dom.Class
-                        , module Foreign.JavaScript.TH
-                        , module Web.KeyCode
-                        ) where
+
+module Reflex.Dom.Class
+  ( module Reflex.Dom.Class
+  , module Foreign.JavaScript.TH
+  , module Web.KeyCode
+  ) where
 
 import Control.Lens
 import Reflex.Class

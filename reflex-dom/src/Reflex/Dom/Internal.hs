@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Internal
   ( module Main
   , run
@@ -14,13 +15,15 @@ module Reflex.Dom.Internal
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Reflex.Dom.Main as Main hiding
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
+  ( mainWidget, mainWidgetWithHead, mainWidgetWithCss
+  , mainWidgetWithHead', mainWidgetInElementById, runApp'
+  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  )
 import qualified Reflex.Dom.Main as Main
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
+  ( mainWidget, mainWidgetWithHead, mainWidgetWithCss
+  , mainWidgetWithHead', mainWidgetInElementById, runApp'
+  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  )
 
 #if defined(ghcjs_HOST_OS)
 run :: a -> a

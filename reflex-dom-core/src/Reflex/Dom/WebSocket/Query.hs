@@ -1,6 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecursiveDo #-}
-module Reflex.Dom.WebSocket.Query (cropQueryT, runWebSocketQuery) where
+
+module Reflex.Dom.WebSocket.Query
+  ( cropQueryT
+  , runWebSocketQuery
+  ) where
 
 import Data.Default
 import Control.Monad.Fix

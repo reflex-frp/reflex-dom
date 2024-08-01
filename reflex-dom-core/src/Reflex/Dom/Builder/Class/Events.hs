@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 #endif
 {-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Builder.Class.Events where
 
 #ifdef USE_TEMPLATE_HASKELL

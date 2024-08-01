@@ -17,11 +17,11 @@
 
 -- | Render the first widget on the server, and the second on the client.
 module Reflex.Dom.Prerender
-       ( Prerender (..)
-       , prerender_
-       , PrerenderClientConstraint
-       , PrerenderBaseConstraints
-       ) where
+  ( Prerender (..)
+  , prerender_
+  , PrerenderClientConstraint
+  , PrerenderBaseConstraints
+  ) where
 
 import Control.Monad
 import Control.Monad.Fix
