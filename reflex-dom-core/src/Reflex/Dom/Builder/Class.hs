@@ -31,22 +31,6 @@ module Reflex.Dom.Builder.Class
   , module Reflex.NotReady.Class
   ) where
 
-import Reflex.Adjustable.Class
-import Reflex.Class as Reflex
-import Reflex.Dom.Builder.Class.Events
-#ifdef USE_TEMPLATE_HASKELL
-import Reflex.Dom.Builder.Class.TH
-#endif
-import Reflex.BehaviorWriter.Base
-import Reflex.DynamicWriter.Base
-import Reflex.EventWriter.Base
-import Reflex.NotReady.Class
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Base
-import Reflex.Query.Base
-import Reflex.Query.Class
-import Reflex.Requester.Base
-
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Fix
@@ -67,6 +51,26 @@ import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
+
+#if !MIN_VERSION_base(4,18,0)
+import Data.Semigroup
+#endif
+
+import Reflex.Adjustable.Class
+import Reflex.Class as Reflex
+import Reflex.Dom.Builder.Class.Events
+#ifdef USE_TEMPLATE_HASKELL
+import Reflex.Dom.Builder.Class.TH
+#endif
+import Reflex.BehaviorWriter.Base
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
+import Reflex.NotReady.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Base
+import Reflex.Query.Base
+import Reflex.Query.Class
+import Reflex.Requester.Base
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> Type) -> Type

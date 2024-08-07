@@ -39,10 +39,19 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Text.Read as T
+
+#if !MIN_VERSION_base(4,18,0)
+import Data.Semigroup
+#endif
+
+import qualified GHCJS.DOM.Event as Event
+import qualified GHCJS.DOM.HTMLInputElement as Input
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
+
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dom.Builder.Class
@@ -51,10 +60,6 @@ import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
-import qualified Text.Read as T
-
-import qualified GHCJS.DOM.Event as Event
-import qualified GHCJS.DOM.HTMLInputElement as Input
 
 {-# DEPRECATED TextInput, _textInput_element, TextInputConfig, textInput "Use 'inputElement' directly" #-}
 data TextInput t

@@ -8,6 +8,9 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+#ifdef __GHCJS__
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -29,17 +32,15 @@ module Reflex.Dom.WebSocket
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
-import Reflex.Class
-import Reflex.Dom.WebSocket.Foreign
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
-
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Lens
+#if MIN_VERSION_base(4,18,0)
 import Control.Monad hiding (forM, mapM, mapM_, sequence)
+#else
+import Control.Monad hiding (forM, forM_, mapM, mapM_, sequence)
+#endif
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.ByteString (ByteString)
@@ -55,6 +56,16 @@ import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
 import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+
+#if !MIN_VERSION_base(4,18,0)
+import Control.Monad.State
+#endif
+
+import Reflex.Class
+import Reflex.Dom.WebSocket.Foreign
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]

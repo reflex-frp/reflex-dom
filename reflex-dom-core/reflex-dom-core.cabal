@@ -1,268 +1,288 @@
-cabal-version: 1.24
-Name: reflex-dom-core
-Version: 0.8.1.4
-Synopsis: Functional Reactive Web Apps with Reflex
-Description:
-  Web applications without callbacks or side-effects.
-  Reflex-DOM brings the power of functional reactive programming (FRP) to the web.
-  Build HTML and other Document Object Model (DOM) data with a pure functional interface.
-  .
-  Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
-  .
-  The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
-  correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
-  Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
-  All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
-License: BSD3
-License-file: LICENSE
-Author: Ryan Trinkle
-Maintainer: ryan.trinkle@gmail.com
-Stability: Experimental
-Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
-Build-type: Simple
--- Deal with https://github.com/haskell/cabal/issues/2544 / https://github.com/haskell/cabal/issues/367
-extra-source-files: src-ghc/Foreign/JavaScript/Internal/Utils.hs
-                    src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
-                    src/Reflex/Dom/Xhr/Foreign.hs
-                    src/Reflex/Dom/WebSocket/Foreign.hs
-                    src/Reflex/Dom/Xhr/ResponseType.hs
-                    src/Reflex/Dom/Xhr/Exception.hs
-                    ChangeLog.md
+cabal-version:      1.24
+name:               reflex-dom-core
+version:            0.8.1.4
+license:            BSD3
+license-file:       LICENSE
+maintainer:         ryan.trinkle@gmail.com
+author:             Ryan Trinkle
+stability:          Experimental
+synopsis:           Functional Reactive Web Apps with Reflex
+description:
+    Web applications without callbacks or side-effects.
+    Reflex-DOM brings the power of functional reactive programming (FRP) to the web.
+    Build HTML and other Document Object Model (DOM) data with a pure functional interface.
+    .
+    Reflex-DOM is a Functional Reactive web framework based on the Reflex FRP engine: <https://reflex-frp.org/>.
+    .
+    The @reflex-dom@ package is a small wrapper around the @reflex-dom-core@ package. It pulls in the
+    correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
+    Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
+    All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
+
+category:
+    FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
+
+build-type:         Simple
+extra-source-files:
+    src-ghc/Foreign/JavaScript/Internal/Utils.hs
+    src-ghcjs/Foreign/JavaScript/Internal/Utils.hs
+    src/Reflex/Dom/Xhr/Foreign.hs
+    src/Reflex/Dom/WebSocket/Foreign.hs
+    src/Reflex/Dom/Xhr/ResponseType.hs
+    src/Reflex/Dom/Xhr/Exception.hs
+    ChangeLog.md
+
+source-repository head
+    type:     git
+    location: https://github.com/reflex-frp/reflex-dom
+    subdir:   reflex-dom-core
 
 flag use-template-haskell
-  description: Use template haskell to generate lenses
-  default: True
-  manual: True
+    description: Use template haskell to generate lenses
+    manual:      True
 
 flag use-reflex-optimizer
-  description: Use the GHC plugin Reflex.Optimizer on some of the modules in the package.  This is still experimental.
-  default: False
-  manual: True
+    description:
+        Use the GHC plugin Reflex.Optimizer on some of the modules in the package.  This is still experimental.
+
+    default:     False
+    manual:      True
 
 flag expose-all-unfoldings
-  description: Build the library with -fexpose-all-unfoldings which can help client code specialize better
-  default: False
-  manual: True
+    description:
+        Build the library with -fexpose-all-unfoldings which can help client code specialize better
+
+    default:     False
+    manual:      True
 
 flag profile-reflex
-  description: Add a layer of profiling to all Reflex events in the system
-  default: False
-  manual: True
+    description: Add a layer of profiling to all Reflex events in the system
+    default:     False
+    manual:      True
 
 flag split-these
-  description: Use split these/semialign packages
-  manual:      False
-  default:     True
+    description: Use split these/semialign packages
+    manual:      False
+    default:     True
 
 flag hydration-tests
-  description: Whether to run the hydration tests (currently only available on linux)
-  default: True
-  manual: True
+    description:
+        Whether to run the hydration tests (currently only available on linux)
+    manual:      True
+    default:     True
 
 flag gc-tests
-  description: Whether to run the gc tests (currently only available on linux)
-  default: True
-  manual: True
+    description:
+        Whether to run the gc tests (currently only available on linux)
+    manual:      True
+    default:     True
 
 flag hlint-tests
-  description: Whether to run the hlint tests
-  default: False
-  manual: True
+    description: Whether to run the hlint tests
+    manual:      False
+    default:     True
 
 library
-  hs-source-dirs: src
-  build-depends:
-    aeson >= 0.8 && < 2.3,
-    base >= 4.7 && < 4.22,
-    bifunctors >= 4.2 && < 6,
-    bimap >= 0.3 && < 0.6,
-    blaze-builder >= 0.4.1 && < 0.5,
-    bytestring >= 0.10 && < 0.13,
-    case-insensitive < 1.3,
-    commutative-semigroups >=0.1 && <0.3,
-    containers >= 0.6 && < 0.8,
-    constraints >= 0.9 && < 0.15,
-    contravariant >= 1.4 && < 1.6,
-    data-default >= 0.5 && < 0.9,
-    dependent-map >= 0.3 && < 0.5,
-    dependent-sum >= 0.6 && < 0.8,
-    dependent-sum-template >= 0.2 && < 0.3,
-    directory >= 1.2 && < 1.4,
-    exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.9.1.0 && < 0.10,
-    jsaddle >= 0.9.0.0 && < 0.10,
-    -- keycode-0.2 has a bug on firefox
-    keycode >= 0.2.1 && < 0.3,
-    lens >= 4.7 && < 5.4,
-    monad-control >= 1.0.1 && < 1.1,
-    mtl >= 2.1 && < 2.4,
-    primitive >= 0.5 && < 0.10,
-    random >= 1.1 && < 1.4,
-    ref-tf >= 0.4 && < 0.6,
-    reflex >= 0.8.2.1 && < 1,
-    semigroups >= 0.16 && < 0.21,
-    stm >= 2.4 && < 2.6,
-    text >= 1.2 && < 2.2,
-    transformers >= 0.3 && < 0.7,
-    network-uri >= 2.6.1 && < 2.7,
-    zenc == 0.1.*
+    exposed-modules:
+        Foreign.JavaScript.TH
+        Foreign.JavaScript.Orphans
+        Foreign.JavaScript.Utils
+        Reflex.Dom.Builder.Class
+        Reflex.Dom.Builder.Class.Events
+        Reflex.Dom.Builder.Immediate
+        Reflex.Dom.Builder.InputDisabled
+        Reflex.Dom.Builder.Hydratable
+        Reflex.Dom.Builder.Static
+        Reflex.Dom.Class
+        Reflex.Dom.Core
+        Reflex.Dom.Location
+        Reflex.Dom.Main
+        Reflex.Dom.Modals.Class
+        Reflex.Dom.Old
+        Reflex.Dom.Prerender
+        Reflex.Dom.Time
+        Reflex.Dom.WebSocket
+        Reflex.Dom.WebSocket.Query
+        Reflex.Dom.Widget
+        Reflex.Dom.Widget.Basic
+        Reflex.Dom.Widget.Input
+        Reflex.Dom.Widget.Lazy
+        Reflex.Dom.Widget.Resize
+        Reflex.Dom.Xhr
+        Reflex.Dom.Xhr.FormData
 
-  if impl(ghcjs) || arch(javascript)
-    hs-source-dirs: src-ghcjs
-    build-depends:
-      ghcjs-base,
-      hashable >= 1.2 && < 1.6
-  else
-    hs-source-dirs: src-ghc
-    if !os(windows)
-      build-depends: unix >= 2.7 && <2.9
-
-  if flag(split-these)
-    build-depends:
-      semialign >= 1 && < 1.4,
-      these >= 1 && < 1.3
-  else
-    build-depends:
-      these >= 0.4 && < 1.0
-
-  exposed-modules:
-    Foreign.JavaScript.TH
-    Foreign.JavaScript.Orphans
-    Foreign.JavaScript.Utils
-    Reflex.Dom.Builder.Class
-    Reflex.Dom.Builder.Class.Events
-    Reflex.Dom.Builder.Immediate
-    Reflex.Dom.Builder.InputDisabled
-    Reflex.Dom.Builder.Hydratable
-    Reflex.Dom.Builder.Static
-    Reflex.Dom.Class
-    Reflex.Dom.Core
-    Reflex.Dom.Location
-    Reflex.Dom.Main
-    Reflex.Dom.Modals.Class
-    Reflex.Dom.Old
-    Reflex.Dom.Prerender
-    Reflex.Dom.Time
-    Reflex.Dom.WebSocket
-    Reflex.Dom.WebSocket.Query
-    Reflex.Dom.Widget
-    Reflex.Dom.Widget.Basic
-    Reflex.Dom.Widget.Input
-    Reflex.Dom.Widget.Lazy
-    Reflex.Dom.Widget.Resize
-    Reflex.Dom.Xhr
-    Reflex.Dom.Xhr.FormData
-  other-modules:
-    Foreign.JavaScript.Internal.Utils
-    Reflex.Dom.WebSocket.Foreign
-    Reflex.Dom.Xhr.Foreign
-    Reflex.Dom.Xhr.ResponseType
-    Reflex.Dom.Xhr.Exception
-
-  default-language: Haskell98
-  ghc-options: -Wall -fwarn-tabs -Wredundant-constraints -funbox-strict-fields -O2 -ferror-spans -fspecialise-aggressively
-  ghc-prof-options: -fprof-auto
-
-  if flag(expose-all-unfoldings)
-    ghc-options: -fexpose-all-unfoldings
-
-  if flag(use-reflex-optimizer)
-    ghc-options: -fplugin=Reflex.Optimizer
-
-  if flag(profile-reflex)
-    cpp-options: -DPROFILE_REFLEX
-
-  if flag(use-template-haskell)
-    build-depends:
-      dependent-sum-template >= 0.1 && < 0.3,
-      template-haskell >= 2.12.0 && < 2.24
-    other-extensions: TemplateHaskell
-    cpp-options: -DUSE_TEMPLATE_HASKELL
+    hs-source-dirs:   src
     other-modules:
-      Reflex.Dom.Builder.Class.TH
+        Foreign.JavaScript.Internal.Utils
+        Reflex.Dom.WebSocket.Foreign
+        Reflex.Dom.Xhr.Foreign
+        Reflex.Dom.Xhr.ResponseType
+        Reflex.Dom.Xhr.Exception
+
+    default-language: Haskell98
+    ghc-options:
+        -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+        -fspecialise-aggressively
+
+    ghc-prof-options: -fprof-auto
+    build-depends:
+        aeson >= 0.8 && < 2.3,
+        base >= 4.7 && < 4.22,
+        bifunctors >= 4.2 && < 6,
+        bimap >= 0.3 && < 0.6,
+        blaze-builder >= 0.4.1 && < 0.5,
+        bytestring >= 0.10 && < 0.13,
+        case-insensitive < 1.3,
+        commutative-semigroups >=0.1 && <0.3,
+        containers >= 0.6 && < 0.8,
+        constraints >= 0.9 && < 0.15,
+        contravariant >= 1.4 && < 1.6,
+        data-default >= 0.5 && < 0.9,
+        dependent-map >= 0.3 && < 0.5,
+        dependent-sum >= 0.6 && < 0.8,
+        dependent-sum-template >= 0.2 && < 0.3,
+        directory >= 1.2 && < 1.4,
+        exception-transformers == 0.4.*,
+        ghcjs-dom >= 0.9.1.0 && < 0.10,
+        jsaddle >= 0.9.0.0 && < 0.10,
+        -- keycode-0.2 has a bug on firefox
+        keycode >= 0.2.1 && < 0.3,
+        lens >= 4.7 && < 5.4,
+        monad-control >= 1.0.1 && < 1.1,
+        mtl >= 2.1 && < 2.4,
+        primitive >= 0.5 && < 0.10,
+        random >= 1.1 && < 1.4,
+        ref-tf >= 0.4 && < 0.6,
+        reflex >= 0.8.2.1 && < 1,
+        semigroups >= 0.16 && < 0.21,
+        stm >= 2.4 && < 2.6,
+        text >= 1.2 && < 2.2,
+        transformers >= 0.3 && < 0.7,
+        network-uri >= 2.6.1 && < 2.7,
+        zenc == 0.1.*
+
+    if (impl(ghcjs >=0) || arch(javascript))
+        hs-source-dirs: src-ghcjs
+        build-depends:
+            ghcjs-base,
+            hashable >= 1.2 && < 1.6
+
+    else
+        hs-source-dirs: src-ghc
+
+        if !os(windows)
+            build-depends: unix >=2.7 && <2.9
+
+    if flag(split-these)
+        build-depends:
+            semialign >=1 && <1.4,
+            these >=1 && <1.3
+
+    else
+        build-depends: these >=0.4 && <1.0
+
+    if flag(expose-all-unfoldings)
+        ghc-options: -fexpose-all-unfoldings
+
+    if flag(profile-reflex)
+        cpp-options: -DPROFILE_REFLEX
+
+    if flag(use-template-haskell)
+        cpp-options:      -DUSE_TEMPLATE_HASKELL
+        other-modules:    Reflex.Dom.Builder.Class.TH
+        other-extensions: TemplateHaskell
+        build-depends:
+            dependent-sum-template >=0.1 && <0.3,
+            template-haskell >=2.12.0 && <2.24
 
 test-suite hlint
-  build-depends:
-    base,
-    hlint >= 2.0 && < 4.0,
-    reflex-dom-core
-  hs-source-dirs: test
-  main-is: hlint.hs
-  type: exitcode-stdio-1.0
-  default-language: Haskell98
-  if !flag(hlint-tests) || arch(javascript)
-    buildable: False
+    type:             exitcode-stdio-1.0
+    main-is:          hlint.hs
+    hs-source-dirs:   test
+    default-language: Haskell98
+    build-depends:
+        base,
+        hlint >=2.0 && <4.0,
+        reflex-dom-core
+
+    if !flag(hlint-tests) || arch(javascript)
+        buildable: False
 
 test-suite hydration
-  build-depends: base
-               , aeson
-               , async
-               , bytestring
-               , chrome-test-utils
-               , constraints
-               , constraints-extras
-               , containers
-               , dependent-map
-               , dependent-sum
-               , dependent-sum-template
-               , directory
-               , exceptions
-               , filepath
-               , ghcjs-dom
-               , hspec
-               , hspec-core
-               , hspec-webdriver
-               , http-types
-               , HUnit
-               , jsaddle
-               , jsaddle-warp
-               , lens
-               , lifted-base
-               , network
-               , random
-               , ref-tf
-               , reflex
-               , reflex-dom-core
-               , process
-               , silently
-               , temporary
-               , text
-               , wai
-               , wai-websockets
-               , warp
-               , webdriver
-               , websockets
-               , which
-  hs-source-dirs: test
-  ghc-options: -rtsopts "-with-rtsopts=-T -V0" -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
-  main-is: hydration.hs
-  type: exitcode-stdio-1.0
-  default-language: Haskell98
-  if !os(linux) || !arch(x86_64) || flag(profile-reflex) || !flag(hydration-tests)
-    buildable: False
+    type:             exitcode-stdio-1.0
+    main-is:          hydration.hs
+    hs-source-dirs:   test
+    default-language: Haskell98
+    ghc-options:
+        -rtsopts "-with-rtsopts=-T -V0" -Wall -fwarn-tabs
+        -funbox-strict-fields -O2 -ferror-spans
+
+    ghc-prof-options: -fprof-auto -optP-DPROFILING
+    build-depends:
+        base
+      , aeson
+      , async
+      , bytestring
+      , chrome-test-utils
+      , constraints
+      , constraints-extras
+      , containers
+      , dependent-map
+      , dependent-sum
+      , dependent-sum-template
+      , directory
+      , exceptions
+      , filepath
+      , ghcjs-dom
+      , hspec
+      , hspec-core
+      , hspec-webdriver
+      , http-types
+      , HUnit
+      , jsaddle
+      , jsaddle-warp
+      , lens
+      , lifted-base
+      , network
+      , random
+      , ref-tf
+      , reflex
+      , reflex-dom-core
+      , process
+      , silently
+      , temporary
+      , text
+      , wai
+      , wai-websockets
+      , warp
+      , webdriver
+      , websockets
+      , which
+
+    if (((!os(linux) || !arch(x86_64)) || flag(profile-reflex)) || !flag(hydration-tests))
+        buildable: False
 
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats
 test-suite gc
-  build-depends: base
-               , chrome-test-utils
-               , jsaddle
-               , jsaddle-warp
-               , process
-               , reflex
-               , reflex-dom-core
-               , text
-  hs-source-dirs: test
-  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
-  ghc-prof-options: -fprof-auto -optP-DPROFILING
-  main-is: gc.hs
-  type: exitcode-stdio-1.0
-  default-language: Haskell98
-  if !os(linux) || !arch(x86_64) || !flag(gc-tests)
-    buildable: False
+    type:             exitcode-stdio-1.0
+    main-is:          gc.hs
+    hs-source-dirs:   test
+    default-language: Haskell98
+    ghc-options:
+        -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields
+        -O2 -ferror-spans
 
-source-repository head
-  type: git
-  location: https://github.com/reflex-frp/reflex-dom
-  subdir: reflex-dom-core
+    ghc-prof-options: -fprof-auto -optP-DPROFILING
+    build-depends:
+        base
+      , chrome-test-utils
+      , jsaddle
+      , jsaddle-warp
+      , process
+      , reflex
+      , reflex-dom-core
+      , text
+
+    if ((!os(linux) || !arch(x86_64)) || !flag(gc-tests))
+        buildable: False

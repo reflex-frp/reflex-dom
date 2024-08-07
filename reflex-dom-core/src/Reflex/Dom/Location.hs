@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -22,9 +23,6 @@ module Reflex.Dom.Location
   , popHistoryState
   ) where
 
-import Reflex
-import Reflex.Dom.Builder.Immediate (wrapDomEvent)
-
 import Control.Lens ((^.))
 import Control.Monad ((>=>))
 import Control.Monad.Fix (MonadFix)
@@ -42,6 +40,13 @@ import qualified GHCJS.DOM.Window as Window
 import qualified GHCJS.DOM.WindowEventHandlers as DOM
 import Language.Javascript.JSaddle (FromJSString, MonadJSM, ToJSString, fromJSValUnchecked, js1, ToJSVal (..), FromJSVal (..))
 import Network.URI
+
+#if !MIN_VERSION_base(4,18,0)
+import Data.Monoid
+#endif
+
+import Reflex
+import Reflex.Dom.Builder.Immediate (wrapDomEvent)
 
 withLocation :: (MonadJSM m) => (Location -> m a) -> m a
 withLocation f = DOM.currentWindowUnchecked >>= Window.getLocation >>= f

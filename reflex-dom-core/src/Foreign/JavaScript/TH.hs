@@ -10,12 +10,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 #ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
+#ifdef __GHCJS__
+{-# LANGUAGE JavaScriptFFI #-}
 #endif
-module Foreign.JavaScript.TH ( module Foreign.JavaScript.TH
+#endif
+
+module Foreign.JavaScript.TH
+  ( module Foreign.JavaScript.TH
 #ifdef USE_TEMPLATE_HASKELL
-                             , Safety (..)
+  , Safety (..)
 #endif
-                             ) where
+  ) where
 
 import Foreign.JavaScript.Orphans ()
 import Prelude hiding ((!!))
@@ -36,6 +41,17 @@ import qualified GHCJS.Foreign as JS
 #if __GLASGOW_HASKELL__ < 900
 import qualified GHCJS.Foreign.Callback as JS
 import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
+import qualified JavaScript.Array as JS
+import qualified JavaScript.Array.Internal (SomeJSArray (..))
+import qualified JavaScript.Object as JS
+import qualified JavaScript.Object.Internal (Object (..))
+import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
+
+import Data.Hashable
+import Data.Word
+import Foreign.C.Types
+import Foreign.Ptr
+import Text.Encoding.Z
 #endif
 
 #else

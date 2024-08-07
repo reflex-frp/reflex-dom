@@ -19,6 +19,7 @@ import qualified Data.Map as Map
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
+
 import Reflex
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (hydratableAttribute)

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -47,6 +48,12 @@ import qualified Data.Text as T
 import Data.Text.Encoding
 import Data.Tuple
 import GHC.Generics
+
+#if !MIN_VERSION_base(4,18,0)
+import Control.Monad.Identity
+import Data.Monoid ((<>))
+#endif
+
 import Reflex.Adjustable.Class
 import Reflex.Class
 import Reflex.Dom.Main (DomHost, DomTimeline, runDomHost)

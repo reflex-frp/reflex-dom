@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,16 +8,6 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Reflex.Dom.Widget.Resize where
-
-import Reflex.Class
-import Reflex.Time
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate
-import Reflex.Dom.Class
-import Reflex.Dom.Widget.Basic
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
 
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -30,6 +21,21 @@ import qualified GHCJS.DOM.GlobalEventHandlers as Events (scroll)
 import GHCJS.DOM.Types (MonadJSM, liftJSM, uncheckedCastTo, HTMLElement(..))
 import GHCJS.DOM.HTMLElement (getOffsetWidth, getOffsetHeight)
 import qualified GHCJS.DOM.Types as DOM
+
+#if !MIN_VERSION_base(4,18,0)
+import Control.Monad
+import Data.Monoid
+#endif
+
+import Reflex.Class
+import Reflex.Time
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Class
+import Reflex.Dom.Widget.Basic
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
 
 -- | A widget that wraps the given widget in a div and fires an event when resized.
 --   Adapted from @github.com\/marcj\/css-element-queries@

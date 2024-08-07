@@ -17,24 +17,14 @@ module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
 
-import Reflex.Adjustable.Class
-import Reflex.Class
-import Reflex.Dom.Builder.Immediate
-import Reflex.Dom.Class
-import Reflex.Host.Class
-import Reflex.PerformEvent.Base
-import Reflex.PostBuild.Base
-import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
-import Reflex.TriggerEvent.Base
-import Reflex.TriggerEvent.Class
-#ifdef PROFILE_REFLEX
-import Reflex.Profiled
-#endif
-
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
+#if MIN_VERSION_base(4,18,0)
 import Control.Monad.Reader
+#else
+import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+#endif
 import Control.Monad.Ref
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
@@ -52,6 +42,20 @@ import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
 
+#if !MIN_VERSION_base(4,18,0)
+import Data.Monoid ((<>))
+#endif
+
+import Reflex.Adjustable.Class
+import Reflex.Class
+import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Class
+import Reflex.Host.Class
+import Reflex.PerformEvent.Base
+import Reflex.PostBuild.Base
+import Reflex.Spider (Global, Spider, SpiderHost, runSpiderHost)
+import Reflex.TriggerEvent.Base
+import Reflex.TriggerEvent.Class
 #ifdef PROFILE_REFLEX
 import Reflex.Profiled
 #endif

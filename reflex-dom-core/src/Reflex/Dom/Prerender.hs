@@ -33,7 +33,19 @@ import Data.Kind (Type)
 import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Void
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+
+#if !MIN_VERSION_base(4,18,0)
+import Data.Semigroup (Semigroup)
+import Foreign.JavaScript.TH
+#endif
+
 import GHCJS.DOM.Types (MonadJSM)
+import qualified GHCJS.DOM.Document as Document
+import qualified GHCJS.DOM.Node as Node
+import qualified GHCJS.DOM.Types as DOM
+
 import Reflex hiding (askEvents)
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Hydratable
@@ -41,12 +53,6 @@ import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
 import Reflex.Host.Class
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
-
-import qualified GHCJS.DOM.Document as Document
-import qualified GHCJS.DOM.Node as Node
-import qualified GHCJS.DOM.Types as DOM
 
 type PrerenderClientConstraint t m =
   ( DomBuilder t m

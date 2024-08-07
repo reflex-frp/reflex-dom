@@ -34,6 +34,7 @@ hsenv.log
 *_stub.h
 .cabal-sandbox/
 cabal.sandbox.config
+cabal.project.local
 .stack-work
 codex.tags
 *.dump-*

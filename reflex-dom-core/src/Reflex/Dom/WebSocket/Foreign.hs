@@ -1,6 +1,9 @@
 {-# LANGUAGE CPP #-}
 #ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
+#ifdef __GHCJS__
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
 #endif
 {-# LANGUAGE LambdaCase #-}
 

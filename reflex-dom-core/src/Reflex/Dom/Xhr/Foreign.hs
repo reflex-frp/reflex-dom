@@ -1,4 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
+#ifdef __GHCJS__
+{-# LANGUAGE JavaScriptFFI #-}
+#endif
 {-# LANGUAGE OverloadedStrings #-}
 
 module Reflex.Dom.Xhr.Foreign
