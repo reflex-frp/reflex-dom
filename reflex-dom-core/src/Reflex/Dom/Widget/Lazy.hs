@@ -81,7 +81,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           preItems = min startingIndex numItems
       in (topPx - preItems * sizeIncrement, (startingIndex - preItems, preItems + numItems * 2))
 
-virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k, Eq v)
+virtualList :: forall t m k v a. (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
   => Dynamic t Int -- ^ A 'Dynamic' of the visible region's height in pixels
   -> Int -- ^ The fixed height of each row in pixels
   -> Dynamic t Int -- ^ A 'Dynamic' of the total number of items
@@ -126,7 +126,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
       in (startingIndex, numItems)
 
 virtualListBuffered
-  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k, Eq v)
+  :: (DomBuilder t m, PostBuild t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m), DomBuilderSpace m ~ GhcjsDomSpace, MonadFix m, Ord k)
   => Int
   -> Dynamic t Int
   -> Int

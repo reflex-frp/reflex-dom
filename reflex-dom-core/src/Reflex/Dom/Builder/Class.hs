@@ -562,7 +562,7 @@ instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) 
   buildDomFragment = liftThrough buildDomFragment
   mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
 
-instance (DomBuilder t m, Monoid w, MonadHold t m, MonadFix m) => DomBuilder t (DynamicWriterT t w m) where
+instance (DomBuilder t m, MonadFix m, Monoid w, MonadHold t m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
@@ -602,7 +602,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
-instance (DomBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
+instance (DomBuilder t m, MonadHold t m, Semigroup w) => DomBuilder t (EventWriterT t w m) where
   type DomBuilderSpace (EventWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
@@ -736,7 +736,6 @@ class Monad m => HasDocument m where
     :: ( m ~ f m'
        , RawDocument (DomBuilderSpace m) ~ RawDocument (DomBuilderSpace m')
        , MonadTrans f
-       , Monad m'
        , HasDocument m'
        )
     => m (RawDocument (DomBuilderSpace m))

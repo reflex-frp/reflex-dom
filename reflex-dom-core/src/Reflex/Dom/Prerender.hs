@@ -76,7 +76,7 @@ type PrerenderBaseConstraints t m =
 -- | Render the first widget on the server, and the second on the client. The
 -- hydration builder will run *both* widgets.
 prerender_
-  :: (Functor m, Reflex t, Prerender t m)
+  :: (Functor m, Prerender t m)
   => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
@@ -219,7 +219,7 @@ instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
     r <- ask
     lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender t m, Monad m, Reflex t, MonadFix m, Monoid w) => Prerender t (DynamicWriterT t w m) where
+instance (Prerender t m, Monad m, MonadFix m, Reflex t, Monoid w) => Prerender t (DynamicWriterT t w m) where
   type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)
@@ -258,11 +258,11 @@ instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Commutative q, 
         query = incrementalToDynamic =<< inc -- Can we avoid the incrementalToDynamic?
     pure a
 
-instance (Prerender t m, Monad m) => Prerender t (InputDisabledT m) where
+instance Prerender t m => Prerender t (InputDisabledT m) where
   type Client (InputDisabledT m) = InputDisabledT (Client m)
   prerender (InputDisabledT server) (InputDisabledT client) = InputDisabledT $ prerender server client
 
-instance (Prerender t m, Monad m) => Prerender t (HydratableT m) where
+instance Prerender t m => Prerender t (HydratableT m) where
   type Client (HydratableT m) = HydratableT (Client m)
   prerender (HydratableT server) (HydratableT client) = HydratableT $ prerender server client
 
@@ -276,7 +276,7 @@ startMarker, endMarker :: Text
 startMarker = "prerender/start"
 endMarker = "prerender/end"
 
-deleteToPrerenderEnd :: (MonadIO m, MonadJSM m, Reflex t, MonadFix m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
+deleteToPrerenderEnd :: (MonadJSM m, Reflex t, MonadFix m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
 deleteToPrerenderEnd doc = do
   startNode <- hydrateComment doc startMarker Nothing
   let go (n :: Int) lastNode = Node.getNextSibling lastNode >>= \case

@@ -315,7 +315,7 @@ performRequestAsync = performRequestAsync' newXMLHttpRequest . fmap return
 performMkRequestAsync :: (MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m, IsXhrPayload a) => Event t (Performable m (XhrRequest a)) -> m (Event t XhrResponse)
 performMkRequestAsync = performRequestAsync' newXMLHttpRequest
 
-performRequestAsync' :: (MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m) => (XhrRequest p -> (a -> JSM ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (XhrRequest p)) -> m (Event t a)
+performRequestAsync' :: (PerformEvent t m, TriggerEvent t m) => (XhrRequest p -> (a -> JSM ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (XhrRequest p)) -> m (Event t a)
 performRequestAsync' newXhr req = performEventAsync $ ffor req $ \hr cb -> do
   r <- hr
   _ <- newXhr r $ liftIO . cb
