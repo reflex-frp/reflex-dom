@@ -189,11 +189,9 @@ replaceEnd key = void $ commentNode $ def { _commentNodeConfig_initialContents =
 hoistIntMapWithKeyWithAdjust :: forall t m p a b.
   ( Adjustable t m
   , MonadHold t m
-  , Patch (p a)
   , Functor p
   , Patch (p (Behavior t Builder))
   , PatchTarget (p (Behavior t Builder)) ~ IntMap (Behavior t Builder)
-  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
   )
   => (forall x. (IntMap.Key -> a -> m x)
       -> IntMap a
@@ -225,7 +223,6 @@ hoistDMapWithKeyWithAdjust :: forall (k :: Type -> Type) v v' t m p.
   , MonadHold t m
   , PatchTarget (p k (Constant (Behavior t Builder))) ~ DMap k (Constant (Behavior t Builder))
   , Patch (p k (Constant (Behavior t Builder)))
-  , Ref m ~ IORef, MonadIO m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m -- TODO remove
   )
   => (forall vv vv'.
          (forall a. k a -> vv a -> m (vv' a))

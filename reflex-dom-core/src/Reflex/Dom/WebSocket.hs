@@ -132,10 +132,10 @@ webSocket' url config onRawMessage = do
     unless success $ atomically $ unGetTQueue payloadQueue payload
   return $ RawWebSocket eRecv eOpen eError eClose
 
-textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
+textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
 textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
 
-jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m, MonadHold t m, Reflex t) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
+jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
 jsonWebSocket url cfg = do
   ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg }
   return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }

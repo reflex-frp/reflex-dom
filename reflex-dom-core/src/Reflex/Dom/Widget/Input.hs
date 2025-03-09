@@ -37,7 +37,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
-import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
+import GHCJS.DOM.Types (File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
 import Reflex.Class
 import Reflex.Collection
@@ -47,7 +47,6 @@ import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
 import qualified Text.Read as T
 
 import qualified GHCJS.DOM.Event as Event
@@ -291,7 +290,7 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 
 -- | Create a view only checkbox
 {-# INLINABLE checkboxView #-}
-checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
   let permanentAttrs = "type" =: "checkbox"
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
@@ -337,7 +336,7 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+fileInput :: forall t m. (MonadIO m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
