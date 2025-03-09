@@ -6,3 +6,6 @@ packages:
 
 tests: True
 benchmarks: True
+
+package reflex-dom
+  flags: +build-examples

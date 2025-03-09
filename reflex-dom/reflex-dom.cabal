@@ -142,6 +142,7 @@ executable sortableList
                , dependent-map
                , lens
                , mtl
+               , patch
                , random
                , reflex
                , reflex-dom

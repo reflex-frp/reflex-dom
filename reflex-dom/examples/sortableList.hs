@@ -5,16 +5,13 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 import Control.Lens
-import Control.Monad.Identity
+import Control.Monad.Fix
 import Control.Monad.IO.Class
-import Data.Dependent.Map (DMap)
-import Data.Functor.Constant
-import Data.Functor.Misc
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Monoid
 import Data.Ord
+import Data.Patch.MapWithMove
 import qualified Data.Text as T
 import Data.Time.Clock
 import Reflex.Dom
@@ -71,7 +68,7 @@ simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, Adjustable t m
 simpleSortableList f m0 resortFunc resortSlowFunc = do
   rec let resortPatchFast = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v
-          redrawPatch d cmp = unsafePatchMapWithMove $ fmap (MapEdit_Insert False) $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
+          redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
           resortPatchSlow = attachWith redrawPatch (currentIncremental m) resortSlowFunc
           resortPatch = leftmost
             [ resortPatchFast
