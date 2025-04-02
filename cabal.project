@@ -1,11 +1,15 @@
 packages:
   reflex-dom-core/
   reflex-dom/
-  chrome-test-utils/
-  reflex-dom-test-selenium/
 
-tests: True
-benchmarks: True
+if os(linux) && arch(x86_64)
+  packages:
+    chrome-test-utils/
+    reflex-dom-test-selenium/
+
+if os(linux) || os(osx)
+   tests: true
+   benchmarks: true
 
 package reflex-dom
   flags: +build-examples
