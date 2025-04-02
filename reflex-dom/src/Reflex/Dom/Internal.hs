@@ -93,7 +93,7 @@ triggerBackButton = withGlobalJSExecutor goBack
 import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
 import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
-run = Wasm.run 0
+run = Wasm.run
 
 #else
 import Language.Javascript.JSaddle.WebKitGTK (run)

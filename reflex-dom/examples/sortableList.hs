@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -16,6 +17,10 @@ import qualified Data.Text as T
 import Data.Time.Clock
 import Reflex.Dom
 import System.Random
+
+#if defined(wasm32_HOST_ARCH)
+foreign export javascript "hs_start" main :: IO ()
+#endif
 
 main :: IO ()
 main = mainWidget $ do
