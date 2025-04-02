@@ -50,11 +50,6 @@ flag build-examples
   default: False
   manual: True
 
-flag wasm32
-  description: Build for wasm32 architecture
-  default: False
-  manual: True
-
 library
   hs-source-dirs: src
   if os(android)
@@ -88,7 +83,7 @@ library
           jsaddle >= 0.9.6 && < 0.10,
           jsaddle-wkwebview >= 0.9.6 && < 0.10
       else
-        if flag(wasm32)
+        if arch(wasm32)
           build-depends:
             jsaddle >= 0.9.6 && < 0.10,
             jsaddle-wasm >= 0.1 && < 0.2
