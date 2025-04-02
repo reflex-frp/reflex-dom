@@ -13,3 +13,9 @@ if os(linux) || os(osx)
 
 package reflex-dom
   flags: +build-examples
+
+-- https://github.com/haskellari/splitmix/pull/73
+source-repository-package
+  type: git
+  location: https://github.com/amesgen/splitmix
+  tag: cea9e31bdd849eb0c17611bb99e33d590e126164
