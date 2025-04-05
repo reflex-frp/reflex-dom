@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## 0.6.3.4
+
+* Fix WASM related issues
+
 ## 0.6.3.3
 
 * Support GHC 9.12
