@@ -1,5 +1,8 @@
 # Revision history for reflex-dom-core
 
+## 0.8.1.4
+* Support hashable 1.5 in JS backend
+
 ## 0.8.1.3
 * Fixes for JS backend FFI
 
