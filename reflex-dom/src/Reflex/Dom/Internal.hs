@@ -89,15 +89,19 @@ run jsm = do
 triggerBackButton :: MonadIO m => m ()
 triggerBackButton = withGlobalJSExecutor goBack
 
-#elif defined(wasm32_HOST_ARCH)
+#elif defined(MIN_VERSION_jsaddle_wasm)
 import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
 import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
 run = Wasm.run
 
-#else
+#elif defined(MIN_VERSION_jsaddle_webkit2gtk)
 import Language.Javascript.JSaddle.WebKitGTK (run)
 
+#else
+import qualified GHC.TypeLits as GHC
+run :: GHC.TypeError (GHC.Text "Attempting to compile reflex-dom for unsupported platform")
+run = error "unreachable"
 #endif
 
 mainWidget :: (forall x. Widget x ()) -> IO ()
