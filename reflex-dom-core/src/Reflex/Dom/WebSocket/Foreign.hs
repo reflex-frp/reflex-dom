@@ -12,6 +12,7 @@ module Reflex.Dom.WebSocket.Foreign
 
 import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
+import Control.Lens ((^.))
 import Data.Bifoldable
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
@@ -23,7 +24,7 @@ import GHCJS.DOM.MessageEvent
 import GHCJS.DOM.Types (JSM, JSVal, liftJSM, fromJSValUnchecked, WebSocket(..))
 import qualified GHCJS.DOM.WebSocket as DOM
 import GHCJS.Foreign (JSType(..), jsTypeOf)
-import Language.Javascript.JSaddle (fun, eval, toJSVal, call)
+import Language.Javascript.JSaddle (fun, new, jsg, js2, jss)
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import Language.Javascript.JSaddle.Types (ghcjsPure)
 
@@ -77,24 +78,12 @@ newWebSocket url protocols onMessage onOpen onError onClose = do
           _ -> do
             ab <- mutableArrayBufferFromJSVal d
             bsFromMutableArrayBuffer ab >>= onMessage . Left
-  newWS <- eval $ unlines
-    [ "(function(url, protos, open, error, close, message) {"
-    , "  var ws = new window['WebSocket'](url, protos);"
-    , "  ws['binaryType'] = 'arraybuffer';"
-    , "  ws['addEventListener']('open', open);"
-    , "  ws['addEventListener']('error', error);"
-    , "  ws['addEventListener']('close', close);"
-    , "  ws['addEventListener']('message', message);"
-    , "  return ws;"
-    , "})"
-    ]
-  url' <- toJSVal url
-  protocols' <- toJSVal protocols
-  onOpen' <- toJSVal onOpenWrapped
-  onError' <- toJSVal onErrorWrapped
-  onClose' <- toJSVal onCloseWrapped
-  onMessage' <- toJSVal onMessageWrapped
-  ws <- call newWS newWS [url', protocols', onOpen', onError', onClose', onMessage']
+  ws <- new (jsg "WebSocket") (url, protocols)
+  ws ^. jss "binaryType" "arraybuffer"
+  _ <- ws ^. js2 "addEventListener" "open" onOpenWrapped
+  _ <- ws ^. js2 "addEventListener" "error" onErrorWrapped
+  _ <- ws ^. js2 "addEventListener" "close" onCloseWrapped
+  _ <- ws ^. js2 "addEventListener" "message" onMessageWrapped
   return $ JSWebSocket $ WebSocket ws
 
 onBSMessage :: Either ByteString JSVal -> JSM ByteString

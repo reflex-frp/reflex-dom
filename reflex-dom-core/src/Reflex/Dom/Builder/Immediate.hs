@@ -27,6 +27,8 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
+{-# LANGUAGE ViewPatterns #-}
+
 -- | This is a builder to be used on the client side. It can be run in two modes:
 --
 --  1. in "hydration mode", reusing DOM nodes already in the page (as produced
@@ -156,7 +158,7 @@ import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnc
 import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, Node, TouchEvent, WheelEvent, uncheckedCastTo)
 import GHCJS.DOM.UIEvent
 #ifndef ghcjs_HOST_OS
-import Language.Javascript.JSaddle (call, eval) -- Avoid using eval in ghcjs. Use ffi instead
+import qualified Language.Javascript.JSaddle as JS
 #endif
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
@@ -471,9 +473,15 @@ foreign import javascript unsafe
   removeSubsequentNodes_ :: DOM.Node -> IO ()
 removeSubsequentNodes n = liftJSM $ removeSubsequentNodes_ (toNode n)
 #else
-removeSubsequentNodes n = liftJSM $ do
-  f <- eval ("(function(n) { while (n.nextSibling) { (n.parentNode).removeChild(n.nextSibling); }; })" :: Text)
-  void $ call f f [n]
+removeSubsequentNodes (toNode -> n) = liftJSM go
+  where
+    go = do
+      x <- n ^. JS.js ("nextSibling" :: Text)
+      JS.ghcjsPure (JS.isTruthy x) >>= \case
+        False -> pure ()
+        True -> do
+          _ <- n ^. JS.js ("parentNode" :: Text) . JS.js1 ("removeChild" :: Text) x
+          go
 #endif
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -498,9 +506,15 @@ foreign import javascript unsafe
   extractBetweenExclusive_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
 extractBetweenExclusive df s e = liftJSM $ extractBetweenExclusive_ df (toNode s) (toNode e)
 #else
-extractBetweenExclusive df s e = liftJSM $ do
-  f <- eval ("(function(df,s,e) { var x; for(;;) { x = s['nextSibling']; if(e===x) { break; }; df['appendChild'](x); } })" :: Text)
-  void $ call f f (df, s, e)
+extractBetweenExclusive df (toNode -> s) (toNode -> e) = liftJSM go
+  where
+    go = do
+      x <- s ^. JS.js ("nextSibling" :: Text)
+      JS.strictEqual e x >>= \case
+        True -> pure ()
+        False -> do
+          _ <- df ^. JS.js1 ("appendChild" :: Text) x
+          go
 #endif
 
 -- | s and e must both be children of the same node and s must precede e;
@@ -523,9 +537,14 @@ foreign import javascript unsafe
   extractUpTo_ :: DOM.DocumentFragment -> DOM.Node -> DOM.Node -> IO ()
 extractUpTo df s e = liftJSM $ extractUpTo_ df (toNode s) (toNode e)
 #else
-extractUpTo df s e = liftJSM $ do
-  f <- eval ("(function(df,s,e){ var x = s; var y; for(;;) { y = x['nextSibling']; df['appendChild'](x); if(e===y) { break; } x = y; } })" :: Text)
-  void $ call f f (df, s, e)
+extractUpTo df (JS.toJSVal -> s) (JS.toJSVal -> e) = liftJSM $ go s
+  where
+    go x = JS.strictEqual x e >>= \case
+      True -> pure ()
+      False -> do
+        y <- x ^. JS.js ("nextSibling" :: Text)
+        _ <- df ^. JS.js1 ("appendChild" :: Text) x
+        go (pure y)
 #endif
 
 type SupportsHydrationDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m))
