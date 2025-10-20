@@ -86,7 +86,6 @@ library
     data-default >= 0.5 && < 0.9,
     dependent-map >= 0.3 && < 0.5,
     dependent-sum >= 0.6 && < 0.8,
-    dependent-sum-template >= 0.1 && < 0.3,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
