@@ -89,11 +89,6 @@ import qualified Test.WebDriver.Capabilities as WD
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 
-
-#if !MIN_VERSION_webdriver(0,10,0)
-deriving instance MonadMask WD
-#endif
-
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
 
@@ -727,6 +722,8 @@ tests withDebugging wdConfig caps _selenium = do
         inputRef <- newRef ("" :: Text)
         let checkValue = do
               WD.sendKeys "hello world" =<< findElemWithRetry (WD.ByTag "textarea")
+              -- This delay is for fixing spurious CI failures
+              liftIO $ threadDelay (4000 * 1000)
               WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "hello world"
         testWidget (pure ()) checkValue $ do
@@ -929,6 +926,8 @@ tests withDebugging wdConfig caps _selenium = do
               e <- findElemWithRetry $ WD.ByTag "select"
               assertAttr e "value" (Just "one")
               WD.click =<< findElemWithRetry (WD.ById "two")
+              -- This delay is for fixing spurious CI failures
+              liftIO $ threadDelay (4000 * 1000)
               assertAttr e "value" (Just "two")
               WD.click =<< findElemWithRetry (WD.ByTag "button")
               readRef inputRef `shouldBeWithRetryM` "two"
@@ -1001,7 +1000,10 @@ tests withDebugging wdConfig caps _selenium = do
           performEvent_ $ liftIO . writeRef focusRef <$> updated (_selectElement_hasFocus e)
       it "has correct initial value" $ runWD $ do
         valueRef :: IORef Text <- newRef ""
-        let checkValue = readRef valueRef `shouldBeWithRetryM` "one"
+        let checkValue = do
+              -- This is a no-op, but prevents a deadlock situation
+              _ <- findElemWithRetry $ WD.ByTag "body"
+              readRef valueRef `shouldBeWithRetryM` "one"
         testWidget (pure ()) checkValue $ do
           prerender_ (pure ()) $ do
             (e, ()) <- selectElement def { _selectElementConfig_initialValue = "one" } options
@@ -1173,6 +1175,8 @@ tests withDebugging wdConfig caps _selenium = do
             liftIO $ do
               writeChan replaceChan1 "one"
               takeMVar lock
+              -- This delay is for fixing spurious CI failures
+              threadDelay (1000 * 1000)
             one <- findElemWithRetry $ WD.ByTag "div"
             shouldContainText "pb" one
             liftIO $ writeChan replaceChan2 "two"
