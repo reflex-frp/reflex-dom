@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -8,6 +7,7 @@
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
+{-# LANGUAGE TypeOperators #-}
 
 -- | A module for performing asynchronous HTTP calls from JavaScript
 -- using the
@@ -173,7 +173,6 @@ import Data.Text.Encoding
 import qualified Data.Text.Lazy as LT
 import qualified Data.Text.Lazy.Builder as B
 import Data.Traversable
-import Data.Typeable
 
 import Language.Javascript.JSaddle.Monad (JSM, askJSM, runJSM, MonadJSM, liftJSM)
 
@@ -182,7 +181,7 @@ data XhrRequest a
                 , _xhrRequest_url :: Text
                 , _xhrRequest_config :: XhrRequestConfig a
                 }
-   deriving (Show, Read, Eq, Ord, Typeable, Functor)
+   deriving (Show, Read, Eq, Ord, Functor)
 
 data XhrRequestConfig a
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map Text Text
@@ -193,7 +192,7 @@ data XhrRequestConfig a
                       , _xhrRequestConfig_withCredentials :: Bool
                       , _xhrRequestConfig_responseHeaders :: XhrResponseHeaders
                       }
-   deriving (Show, Read, Eq, Ord, Typeable, Functor)
+   deriving (Show, Read, Eq, Ord, Functor)
 
 data XhrResponse
    = XhrResponse { _xhrResponse_status :: Word
@@ -202,12 +201,11 @@ data XhrResponse
                  , _xhrResponse_responseText :: Maybe Text
                  , _xhrResponse_headers :: Map (CI Text) Text
                  }
-   deriving (Typeable)
 
 data XhrResponseHeaders =
     OnlyHeaders (Set.Set (CI Text)) -- ^ Parse a subset of headers from the XHR Response
   | AllHeaders -- ^ Parse all headers from the XHR Response
-  deriving (Show, Read, Eq, Ord, Typeable)
+  deriving (Show, Read, Eq, Ord)
 
 instance Default XhrResponseHeaders where
   def = OnlyHeaders mempty
@@ -317,7 +315,7 @@ performRequestAsync = performRequestAsync' newXMLHttpRequest . fmap return
 performMkRequestAsync :: (MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m, IsXhrPayload a) => Event t (Performable m (XhrRequest a)) -> m (Event t XhrResponse)
 performMkRequestAsync = performRequestAsync' newXMLHttpRequest
 
-performRequestAsync' :: (MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m) => (XhrRequest p -> (a -> JSM ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (XhrRequest p)) -> m (Event t a)
+performRequestAsync' :: (PerformEvent t m, TriggerEvent t m) => (XhrRequest p -> (a -> JSM ()) -> Performable m XMLHttpRequest) -> Event t (Performable m (XhrRequest p)) -> m (Event t a)
 performRequestAsync' newXhr req = performEventAsync $ ffor req $ \hr cb -> do
   r <- hr
   _ <- newXhr r $ liftIO . cb

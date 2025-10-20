@@ -41,8 +41,6 @@ public class MainWidget {
     a.setContentView(wv);
     final WebSettings ws = wv.getSettings();
     ws.setJavaScriptEnabled(true);
-    ws.setAllowFileAccessFromFileURLs(true);
-    ws.setAllowUniversalAccessFromFileURLs(true);
     ws.setDomStorageEnabled(true);
     wv.setWebContentsDebuggingEnabled(true);
     // allow video to play without user interaction
@@ -64,7 +62,8 @@ public class MainWidget {
         @Override
         public WebResourceResponse shouldInterceptRequest (WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
-            if(!uri.getScheme().equals("file"))
+	    Log.i("reflex", uri.toString());
+            if(!uri.getScheme().equals("file") && !uri.getEncodedAuthority().equals("appassets.androidplatform.net"))
                 return null;
 
             String path = uri.getPath();
@@ -87,7 +86,7 @@ public class MainWidget {
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            if( url != null && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
+            if( url != null && !url.startsWith("http://appassets.androidplatform.net") && !url.startsWith("https://appassets.androidplatform.net") && !url.startsWith("file://")) {
                 try {
                     view.getContext().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                 }
@@ -144,6 +143,16 @@ public class MainWidget {
               wv.evaluateJavascript(jsStr, null);
             }
           });
+      }
+      public final void goBack() {
+        hnd.post(new Runnable() {
+          @Override
+	  public void run() {
+            if(wv.canGoBack()) {
+              wv.goBack();
+            }
+	  }
+	});
       }
     };
   }

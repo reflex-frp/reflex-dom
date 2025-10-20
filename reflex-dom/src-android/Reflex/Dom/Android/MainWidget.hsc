@@ -2,11 +2,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Android.MainWidget
   ( startMainWidget
+  , goBack
+  , JSExecutor(..)
+  , withGlobalJSExecutor
   ) where
 
 import Android.HaskellActivity
 import Control.Concurrent
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -23,9 +27,9 @@ import Foreign.Storable
 import Language.Javascript.JSaddle (JSM)
 import Language.Javascript.JSaddle.Run (runJavaScript)
 import Language.Javascript.JSaddle.Run.Files (initState, runBatch, ghcjsHelpers)
+import System.IO.Unsafe
 
 #include "MainWidget.h"
-
 
 startMainWidget :: HaskellActivity -> ByteString -> JSM () -> IO ()
 startMainWidget a url jsm = do
@@ -57,13 +61,27 @@ startMainWidget a url jsm = do
         \jsaddle.postReady();\n"
     }
   BS.useAsCString url $ \curl -> do
-    writeIORef executorRef =<< startMainWidget_ a curl callbacks
+    executor <- startMainWidget_ a curl callbacks
+    writeIORef executorRef executor
+    writeIORef globalJSExecutor $ Just executor
 
 newtype JSExecutor = JSExecutor { unJSExecutor :: Ptr JSExecutor }
+
+-- Ugh. But not doing this is also unfortunate for being able to clear the history so that the "back" list is good.
+globalJSExecutor :: IORef (Maybe JSExecutor)
+globalJSExecutor = unsafePerformIO $ newIORef Nothing
+
+withGlobalJSExecutor :: MonadIO m => (JSExecutor -> IO ()) -> m ()
+withGlobalJSExecutor f = liftIO $ do
+  executor <- readIORef globalJSExecutor
+  case executor of
+    Just e -> f e
+    _ -> pure ()
 
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_start" startMainWidget_ :: HaskellActivity -> CString -> Ptr JSaddleCallbacksPtrs -> IO JSExecutor
 
 foreign import ccall safe "Reflex_Dom_Android_MainWidget_runJS" runJS :: JSExecutor -> CString -> CSize -> IO ()
+foreign import ccall safe "Reflex_Dom_Android_MainWidget_back" goBack :: JSExecutor -> IO ()
 
 data JSaddleCallbacks = JSaddleCallbacks
   { _jsaddleCallbacks_jsaddleStart :: IO ()

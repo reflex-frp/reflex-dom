@@ -1,5 +1,39 @@
 # Revision history for reflex-dom
 
+## 0.6.3.4
+
+* Fix WASM related issues
+
+## 0.6.3.3
+
+* Support GHC 9.12
+
+## 0.6.3.2-r1
+
+* Require reflex-dom-core >= 0.8.1.0
+
+## 0.6.3.2
+
+* Build with GHC 9.10
+
+## 0.6.3.1-r1
+
+* Require reflex-dom-core >= 0.8.1.0
+
+## 0.6.3.1
+
+* Don't depend on webkit2gtk on android
+
+## 0.6.3.0
+
+* Use android-activity 0.2
+* Fix bug in android back button handler
+
+## 0.6.2.0
+
+* [#452](https://github.com/reflex-frp/reflex-dom/pull/452) Allow file access on newer android, following usage recommended by the [official docs](https://developer.android.com/reference/androidx/webkit/WebViewAssetLoader)
+* [#453](https://github.com/reflex-frp/reflex-dom/pull/453) History management for android
+
 ## 0.6.1.1-r1
 
 * Loosen reflex-dom-core version bounds to allow reflex-dom-core 0.7.*

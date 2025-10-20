@@ -1,10 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-
 module Reflex.Dom.Xhr.ResponseType where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Data.Typeable
 import GHCJS.DOM.Blob (Blob)
 
 data XhrResponseType
@@ -12,7 +9,7 @@ data XhrResponseType
   | XhrResponseType_ArrayBuffer
   | XhrResponseType_Blob
   | XhrResponseType_Text
-  deriving (Show, Read, Eq, Ord, Typeable)
+  deriving (Show, Read, Eq, Ord)
 
 data XhrResponseBody
   = XhrResponseBody_Default Text

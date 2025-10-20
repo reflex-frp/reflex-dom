@@ -33,14 +33,13 @@ import Reflex.Profiled
 import Control.Concurrent
 import Control.Lens
 import Control.Monad
-import Control.Monad.Reader hiding (forM, forM_, mapM, mapM_, sequence, sequence_)
+import Control.Monad.Reader
 import Control.Monad.Ref
 import Data.ByteString (ByteString)
 import Data.Dependent.Sum (DSum (..))
 import Data.Foldable (for_)
 import Data.IORef
 import Data.Maybe
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding
@@ -58,7 +57,7 @@ import Reflex.Profiled
 
 {-# INLINE mainHydrationWidgetWithHead #-}
 mainHydrationWidgetWithHead :: (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
-mainHydrationWidgetWithHead = mainHydrationWidgetWithHead'
+mainHydrationWidgetWithHead head' body = mainHydrationWidgetWithHead' head' body
 
 {-# INLINABLE mainHydrationWidgetWithHead' #-}
 -- | Warning: `mainHydrationWidgetWithHead'` is provided only as performance tweak. It is expected to disappear in future releases.
@@ -67,7 +66,7 @@ mainHydrationWidgetWithHead' = mainHydrationWidgetWithSwitchoverAction' (pure ()
 
 {-# INLINE mainHydrationWidgetWithSwitchoverAction #-}
 mainHydrationWidgetWithSwitchoverAction :: JSM () -> (forall x. HydrationWidget x ()) -> (forall x. HydrationWidget x ()) -> JSM ()
-mainHydrationWidgetWithSwitchoverAction = mainHydrationWidgetWithSwitchoverAction'
+mainHydrationWidgetWithSwitchoverAction switchoverAction head' body = mainHydrationWidgetWithSwitchoverAction' switchoverAction head' body
 
 {-# INLINABLE mainHydrationWidgetWithSwitchoverAction' #-}
 -- | Warning: `mainHydrationWidgetWithSwitchoverAction'` is provided only as performance tweak. It is expected to disappear in future releases.
@@ -187,7 +186,7 @@ runHydrationWidgetWithHeadAndBodyWithFailure onFailure switchoverAction app = wi
 
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
-mainWidget = mainWidget'
+mainWidget w = mainWidget' w
 
 {-# INLINABLE mainWidget' #-}
 -- | Warning: `mainWidget'` is provided only as performance tweak. It is expected to disappear in future releases.

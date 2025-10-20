@@ -11,6 +11,7 @@
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
+{-# LANGUAGE TypeOperators #-}
 module Reflex.Dom.Old
        ( MonadWidget
        , El
@@ -264,7 +265,7 @@ elStopPropagationNS ns elementTag en child = do
         & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
   snd <$> element elementTag cfg child
 
-elDynHtmlAttr' :: (DOM.MonadJSM m, MonadWidget t m) => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
+elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
   let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
   (e, _) <- element elementTag cfg $ return ()

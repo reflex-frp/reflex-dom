@@ -13,12 +13,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 #endif
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
 
 import Prelude
 
 import Control.Lens hiding (element, ix)
+import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -27,15 +29,15 @@ import Data.Default
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Functor.Misc
+import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Semigroup
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
-import GHCJS.DOM.Types (MonadJSM, File, uncheckedCastTo)
+import GHCJS.DOM.Types (File, uncheckedCastTo)
 import qualified GHCJS.DOM.Types as DOM (HTMLElement(..), EventTarget(..))
 import Reflex.Class
 import Reflex.Collection
@@ -45,7 +47,6 @@ import Reflex.Dom.Class
 import Reflex.Dom.Widget.Basic
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
 import qualified Text.Read as T
 
 import qualified GHCJS.DOM.Event as Event
@@ -232,7 +233,7 @@ checkbox checked config = do
     , _checkbox_change = _inputElement_checkedChange i
     }
 
-type family CheckboxViewEventResultType (en :: EventTag) :: * where
+type family CheckboxViewEventResultType (en :: EventTag) :: Type where
   CheckboxViewEventResultType 'ClickTag = Bool
   CheckboxViewEventResultType t = EventResultType t
 
@@ -289,7 +290,7 @@ newtype CheckboxViewEventResult en = CheckboxViewEventResult { unCheckboxViewEve
 
 -- | Create a view only checkbox
 {-# INLINABLE checkboxView #-}
-checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m, MonadHold t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: forall t m. (DomBuilder t m, DomBuilderSpace m ~ GhcjsDomSpace, PostBuild t m) => Dynamic t (Map Text Text) -> Dynamic t Bool -> m (Event t Bool)
 checkboxView dAttrs dValue = do
   let permanentAttrs = "type" =: "checkbox"
   modifyAttrs <- dynamicAttributesToModifyAttributes $ fmap (Map.union permanentAttrs) dAttrs
@@ -335,7 +336,7 @@ instance Reflex t => Default (FileInputConfig t) where
   def = FileInputConfig { _fileInputConfig_attributes = constDyn mempty
                         }
 
-fileInput :: forall t m. (MonadIO m, MonadJSM m, MonadFix m, MonadHold t m, TriggerEvent t m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
+fileInput :: forall t m. (MonadIO m, DomBuilder t m, PostBuild t m, DomBuilderSpace m ~ GhcjsDomSpace)
           => FileInputConfig t -> m (FileInput (DomBuilderSpace m) t)
 fileInput config = do
   let insertType = Map.insert "type" "file"
@@ -368,7 +369,7 @@ instance Reflex t => Default (DropdownConfig t k) where
                        , _dropdownConfig_attributes = constDyn mempty
                        }
 
-type family DropdownViewEventResultType (en :: EventTag) :: * where
+type family DropdownViewEventResultType (en :: EventTag) :: Type where
   DropdownViewEventResultType 'ChangeTag = Text
   DropdownViewEventResultType t = EventResultType t
 
@@ -648,7 +649,7 @@ instance HasSetValue (CheckboxConfig t) where
   setValue = checkboxConfig_setValue
 
 class HasValue a where
-  type Value a :: *
+  type Value a :: Type
   value :: a -> Value a
 
 instance HasValue (InputElement er d t) where

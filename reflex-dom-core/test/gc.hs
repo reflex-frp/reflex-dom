@@ -11,7 +11,6 @@ import Data.Int
 import Data.Text as T
 import Language.Javascript.JSaddle.Warp
 import Reflex.Dom.Core
-import Reflex.Time
 import System.Exit
 import System.Mem
 import System.Process
@@ -20,7 +19,7 @@ import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 
 #if MIN_VERSION_base(4,11,0)
-import GHC.Stats (getRTSStatsEnabled, getRTSStats, RTSStats(..), gcdetails_live_bytes, gc)
+import GHC.Stats (getRTSStats, RTSStats(..), gcdetails_live_bytes, gc)
 currentBytesUsed :: RTSStats -> Int64
 currentBytesUsed = fromIntegral . gcdetails_live_bytes . gc
 #else

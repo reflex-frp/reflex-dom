@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -58,7 +59,6 @@ import Network.Socket
 import Network.Wai
 import Network.WebSockets
 import Reflex.Dom.Core
-import Reflex.Dom.Widget.Input (dropdown)
 import Reflex.Patch.DMapWithMove
 import System.Directory
 import System.Environment
@@ -115,17 +115,10 @@ assertBool msg bool = liftIO $ HUnit.assertBool msg bool
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags }) WD.defaultConfig
 
-keyMap :: DMap DKey Identity
-keyMap = DMap.fromList
-  [ Key_Int ==> 0
-  , Key_Char ==> 'A'
-  ]
-
 data DKey a where
   Key_Int :: DKey Int
   Key_Char :: DKey Char
   Key_Bool :: DKey Bool
-
 
 textKey :: DKey a -> Text
 textKey = \case
@@ -137,6 +130,21 @@ deriveArgDict ''DKey
 deriveGEq ''DKey
 deriveGCompare ''DKey
 deriveGShow ''DKey
+
+keyMap :: DMap DKey Identity
+keyMap = DMap.fromList
+  [ Key_Int ==> 0
+  , Key_Char ==> 'A'
+  ]
+
+data Key2 a where
+  Key2_Int :: Int -> Key2 Int
+  Key2_Char :: Char -> Key2 Char
+
+deriveGEq ''Key2
+deriveGCompare ''Key2
+deriveGShow ''Key2
+deriveArgDict ''Key2
 
 deriving instance MonadFail WD
 
@@ -163,11 +171,11 @@ tests withDebugging wdConfig caps _selenium = do
         r <- m
         putStrLnDebug "after"
         return r
-      testWidgetStatic :: WD b -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
+      testWidgetStatic :: WD b -> (forall m. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidgetStatic = testWidgetStaticDebug withDebugging
-      testWidget :: WD () -> WD b -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
+      testWidget :: WD () -> WD b -> (forall m. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidget = testWidgetDebug True withDebugging
-      testWidget' :: WD a -> (a -> WD b) -> (forall m js. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
+      testWidget' :: WD a -> (a -> WD b) -> (forall m. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidget' = testWidgetDebug' True withDebugging
   session' "text" $ do
     it "works" $ runWD $ do
@@ -1728,7 +1736,7 @@ testWidgetStaticDebug
   :: Bool
   -> WD b
   -- ^ Webdriver commands to run before JS runs and after hydration switchover
-  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing
   -> WD b
 testWidgetStaticDebug withDebugging w = testWidgetDebug True withDebugging (void w) w
@@ -1741,7 +1749,7 @@ testWidgetDebug
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing
   -> WD b
 testWidgetDebug hardFailure withDebugging beforeJS afterSwitchover =
@@ -1758,7 +1766,7 @@ testWidgetDebug'
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> (a -> WD b)
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget = do
@@ -1823,12 +1831,3 @@ withAsync' f g = bracket
   (liftIO $ Async.async f)
   (liftIO . Async.uninterruptibleCancel)
   (const g)
-
-data Key2 a where
-  Key2_Int :: Int -> Key2 Int
-  Key2_Char :: Char -> Key2 Char
-
-deriveGEq ''Key2
-deriveGCompare ''Key2
-deriveGShow ''Key2
-deriveArgDict ''Key2

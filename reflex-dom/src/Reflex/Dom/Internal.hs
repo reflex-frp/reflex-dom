@@ -13,7 +13,6 @@ module Reflex.Dom.Internal
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
-import Reflex.Dom.Core (Widget)
 import Reflex.Dom.Main as Main hiding
        (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
         mainWidgetWithHead', mainWidgetInElementById, runApp',
@@ -27,8 +26,6 @@ import qualified Reflex.Dom.Main as Main
 run :: a -> a
 run = id
 #elif defined(MIN_VERSION_jsaddle_warp)
-import Data.Maybe (maybe)
-import Data.Monoid ((<>))
 import Language.Javascript.JSaddle (JSM)
 import qualified Language.Javascript.JSaddle.Warp as JW
 import System.Environment (lookupEnv)
@@ -38,6 +35,7 @@ run jsm = do
   port <- maybe 3003 read <$> lookupEnv "JSADDLE_WARP_PORT"
   putStrLn $ "Running jsaddle-warp server on port " <> show port
   JW.run port jsm
+
 #elif defined(MIN_VERSION_jsaddle_wkwebview)
 #if defined(ios_HOST_OS)
 import Data.Default
@@ -56,18 +54,24 @@ run jsm = do
       return ""
     Just p -> return $ "file://" <> p <> "/index.html"
   run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
+
 #else
 import Language.Javascript.JSaddle.WKWebView (run)
 #endif
 #elif defined(ANDROID)
 import Android.HaskellActivity
 import Control.Monad
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Concurrent
+import Language.Javascript.JSaddle (JSM)
 import Data.Default
+import Data.IORef
+import Data.Maybe
 import Data.String
 import Reflex.Dom.Android.MainWidget
 import System.IO
-import Language.Javascript.JSaddle (JSM)
+import System.IO.Unsafe
+import Language.Javascript.JSaddle (JSM, eval)
 
 run :: JSM () -> IO ()
 run jsm = do
@@ -76,17 +80,28 @@ run jsm = do
   continueWithCallbacks $ def
     { _activityCallbacks_onCreate = \_ -> do
         a <- getHaskellActivity
-        let startPage = fromString "file:///android_asset/index.html"
+        let startPage = fromString "https://appassets.androidplatform.net/index.html"
         startMainWidget a startPage jsm
+    , _activityCallbacks_onBackPressed = triggerBackButton
     }
   forever $ threadDelay 1000000000
-#elif defined(wasm32_HOST_ARCH)
+
+triggerBackButton :: MonadIO m => m ()
+triggerBackButton = withGlobalJSExecutor goBack
+
+#elif defined(MIN_VERSION_jsaddle_wasm)
 import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
 import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
-run = Wasm.run 0
-#else
+run = Wasm.run
+
+#elif defined(MIN_VERSION_jsaddle_webkit2gtk)
 import Language.Javascript.JSaddle.WebKitGTK (run)
+
+#else
+import qualified GHC.TypeLits as GHC
+run :: GHC.TypeError (GHC.Text "Attempting to compile reflex-dom for unsupported platform")
+run = error "unreachable"
 #endif
 
 mainWidget :: (forall x. Widget x ()) -> IO ()

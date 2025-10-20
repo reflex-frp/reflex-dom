@@ -15,13 +15,12 @@ library
   hs-source-dirs: src
   build-depends:
     async,
-    base >= 4.7 && < 4.15,
-    bytestring == 0.10.*,
+    base >= 4.7 && < 4.22,
+    bytestring >= 0.10 && < 0.13,
     chrome-test-utils,
     exceptions,
-    -- Until hspec-webdriver supports newer hspec-core versions
-    hspec-core < 2.8,
-    hspec-webdriver >= 1.2.1,
+    hspec-core < 2.12,
+    hspec-webdriver >= 1.2.2,
     http-types,
     jsaddle >= 0.9.0.0 && < 0.10,
     jsaddle-warp,
@@ -29,7 +28,7 @@ library
     process,
     reflex-dom-core,
     silently,
-    text == 1.2.*,
+    text >= 1.2 && < 2.2,
     wai,
     warp,
     webdriver,

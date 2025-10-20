@@ -10,7 +10,7 @@
       testSystemDepends = with nixpkgs; (drv.testSystemDepends or []) ++ [
         selenium-server-standalone which
         chromium
-        nixpkgs.iproute
+        nixpkgs.iproute2
       ];
 
       # The headless browser run as part of gc tests would hang/crash without this

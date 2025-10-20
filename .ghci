@@ -1,4 +1,0 @@
-:set -isrc
-
--- Since we're in GHCi, we can't be using GHCJS
-:set -isrc-ghc

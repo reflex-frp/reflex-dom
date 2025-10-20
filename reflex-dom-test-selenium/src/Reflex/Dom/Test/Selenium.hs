@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -54,7 +55,9 @@ import qualified Test.Hspec.Core.Spec as Hspec
 import qualified Test.WebDriver as WD
 import qualified Test.WebDriver.Capabilities as WD
 
+#if !MIN_VERSION_webdriver(0,10,0)
 deriving instance MonadMask WD
+#endif
 
 data SeleniumSetupConfig = SeleniumSetupConfig
   { _seleniumSetupConfig_chromiumPath :: FilePath
@@ -116,7 +119,7 @@ type TestWidget t m =
 data TestWidgetConfig = TestWidgetConfig
   { _testWidgetConfig_debug :: Bool
   -- ^ If this flag is set to True, during the test we will emit debug messages
-  , _testWidgetConfig_headWidget :: (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  , _testWidgetConfig_headWidget :: (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ We can add widgets here that will be included in the head of the page
   --   (useful for example to include external js libraries in the tests)
   , _testWidgetConfig_jsaddlePort :: PortNumber
@@ -131,7 +134,7 @@ testWidget
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidget cfg before after widget = testWidget' cfg before (const after) widget
@@ -142,7 +145,7 @@ testWidgetStatic
   :: TestWidgetConfig
   -> WD a
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD a
 testWidgetStatic cfg before widget = testWidget' cfg before pure widget
@@ -152,7 +155,7 @@ testWidgetHydrated
   :: TestWidgetConfig
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m . TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidgetHydrated cfg after widget = testWidget' cfg (pure ()) (const after) widget
@@ -166,7 +169,7 @@ testWidget'
   -- ^ Webdriver commands to run before the JS runs (i.e. on the statically rendered page)
   -> (a -> WD b)
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m js. TestWidget js (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS afterSwitchover bodyWidget = do
