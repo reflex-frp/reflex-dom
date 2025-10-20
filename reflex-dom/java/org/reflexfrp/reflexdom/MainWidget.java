@@ -31,8 +31,6 @@ import systems.obsidian.HaskellActivity;
 
 public class MainWidget {
   private static Object startMainWidget(final HaskellActivity a, String url, long jsaddleCallbacks, final String initialJS) {
-    CookieManager.setAcceptFileSchemeCookies(true); //TODO: Can we do this just for our own WebView?
-
     // Remove title and notification bars
     a.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -43,6 +41,11 @@ public class MainWidget {
     ws.setJavaScriptEnabled(true);
     ws.setDomStorageEnabled(true);
     wv.setWebContentsDebuggingEnabled(true);
+    CookieManager cookieManager = CookieManager.getInstance();
+    cookieManager.setAcceptCookie(true);
+    cookieManager.setAcceptThirdPartyCookies(wv, true);
+    cookieManager.setAcceptFileSchemeCookies(true); //TODO: Can we do this just for our own WebView?
+
     // allow video to play without user interaction
     wv.getSettings().setMediaPlaybackRequiresUserGesture(false);
     final AtomicBoolean jsaddleLoaded = new AtomicBoolean(false);
@@ -79,8 +82,7 @@ public class MainWidget {
             catch (IOException e) {
                 Log.i("reflex", "Opening resource failed, Webview will handle the request ..");
                 e.printStackTrace();
-            }
-
+            }	    
             return null;
         }
 

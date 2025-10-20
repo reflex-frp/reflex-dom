@@ -54,7 +54,7 @@ library
   hs-source-dirs: src
   if os(android)
     hs-source-dirs: src-android
-    other-modules: Reflex.Dom.Android.MainWidget
+    exposed-modules: Reflex.Dom.Android.MainWidget
     build-depends:
       aeson >= 1.4 && < 2.3,
       android-activity == 0.2.*,
