@@ -4,7 +4,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+#if MIN_VERSION_base(4,16,0)
 {-# LANGUAGE UnliftedDatatypes #-}
+#endif
 
 module Reflex.Dom.Internal
   ( module Main
