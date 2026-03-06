@@ -43,6 +43,7 @@ import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
 import Data.Dependent.Sum (DSum(..), (==>))
+import Data.Foldable (traverse_)
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
@@ -87,14 +88,12 @@ import qualified Test.WebDriver as WD
 import qualified Test.WebDriver.Capabilities as WD
 
 import Test.Util.ChromeFlags
-import Test.Util.UnshareNetwork
 
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
 
-seleniumPort, jsaddlePort :: PortNumber
+seleniumPort :: PortNumber
 seleniumPort = 8000
-jsaddlePort = 8001
 
 -- TODO Remove orphan
 instance MonadRef WD where
@@ -108,9 +107,6 @@ assertEqual msg a b = liftIO $ HUnit.assertEqual msg a b
 
 assertFailure :: MonadIO m => String -> m ()
 assertFailure = liftIO . HUnit.assertFailure
-
-assertBool :: (MonadIO m) => String -> Bool -> m ()
-assertBool msg bool = liftIO $ HUnit.assertBool msg bool
 
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags = WD.useBrowser (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags }) WD.defaultConfig
@@ -150,7 +146,6 @@ deriving instance MonadFail WD
 
 main :: IO ()
 main = do
-  unshareNetwork
   isHeadless <- (== Nothing) <$> lookupEnv "NO_HEADLESS"
   withSandboxedChromeFlags isHeadless $ \chromeFlags -> do
     withSeleniumServer $ \selenium -> do
@@ -1049,15 +1044,14 @@ tests withDebugging wdConfig caps _selenium = do
     it "works inside other element" $ runWD $ do
       testWidget (checkTextInTag "div" "One") (checkTextInTag "div" "Two") $ do
         el "div" $ prerender_ (text "One") (text "Two")
--- TODO re-enable this
---    it "places fences and removes them" $ runWD $ do
---      testWidget'
---        (do
---          scripts <- WD.findElems $ WD.ByTag "script"
---          filterM (\s -> maybe False (\t -> "prerender" `T.isPrefixOf` t) <$> WD.attr s "type") scripts
---        )
---        (traverse_ elementShouldBeRemoved)
---        (el "span" $ prerender_ (text "One") (text "Two"))
+    it "places fences and removes them" $ runWD $ do
+      testWidget'
+        (do
+          scripts <- WD.findElems $ WD.ByTag "script"
+          filterM (\s -> maybe False (\t -> "prerender" `T.isPrefixOf` t) <$> WD.attr s "type") scripts
+        )
+        (traverse_ elementShouldBeRemoved)
+        (el "span" $ prerender_ (text "One") (text "Two"))
     it "postBuild works on server side" $ runWD $ do
       lock :: MVar () <- liftIO newEmptyMVar
       testWidget (liftIO $ takeMVar lock) (pure ()) $ do
@@ -1802,8 +1796,14 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
     putStrLnDebug "sent response"
     return r
   waitJSaddle <- liftIO newEmptyMVar
+  port <- liftIO $ do
+    sock <- socket AF_INET Stream defaultProtocol
+    bind sock $ SockAddrInet 0 0
+    p <- socketPort sock
+    close sock
+    return p
   let settings = foldr ($) Warp.defaultSettings
-        [ Warp.setPort $ fromIntegral $ toInteger jsaddlePort
+        [ Warp.setPort $ fromIntegral port
         , Warp.setBeforeMainLoop $ do
             putStrLnDebug "putting waitJSaddle"
             putMVar waitJSaddle ()
@@ -1816,7 +1816,7 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
     putStrLnDebug "taking waitJSaddle"
     liftIO $ takeMVar waitJSaddle
     putStrLnDebug "opening page"
-    WD.openPage $ "http://localhost:" <> show jsaddlePort
+    WD.openPage $ "http://localhost:" <> show port
     putStrLnDebug "running beforeJS"
     a <- beforeJS
     putStrLnDebug "putting waitBeforeJS"

@@ -214,7 +214,7 @@ test-suite hydration
     hs-source-dirs:   test
     default-language: Haskell98
     ghc-options:
-        -rtsopts "-with-rtsopts=-T -V0" -Wall -fwarn-tabs
+        -threaded -rtsopts "-with-rtsopts=-T -V0" -Wall -fwarn-tabs
         -funbox-strict-fields -O2 -ferror-spans
 
     ghc-prof-options: -fprof-auto -optP-DPROFILING

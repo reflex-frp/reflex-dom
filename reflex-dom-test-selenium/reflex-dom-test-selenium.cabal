@@ -38,7 +38,7 @@ library
         text >= 1.2 && < 2.2,
         wai,
         warp,
-        webdriver,
+        webdriver < 0.13,
         websockets
 
     if (!os(linux) || !arch(x86_64))
