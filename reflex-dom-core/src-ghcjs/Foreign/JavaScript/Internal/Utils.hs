@@ -1,7 +1,9 @@
 {-# LANGUAGE CPP #-}
+#ifdef ghcjs_HOST_OS
 {-# LANGUAGE ForeignFunctionInterface #-}
-#ifdef __ghcjs_HOST_OS
+#ifdef __GHCJS__
 {-# LANGUAGE JavaScriptFFI #-}
+#endif
 #endif
 
 module Foreign.JavaScript.Internal.Utils

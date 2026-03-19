@@ -36,8 +36,10 @@ import Language.Haskell.TH
 import GHCJS.DOM.Types (JSContextRef, askJSM)
 #ifdef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM)
+#ifdef __GHCJS__
 import qualified GHCJS.DOM.Types as JS
 import qualified GHCJS.Foreign as JS
+#endif
 #if __GLASGOW_HASKELL__ < 900
 import qualified GHCJS.Foreign.Callback as JS
 import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
