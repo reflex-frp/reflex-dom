@@ -205,7 +205,7 @@ test-suite hlint
         hlint >=2.0 && <4.0,
         reflex-dom-core
 
-    if !flag(hlint-tests) || arch(javascript)
+    if !flag(hlint-tests) || arch(javascript) || arch(wasm32)
         buildable: False
 
 test-suite hydration
