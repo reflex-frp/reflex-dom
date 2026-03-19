@@ -1,0 +1,3 @@
+[submodule "deps/nix-haskell"]
+	path = deps/nix-haskell
+	url = git@github.com:reflex-frp/nix-haskell.git

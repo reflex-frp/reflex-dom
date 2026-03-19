@@ -12,7 +12,7 @@ if os(linux) || os(osx)
    benchmarks: true
 
 package reflex-dom
-  flags: +build-examples
+  flags: +use-warp -webkit2gtk +build-examples
 
 
 

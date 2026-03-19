@@ -1,9 +1,0 @@
-packages:
-  reflex-dom-core/
-  reflex-dom/
-
-package reflex-dom-core
-  flags: -hlint-tests -hydration-tests -gc-tests
-
-package reflex-dom
-  flags: +use-warp -webkit2gtk +build-examples
