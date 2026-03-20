@@ -138,6 +138,7 @@ library
     Reflex.Dom.Old
     Reflex.Dom.Prerender
     Reflex.Dom.Time
+    Reflex.Dom.Tutorial
     Reflex.Dom.WebSocket
     Reflex.Dom.WebSocket.Query
     Reflex.Dom.Widget

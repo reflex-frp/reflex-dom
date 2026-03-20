@@ -228,6 +228,14 @@ instance MonadJSM m => MonadJSM (DomRenderHookT t m) where
   liftJSM' = lift . liftJSM'
 #endif
 
+-- | Environment for 'HydrationDomBuilderT'. Carries references to the DOM
+-- document, parent node, hydration state, and synchronization machinery.
+--
+-- During hydration, the builder walks the pre-existing DOM tree (produced by
+-- 'Reflex.Dom.Builder.Static.renderStatic') and attaches event handlers to
+-- existing nodes rather than creating new ones. After the switchover event
+-- fires, it transitions to immediate mode where new DOM nodes are created
+-- and appended directly.
 data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
   { _hydrationDomBuilderEnv_document :: {-# UNPACK #-} !Document
   -- ^ Reference to the document
@@ -244,11 +252,41 @@ data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
   , _hydrationDomBuilderEnv_delayed :: {-# UNPACK #-} !(IORef (HydrationRunnerT t m ()))
   }
 
--- | A monad for DomBuilder which just gets the results of children and pushes
--- work into an action that is delayed until after postBuild (to match the
--- static builder). The action runs in 'HydrationRunnerT', which performs the
--- DOM takeover and sets up the events, after which point this monad will
--- continue in the vein of 'ImmediateDomBuilderT'.
+-- | The main client-side 'DomBuilder' monad transformer, parameterized by a
+-- 'DomSpace' @s@ which determines whether it operates in hydration mode
+-- or immediate mode.
+--
+-- == Two modes of operation
+--
+-- * @HydrationDomBuilderT 'HydrationDomSpace' t m@ — __hydration mode__:
+--   walks pre-existing DOM nodes (from server-side rendering) and attaches
+--   event handlers without creating new elements. After the switchover event,
+--   transitions to creating nodes normally.
+--
+-- * @HydrationDomBuilderT 'GhcjsDomSpace' t m@ — __immediate mode__
+--   (aliased as 'ImmediateDomBuilderT'): creates and appends real DOM nodes
+--   on every call to 'element', 'textNode', etc.
+--
+-- == Monad stack
+--
+-- Internally, this is a @ReaderT ('HydrationDomBuilderEnv' t m) ('DomRenderHookT' t m)@.
+-- The 'DomRenderHookT' layer manages deferred DOM actions (for safe batching
+-- of DOM mutations) and event trigger channels.
+--
+-- == Instances provided
+--
+-- 'DomBuilder', 'PostBuild', 'TriggerEvent', 'PerformEvent', 'MonadHold',
+-- 'MonadSample', 'MonadJSM', 'Adjustable', 'NotReady', 'HasDocument',
+-- 'Requester'.
+--
+-- When @s ~ GhcjsDomSpace@, 'Element' values contain real DOM references
+-- and 'domEvent' returns live events wired to actual browser event listeners.
+--
+-- The server-side counterpart is 'StaticDomBuilderT' (from
+-- "Reflex.Dom.Builder.Static"). For prerender-based splitting between
+-- server and client code, see "Reflex.Dom.Prerender".
+--
+-- @since 0.8.0.0
 newtype HydrationDomBuilderT s t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (DomRenderHookT t m) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
@@ -268,8 +306,22 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT s t m) 
   requestDomAction = HydrationDomBuilderT . lift . requestDomAction
   requestDomAction_ = HydrationDomBuilderT . lift . requestDomAction_
 
--- | The monad which performs the delayed actions to reuse prerendered nodes and set up events.
--- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
+-- | The monad that performs the actual DOM hydration walk at switchover time.
+--
+-- When the page loads with server-rendered HTML, 'HydrationDomBuilderT'
+-- accumulates deferred actions. When the switchover event fires, those actions
+-- run inside 'HydrationRunnerT', which walks the existing DOM tree:
+--
+-- * The 'ReaderT Node' carries the current parent node
+-- * The 'StateT HydrationState' tracks the most recently visited sibling
+--   (so the runner can advance through child nodes sequentially)
+-- * If the DOM doesn't match expectations (e.g. a text node where an element
+--   was expected), the runner sets @_hydrationState_failed@ and prints a
+--   warning
+--
+-- After the hydration walk completes, any remaining DOM nodes after the last
+-- visited sibling are removed (via 'removeSubsequentNodes'). This cleans up
+-- server-rendered content that the client doesn't expect.
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT HydrationState (ReaderT Node (DomRenderHookT t m)) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
@@ -432,11 +484,22 @@ append n = do
   -> HydrationDomBuilderT s Spider HydrationM ()
   #-}
 
+-- | Tracks whether the builder is still walking pre-rendered DOM nodes
+-- or has switched to creating them from scratch.
+--
+-- During 'HydrationMode_Hydrating', 'HydrationDomBuilderT' expects to find
+-- matching DOM nodes already present (produced by the static renderer).
+-- If the actual DOM doesn't match what the builder expects, hydration will
+-- fail with a warning.
+--
+-- After the switchover event fires, the mode changes to
+-- 'HydrationMode_Immediate' and all subsequent widget builds create new DOM
+-- nodes normally.
 data HydrationMode
   = HydrationMode_Hydrating
-  -- ^ The time from initial load to parity with static builder
+  -- ^ Walking pre-existing server-rendered DOM nodes, attaching event handlers
   | HydrationMode_Immediate
-  -- ^ After hydration
+  -- ^ Creating and appending new DOM nodes (normal operation)
   deriving (Eq, Ord, Show)
 
 {-# INLINABLE getPreviousNode #-}
@@ -517,14 +580,29 @@ extractUpTo df s e = liftJSM $ do
   void $ call f f (df, s, e)
 #endif
 
+-- | Constraint bundle for monads that can run 'HydrationDomBuilderT'.
+--
+-- Compared to 'SupportsStaticDomBuilder', this additionally requires
+-- 'MonadJSM' (and @MonadJSM (Performable m)@) because the hydration and
+-- immediate DOM builders need access to the JavaScript context for DOM
+-- manipulation and event wiring.
+--
+-- This is satisfied by the concrete monad stack used by @mainWidget@ and
+-- friends: 'PerformEventT' over 'DomHost' with a JSM context.
 type SupportsHydrationDomBuilder t m = (Reflex t, MonadJSM m, MonadHold t m, MonadFix m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref JSM, Adjustable t m, PrimMonad m, PerformEvent t m, MonadJSM (Performable m))
 
+-- | Collect all DOM nodes between @start@ (inclusive) and @end@ (exclusive)
+-- into a 'DocumentFragment', removing them from the live DOM. Used internally
+-- by the 'Adjustable' instance to extract widget content regions for
+-- replacement or reordering.
 {-# INLINABLE collectUpTo #-}
 collectUpTo :: (MonadJSM m, IsNode start, IsNode end) => start -> end -> m DOM.DocumentFragment
 collectUpTo s e = do
   currentParent <- getParentNodeUnchecked e -- May be different than it was at initial construction, e.g., because the parent may have dumped us in from a DocumentFragment
   collectUpToGivenParent currentParent s e
 
+-- | Like 'collectUpTo' but takes an explicit parent node, avoiding a
+-- 'getParentNodeUnchecked' call. Useful when the parent is already known.
 {-# INLINABLE collectUpToGivenParent #-}
 collectUpToGivenParent :: (MonadJSM m, IsNode parent, IsNode start, IsNode end) => parent -> start -> end -> m DOM.DocumentFragment
 collectUpToGivenParent currentParent s e = do
@@ -635,6 +713,26 @@ newtype GhcjsDomHandler1 a b = GhcjsDomHandler1 { unGhcjsDomHandler1 :: forall (
 
 newtype GhcjsDomEvent en = GhcjsDomEvent { unGhcjsDomEvent :: EventType en }
 
+-- | The 'DomSpace' for live client-side rendering via GHCJS (or JSaddle).
+--
+-- All associated types resolve to real DOM objects:
+--
+-- * @RawDocument GhcjsDomSpace = Document@
+-- * @RawElement GhcjsDomSpace = Element@
+-- * @RawTextNode GhcjsDomSpace = Text@
+-- * @RawInputElement GhcjsDomSpace = HTMLInputElement@
+-- * @RawTextAreaElement GhcjsDomSpace = HTMLTextAreaElement@
+-- * @RawSelectElement GhcjsDomSpace = HTMLSelectElement@
+--
+-- This is what 'ImmediateDomBuilderT' uses. 'Element' values from this space
+-- carry real DOM node references, so you can pass @_element_raw@ to JavaScript
+-- FFI, read element dimensions, attach custom event listeners, etc.
+--
+-- Compare with 'StaticDomSpace' (all @()@, from "Reflex.Dom.Builder.Static")
+-- and 'HydrationDomSpace' (also @()@ for raw nodes, but uses real event
+-- processing).
+--
+-- @since 0.8.0.0
 data GhcjsDomSpace
 
 instance DomSpace GhcjsDomSpace where
@@ -666,6 +764,22 @@ data Pair1 (f :: k -> *) (g :: k -> *) (a :: k) = Pair1 (f a) (g a)
 
 data Maybe1 f a = Nothing1 | Just1 (f a)
 
+-- | Specification for how DOM events are processed in 'GhcjsDomSpace' and
+-- 'HydrationDomSpace'.
+--
+-- The @er@ parameter is typically 'EventResult', which maps each
+-- 'EventTag' to its result type (e.g. @ClickTag@ → @()@,
+-- @InputTag@ → @Text@, @KeypressTag@ → @Word@).
+--
+-- * @_ghcjsEventSpec_filters@ — per-event-name filters that can inspect the
+--   raw DOM event and return 'EventFlags' (preventDefault, stopPropagation)
+--   plus an optional result. These are installed by 'addEventSpecFlags' in
+--   the 'DomSpace' instance.
+--
+-- * @_ghcjsEventSpec_handler@ — the default handler used for events without
+--   a specific filter. Delegates to 'defaultDomEventHandler' which extracts
+--   the appropriate value from the DOM event (e.g. mouse coordinates for
+--   click, key code for keypress).
 data GhcjsEventSpec er = GhcjsEventSpec
   { _ghcjsEventSpec_filters :: DMap EventName (GhcjsEventFilter er)
   , _ghcjsEventSpec_handler :: GhcjsEventHandler er
@@ -1416,6 +1530,30 @@ instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT s t
     unreadyChildren <- askUnreadyChildren
     liftIO $ modifyIORef' unreadyChildren succ
 
+-- | The 'DomSpace' used during hydration — the process of taking over
+-- server-rendered HTML and attaching event handlers to the existing DOM.
+--
+-- Raw element types are @()@ (just like 'StaticDomSpace') because during
+-- hydration we don't hold references to individual elements in the monad's
+-- return values. However, the event processing infrastructure is real
+-- ('GhcjsEventSpec'), so event handlers are correctly wired up during the
+-- hydration walk.
+--
+-- After hydration completes, 'HydrationDomBuilderT' switches to
+-- 'HydrationMode_Immediate' internally, but the @s@ type parameter remains
+-- 'HydrationDomSpace' — only the runtime behavior changes.
+--
+-- Compare with 'StaticDomSpace' (from "Reflex.Dom.Builder.Static", pure
+-- server-side rendering with no event processing) and 'GhcjsDomSpace'
+-- (full live DOM with real element references).
+--
+-- @
+-- RawDocument HydrationDomSpace = Document  -- real document reference
+-- RawElement HydrationDomSpace  = ()        -- no element references
+-- RawTextNode HydrationDomSpace = ()        -- no text node references
+-- @
+--
+-- @since 0.8.0.0
 data HydrationDomSpace
 
 instance DomSpace HydrationDomSpace where
@@ -1527,6 +1665,29 @@ instance (Reflex t, Monad m, Adjustable t m, MonadHold t m, MonadFix m) => Adjus
   traverseDMapWithKeyWithAdjust f m = DomRenderHookT . traverseDMapWithKeyWithAdjust (\k -> unDomRenderHookT . f k) m
   traverseDMapWithKeyWithAdjustWithMove f m = DomRenderHookT . traverseDMapWithKeyWithAdjustWithMove (\k -> unDomRenderHookT . f k) m
 
+-- | 'Adjustable' instance for client-side DOM building. Powers 'dyn', 'dyn_',
+-- 'widgetHold', 'listWithKey', and all dynamic widget swapping.
+--
+-- == How it works in immediate\/hydration mode
+--
+-- 'runWithReplace' creates a DOM region bounded by two comment sentinel nodes.
+-- The initial widget @a0@ is rendered between them. When the replacement event
+-- @a'@ fires, the region between the sentinels is cleared (all child nodes
+-- removed) and the new widget is rendered in its place.
+--
+-- This is fundamentally different from the static 'Adjustable' instance:
+-- here, DOM nodes are actually created and destroyed. The implementation
+-- tracks \"cohorts\" (generations of content) to handle rapid replacements
+-- and ensure the DOM stays consistent.
+--
+-- During hydration, 'runWithReplace' must match the sentinel comments that
+-- the static renderer emitted. After switchover, it operates like the
+-- immediate builder.
+--
+-- 'traverseDMapWithKeyWithAdjust' (used by @listWithKey@, @simpleList@, etc.)
+-- maintains a live collection of child widgets, each bounded by their own
+-- sentinel nodes. Patches (insertions, deletions, moves) are applied to the
+-- DOM incrementally — only changed children are touched.
 instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, PrimMonad m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => Adjustable t (HydrationDomBuilderT s t m) where
   {-# INLINABLE runWithReplace #-}
   runWithReplace a0 a' = do
@@ -1792,6 +1953,13 @@ traverseIntMapWithKeyWithAdjust' = do
   -> HydrationDomBuilderT HydrationDomSpace DomTimeline HydrationM (IntMap v', Event DomTimeline (PatchIntMap v'))
   #-}
 
+-- | Tracks whether a child widget has finished its initial build. Used by
+-- 'drawChildUpdate' and the 'Adjustable' instance to coordinate when all
+-- children are ready (so the parent can fire its commit action).
+--
+-- * 'ChildReadyState_Ready' — the child is fully rendered
+-- * @ChildReadyState_Unready (Just key)@ — still rendering, identified by @key@
+-- * @ChildReadyState_Unready Nothing@ — still rendering, no key
 data ChildReadyState a
    = ChildReadyState_Ready
    | ChildReadyState_Unready !(Maybe a)
@@ -2077,6 +2245,15 @@ data TraverseChild t m k a = TraverseChild
   , _traverseChild_result :: !a
   } deriving Functor
 
+-- | Render a single child widget within the context of
+-- 'traverseDMapWithKeyWithAdjust' (i.e. list rendering). Creates the child's
+-- DOM region with sentinel nodes, tracks its 'ChildReadyState', and returns
+-- the result wrapped in @TraverseChild@ for incremental patch application.
+--
+-- The @markReady@ callback is invoked when the child finishes rendering, but
+-- only if the child was NOT immediately ready. If the child is ready at
+-- initialization time, the returned 'ChildReadyState' will be
+-- 'ChildReadyState_Ready' and the callback is never called.
 {-# INLINABLE drawChildUpdate #-}
 drawChildUpdate :: (MonadJSM m, Reflex t)
   => HydrationDomBuilderEnv t m
@@ -2166,11 +2343,30 @@ mkHasFocus e = do
     , True <$ Reflex.select (_element_events e) (WrapArg Focus)
     ]
 
+-- | Insert a node immediately before an existing sibling node in the DOM.
+-- Used internally for inserting content at specific positions during
+-- 'Adjustable' patch application.
 insertBefore :: (MonadJSM m, IsNode new, IsNode existing) => new -> existing -> m ()
 insertBefore new existing = do
   p <- getParentNodeUnchecked existing
   Node.insertBefore_ p new (Just existing) -- If there's no parent, that means we've been removed from the DOM; this should not happen if the we're removing ourselves from the performEvent properly
 
+-- | Convenience alias for direct (non-hydrating) client-side DOM building.
+--
+-- @ImmediateDomBuilderT t m ≡ HydrationDomBuilderT GhcjsDomSpace t m@
+--
+-- When you see @Widget x@ from "Reflex.Dom.Main", the outermost transformer
+-- is 'ImmediateDomBuilderT'. This is the concrete monad that actually creates
+-- and appends DOM elements in the browser.
+--
+-- In this mode, 'Element' values carry real @DOM.Element@ references, and
+-- 'domEvent' wires up actual browser event listeners via the 'GhcjsEventSpec'
+-- infrastructure.
+--
+-- The server-side counterpart is 'StaticDomBuilderT' (from
+-- "Reflex.Dom.Builder.Static").
+--
+-- @since 0.8.0.0
 type ImmediateDomBuilderT = HydrationDomBuilderT GhcjsDomSpace
 
 instance PerformEvent t m => PerformEvent t (HydrationDomBuilderT s t m) where
@@ -2219,6 +2415,17 @@ instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT s t m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
+-- | Maps each 'EventTag' to its corresponding GHCJS DOM event type.
+--
+-- This type family is used by 'GhcjsDomEvent' and the event handling
+-- infrastructure to determine the correct DOM event type for each event name.
+-- For example, @EventType 'ClickTag = MouseEvent@ ensures that click event
+-- handlers receive a 'MouseEvent', while @EventType 'KeypressTag = KeyboardEvent@
+-- provides keyboard-specific information.
+--
+-- The mapping covers all standard DOM events: mouse events, keyboard events,
+-- focus events, touch events, wheel events, clipboard events, drag events,
+-- and generic UI events.
 type family EventType en where
   EventType 'AbortTag = UIEvent
   EventType 'BlurTag = FocusEvent
@@ -2267,6 +2474,19 @@ type family EventType en where
   EventType 'TouchendTag = TouchEvent
   EventType 'TouchcancelTag = TouchEvent
 
+-- | Default handler for each DOM event type, extracting the appropriate value.
+--
+-- This is what runs when no custom 'GhcjsEventFilter' is installed for an
+-- event. The return value depends on the event tag:
+--
+-- * @Click@, @Dblclick@ → @()@
+-- * @Keypress@, @Keydown@, @Keyup@ → key code ('Word')
+-- * @Scroll@ → scroll position
+-- * @Mousemove@, @Mousedown@, etc. → @(Int, Int)@ coordinates
+-- * @Input@, @Change@ → current element value ('Text')
+-- * @Touchstart@, @Touchmove@, etc. → list of touch points
+-- * @Wheel@ → delta values
+-- * @Paste@ → clipboard 'Text'
 {-# INLINABLE defaultDomEventHandler #-}
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
@@ -2575,6 +2795,15 @@ windowOnEventName en e = case en of
   Touchend -> on e Events.touchEnd
   Touchcancel -> on e Events.touchCancel
 
+-- | Subscribe to a DOM event on an element and produce a Reflex 'Event'.
+--
+-- This is the bridge between the DOM event system and Reflex FRP. It registers
+-- a DOM event listener (via the provided subscription function) and routes
+-- the results into a Reflex 'Event' via 'TriggerEvent'.
+--
+-- Typically you don't call this directly — 'domEvent' on 'Element' values
+-- handles it for you. Use this when you need to subscribe to events on
+-- raw DOM nodes obtained via @_element_raw@ or JavaScript FFI.
 {-# INLINABLE wrapDomEvent #-}
 wrapDomEvent :: (TriggerEvent t m, MonadJSM m) => e -> (e -> EventM e event () -> JSM (JSM ())) -> EventM e event a -> m (Event t a)
 wrapDomEvent el elementOnevent getValue = wrapDomEventMaybe el elementOnevent $ fmap Just getValue
@@ -2719,16 +2948,30 @@ instance MonadHold t m => MonadHold t (HydrationDomBuilderT s t m) where
   {-# INLINABLE headE #-}
   headE = lift . headE
 
+-- | Configuration for subscribing to window-level DOM events.
+-- Currently has no configuration options (placeholder for future extension).
 data WindowConfig t = WindowConfig -- No config options yet
 
 instance Default (WindowConfig t) where
   def = WindowConfig
 
+-- | A wrapped browser window with Reflex event subscriptions.
+-- Use @_window_events@ with 'select' to subscribe to window-level events
+-- (e.g. resize, scroll, focus, blur):
+--
+-- @
+-- win <- wrapWindow jsWindow def
+-- let resizeEvt = select (_window_events win) (WrapArg Resize)
+-- @
 data Window t = Window
   { _window_events :: EventSelector t (WrapArg EventResult EventName)
+  -- ^ Event selector for all window-level DOM events
   , _window_raw :: DOM.Window
+  -- ^ The underlying GHCJS Window object
   }
 
+-- | Wrap a raw GHCJS 'DOM.Window' into a Reflex 'Window' with event
+-- subscriptions. Requires 'GhcjsDomSpace' — not available in static rendering.
 wrapWindow :: (MonadJSM m, MonadReflexCreateTrigger t m) => DOM.Window -> WindowConfig t -> HydrationDomBuilderT GhcjsDomSpace t m (Window t)
 wrapWindow wv _ = do
   events <- wrapDomEventsMaybe wv (defaultDomWindowEventHandler wv) windowOnEventName

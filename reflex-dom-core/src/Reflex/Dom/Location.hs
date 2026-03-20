@@ -3,6 +3,20 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+-- |
+-- Module: Reflex.Dom.Location
+--
+-- Browser location (URL) and history management for reflex-dom applications.
+--
+-- Provides functions to read the current URL components and to manage
+-- browser history (pushState\/replaceState) reactively via Reflex events.
+--
+-- All functions in this module require 'MonadJSM' since they interact with
+-- the browser's @window.location@ and @window.history@ APIs. They are not
+-- available in static rendering.
+--
+-- In Obelisk applications, URL routing is typically handled at a higher level
+-- by the @Obelisk.Route@ machinery, which uses these primitives internally.
 module Reflex.Dom.Location
   ( browserHistoryWith
   , getLocationAfterHost
@@ -88,6 +102,12 @@ decodeURIText :: (MonadJSM m) => Text -> m Text
 decodeURIText = decodeURI
 
 -- | Builds a Dynamic carrying the current window location.
+-- Updates automatically on @popstate@ events (browser back\/forward).
+--
+-- @
+-- locationDyn <- browserHistoryWith getLocationAfterHost
+-- dynText locationDyn  -- displays e.g. \"\/dashboard?tab=settings\"
+-- @
 browserHistoryWith :: (MonadJSM m, TriggerEvent t m, MonadHold t m)
                    => (forall jsm. MonadJSM jsm => Location -> jsm a)
                    -- ^ A function to encode the window location in a more useful form (e.g. @getLocationAfterHost@).
@@ -146,6 +166,15 @@ getLocationUri location = URI
   <*> Location.getSearch location
   <*> Location.getHash location
 
+-- | Subscribe to history events and execute 'HistoryCommand's, returning a
+-- 'Dynamic' of the current 'HistoryItem'.
+--
+-- @
+-- historyDyn <- manageHistory $ leftmost
+--   [ HistoryCommand_PushState newPageUpdate \<$ navigateEvt
+--   , HistoryCommand_ReplaceState replaceUpdate \<$ replaceEvt
+--   ]
+-- @
 manageHistory :: (MonadJSM m, TriggerEvent t m, MonadHold t m, PerformEvent t m, MonadJSM (Performable m)) => Event t HistoryCommand -> m (Dynamic t HistoryItem)
 manageHistory runCmd = do
   window <- DOM.currentWindowUnchecked

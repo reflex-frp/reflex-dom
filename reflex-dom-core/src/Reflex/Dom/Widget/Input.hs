@@ -14,6 +14,30 @@
 #endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+-- |
+-- Module: Reflex.Dom.Widget.Input
+--
+-- High-level input widgets built on top of the raw 'DomBuilder' input elements.
+--
+-- == Deprecation Notice
+--
+-- Most types in this module ('TextInput', 'TextInputConfig', 'textInput') are
+-- __deprecated__ in favor of using 'inputElement' from "Reflex.Dom.Builder.Class"
+-- directly. The raw 'inputElement' is more flexible and avoids an extra
+-- abstraction layer.
+--
+-- == Widgets that are still useful
+--
+-- * 'checkbox' / 'Checkbox' — wraps a checkbox input with a 'Dynamic t Bool'
+-- * 'dropdown' / 'Dropdown' — wraps a @\<select\>@ element with type-safe keys
+-- * 'fileInput' / 'FileInput' — file upload input (requires 'GhcjsDomSpace')
+--
+-- == Constraint notes
+--
+-- * 'textInput', 'fileInput', 'checkboxView' require @DomBuilderSpace m ~ GhcjsDomSpace@
+--   — they cannot run in static rendering
+-- * 'checkbox', 'dropdown' use only @DomBuilder t m@ + @PostBuild t m@ +
+--   @MonadHold t m@ — they work in both static and GHCJS contexts
 module Reflex.Dom.Widget.Input (module Reflex.Dom.Widget.Input, def, (&), (.~)) where
 
 import Prelude

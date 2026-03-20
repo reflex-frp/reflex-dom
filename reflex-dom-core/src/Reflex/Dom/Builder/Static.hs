@@ -13,6 +13,37 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+-- |
+-- Module: Reflex.Dom.Builder.Static
+--
+-- Server-side rendering of reflex-dom widgets to HTML 'ByteString'. This module
+-- provides 'StaticDomBuilderT', the 'DomBuilder' implementation that serializes
+-- elements as HTML bytes rather than creating live DOM nodes.
+--
+-- == Key Characteristics
+--
+-- * All 'RawElement', 'RawTextNode', etc. types are @()@ — there is no DOM.
+-- * All events are 'never' — no interactivity in static rendering.
+-- * @domEvent Click el@ returns 'never'. @toggle False clickEvt@ returns @constDyn False@.
+-- * 'TriggerEvent' instance returns @(never, \\_ -> pure ())@ — no external events.
+-- * 'MonadJSM' is NOT available — no JavaScript context.
+-- * @\<script\>@ tags are serialized as HTML; the browser will execute them when
+--   it parses the static HTML output.
+--
+-- == Usage
+--
+-- @
+-- (result, htmlBytes) <- renderStatic $ do
+--   el \"div\" $ text \"Hello, world!\"
+-- @
+--
+-- == FRP Code in Static Context
+--
+-- FRP code (Dynamic, Event, etc.) compiles and runs in static context, but is
+-- inert: all Dynamics hold their initial value forever, all Events are 'never',
+-- and 'MonadHold' operations produce constant values. This is by design —
+-- the same polymorphic widget code can run in both static and GHCJS contexts
+-- without branching.
 module Reflex.Dom.Builder.Static where
 
 import Data.IORef (IORef)
@@ -67,6 +98,31 @@ data StaticDomBuilderEnv t = StaticDomBuilderEnv
   , _staticDomBuilderEnv_nextRunWithReplaceKey :: IORef Int
   }
 
+-- | The static rendering monad transformer. Builds up HTML as a 'ByteString'
+-- builder rather than creating live DOM nodes.
+--
+-- Internally, this is a @ReaderT env (StateT [Behavior t Builder] m)@. The
+-- state accumulates HTML fragments in reverse order; 'runStaticDomBuilderT'
+-- reverses and concatenates them into the final output.
+--
+-- This is the 'DomBuilder' instance used by 'renderStatic' and by Obelisk's
+-- server-side rendering. All 'RawElement', 'RawTextNode', etc. types are @()@,
+-- meaning you cannot interact with the DOM at all — but the same polymorphic
+-- widget code that works in GHCJS will compile and run here, producing HTML
+-- output.
+--
+-- The client-side counterparts are 'ImmediateDomBuilderT' (direct DOM
+-- construction) and 'HydrationDomBuilderT' (SSR hydration reattach).
+--
+-- Notable behaviors:
+--
+-- * 'TriggerEvent' returns @(never, \\_ -> pure ())@ — no external event sources
+-- * 'MonadHold' works (values are held) but 'Event's never fire, so held values
+--   never change
+-- * @\<script\>@ tags are serialized into the output; the browser will execute
+--   them when it parses the HTML
+--
+-- @since 0.8.0.0
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
     { unStaticDomBuilderT :: ReaderT (StaticDomBuilderEnv t) (StateT [Behavior t Builder] m) a -- Accumulated Html will be in reversed order
     }
@@ -134,8 +190,30 @@ instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
 instance MonadAtomicRef m => MonadAtomicRef (StaticDomBuilderT t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
+-- | Constraint bundle for monads that can run 'StaticDomBuilderT'.
+--
+-- This is satisfied by the 'DomHost' monad (via 'runDomHost' / 'renderStatic'),
+-- which provides the Spider timeline, IO, and event infrastructure needed for
+-- sampling 'Behavior's during rendering.
 type SupportsStaticDomBuilder t m = (Reflex t, MonadIO m, MonadHold t m, MonadFix m, PerformEvent t m, MonadReflexCreateTrigger t m, MonadRef m, Ref m ~ Ref IO, Adjustable t m)
 
+-- | The 'DomSpace' for static (server-side) rendering.
+--
+-- All associated types are @()@:
+--
+-- * @RawDocument StaticDomSpace = ()@
+-- * @RawElement StaticDomSpace = ()@
+-- * @RawTextNode StaticDomSpace = ()@
+-- * @RawInputElement StaticDomSpace = ()@
+-- * etc.
+--
+-- This means 'Element' values from static rendering carry no DOM references.
+-- 'domEvent' on a static element always returns 'never'.
+--
+-- Compare with 'GhcjsDomSpace' (real GHCJS DOM objects) and
+-- 'HydrationDomSpace' (hybrid SSR reattach).
+--
+-- @since 0.8.0.0
 data StaticDomSpace
 
 -- | Static documents never produce any events, so this type has no inhabitants
@@ -162,6 +240,27 @@ instance DomSpace StaticDomSpace where
 instance (SupportsStaticDomBuilder t m, Monad m) => HasDocument (StaticDomBuilderT t m) where
   askDocument = pure ()
 
+-- | 'Adjustable' instance for static rendering. This is what powers 'dyn',
+-- 'dyn_', and 'widgetHold' in static context.
+--
+-- == How it works in static rendering
+--
+-- 'runWithReplace' renders the initial widget @a0@ to HTML immediately. When
+-- the replacement event @a'@ fires, the new widget is also rendered — but since
+-- this is static rendering, the \"replacement\" is implemented by holding the
+-- latest output 'Behavior' and sampling it at render time.
+--
+-- In practice, only the initial widget's HTML appears in the output of
+-- 'renderStatic', because no events ever fire during static rendering.
+-- The replacement event @a'@ is effectively dead code in this context.
+--
+-- HTML comment markers (@\<!-- replace-start-N --\>@ / @\<!-- replace-end-N --\>@)
+-- are inserted around the replaceable region. The hydration system uses these
+-- markers to locate the DOM region that needs to be taken over on the client.
+--
+-- 'traverseDMapWithKeyWithAdjust' (used by 'listWithKey', etc.) similarly
+-- renders all initial children and holds their outputs, merging them at
+-- sample time.
 instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m) => Adjustable t (StaticDomBuilderT t m) where
   runWithReplace a0 a' = do
     e <- StaticDomBuilderT ask
@@ -383,8 +482,44 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
   wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
 
 --TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
+
+-- | Concrete monad stack for static rendering. This is what 'renderStatic'
+-- runs your widget in.
+--
+-- @
+-- StaticWidget x ≈ PostBuildT DomTimeline
+--                    (StaticDomBuilderT DomTimeline
+--                      (PerformEventT DomTimeline DomHost))
+-- @
+--
+-- The @x@ parameter is unused (it exists for compatibility with
+-- 'Reflex.Dom.Main.Widget' which also takes @x@).
+--
+-- You rarely need to refer to this type directly. Write polymorphic widgets
+-- with @DomBuilder t m@ constraints instead.
 type StaticWidget x = PostBuildT DomTimeline (StaticDomBuilderT DomTimeline (PerformEventT DomTimeline DomHost))
 
+-- | Render a reflex-dom widget to an HTML 'ByteString'.
+--
+-- This is the main entry point for server-side rendering. The widget runs in
+-- 'StaticDomBuilderT', so all events are 'never' and no JavaScript context
+-- is available. The result is a strict 'ByteString' containing the rendered
+-- HTML.
+--
+-- For client-side entry points, see 'mainWidget' and 'mainWidgetWithHead'
+-- from "Reflex.Dom.Main".
+--
+-- @
+-- (result, htmlBytes) <- renderStatic $ do
+--   el \"div\" $ do
+--     elAttr \"a\" (\"href\" =: \"\/about\") $ text \"About\"
+--   return someValue
+-- @
+--
+-- The returned @result@ is whatever your widget returns (useful for extracting
+-- metadata during rendering). The @htmlBytes@ is the serialized HTML.
+--
+-- @since 0.8.0.0
 {-# INLINE renderStatic #-}
 renderStatic :: StaticWidget x a -> IO (a, ByteString)
 renderStatic w = do

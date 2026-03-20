@@ -14,7 +14,54 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
--- | Render the first widget on the server, and the second on the client.
+-- |
+-- Module: Reflex.Dom.Prerender
+--
+-- Split code between server-side and client-side rendering. The 'Prerender'
+-- typeclass lets you write a server-side widget (static HTML) and a
+-- client-side widget (full GHCJS interactivity) in the same codebase.
+--
+-- == How It Works
+--
+-- @'prerender' serverWidget clientWidget@ behaves differently depending on context:
+--
+-- * __Static__ ('StaticDomBuilderT'): Runs @serverWidget@, ignores @clientWidget@.
+--   Returns @constDyn result@. The client widget is never built.
+--
+-- * __GHCJS__ ('HydrationDomBuilderT' 'GhcjsDomSpace'): Only runs @clientWidget@.
+--   Returns @constDyn result@. The server widget is never built.
+--
+-- * __Hydration__ ('HydrationDomBuilderT' 'HydrationDomSpace'): Runs @serverWidget@
+--   initially. After switchover (when the client takes over from the server-rendered
+--   HTML), runs @clientWidget@ and returns a 'Dynamic' that switches from the server
+--   result to the client result.
+--
+-- == The @Client m@ Type
+--
+-- The @Client m@ associated type is the monad in which the client widget runs.
+-- It always satisfies 'PrerenderClientConstraint', which includes:
+--
+-- * 'DomBuilderSpace' @(Client m) ~ GhcjsDomSpace@ — real DOM access
+-- * 'MonadJSM' — JavaScript execution via @liftJSM@
+-- * 'HasDocument' — access to @DOM.Document@
+-- * 'TriggerEvent' — create events from callbacks
+-- * 'MonadHold', 'PostBuild', 'PerformEvent', 'MonadFix', etc.
+--
+-- For 'StaticDomBuilderT', @Client m@ is 'UnrunnableT' — a phantom monad that
+-- satisfies the type constraints but can never actually be executed (since there
+-- is no JavaScript context on the server).
+--
+-- == Common Pattern
+--
+-- Use 'prerender_' (note the underscore) when you don't need the result:
+--
+-- @
+-- prerender_ (text \"Loading...\") $ do
+--   \-\- Full GHCJS access here
+--   (btn, _) <- el\' \"button\" $ text \"Click\"
+--   count <- foldDyn (+) (0 :: Int) (1 \<$ domEvent Click btn)
+--   el \"span\" $ display count
+-- @
 module Reflex.Dom.Prerender
        ( Prerender (..)
        , prerender_
@@ -46,20 +93,26 @@ import qualified GHCJS.DOM.Document as Document
 import qualified GHCJS.DOM.Node as Node
 import qualified GHCJS.DOM.Types as DOM
 
+-- | The full constraint set available inside @Client m@. This is what you can
+-- use inside the client block of 'prerender'. Notably includes 'MonadJSM'
+-- and @DomBuilderSpace m ~ GhcjsDomSpace@.
 type PrerenderClientConstraint t m =
   ( DomBuilder t m
-  , DomBuilderSpace m ~ GhcjsDomSpace
+  , DomBuilderSpace m ~ GhcjsDomSpace  -- ^ Real DOM elements, not ()
   , DomRenderHook t m
-  , HasDocument m
-  , TriggerEvent t m
+  , HasDocument m                       -- ^ Access to DOM.Document
+  , TriggerEvent t m                    -- ^ Create events from callbacks
   , PrerenderBaseConstraints t m
   )
 
+-- | Base constraints shared between client and hydration contexts.
+-- Includes 'MonadJSM' (JavaScript execution), 'MonadHold' (state),
+-- 'PerformEvent' (side effects), and 'PostBuild' (initialization).
 type PrerenderBaseConstraints t m =
   ( MonadFix m
   , MonadHold t m
-  , MonadJSM (Performable m)
-  , MonadJSM m
+  , MonadJSM (Performable m)           -- ^ Run JS in event handlers
+  , MonadJSM m                         -- ^ Run JS directly
   , MonadRef (Performable m)
   , MonadRef m
   , MonadReflexCreateTrigger t m
@@ -78,12 +131,33 @@ prerender_
   => m () ->  Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
+-- | Split rendering between server and client contexts.
+--
+-- The key 'DomBuilder' implementations are 'StaticDomBuilderT'
+-- (from "Reflex.Dom.Builder.Static") for server-side rendering, and
+-- 'HydrationDomBuilderT' / 'ImmediateDomBuilderT'
+-- (from "Reflex.Dom.Builder.Immediate") for client-side rendering.
+--
+-- == Instances
+--
+-- * 'StaticDomBuilderT': @Client m = UnrunnableT@ (phantom, never executes).
+--   'prerender' runs the server widget only.
+-- * @'HydrationDomBuilderT' 'GhcjsDomSpace'@: @Client m = m@ (same monad).
+--   'prerender' runs the client widget only.
+-- * @'HydrationDomBuilderT' 'HydrationDomSpace'@: @Client m = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)@.
+--   'prerender' runs the server widget first, then the client widget after switchover.
+-- * 'ReaderT', 'RequesterT', 'EventWriterT', etc. all lift through transparently.
+--
+-- @since 0.8.0.0
 class (PrerenderClientConstraint t (Client m), Client (Client m) ~ Client m, Prerender t (Client m)) => Prerender t m | m -> t where
-  -- | Monad in which the client widget is built
+  -- | The monad in which the client widget is built. In 'StaticDomBuilderT' this
+  -- is 'UnrunnableT' (a phantom monad). In GHCJS it is the same builder monad.
   type Client m :: * -> *
-  -- | Render the first widget on the server, and the second on the client. The
-  -- hydration builder will run *both* widgets, updating the result dynamic at
-  -- switchover time.
+  -- | Render the first widget on the server, and the second on the client.
+  --
+  -- Returns a 'Dynamic' that holds the server widget's result initially, then
+  -- switches to the client widget's result after switchover (hydration) or
+  -- immediately (pure GHCJS). In static rendering, returns @constDyn serverResult@.
   prerender :: m a -> Client m a -> m (Dynamic t a)
 
 instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints t m) => Prerender t (HydrationDomBuilderT GhcjsDomSpace t m) where

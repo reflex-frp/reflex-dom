@@ -23,6 +23,34 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- |
+-- Module: Reflex.Dom.WebSocket
+--
+-- FRP-style WebSocket connections for reflex-dom. Provides a declarative
+-- interface for opening WebSocket connections, sending messages, and receiving
+-- responses as Reflex 'Event' streams.
+--
+-- == Basic usage
+--
+-- @
+-- let wsConfig = def
+--       & webSocketConfig_send .~ (fmap (:[]) sendMessageEvent)
+-- ws <- webSocket \"wss:\/\/example.com\/ws\" wsConfig
+-- let received = _webSocket_recv ws      -- Event t ByteString
+-- let isOpen   = _webSocket_open ws      -- Event t ()
+-- let closed   = _webSocket_close ws     -- Event t (Bool, Text, Text)
+-- @
+--
+-- == Reconnection
+--
+-- By default, the WebSocket will attempt to reconnect on close. Configure
+-- reconnection behavior via 'WebSocketConfig'.
+--
+-- == Rhyolite integration
+--
+-- In the Ace codebase, raw WebSocket usage is typically abstracted by Rhyolite
+-- (which provides typed request\/response and reactive subscriptions on top of
+-- WebSockets). You rarely need to use this module directly.
 module Reflex.Dom.WebSocket
   ( module Reflex.Dom.WebSocket
   , jsonDecode
@@ -58,6 +86,15 @@ import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
 
+-- | Configuration for a WebSocket connection.
+--
+-- * @_webSocketConfig_send@ — an event carrying lists of messages to send.
+--   Messages are sent in order whenever this event fires.
+-- * @_webSocketConfig_close@ — an event to close the connection, carrying
+--   a close code and reason text.
+-- * @_webSocketConfig_reconnect@ — whether to automatically reconnect on
+--   disconnect (default: 'True').
+-- * @_webSocketConfig_protocols@ — WebSocket sub-protocols to request.
 data WebSocketConfig t a
    = WebSocketConfig { _webSocketConfig_send :: Event t [a]
                      , _webSocketConfig_close :: Event t (Word, Text)
@@ -70,10 +107,18 @@ instance Reflex t => Default (WebSocketConfig t a) where
 
 type WebSocket t = RawWebSocket t ByteString
 
+-- | The result of opening a WebSocket connection. Provides Reflex event streams
+-- for receiving data, connection lifecycle, and errors.
+--
+-- The @a@ parameter is the received message type — 'ByteString' for the
+-- default 'webSocket', or a custom type when using 'webSocket\'' with a
+-- message decoder.
 data RawWebSocket t a
    = RawWebSocket { _webSocket_recv :: Event t a
+                  -- ^ Fires each time a message is received from the server
                   , _webSocket_open :: Event t ()
-                  , _webSocket_error :: Event t () -- eror event does not carry any data and is always
+                  -- ^ Fires once when the connection is established
+                  , _webSocket_error :: Event t () -- error event does not carry any data and is always
                                                    -- followed by termination of the connection
                                                    -- for details see the close event
                   , _webSocket_close :: Event t ( Bool -- wasClean
@@ -82,6 +127,22 @@ data RawWebSocket t a
                                                 )
                   }
 
+-- | Open a WebSocket connection and return event streams for received messages,
+-- open\/close\/error events.
+--
+-- The connection is established after 'postBuild'. Messages are received as
+-- 'ByteString'. Use 'webSocket\'' for custom message decoding.
+--
+-- Requires 'MonadJSM' — cannot be used in static rendering. Wrap in
+-- 'prerender' if needed.
+--
+-- @
+-- rec ws <- webSocket \"ws:\/\/localhost:8080\/ws\" $ def
+--       & webSocketConfig_send .~ (fmap (:[]) sendEvt)
+-- let recvEvt   = _webSocket_recv ws   -- Event t ByteString
+-- let openEvt   = _webSocket_open ws   -- Event t ()
+-- let closeEvt  = _webSocket_close ws  -- Event t (Bool, Word, Text)
+-- @
 webSocket :: (MonadJSM m, MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
 webSocket url config = webSocket' url config onBSMessage
 

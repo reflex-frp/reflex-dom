@@ -1,0 +1,868 @@
+-- |
+-- Module: Reflex.Dom.Tutorial
+-- Description: A guided walkthrough of reflex-dom for working developers.
+-- Stability: experimental
+--
+-- This is a documentation-only module. It exports nothing and contains no
+-- executable code. Its purpose is to provide a structured, practical
+-- introduction to reflex-dom's core concepts, types, and patterns.
+--
+-- The intended audience is someone who already knows Haskell and wants to
+-- build web UIs with reflex-dom. The focus is on what you need day-to-day,
+-- not exhaustive API coverage.
+module Reflex.Dom.Tutorial
+  ( -- * Getting Started
+    -- $getting-started
+
+    -- * The DomBuilder Constraint
+    -- $dombuilder
+
+    -- * Three DOM Spaces
+    -- $dom-spaces
+
+    -- * Building Elements
+    -- $building-elements
+
+    -- * Text and Dynamic Content
+    -- $text-and-dynamic
+
+    -- * Events
+    -- $events
+
+    -- * The Element Type
+    -- $element-type
+
+    -- * Input Widgets
+    -- $input-widgets
+
+    -- * Prerender
+    -- $prerender
+
+    -- * Common Constraint Patterns
+    -- $constraint-patterns
+
+    -- * Gotchas and Anti-Patterns
+    -- $gotchas
+  ) where
+
+-- $getting-started
+--
+-- == What Is reflex-dom?
+--
+-- reflex-dom is a Haskell library for building reactive web interfaces. It sits
+-- on top of reflex (the FRP engine) and provides a way to construct and
+-- manipulate the DOM using ordinary Haskell code.
+--
+-- The central idea: __widgets are monadic computations that build DOM.__
+--
+-- When you write:
+--
+-- @
+-- myWidget :: DomBuilder t m => m ()
+-- myWidget = do
+--   el "h1" $ text "Hello"
+--   el "p"  $ text "Welcome to reflex-dom."
+-- @
+--
+-- ...you are writing a monadic action in some monad @m@ that, when executed,
+-- produces an @\<h1\>@ and a @\<p\>@ in the document. There is no virtual DOM,
+-- no diffing, and no render cycle. The DOM is built once, and then specific
+-- parts of it are updated in response to 'Event's and 'Dynamic's from the
+-- reflex FRP layer.
+--
+-- The monadic structure gives you sequencing (elements appear in the order
+-- you write them), scoping (child widgets are nested inside parent elements),
+-- and composition (widgets can call other widgets and pass values between them).
+--
+-- @
+-- page :: DomBuilder t m => m ()
+-- page = el "div" $ do
+--   header        -- build the header DOM
+--   mainContent   -- build the body DOM
+--   footer        -- build the footer DOM
+-- @
+--
+-- This is a pure Haskell function. No JSX, no templates, no special syntax.
+-- Types enforce that DOM-building code lives in a monad with the 'DomBuilder'
+-- constraint. The same code can render to a live browser (GHCJS), to static
+-- HTML (server-side), or participate in hydration (SSR takeover).
+
+-- $dombuilder
+--
+-- == The DomBuilder Constraint
+--
+-- 'DomBuilder' is the foundation of all DOM-constructing code in reflex-dom.
+-- Its full class header is:
+--
+-- @
+-- class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m)
+--       => DomBuilder t m | m -> t
+-- @
+--
+-- This gives you:
+--
+-- * 'Monad' @m@ -- sequencing and composition via @do@-notation.
+-- * 'Reflex' @t@ -- the FRP timeline (you can work with 'Event' and 'Dynamic').
+-- * 'DomSpace' -- a type family that says which rendering backend this monad
+--   targets (static, GHCJS, or hydration).
+-- * 'NotReady' @t m@ -- the ability to signal that a widget is not yet ready
+--   (used internally by the framework).
+-- * 'Adjustable' @t m@ -- the ability to replace or modify parts of the DOM
+--   dynamically ('runWithReplace', which powers 'dyn' and 'widgetHold').
+--
+-- __What DomBuilder intentionally does NOT include:__
+--
+-- * 'MonadHold' @t m@ -- holding state across time.
+-- * 'PostBuild' @t m@ -- the post-build event.
+-- * 'PerformEvent' @t m@ -- performing IO in response to events.
+-- * 'TriggerEvent' @t m@ -- creating events from external callbacks.
+-- * 'MonadJSM' -- running raw JavaScript.
+-- * 'MonadIO' -- performing arbitrary IO.
+--
+-- You add these constraints explicitly, only when you need them. This is the
+-- key design principle: __write your constraint as small as possible.__
+--
+-- == Why Polymorphic Constraints Matter
+--
+-- The old 'MonadWidget' constraint (from "Reflex.Dom.Old") bundles everything
+-- together AND forces @DomBuilderSpace m ~ GhcjsDomSpace@. That means any
+-- widget using 'MonadWidget' can only run in GHCJS -- it cannot be rendered
+-- on the server via 'renderStatic' or participate in hydration.
+--
+-- By writing @DomBuilder t m@ instead, your widget is polymorphic over the
+-- DOM space and works in all three rendering contexts:
+--
+-- @
+-- -- GOOD: works everywhere
+-- greeting :: DomBuilder t m => m ()
+-- greeting = el "p" $ text "Hello, world!"
+--
+-- -- BAD: locked to GHCJS only
+-- greeting :: MonadWidget t m => m ()
+-- greeting = el "p" $ text "Hello, world!"
+-- @
+--
+-- Only reach for more constraints when you actually need them. If you need
+-- dynamic attributes, add 'PostBuild'. If you need to hold state, add
+-- 'MonadHold'. If you need JavaScript interop, use 'prerender' to isolate
+-- that code to the client.
+
+-- $dom-spaces
+--
+-- == Three DOM Spaces
+--
+-- reflex-dom can render your widget code in three different contexts, selected
+-- by the 'DomBuilderSpace' type family. When you write polymorphic code
+-- (@DomBuilder t m@), the same widget runs correctly in all three.
+--
+-- === StaticDomSpace
+--
+-- Used by 'renderStatic' and the Obelisk static site generator. Your widget
+-- code runs on the server (GHC, not GHCJS) and produces HTML as a
+-- @ByteString@.
+--
+-- * All raw element types ('RawElement', 'RawTextNode', etc.) are @()@.
+-- * All events are 'never' -- no event ever fires.
+-- * All 'Dynamic' values are constant (stuck at their initial value).
+-- * There is no JavaScript context, no 'MonadJSM'.
+-- * @inputElement@ works but its @_inputElement_value@ is @constDyn initialValue@.
+--
+-- This is the context where your code produces the initial server-rendered HTML
+-- that gets sent to the browser before JavaScript loads.
+--
+-- === GhcjsDomSpace
+--
+-- The live browser context. Your code runs in GHCJS and has full access to
+-- the real DOM.
+--
+-- * Raw elements are real jsaddle-dom types (@DOM.Element@, @DOM.Text@, etc.).
+-- * Events fire from @addEventListener@ callbacks.
+-- * 'Dynamic' values update in real time.
+-- * 'MonadJSM' is available (inside 'prerender' or when the constraint is satisfied).
+-- * @inputElement@ values are two-way bound to the live DOM input.
+--
+-- This is the context for a pure client-side app or the client half of a
+-- 'prerender' block.
+--
+-- === HydrationDomSpace
+--
+-- The hybrid SSR-to-live-client takeover context. Used by Obelisk's
+-- @ob run@ and production deployment.
+--
+-- * Initially, the server renders static HTML (like 'StaticDomSpace').
+-- * The browser receives this HTML and displays it immediately.
+-- * GHCJS loads and \"hydrates\": it walks the existing DOM nodes, attaches
+--   event handlers, and takes over. After switchover, it behaves like
+--   'GhcjsDomSpace'.
+--
+-- The key subtlety: code in 'HydrationDomSpace' runs /twice/. The server
+-- pass produces the HTML. The client pass reattaches to it. 'prerender' lets
+-- you provide different code for each pass.
+--
+-- === When Code Runs in Each Space
+--
+-- @
+-- +-------------------+---------------------------+---------------------------+
+-- | Your Code         | Static (Server)           | GHCJS (Client)            |
+-- +-------------------+---------------------------+---------------------------+
+-- | el, text, elAttr  | Produces HTML bytes        | Creates live DOM nodes    |
+-- | dyn, dyn_         | Renders initial value only | Replaces DOM on change    |
+-- | domEvent          | Returns \'never\'            | Returns real event stream |
+-- | inputElement      | constDyn initialValue      | Two-way bound to DOM      |
+-- | prerender s c     | Runs s, ignores c          | Runs c, ignores s         |
+-- +-------------------+---------------------------+---------------------------+
+-- @
+
+-- $building-elements
+--
+-- == Building Elements
+--
+-- The everyday functions for creating DOM elements live in
+-- "Reflex.Dom.Widget.Basic". They are all built on the low-level 'element'
+-- method from 'DomBuilder' but provide a much nicer interface.
+--
+-- === el -- The Simplest Element Builder
+--
+-- @
+-- el :: DomBuilder t m => Text -> m a -> m a
+-- @
+--
+-- Creates an element with the given tag name and runs the child widget inside it:
+--
+-- @
+-- el "div" $ do
+--   el "h1" $ text "Title"
+--   el "p"  $ text "Paragraph"
+-- @
+--
+-- Produces: @\<div\>\<h1\>Title\<\/h1\>\<p\>Paragraph\<\/p\>\<\/div\>@
+--
+-- === elAttr -- Element with Static Attributes
+--
+-- @
+-- elAttr :: DomBuilder t m => Text -> Map Text Text -> m a -> m a
+-- @
+--
+-- @
+-- elAttr "a" ("href" =: "https:\/\/example.com" \<\> "target" =: "_blank") $
+--   text "Click here"
+-- @
+--
+-- The @=:@ operator (from @Data.Map@) creates a singleton map. Use @\<\>@ to
+-- combine multiple attributes.
+--
+-- === elClass -- Element with a CSS Class
+--
+-- @
+-- elClass :: DomBuilder t m => Text -> Text -> m a -> m a
+-- @
+--
+-- @
+-- elClass "div" "container mx-auto" $ do
+--   elClass "p" "text-lg" $ text "Styled paragraph"
+-- @
+--
+-- This is the most commonly used element builder in practice, since most
+-- elements just need a class string.
+--
+-- === elDynAttr -- Element with Dynamic Attributes
+--
+-- @
+-- elDynAttr :: (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
+-- @
+--
+-- The attributes can change over time. Note the additional 'PostBuild' constraint:
+--
+-- @
+-- elDynAttr "div" (ffor isActive $ \\active ->
+--   if active
+--     then "class" =: "bg-green-500"
+--     else "class" =: "bg-gray-300"
+--   ) $ text "Status"
+-- @
+--
+-- In static rendering, the initial value of the 'Dynamic' is used and the
+-- attributes never update. In GHCJS, attribute changes are applied to the
+-- live DOM element via @setAttribute@\/@removeAttribute@.
+--
+-- === Primed Variants
+--
+-- Every element builder has a primed version (@el'@, @elAttr'@, @elClass'@,
+-- @elDynAttr'@) that returns the 'Element' handle alongside the child result:
+--
+-- @
+-- (btnEl, _) <- el' "button" $ text "Click me"
+-- let clicks = domEvent Click btnEl  -- Event t ()
+-- @
+--
+-- The non-primed versions discard the element handle for convenience. Use the
+-- primed version when you need to attach event handlers (see the Events
+-- section).
+
+-- $text-and-dynamic
+--
+-- == Text and Dynamic Content
+--
+-- === Static Text
+--
+-- @
+-- text :: DomBuilder t m => Text -> m ()
+-- @
+--
+-- Creates a text node. This is the leaf of your DOM tree:
+--
+-- @
+-- el "p" $ text "This is a paragraph."
+-- @
+--
+-- === Dynamic Text
+--
+-- @
+-- dynText :: (DomBuilder t m, PostBuild t m) => Dynamic t Text -> m ()
+-- @
+--
+-- Displays a 'Dynamic' text value. When the 'Dynamic' updates, the text node
+-- in the DOM is replaced:
+--
+-- @
+-- nameD <- holdDyn "World" nameChangeEvent
+-- el "p" $ do
+--   text "Hello, "
+--   dynText nameD
+-- @
+--
+-- === display -- Show Any Value
+--
+-- @
+-- display :: (DomBuilder t m, PostBuild t m, Show a) => Dynamic t a -> m ()
+-- @
+--
+-- Like 'dynText' but calls 'show' on the value first. Handy for debugging
+-- or displaying numbers:
+--
+-- @
+-- counter <- foldDyn (+) (0 :: Int) (1 \<$ clickEvt)
+-- el "span" $ display counter
+-- @
+--
+-- === dyn and dyn_ -- Dynamic Widget Replacement
+--
+-- @
+-- dyn  :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
+-- dyn_ :: (DomBuilder t m, PostBuild t m) => Dynamic t (m a) -> m ()
+-- @
+--
+-- 'dyn' takes a 'Dynamic' containing a /widget/ and rebuilds the DOM every
+-- time the 'Dynamic' changes. The old DOM is destroyed and the new widget's
+-- DOM is inserted in its place.
+--
+-- @
+-- dyn_ $ ffor currentPage $ \\case
+--   HomePage    -> homeWidget
+--   AboutPage   -> aboutWidget
+--   ContactPage -> contactWidget
+-- @
+--
+-- __Performance note:__ 'dyn' destroys and rebuilds the entire subtree on
+-- every change. For large widgets, prefer updating individual attributes or
+-- text nodes via 'Dynamic' values rather than replacing the whole widget.
+--
+-- === widgetHold -- Dynamic Widget with State
+--
+-- @
+-- widgetHold  :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
+-- widgetHold_ :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m ()
+-- @
+--
+-- Like 'dyn' but driven by an 'Event' instead of a 'Dynamic'. Takes an
+-- initial widget and an event that fires replacement widgets:
+--
+-- @
+-- widgetHold_ (text "Loading...") (buildResultWidget \<$\> responseEvt)
+-- @
+--
+-- Note the different constraint: 'Adjustable' and 'MonadHold' instead of
+-- 'PostBuild'. This is because 'widgetHold' works at a lower level than
+-- 'dyn'.
+
+-- $events
+--
+-- == Events
+--
+-- DOM events are extracted from 'Element' handles using 'domEvent'. The type
+-- of data you get back depends on which event you select.
+--
+-- === domEvent
+--
+-- @
+-- domEvent :: HasDomEvent t target eventName
+--          => EventName eventName -> target -> Event t (DomEventType target eventName)
+-- @
+--
+-- The 'EventName' constructors (from "Reflex.Dom.Builder.Class.Events") are
+-- the first argument. The 'Element' (or 'InputElement', etc.) is the second.
+--
+-- @
+-- (e, _) <- el' "div" $ text "Click or type here"
+-- let click    = domEvent Click e     -- Event t ()
+-- let keypress = domEvent Keypress e  -- Event t Word
+-- let mousePos = domEvent Mousemove e -- Event t (Int, Int)
+-- @
+--
+-- === EventName Constructors (Partial List)
+--
+-- @
+-- Click       :: EventName \'ClickTag
+-- Dblclick    :: EventName \'DblclickTag
+-- Keypress    :: EventName \'KeypressTag
+-- Keydown     :: EventName \'KeydownTag
+-- Keyup       :: EventName \'KeyupTag
+-- Mousemove   :: EventName \'MousemoveTag
+-- Mousedown   :: EventName \'MousedownTag
+-- Mouseup     :: EventName \'MouseupTag
+-- Mouseenter  :: EventName \'MouseenterTag
+-- Mouseleave  :: EventName \'MouseleaveTag
+-- Scroll      :: EventName \'ScrollTag
+-- Focus       :: EventName \'FocusTag
+-- Blur        :: EventName \'BlurTag
+-- Input       :: EventName \'InputTag
+-- Change      :: EventName \'ChangeTag
+-- Submit      :: EventName \'SubmitTag
+-- Paste       :: EventName \'PasteTag
+-- Wheel       :: EventName \'WheelTag
+-- Touchstart  :: EventName \'TouchstartTag
+-- Touchmove   :: EventName \'TouchmoveTag
+-- Touchend    :: EventName \'TouchendTag
+-- Touchcancel :: EventName \'TouchcancelTag
+-- @
+--
+-- === EventResultType Mappings
+--
+-- Each event name maps to a specific result type via the 'EventResultType'
+-- type family. This determines what type @domEvent SomeEvent el@ returns:
+--
+-- @
+-- domEvent Click el      :: Event t ()             -- fire-and-forget
+-- domEvent Dblclick el   :: Event t (Int, Int)     -- mouse coordinates
+-- domEvent Keypress el   :: Event t Word           -- key code
+-- domEvent Keydown el    :: Event t Word           -- key code
+-- domEvent Keyup el      :: Event t Word           -- key code
+-- domEvent Scroll el     :: Event t Double         -- scroll position
+-- domEvent Mousemove el  :: Event t (Int, Int)     -- mouse coordinates
+-- domEvent Mousedown el  :: Event t (Int, Int)     -- mouse coordinates
+-- domEvent Mouseup el    :: Event t (Int, Int)     -- mouse coordinates
+-- domEvent Mouseenter el :: Event t ()
+-- domEvent Mouseleave el :: Event t ()
+-- domEvent Focus el      :: Event t ()
+-- domEvent Blur el       :: Event t ()
+-- domEvent Input el      :: Event t ()             -- use _inputElement_value for text
+-- domEvent Change el     :: Event t ()
+-- domEvent Submit el     :: Event t ()
+-- domEvent Paste el      :: Event t (Maybe Text)   -- clipboard text, if available
+-- domEvent Touchstart el :: Event t TouchEventResult
+-- domEvent Wheel el      :: Event t WheelEventResult
+-- @
+--
+-- Most events return @()@ -- the event /firing/ is the information.
+-- Keyboard events carry the key code as a 'Word'. Mouse events carry
+-- @(Int, Int)@ coordinates. Touch events carry 'TouchEventResult'
+-- (which includes modifier keys and a list of 'TouchResult' touch points).
+--
+-- === Important: Events in Static Context
+--
+-- In 'StaticDomSpace', 'domEvent' always returns 'never'. No events ever
+-- fire during server-side rendering. Any code that depends on events will
+-- simply never execute in the static context, which is usually fine (the
+-- server just produces the initial HTML).
+
+-- $element-type
+--
+-- == The Element Type
+--
+-- When you use a primed element builder (@el'@, @elAttr'@, etc.), you get
+-- back an 'Element' value:
+--
+-- @
+-- data Element er d t = Element
+--   { _element_events :: EventSelector t (WrapArg er EventName)
+--   , _element_raw    :: RawElement d
+--   }
+-- @
+--
+-- === _element_events
+--
+-- An 'EventSelector' that can produce an 'Event' for any DOM event type.
+-- You do not use this directly -- instead, use 'domEvent' which wraps the
+-- selector lookup and coercion:
+--
+-- @
+-- (e, _) <- el' "button" $ text "Go"
+-- let click = domEvent Click e  -- uses _element_events internally
+-- @
+--
+-- === _element_raw
+--
+-- The raw underlying DOM node. Its type depends on the DOM space:
+--
+-- * 'StaticDomSpace': @()@ -- there is no real node.
+-- * 'GhcjsDomSpace': @DOM.Element@ -- a real jsaddle-dom element.
+-- * 'HydrationDomSpace': @()@ until switchover, then a real node.
+--
+-- In GHCJS, you can use @_element_raw@ to call jsaddle-dom functions
+-- directly on the element (e.g., @getBoundingClientRect@, @scrollIntoView@).
+-- This requires 'MonadJSM', so it should be inside a 'prerender' block.
+--
+-- === Using domEvent: A Complete Example
+--
+-- @
+-- clickCounter :: (DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => m ()
+-- clickCounter = el "div" $ do
+--   (btnEl, _) <- el' "button" $ text "+1"
+--   count <- foldDyn (+) (0 :: Int) (1 \<$ domEvent Click btnEl)
+--   el "span" $ display count
+-- @
+--
+-- Breakdown:
+--
+-- 1. @el' "button"@ creates a @\<button\>@ and returns the 'Element' handle.
+-- 2. @domEvent Click btnEl@ extracts the click event as @Event t ()@.
+-- 3. @1 \<$ ...@ replaces the @()@ payload with the integer @1@.
+-- 4. @foldDyn (+) 0@ accumulates the count into a @Dynamic t Int@.
+-- 5. @display count@ renders the current count, updating on each click.
+
+-- $input-widgets
+--
+-- == Input Widgets
+--
+-- === inputElement (Preferred)
+--
+-- @
+-- inputElement :: DomBuilder t m
+--              => InputElementConfig er t (DomBuilderSpace m)
+--              -> m (InputElement er (DomBuilderSpace m) t)
+-- @
+--
+-- This is the modern, preferred way to create @\<input\>@ elements. It returns
+-- an 'InputElement' with reactive access to the input\'s state:
+--
+-- @
+-- i <- inputElement $ def
+--   & inputElementConfig_initialValue .~ ""
+--   & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
+--       ("placeholder" =: "Type here..." \<\> "type" =: "text")
+--
+-- let currentValue = _inputElement_value i   -- Dynamic t Text
+-- let inputEvt     = _inputElement_input i   -- Event t Text (on user typing)
+-- let hasFocus     = _inputElement_hasFocus i -- Dynamic t Bool
+-- @
+--
+-- 'InputElement' is also an instance of 'HasDomEvent', so you can use
+-- 'domEvent' directly on it:
+--
+-- @
+-- let enterKey = domEvent Keypress i  -- Event t Word
+-- @
+--
+-- === textInput (Deprecated)
+--
+-- The older 'textInput' from "Reflex.Dom.Widget.Input" still works but is
+-- deprecated. It wraps 'inputElement' and adds an extra layer of abstraction.
+-- Prefer 'inputElement' directly.
+--
+-- === checkbox
+--
+-- @
+-- checkbox :: (DomBuilder t m, PostBuild t m)
+--          => Bool -> CheckboxConfig t -> m (Checkbox t)
+-- @
+--
+-- @
+-- cb <- checkbox False def
+-- let isChecked = _checkbox_value cb   -- Dynamic t Bool
+-- let changed   = _checkbox_change cb  -- Event t Bool
+-- @
+--
+-- Creates a simple @\<input type=\"checkbox\"\>@ with a reactive 'Dynamic t Bool'
+-- tracking its state.
+--
+-- === dropdown
+--
+-- @
+-- dropdown :: (DomBuilder t m, MonadFix m, MonadHold t m, PostBuild t m, Ord k)
+--          => k -> Dynamic t (Map k Text) -> DropdownConfig t k -> m (Dropdown t k)
+-- @
+--
+-- @
+-- dd <- dropdown "en" (constDyn $ Map.fromList [("en", "English"), ("es", "Spanish")]) def
+-- let selectedLang = _dropdown_value dd  -- Dynamic t Text
+-- @
+--
+-- Creates a @\<select\>@ element. The key type @k@ can be any 'Ord' type.
+-- The 'Map k Text' provides the option values (key) and display labels (value).
+--
+-- === selectElement
+--
+-- @
+-- selectElement :: DomBuilder t m
+--               => SelectElementConfig er t (DomBuilderSpace m)
+--               -> m a
+--               -> m (SelectElement er (DomBuilderSpace m) t, a)
+-- @
+--
+-- Lower-level than 'dropdown'. You provide the @\<option\>@ elements as child
+-- widgets. Returns a 'SelectElement' with @_selectElement_value :: Dynamic t Text@
+-- holding the currently selected value.
+--
+-- @
+-- (sel, _) <- selectElement def $ do
+--   elAttr "option" ("value" =: "a") $ text "Option A"
+--   elAttr "option" ("value" =: "b") $ text "Option B"
+-- let selected = _selectElement_value sel  -- Dynamic t Text
+-- @
+
+-- $prerender
+--
+-- == Prerender: Server\/Client Code Splitting
+--
+-- 'prerender' lets you provide separate implementations for server-side and
+-- client-side rendering:
+--
+-- @
+-- prerender :: (Prerender t m)
+--           => m a           -- ^ Server widget (runs in static context)
+--           -> Client m a    -- ^ Client widget (runs in GHCJS context)
+--           -> m (Dynamic t a)
+-- @
+--
+-- === What Runs Where
+--
+-- * __StaticDomBuilderT__ (server render): Runs the first (server) widget.
+--   The client widget is never built. @Client m@ is @UnrunnableT@ -- a phantom
+--   monad that satisfies type constraints but cannot actually execute.
+--   Returns @constDyn serverResult@.
+--
+-- * __HydrationDomBuilderT GhcjsDomSpace__ (pure GHCJS, no SSR): Runs only
+--   the second (client) widget. The server widget is never built. @Client m@
+--   is the same as @m@. Returns @constDyn clientResult@.
+--
+-- * __HydrationDomBuilderT HydrationDomSpace__ (SSR with hydration): Runs the
+--   server widget first (producing initial HTML). After switchover (when
+--   GHCJS takes over), runs the client widget. Returns a 'Dynamic' that
+--   switches from the server result to the client result.
+--
+-- === The Client m Type
+--
+-- @Client m@ is an associated type that always satisfies
+-- 'PrerenderClientConstraint', which gives you:
+--
+-- * @DomBuilderSpace (Client m) ~ GhcjsDomSpace@ -- real DOM access.
+-- * 'MonadJSM' -- you can call JavaScript via @liftJSM@.
+-- * 'HasDocument' -- access to the @DOM.Document@.
+-- * 'TriggerEvent' -- create events from callbacks.
+-- * 'MonadHold', 'PostBuild', 'PerformEvent', 'MonadFix', etc.
+--
+-- === Common Pattern: prerender_
+--
+-- When you do not need the return value, use 'prerender_' (with underscore):
+--
+-- @
+-- prerender_ (text "Loading...") $ do
+--   \-\- This block only runs on the client
+--   (btn, _) <- el' "button" $ text "Click me"
+--   count <- foldDyn (+) (0 :: Int) (1 \<$ domEvent Click btn)
+--   el "span" $ display count
+-- @
+--
+-- === When to Use Prerender
+--
+-- Use 'prerender' when you need something that only exists on the client:
+--
+-- * JavaScript interop ('MonadJSM', @liftJSM@).
+-- * Access to the raw DOM (@_element_raw@, @getBoundingClientRect@).
+-- * 'TriggerEvent' for creating events from external sources (WebSockets,
+--   timers via @setInterval@, etc.).
+-- * Anything requiring @DomBuilderSpace m ~ GhcjsDomSpace@.
+--
+-- Do NOT use 'prerender' for basic DOM construction (@el@, @text@, @elAttr@)
+-- or for state management (@foldDyn@, @holdDyn@). These work in all contexts.
+
+-- $constraint-patterns
+--
+-- == Common Constraint Patterns
+--
+-- Here is a progression of constraint sets from minimal to maximal, and what
+-- each level gives you.
+--
+-- === DomBuilder t m
+--
+-- The minimum. You can:
+--
+-- * Create elements: @el@, @elAttr@, @elClass@, @text@, @blank@.
+-- * Nest widgets: @el "div" $ childWidget@.
+-- * Use primed variants to get 'Element' handles: @el'@, @elAttr'@.
+-- * Create input elements: @inputElement@.
+--
+-- You cannot:
+--
+-- * Use 'Dynamic'-based functions (@dynText@, @elDynAttr@, @dyn@).
+-- * Hold state (@holdDyn@, @foldDyn@).
+-- * Respond to the post-build event.
+--
+-- @
+-- staticWidget :: DomBuilder t m => m ()
+-- staticWidget = el "p" $ text "Hello"
+-- @
+--
+-- === DomBuilder t m, PostBuild t m
+--
+-- Adds the post-build event and enables 'Dynamic'-based DOM:
+--
+-- * @dynText@ -- display dynamic text.
+-- * @elDynAttr@ -- dynamic attributes.
+-- * @dyn@, @dyn_@ -- replace widgets based on a 'Dynamic'.
+-- * @display@ -- show any 'Show' value dynamically.
+-- * @getPostBuild@ -- get the 'Event' that fires once after the widget is built.
+--
+-- @
+-- dynamicWidget :: (DomBuilder t m, PostBuild t m) => Dynamic t Text -> m ()
+-- dynamicWidget nameDyn = el "p" $ do
+--   text "Hello, "
+--   dynText nameDyn
+-- @
+--
+-- === DomBuilder t m, PostBuild t m, MonadHold t m
+--
+-- Adds state management:
+--
+-- * @holdDyn@ -- hold the latest event value as a 'Dynamic'.
+-- * @foldDyn@ -- accumulate state from events.
+-- * @widgetHold@ -- hold a widget, replacing it on events.
+--
+-- @
+-- statefulWidget :: (DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => m ()
+-- statefulWidget = do
+--   (btn, _) <- el' "button" $ text "Click"
+--   count <- foldDyn (+) (0 :: Int) (1 \<$ domEvent Click btn)
+--   display count
+-- @
+--
+-- === DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m)
+--
+-- The full interactive set. Adds:
+--
+-- * @performEvent@ -- run IO actions in response to events.
+-- * @performEvent_@ -- same but discard the result.
+-- * @MonadIO (Performable m)@ -- the performed action can do IO.
+--
+-- @
+-- ioWidget :: ( DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m
+--             , PerformEvent t m, MonadIO (Performable m)
+--             ) => m ()
+-- ioWidget = do
+--   (btn, _) <- el' "button" $ text "Log"
+--   performEvent_ $ liftIO (putStrLn "Button clicked!") \<$ domEvent Click btn
+-- @
+--
+-- === When to Use Each
+--
+-- As a rule of thumb:
+--
+-- * Pure layout/structure: @DomBuilder t m@ alone.
+-- * Displaying dynamic data: add @PostBuild t m@.
+-- * User interaction with state: add @MonadHold t m@ and @MonadFix m@.
+-- * Side effects (HTTP, logging, etc.): add @PerformEvent@ and @MonadIO@.
+-- * JavaScript interop: use @prerender@ to isolate to client.
+
+-- $gotchas
+--
+-- == Gotchas and Anti-Patterns
+--
+-- === MonadWidget Locks You to GHCJS
+--
+-- 'MonadWidget' (from "Reflex.Dom.Old") forces @DomBuilderSpace m ~ GhcjsDomSpace@.
+-- Any widget using it cannot be rendered statically or participate in
+-- hydration. Use polymorphic constraints instead:
+--
+-- @
+-- -- Avoid:
+-- myWidget :: MonadWidget t m => m ()
+--
+-- -- Prefer:
+-- myWidget :: (DomBuilder t m, PostBuild t m, MonadHold t m) => m ()
+-- @
+--
+-- === Script Tags Do Not Execute in GHCJS
+--
+-- If you create a @\<script\>@ element via @el "script"@, the browser will NOT
+-- execute it. The DOM spec says dynamically inserted script elements via
+-- @innerHTML@ or @createElement@+@appendChild@ do not automatically run.
+-- GHCJS uses @createElement@ under the hood.
+--
+-- If you need to run JavaScript, use 'MonadJSM' inside a 'prerender' block:
+--
+-- @
+-- prerender_ blank $ liftJSM $ do
+--   \-\- Your JavaScript code here via jsaddle
+--   jsg ("console" :: Text) ^. js1 ("log" :: Text) ("Hello from JS" :: Text)
+-- @
+--
+-- === Events Are Never in Static Context
+--
+-- In 'StaticDomSpace', every 'Event' is 'never'. This means:
+--
+-- * 'domEvent' returns 'never' for all events.
+-- * @_inputElement_input@ is 'never'.
+-- * @_checkbox_change@ is 'never'.
+-- * Any @performEvent@ handler will never fire.
+-- * Any @foldDyn@ will stay at its initial value.
+--
+-- This is by design. The server just produces HTML. If your widget logic
+-- depends on events, it will silently do nothing in the static context.
+-- The client takes over after hydration.
+--
+-- === delay 0.1 for PostBuild Requests
+--
+-- When firing a request in response to @getPostBuild@, the WebSocket
+-- connection (e.g., Rhyolite) may not be established yet. A common
+-- workaround:
+--
+-- @
+-- pb <- getPostBuild
+-- pbDelayed <- delay 0.1 pb
+-- let initialReq = someRequest \<$ pbDelayed
+-- @
+--
+-- This gives the WebSocket time to connect before the first request is sent.
+-- Without the delay, the request may be silently dropped.
+--
+-- === Avoid Rebuilding Large Subtrees with dyn
+--
+-- 'dyn' and 'dyn_' destroy and rebuild their entire subtree on every change.
+-- For large widgets, this is expensive. Prefer:
+--
+-- * @dynText@ or @display@ for changing text.
+-- * @elDynAttr@ or @elDynClass@ for changing attributes.
+-- * @ffor@ over a 'Dynamic' to compute attributes, not widget trees.
+--
+-- @
+-- -- Expensive: rebuilds the entire div on every change
+-- dyn_ $ ffor stateDyn $ \\s -> elClass "div" (stateToClass s) $ text (stateToText s)
+--
+-- -- Cheaper: only the text and class change, the div stays
+-- elDynClass "div" (stateToClass \<$\> stateDyn) $
+--   dynText (stateToText \<$\> stateDyn)
+-- @
+--
+-- === textInput Is Deprecated
+--
+-- 'textInput' from "Reflex.Dom.Widget.Input" is deprecated. Use
+-- 'inputElement' from "Reflex.Dom.Builder.Class" instead. It is more
+-- flexible and does not require @DomBuilderSpace m ~ GhcjsDomSpace@:
+--
+-- @
+-- -- Deprecated:
+-- ti <- textInput def
+--
+-- -- Preferred:
+-- ie <- inputElement def
+-- @

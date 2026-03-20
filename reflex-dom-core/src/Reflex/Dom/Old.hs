@@ -11,6 +11,40 @@
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
+-- |
+-- Module: Reflex.Dom.Old
+--
+-- Legacy API from reflex-dom 0.x. This module is __deprecated__ — prefer
+-- using 'DomBuilder' constraints and the functions from
+-- "Reflex.Dom.Widget.Basic" instead.
+--
+-- == Why this exists
+--
+-- Early reflex-dom versions used 'MonadWidget' as the primary constraint for
+-- all widget code. This was a \"kitchen sink\" constraint that bundled together
+-- everything you could possibly need ('DomBuilder', 'MonadHold', 'PostBuild',
+-- 'PerformEvent', 'TriggerEvent', 'MonadIO', 'MonadJSM', 'MonadRef', etc.).
+--
+-- The problem: 'MonadWidget' forces @DomBuilderSpace m ~ GhcjsDomSpace@,
+-- which means any widget using 'MonadWidget' __cannot__ be rendered statically
+-- via 'renderStatic'. Modern reflex-dom code should use polymorphic
+-- constraints (@DomBuilder t m@) so the same widget works in both static
+-- and GHCJS contexts.
+--
+-- == Migration
+--
+-- Replace @MonadWidget t m =>@ with the specific constraints you actually need:
+--
+-- @
+-- -- Old (locked to GHCJS):
+-- myWidget :: MonadWidget t m => m ()
+--
+-- -- New (works in static and GHCJS):
+-- myWidget :: (DomBuilder t m, PostBuild t m, MonadHold t m) => m ()
+-- @
+--
+-- Only add constraints you actually use. The 'DomBuilder' constraint alone
+-- covers @el@, @text@, @elAttr@, etc.
 module Reflex.Dom.Old
        ( MonadWidget
        , El
@@ -101,6 +135,11 @@ elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
 {-# INLINE elConfig_attributes #-}
 #endif
 
+-- | The full set of constraints that 'MonadWidget' demands.
+--
+-- Note the @DomBuilderSpace m ~ GhcjsDomSpace@ constraint, which is why
+-- 'MonadWidget' code cannot run in static rendering. Avoid using this directly;
+-- prefer individual polymorphic constraints.
 type MonadWidgetConstraints t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
@@ -124,6 +163,15 @@ type MonadWidgetConstraints t m =
   , Ref (Performable m) ~ Ref IO
   )
 
+-- | __Deprecated.__ A \"kitchen sink\" constraint alias bundling every
+-- capability a widget could need. Any monad satisfying 'MonadWidgetConstraints'
+-- is automatically an instance.
+--
+-- The key problem: this forces @DomBuilderSpace m ~ GhcjsDomSpace@,
+-- preventing static rendering. Use individual constraints ('DomBuilder',
+-- 'PostBuild', 'MonadHold', etc.) instead.
+--
+-- @since 0.8.0.0 (deprecated)
 class MonadWidgetConstraints t m => MonadWidget t m
 instance MonadWidgetConstraints t m => MonadWidget t m
 

@@ -6,6 +6,24 @@
 {-# LANGUAGE TemplateHaskell #-}
 #endif
 {-# LANGUAGE TypeFamilies #-}
+-- |
+-- Module: Reflex.Dom.Builder.Class.Events
+--
+-- Type-level enumeration of DOM events. Every standard DOM event has a
+-- corresponding 'EventTag' promoted constructor and a matching 'EventName'
+-- GADT value.
+--
+-- These are used throughout reflex-dom to provide type-safe event selection:
+--
+-- @
+-- domEvent Click myElement   :: Event t ()
+-- domEvent Keypress myElement :: Event t Word
+-- domEvent Input myElement    :: Event t Text
+-- @
+--
+-- The result type for each event is determined by the 'EventResult' type
+-- family in "Reflex.Dom.Builder.Class", which maps @ClickTag@ to @()@,
+-- @KeypressTag@ to @Word@, @InputTag@ to @Text@, etc.
 module Reflex.Dom.Builder.Class.Events where
 
 #ifdef USE_TEMPLATE_HASKELL
@@ -17,6 +35,8 @@ import Data.GADT.Compare
 #endif
 import Data.Text (Text)
 
+-- | Enumeration of all supported DOM event types. Promoted to the kind level
+-- via DataKinds and used as the index for 'EventName' and 'EventResult'.
 data EventTag
    = AbortTag
    | BlurTag
@@ -65,6 +85,16 @@ data EventTag
    | TouchendTag
    | TouchcancelTag
 
+-- | Singleton GADT for event names. Each constructor corresponds to an
+-- 'EventTag' and carries the tag at the type level.
+--
+-- Use these constructors with 'domEvent' to select specific event streams:
+--
+-- @
+-- clicks    = domEvent Click el      -- Event t ()
+-- keypresses = domEvent Keypress el  -- Event t Word
+-- scrolls   = domEvent Scroll el     -- Event t Int
+-- @
 data EventName :: EventTag -> * where
   Abort :: EventName 'AbortTag
   Blur :: EventName 'BlurTag
@@ -113,8 +143,45 @@ data EventName :: EventTag -> * where
   Touchend :: EventName 'TouchendTag
   Touchcancel :: EventName 'TouchcancelTag
 
+-- | Wrapper newtype that pairs an 'EventTag' with its result value.
+-- Used as the @er@ parameter throughout the 'DomBuilder' API.
+--
+-- When you write @domEvent Click el@, reflex-dom internally selects from
+-- an @EventSelector (WrapArg EventResult)@ and unwraps the 'EventResult'
+-- to give you the raw 'EventResultType'.
+--
+-- @since 0.8.0.0
 newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
+-- | Maps each 'EventTag' to the Haskell type of data extracted from that
+-- DOM event. This is what determines the type of @domEvent SomeEvent el@.
+--
+-- == Quick reference
+--
+-- @
+-- domEvent Click el      :: Event t ()           -- ClickTag → ()
+-- domEvent Dblclick el   :: Event t (Int, Int)   -- mouse coordinates
+-- domEvent Keypress el   :: Event t Word         -- key code
+-- domEvent Keydown el    :: Event t Word         -- key code
+-- domEvent Keyup el      :: Event t Word         -- key code
+-- domEvent Scroll el     :: Event t Double       -- scroll position
+-- domEvent Mousemove el  :: Event t (Int, Int)   -- mouse coordinates
+-- domEvent Mousedown el  :: Event t (Int, Int)   -- mouse coordinates
+-- domEvent Mouseup el    :: Event t (Int, Int)   -- mouse coordinates
+-- domEvent Input el      :: Event t ()           -- (use _inputElement_value for text)
+-- domEvent Change el     :: Event t ()
+-- domEvent Focus el      :: Event t ()
+-- domEvent Blur el       :: Event t ()
+-- domEvent Paste el      :: Event t (Maybe Text) -- clipboard text
+-- domEvent Touchstart el :: Event t TouchEventResult
+-- domEvent Wheel el      :: Event t WheelEventResult
+-- @
+--
+-- Most events return @()@ — the event firing IS the information. For events
+-- with payload (keyboard, mouse, touch, wheel, paste), the result carries
+-- the extracted data.
+--
+-- @since 0.8.0.0
 type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ClickTag = ()
   EventResultType 'DblclickTag = (Int, Int)
@@ -163,9 +230,12 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'TouchcancelTag = TouchEventResult
   EventResultType 'WheelTag = WheelEventResult
 
+-- | How to interpret the delta values in a 'WheelEventResult'.
 data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
   deriving (Show, Read, Eq, Ord, Bounded, Enum)
 
+-- | Data extracted from a @wheel@ DOM event. Contains scroll delta values
+-- along all three axes and the unit of measurement.
 data WheelEventResult = WheelEventResult
   { _wheelEventResult_deltaX :: Double
   , _wheelEventResult_deltaY :: Double
@@ -173,6 +243,9 @@ data WheelEventResult = WheelEventResult
   , _wheelEventResult_deltaMode :: DeltaMode
   } deriving (Show, Read, Eq, Ord)
 
+-- | Data extracted from a touch DOM event. Contains modifier key states and
+-- three lists of 'TouchResult': changed touches, target touches, and all
+-- active touches.
 data TouchEventResult = TouchEventResult
   { _touchEventResult_altKey :: Bool
   , _touchEventResult_changedTouches :: [TouchResult]

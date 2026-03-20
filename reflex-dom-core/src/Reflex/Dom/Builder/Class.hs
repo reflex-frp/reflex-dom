@@ -23,6 +23,64 @@
 #endif
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+-- |
+-- Module: Reflex.Dom.Builder.Class
+--
+-- The core abstraction for building DOM in reflex-dom. This module defines
+-- 'DomBuilder', the typeclass that all DOM-constructing code is written against,
+-- along with the configuration and result types for elements, inputs, and events.
+--
+-- == DOM Spaces
+--
+-- reflex-dom supports three rendering backends, selected by the phantom type
+-- in 'DomBuilderSpace':
+--
+-- * 'StaticDomSpace' — server-side rendering to 'ByteString'. All events are
+--   'never', all raw elements are @()@, no JavaScript context available.
+--   Used by Lamarckian static page generation and 'renderStatic'.
+--
+-- * 'GhcjsDomSpace' — live GHCJS DOM. Raw elements are real @DOM.Element@
+--   values, events fire from @addEventListener@ callbacks, full 'MonadJSM'
+--   access. Used by the Obelisk frontend and any GHCJS-compiled app.
+--
+-- * 'HydrationDomSpace' — hybrid SSR reattach. Reuses server-rendered DOM
+--   nodes, then switches to live mode after a switchover event.
+--
+-- == Constraint Design
+--
+-- 'DomBuilder' intentionally has a minimal superclass set:
+--
+-- @
+-- (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m)
+-- @
+--
+-- It does /not/ imply 'MonadHold', 'PostBuild', 'MonadJSM', 'PerformEvent',
+-- or 'TriggerEvent'. Add those constraints explicitly when needed:
+--
+-- @
+-- \-\- Just build DOM (static-compatible):
+-- myWidget :: DomBuilder t m => m ()
+--
+-- \-\- Dynamic attributes (still static-compatible, attrs just won\'t change):
+-- myWidget :: (DomBuilder t m, PostBuild t m) => m ()
+--
+-- \-\- State management (still static-compatible, state is constant in static):
+-- myWidget :: (DomBuilder t m, PostBuild t m, MonadHold t m) => m ()
+--
+-- \-\- Full interactive widget (static-compatible):
+-- myWidget :: (DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => m ()
+-- @
+--
+-- == Extracting Events
+--
+-- Use the primed variant of element builders (e.g. 'Reflex.Dom.Widget.Basic.elAttr\'')
+-- to get an 'Element' handle, then 'domEvent' to extract specific events:
+--
+-- @
+-- (btnEl, _) <- elAttr\' \"button\" (\"class\" =: \"btn\") $ text \"Click\"
+-- let clickEvt = domEvent Click btnEl   -- Event t ()
+-- let keyEvt   = domEvent Keydown btnEl -- Event t Word
+-- @
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class
        , module Reflex.Dom.Builder.Class.Events
@@ -65,21 +123,82 @@ import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
 
+-- | Abstraction over the rendering target. Each DOM space defines what
+-- raw node types look like and how events are represented.
+--
+-- Three spaces exist:
+--
+-- [@'StaticDomSpace'@] All @Raw*@ types are @()@. 'EventSpec' is trivial (no events fire).
+--   Defined in "Reflex.Dom.Builder.Static".
+-- [@'GhcjsDomSpace'@] @Raw*@ types are real jsaddle-dom types (e.g. @DOM.Element@).
+--   Events use 'GhcjsEventSpec' backed by @addEventListener@.
+--   Defined in "Reflex.Dom.Builder.Immediate".
+-- [@'HydrationDomSpace'@] @RawDocument@ is @DOM.Document@ but element types are @()@
+--   until hydration switchover. Defined in "Reflex.Dom.Builder.Immediate".
+--
+-- @since 0.8.0.0
 class Default (EventSpec d EventResult) => DomSpace d where
+  -- | How events are specified for this space. 'StaticDomSpace' uses a no-op
+  -- spec; 'GhcjsDomSpace' uses 'GhcjsEventSpec' with JS callbacks.
   type EventSpec d :: (EventTag -> *) -> *
+  -- | The document handle type. @()@ in static, @DOM.Document@ in GHCJS.
   type RawDocument d :: *
+  -- | Raw text node. @()@ in static, @DOM.Text@ in GHCJS.
   type RawTextNode d :: *
+  -- | Raw comment node. @()@ in static, @DOM.Comment@ in GHCJS.
   type RawCommentNode d :: *
+  -- | Raw element node. @()@ in static, @DOM.Element@ in GHCJS.
+  -- Available via '_element_raw' on the 'Element' returned by primed builders.
   type RawElement d :: *
+  -- | Raw input element. @()@ in static, @DOM.HTMLInputElement@ in GHCJS.
   type RawInputElement d :: *
+  -- | Raw textarea element. @()@ in static, @DOM.HTMLTextAreaElement@ in GHCJS.
   type RawTextAreaElement d :: *
+  -- | Raw select element. @()@ in static, @DOM.HTMLSelectElement@ in GHCJS.
   type RawSelectElement d :: *
+  -- | Add event flags (stop propagation, prevent default) to an event spec.
   addEventSpecFlags :: proxy d -> EventName en -> (Maybe (er en) -> EventFlags) -> EventSpec d er -> EventSpec d er
 
 -- | @'DomBuilder' t m@ indicates that @m@ is a 'Monad' capable of building
--- dynamic DOM in the 'Reflex' timeline @t@
+-- dynamic DOM in the 'Reflex' timeline @t@.
+--
+-- This is the central typeclass of reflex-dom. All element-building functions
+-- ('Reflex.Dom.Widget.Basic.el', 'Reflex.Dom.Widget.Basic.elAttr', etc.) are
+-- implemented in terms of 'element'.
+--
+-- == Superclasses
+--
+-- * 'Monad' @m@
+-- * 'Reflex' @t@ — the FRP timeline
+-- * 'DomSpace' @(DomBuilderSpace m)@ — which rendering backend
+-- * 'NotReady' @t m@ — widget readiness tracking
+-- * 'Adjustable' @t m@ — dynamic widget replacement ('runWithReplace')
+--
+-- Notably absent: 'MonadHold', 'PostBuild', 'MonadJSM', 'PerformEvent'.
+-- These are added as separate constraints where needed, keeping the base
+-- interface compatible with all three DOM spaces.
+--
+-- == Methods
+--
+-- Most user code should use the convenience functions in
+-- "Reflex.Dom.Widget.Basic" rather than calling these methods directly.
+-- The methods here are the low-level primitives that those functions wrap.
+--
+-- == Instances
+--
+-- Instances exist for 'StaticDomBuilderT' (from "Reflex.Dom.Builder.Static"),
+-- 'ImmediateDomBuilderT' and 'HydrationDomBuilderT' (from
+-- "Reflex.Dom.Builder.Immediate"), and all standard monad transformers
+-- ('ReaderT', 'PostBuildT', 'RequesterT', 'EventWriterT', etc.).
+--
+-- @since 0.8.0.0
 class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m) => DomBuilder t m | m -> t where
+  -- | Which 'DomSpace' this builder targets. Determines the concrete types
+  -- of raw elements, events, and document handles.
   type DomBuilderSpace m :: *
+  -- | Create a text node. In static context, serializes the text content.
+  -- In GHCJS, calls @document.createTextNode@. The optional 'Event' in the
+  -- config allows updating the text content over time (only fires in GHCJS).
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   default textNode :: ( MonadTrans f
                       , m ~ f m'
@@ -89,6 +208,8 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                    => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   textNode = lift . textNode
   {-# INLINABLE textNode #-}
+  -- | Create an HTML comment node. Used internally for marking dynamic
+  -- replacement boundaries (e.g. 'runWithReplace' insertion points).
   commentNode :: CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
   default commentNode :: ( MonadTrans f
                       , m ~ f m'
@@ -98,6 +219,24 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                    => CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
   commentNode = lift . commentNode
   {-# INLINABLE commentNode #-}
+  -- | Create a DOM element with the given tag name, configuration, and children.
+  -- Returns the 'Element' handle (for event queries via 'domEvent') and the
+  -- child result. This is the primitive that 'Reflex.Dom.Widget.Basic.el',
+  -- 'Reflex.Dom.Widget.Basic.elAttr', etc. are built on.
+  --
+  -- In 'StaticDomSpace', serializes @\<tag attrs\>children\<\/tag\>@ as bytes.
+  -- In 'GhcjsDomSpace', calls @document.createElement@, sets attributes, and
+  -- appends to the parent node.
+  --
+  -- Most user code should prefer the convenience wrappers:
+  --
+  -- @
+  -- \-\- Instead of this:
+  -- (el_, result) <- element \"div\" (def & initialAttributes .~ (\"class\" =: \"box\")) $ text \"Hi\"
+  --
+  -- \-\- Write this:
+  -- (el_, result) <- elAttr\' \"div\" (\"class\" =: \"box\") $ text \"Hi\"
+  -- @
   element :: Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   default element :: ( MonadTransControl f
                      , StT f a ~ a
@@ -108,6 +247,26 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                   => Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t cfg $ run child
   {-# INLINABLE element #-}
+  -- | Create an @\<input\>@ element. Returns an 'InputElement' with:
+  --
+  -- * '_inputElement_value' — @Dynamic t Text@ of the current value
+  -- * '_inputElement_checked' — @Dynamic t Bool@ of the checked state
+  -- * '_inputElement_input' — @Event t Text@ firing on user input
+  -- * '_inputElement_checkedChange' — @Event t Bool@ firing on check change
+  -- * '_inputElement_hasFocus' — @Dynamic t Bool@ of focus state
+  --
+  -- In 'StaticDomSpace', the value is @constDyn initialValue@ and all
+  -- events are 'never'. In 'GhcjsDomSpace', values are two-way bound
+  -- to the live DOM element.
+  --
+  -- @
+  -- inp <- inputElement $ def
+  --   & inputElementConfig_initialValue .~ \"\"
+  --   & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
+  --       (\"placeholder\" =: \"Enter name\" \<\> \"type\" =: \"text\")
+  -- let valueDyn = _inputElement_value inp   -- Dynamic t Text
+  -- let inputEvt = _inputElement_input inp   -- Event t Text
+  -- @
   inputElement :: InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
   default inputElement :: ( MonadTransControl f
                           , m ~ f m'
@@ -117,6 +276,7 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                        => InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
   inputElement = lift . inputElement
   {-# INLINABLE inputElement #-}
+  -- | Create a @\<textarea\>@ element. Like 'inputElement' but for multi-line text.
   textAreaElement :: TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
   default textAreaElement :: ( MonadTransControl f
                              , m ~ f m'
@@ -126,6 +286,8 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                           => TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
   textAreaElement = lift . textAreaElement
   {-# INLINABLE textAreaElement #-}
+  -- | Create a @\<select\>@ element. The child @m a@ should contain @\<option\>@
+  -- elements. Returns a 'SelectElement' with the current selection value.
   selectElement :: SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
   default selectElement :: ( MonadTransControl f
                            , StT f a ~ a
@@ -137,6 +299,9 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
   selectElement cfg child = do
     liftWith $ \run -> selectElement cfg $ run child
   {-# INLINABLE selectElement #-}
+  -- | Insert a pre-existing raw DOM element into the builder's current
+  -- position. Only meaningful in 'GhcjsDomSpace' where raw elements are
+  -- real @DOM.Element@ values.
   placeRawElement :: RawElement (DomBuilderSpace m) -> m ()
   default placeRawElement :: ( MonadTrans f
                              , m ~ f m'
@@ -146,6 +311,9 @@ class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable
                           => RawElement (DomBuilderSpace m) -> m ()
   placeRawElement = lift . placeRawElement
   {-# INLINABLE placeRawElement #-}
+  -- | Wrap a pre-existing raw DOM element, attaching event handlers and
+  -- producing an 'Element' handle. Useful for integrating with elements
+  -- created outside of reflex-dom (e.g. from a JS library).
   wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
   default wrapRawElement :: ( MonadTrans f
                             , m ~ f m'
@@ -218,10 +386,11 @@ mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
 instance IsString AttributeName where
   fromString = AttributeName Nothing . fromString
 
+-- | Controls whether a DOM event continues propagating up the tree.
 data Propagation
-   = Propagation_Continue
-   | Propagation_Stop
-   | Propagation_StopImmediate
+   = Propagation_Continue       -- ^ Allow normal event propagation.
+   | Propagation_Stop           -- ^ Call @event.stopPropagation()@.
+   | Propagation_StopImmediate  -- ^ Call @event.stopImmediatePropagation()@.
    deriving (Show, Read, Eq, Ord)
 
 instance Semigroup Propagation where
@@ -234,9 +403,11 @@ instance Monoid Propagation where
   {-# INLINABLE mappend #-}
   mappend = (<>)
 
-data EventFlags = EventFlags --TODO: Monoid; ways of building each flag
-  { _eventFlags_propagation :: Propagation
-  , _eventFlags_preventDefault :: Bool
+-- | Flags that modify DOM event behavior. Use 'preventDefault' and
+-- 'stopPropagation' as convenient constructors. Combine with @('<>')@.
+data EventFlags = EventFlags
+  { _eventFlags_propagation :: Propagation   -- ^ How propagation is handled.
+  , _eventFlags_preventDefault :: Bool       -- ^ Whether to call @event.preventDefault()@.
   }
 
 instance Semigroup EventFlags where
@@ -255,11 +426,20 @@ preventDefault = mempty { _eventFlags_preventDefault = True }
 stopPropagation :: EventFlags
 stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
 
+-- | Configuration for creating a DOM element via 'element'.
+--
+-- Use 'def' for defaults (no namespace, no attributes, no modifications,
+-- default event spec). Lenses are provided for all fields.
 data ElementConfig er t s
    = ElementConfig { _elementConfig_namespace :: Maybe Namespace
+                     -- ^ Optional XML namespace (e.g. @Just \"http:\/\/www.w3.org\/2000\/svg\"@ for SVG).
                    , _elementConfig_initialAttributes :: Map AttributeName Text
+                     -- ^ Attributes set at creation time.
                    , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
+                     -- ^ Dynamic attribute patches. @Just v@ sets\/updates; @Nothing@ removes.
+                     -- Only fires in GHCJS; in static rendering the initial attributes are all that matter.
                    , _elementConfig_eventSpec :: EventSpec s er
+                     -- ^ Event specification for this element.
                    }
 
 #ifndef USE_TEMPLATE_HASKELL
@@ -278,9 +458,25 @@ elementConfig_eventSpec f (ElementConfig a b c d) = (\d' -> ElementConfig a b c 
 {-# INLINE elementConfig_eventSpec #-}
 #endif
 
+-- | A handle to a created DOM element. Returned by the primed variants of
+-- element builders (e.g. 'Reflex.Dom.Widget.Basic.el\'', 'Reflex.Dom.Widget.Basic.elAttr\'').
+--
+-- Use 'domEvent' to extract specific events:
+--
+-- @
+-- (e, _) <- el\' \"button\" $ text \"Click\"
+-- let click = domEvent Click e      -- Event t ()
+-- let keys  = domEvent Keydown e    -- Event t Word
+-- let mouse = domEvent Mousemove e  -- Event t (Int, Int)
+-- @
+--
+-- Access the raw DOM element (only useful in 'GhcjsDomSpace') via '_element_raw'.
 data Element er d t
-   = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
+   = Element { _element_events :: EventSelector t (WrapArg er EventName)
+               -- ^ Fan of all possible events on this element. Use 'domEvent' to select one.
              , _element_raw :: RawElement d
+               -- ^ The underlying raw DOM element. @()@ in 'StaticDomSpace',
+               -- @DOM.Element@ in 'GhcjsDomSpace'.
              }
 
 data InputElementConfig er t s
@@ -640,6 +836,24 @@ instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Commutati
 
 -- * Convenience functions
 
+-- | Extract a specific event from a DOM element, input, or text area.
+--
+-- The result type depends on the 'EventName' — see 'EventResultType' for the
+-- complete mapping. Common examples:
+--
+-- @
+-- (e, _) <- el\' \"div\" $ text \"Hello\"
+-- let click   = domEvent Click e      -- Event t ()
+-- let keydown = domEvent Keydown e    -- Event t Word
+-- let mouse   = domEvent Mousemove e  -- Event t (Int, Int)
+-- @
+--
+-- Works on 'Element', 'InputElement', and 'TextAreaElement':
+--
+-- @
+-- inp <- inputElement def
+-- let inputKeypress = domEvent Keypress inp  -- Event t Word
+-- @
 class HasDomEvent t target eventName | target -> t where
   type DomEventType target eventName :: *
   domEvent :: EventName eventName -> target -> Event t (DomEventType target eventName)
@@ -728,6 +942,19 @@ deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s
 liftElementConfig = id
 
+-- | Provides access to the raw document object for the current 'DomSpace'.
+--
+-- In 'GhcjsDomSpace' (from "Reflex.Dom.Builder.Immediate"), @askDocument@
+-- returns a real @DOM.Document@ that you can use for direct DOM operations
+-- (e.g. @createElement@, @querySelector@).
+--
+-- In 'StaticDomSpace' (from "Reflex.Dom.Builder.Static"), @askDocument@
+-- returns @()@ — there is no document.
+--
+-- This class is primarily used internally by the builder implementations.
+-- Application code typically uses 'DomBuilder' methods instead.
+--
+-- @since 0.8.0.0
 class Monad m => HasDocument m where
   askDocument :: m (RawDocument (DomBuilderSpace m))
   default askDocument

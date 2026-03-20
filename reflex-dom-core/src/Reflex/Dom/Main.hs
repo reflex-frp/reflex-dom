@@ -12,6 +12,41 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fspecialise-aggressively #-}
+-- |
+-- Module: Reflex.Dom.Main
+--
+-- Application entry points and the concrete 'Widget' type alias.
+--
+-- == The Widget Monad Stack
+--
+-- @
+-- type Widget x = ImmediateDomBuilderT DomTimeline (DomCoreWidget x)
+--
+-- type DomCoreWidget x = PostBuildT DomTimeline
+--   (WithJSContextSingleton x (PerformEventT DomTimeline DomHost))
+--
+-- type DomTimeline = Spider
+-- type DomHost     = SpiderHost Global
+-- @
+--
+-- You rarely need to know this — write polymorphic code with 'DomBuilder',
+-- 'PostBuild', 'MonadHold', etc. constraints instead.
+--
+-- == Entry Points
+--
+-- For standalone apps (not Obelisk):
+--
+-- * 'mainWidget' — run a widget in @\<body\>@
+-- * 'mainWidgetWithHead' — run widgets in both @\<head\>@ and @\<body\>@
+-- * 'mainWidgetWithCss' — inject CSS then run widget in @\<body\>@
+-- * 'mainWidgetInElementById' — run a widget inside a specific element
+--
+-- For server-side rendering:
+--
+-- * 'renderStatic' (from "Reflex.Dom.Builder.Static") — render a widget to 'ByteString'
+--
+-- Obelisk applications use their own entry points that call the hydration
+-- variants ('mainHydrationWidgetWithHead', etc.) internally.
 module Reflex.Dom.Main where
 
 import Prelude hiding (concat, mapM, mapM_, sequence, sequence_)
@@ -185,6 +220,19 @@ runHydrationWidgetWithHeadAndBodyWithFailure onFailure switchoverAction app = wi
     return (events, postBuildTriggerRef)
   liftIO $ processAsyncEvents events fc
 
+-- | Run a widget in the document @\<body\>@, replacing its contents.
+-- This is the simplest entry point for a standalone reflex-dom app.
+--
+-- @
+-- main :: IO ()
+-- main = mainWidget $ do
+--   el \"h1\" $ text \"Hello, reflex!\"
+--   clickEvt <- button \"Click me\"
+--   count <- foldDyn (+) (0 :: Int) (1 \<$ clickEvt)
+--   el \"p\" $ do
+--     text \"Clicks: \"
+--     display count
+-- @
 {-# INLINE mainWidget #-}
 mainWidget :: (forall x. Widget x ()) -> JSM ()
 mainWidget = mainWidget'
@@ -207,6 +255,13 @@ mainWidgetWithHead h b = withJSContextSingletonMono $ \jsSing -> do
   body <- getBodyUnchecked doc
   attachWidget body jsSing b
 
+-- | Inject CSS into @\<head\>@ via a @\<style\>@ tag, then run a widget in @\<body\>@.
+--
+-- @
+-- main :: IO ()
+-- main = mainWidgetWithCss \"body { background: #f0f0f0; }\" $ do
+--   el \"h1\" $ text \"Styled app\"
+-- @
 {-# INLINABLE mainWidgetWithCss #-}
 mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
 mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
@@ -236,6 +291,16 @@ runDomHost = runSpiderHost
   . runProfiledM
 #endif
 
+-- | The concrete widget monad for GHCJS applications. This is the fully
+-- instantiated monad stack that 'mainWidget' and 'attachWidget' run.
+--
+-- The outermost layer is 'ImmediateDomBuilderT', which provides the
+-- 'DomBuilder' instance backed by real GHCJS DOM operations.
+--
+-- In practice, write widgets with polymorphic constraints ('DomBuilder',
+-- 'PostBuild', 'MonadHold', etc.) rather than using this type directly.
+-- The polymorphic style lets the same code run in static rendering
+-- ('StaticDomBuilderT') and GHCJS ('Widget').
 type Widget x = ImmediateDomBuilderT DomTimeline (DomCoreWidget x)
 
 {-# INLINABLE attachWidget #-}
@@ -343,7 +408,15 @@ processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
     liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
   return ()
 
--- | Run a reflex-dom application inside of an existing DOM element with the given ID
+-- | Run a reflex-dom application inside of an existing DOM element with the given ID.
+-- Useful for embedding a Reflex app within a larger page.
+--
+-- @
+-- \-\- Given \<div id=\"app\"\>\<\/div\> in the HTML:
+-- main :: IO ()
+-- main = mainWidgetInElementById \"app\" $ do
+--   el \"p\" $ text \"I live inside #app\"
+-- @
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
 mainWidgetInElementById eid w = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked

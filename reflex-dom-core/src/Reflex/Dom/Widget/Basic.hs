@@ -9,6 +9,41 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+-- |
+-- Module: Reflex.Dom.Widget.Basic
+--
+-- High-level widget combinators for building DOM. These are the functions you
+-- use in day-to-day reflex-dom code. They are all built on the low-level
+-- 'DomBuilder' methods from "Reflex.Dom.Builder.Class".
+--
+-- == Constraint Guide
+--
+-- Functions here require different constraint sets depending on what they do:
+--
+-- [@DomBuilder t m@] Static element creation: 'el', 'elAttr', 'elClass',
+--   'text', 'blank', 'button', 'divClass'.
+--
+-- [@(DomBuilder t m, PostBuild t m)@] Dynamic content: 'elDynAttr',
+--   'elDynClass', 'dynText', 'display', 'dyn', 'dyn_'.
+--
+-- [@(Adjustable t m, MonadHold t m)@] Stateful widget replacement:
+--   'widgetHold', 'widgetHold_'.
+--
+-- All of these work in both static ('StaticDomBuilderT') and GHCJS contexts.
+-- In static rendering, dynamic content is rendered with its initial value and
+-- never updates. Events (e.g. from 'button') are 'never'.
+--
+-- == Primed Variants
+--
+-- Functions ending in @\'@ (e.g. 'el\'', 'elAttr\'') return an 'Element'
+-- handle alongside the child result. Use 'domEvent' to extract events:
+--
+-- @
+-- (e, _) <- el\' \"button\" $ text \"Click\"
+-- let click = domEvent Click e  -- Event t ()
+-- @
+--
+-- Non-primed variants discard the element handle for convenience.
 module Reflex.Dom.Widget.Basic
   (
   -- * Displaying Values
@@ -108,10 +143,33 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
                         then go t geq
                         else (Left h, lt) : go t geq
 
+-- | Create a static text node. This is the most basic way to put text on screen.
+--
+-- @
+-- el \"p\" $ text \"Hello, world!\"
+-- @
+--
+-- Multiple 'text' calls produce adjacent text nodes:
+--
+-- @
+-- el \"p\" $ do
+--   text \"Hello, \"
+--   text \"world!\"
+-- -- renders: \<p\>Hello, world!\<\/p\>
+-- @
 {-# INLINABLE text #-}
 text :: DomBuilder t m => Text -> m ()
 text t = void $ textNode $ def & textNodeConfig_initialContents .~ t
 
+-- | Create a text node whose content changes over time.
+--
+-- Requires 'PostBuild' to sample the initial value of the 'Dynamic'.
+-- In static rendering, only the initial value is used.
+--
+-- @
+-- nameDyn <- holdDyn \"Anonymous\" nameUpdateEvt
+-- dynText nameDyn
+-- @
 {-# INLINABLE dynText #-}
 dynText :: forall t m. (PostBuild t m, DomBuilder t m) => Dynamic t Text -> m ()
 dynText t = do
@@ -135,34 +193,74 @@ dynComment t = do
     ]
   notReadyUntil postBuild
 
+-- | Display a 'Show'-able 'Dynamic' value as text. Equivalent to
+-- @dynText . fmap (T.pack . show)@.
+--
+-- @
+-- counter <- foldDyn (+) (0 :: Int) (1 \<$ clickEvt)
+-- el \"p\" $ do
+--   text \"Count: \"
+--   display counter
+-- @
 display :: (PostBuild t m, DomBuilder t m, Show a) => Dynamic t a -> m ()
 display = dynText . fmap (T.pack . show)
 
+-- | Create a @\<button\>@ element with the given label, returning a click 'Event'.
+--
+-- Internally uses 'domEvent' 'Click' on the created element.
+--
+-- In 'StaticDomSpace', the returned event is 'never'.
+-- In 'GhcjsDomSpace', it fires @()@ on each click.
+--
+-- @
+-- clickEvt <- button \"Submit\"
+-- @
 button :: DomBuilder t m => Text -> m (Event t ())
 button t = do
   (e, _) <- element "button" def $ text t
   return $ domEvent Click e
 
---TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
--- | Given a Dynamic of widget-creating actions, create a widget that is recreated whenever the Dynamic updates.
---   The returned Event occurs whenever the child widget is updated, which is
---   at post-build in addition to the times at which the input Dynamic is
---   updated, and its value is the result of running the widget.
---   Note:  Often, the type @a@ is an 'Event', in which case the return value is an Event-of-Events that would typically be flattened (via 'switchHold').
+-- | Rebuild a widget entirely whenever the 'Dynamic' changes. Each time the
+-- 'Dynamic' updates, the previous widget is destroyed and a new one is built.
+--
+-- Requires 'Adjustable' (from the @reflex@ package) for dynamic widget
+-- replacement. See also 'widgetHold' for an event-driven variant.
+--
+-- The returned 'Event' fires with the new widget's result each time the widget
+-- is rebuilt (including once at post-build time).
+--
+-- __Warning:__ If @a@ is itself an 'Event', you get an @Event t (Event t b)@.
+-- Flatten with 'switchHold' or 'switchDyn'.
+--
+-- @
+-- dyn $ ffor currentPage $ \\case
+--   HomePage  -> homeWidget
+--   AboutPage -> aboutWidget
+-- @
 dyn :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m (Event t a)
 dyn = networkView
 
--- | Like 'dyn' but discards result.
+-- | Like 'dyn' but discards the result.
 dyn_ :: (Adjustable t m, NotReady t m, PostBuild t m) => Dynamic t (m a) -> m ()
 dyn_ = void . dyn
 
--- | Given an initial widget and an Event of widget-creating actions, create a widget that is recreated whenever the Event fires.
---   The returned Dynamic of widget results occurs when the Event does.
---   Note:  Often, the type 'a' is an Event, in which case the return value is a Dynamic-of-Events that would typically be flattened (via 'switchDyn').
+-- | Hold a widget, replacing it whenever the 'Event' fires with a new widget
+-- action. Returns a 'Dynamic' that always holds the latest widget's result.
+--
+-- Requires 'Adjustable' (from the @reflex@ package) for dynamic widget
+-- replacement. See also 'dyn' for a 'Dynamic'-driven variant.
+--
+-- Unlike 'dyn', this takes an initial widget and an update 'Event' rather than
+-- a 'Dynamic'. Use when the widget changes in response to discrete events
+-- (e.g. a server response), not continuous state.
+--
+-- @
+-- widgetHold (text \"Loading...\") (buildResult \<$\> responseEvt)
+-- @
 widgetHold :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m (Dynamic t a)
 widgetHold = networkHold
 
--- | Like 'widgetHold' but discards result.
+-- | Like 'widgetHold' but discards the result.
 widgetHold_ :: (Adjustable t m, MonadHold t m) => m a -> Event t (m a) -> m ()
 widgetHold_ z = void . widgetHold z
 
@@ -190,18 +288,32 @@ elAttr elementTag attrs child = snd <$> elAttr' elementTag attrs child
 elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
 elClass elementTag c child = snd <$> elClass' elementTag c child
 
--- | Create a DOM element with Dynamic Attributes
+-- | Create a DOM element with Dynamic Attributes.
 --
--- >>> elClass "div" (constDyn ("class" =: "row")) (return ())
--- <div class="row"></div>
+-- Attribute changes are applied as incremental patches to the real DOM;
+-- attributes that do not change between updates are left untouched.
+--
+-- @
+-- visibleDyn <- toggle True clickEvt
+-- let attrsDyn = ffor visibleDyn $ \\vis ->
+--       if vis then (\"class\" =: \"visible\")
+--              else (\"class\" =: \"hidden\")
+-- elDynAttr \"div\" attrsDyn $ text \"Toggle me\"
+-- @
 {-# INLINABLE elDynAttr #-}
 elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
 elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
 
--- | Create a DOM element with a Dynamic Class
+-- | Create a DOM element with a Dynamic class string.
 --
--- >>> elDynClass "div" (constDyn "row") (return ())
--- <div class="row"></div>
+-- When the 'Dynamic' updates, the @class@ attribute is patched on the real
+-- DOM element. Equivalent to @elDynAttr tag (fmap (\"class\" =:) classDyn)@.
+--
+-- @
+-- isActive <- toggle False clickEvt
+-- let classDyn = ffor isActive $ \\a -> if a then \"tab active\" else \"tab\"
+-- elDynClass \"div\" classDyn $ text \"Tab content\"
+-- @
 {-# INLINABLE elDynClass #-}
 elDynClass :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m a
 elDynClass elementTag c child = snd <$> elDynClass' elementTag c child
@@ -216,7 +328,12 @@ elDynClass elementTag c child = snd <$> elDynClass' elementTag c child
 el' :: forall t m a. DomBuilder t m => Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 el' elementTag = element elementTag def
 
--- | Create a DOM element with attributes and return the element
+-- | Create a DOM element with attributes and return the element.
+--
+-- @
+-- (imgEl, _) <- elAttr' \"img\" (\"src\" =: \"logo.png\" \<> \"alt\" =: \"Logo\") blank
+-- let mouseEvt = domEvent Mouseover imgEl
+-- @
 {-# INLINABLE elAttr' #-}
 elAttr' :: forall t m a. DomBuilder t m => Text -> Map Text Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
 elAttr' elementTag attrs = element elementTag $ def
@@ -275,22 +392,50 @@ newtype Link t
   = Link { _link_clicked :: Event t ()
          }
 
+-- | Create a clickable @\<a\>@ element with text and a CSS class.
+--
+-- @
+-- lnk <- linkClass \"Sign up\" \"cta-link\"
+-- performEvent_ $ redirect \"\/signup\" \<$ _link_clicked lnk
+-- @
 linkClass :: DomBuilder t m => Text -> Text -> m (Link t)
 linkClass s c = do
   (l,_) <- elAttr' "a" ("class" =: c) $ text s
   return $ Link $ domEvent Click l
 
+-- | Create a clickable @\<a\>@ element with no CSS class. See 'linkClass'.
 link :: DomBuilder t m => Text -> m (Link t)
 link s = linkClass s ""
 
+-- | Shorthand for @elClass \"div\"@. Creates a @\<div\>@ with the given class.
+--
+-- @
+-- divClass \"container\" $ do
+--   divClass \"header\" $ text \"Title\"
+--   divClass \"body\"   $ text \"Content\"
+-- @
 divClass :: forall t m a. DomBuilder t m => Text -> m a -> m a
 divClass = elClass "div"
 
+-- | Render a definition list term\/description pair.
+--
+-- @
+-- el \"dl\" $ do
+--   dtdd \"Name\" $ text \"Alice\"
+--   dtdd \"Age\"  $ text \"30\"
+-- -- renders: \<dt\>Name\<\/dt\>\<dd\>Alice\<\/dd\>\<dt\>Age\<\/dt\>\<dd\>30\<\/dd\>
+-- @
 dtdd :: forall t m a. DomBuilder t m => Text -> m a -> m a
 dtdd h w = do
   el "dt" $ text h
   el "dd" w
 
+-- | Do nothing. Useful as a no-op child widget.
+--
+-- @
+-- elAttr \"img\" (\"src\" =: \"logo.png\") blank   -- self-closing-style element
+-- elAttr \"hr\" mempty blank                    -- no child content needed
+-- @
 blank :: forall m. Monad m => m ()
 blank = return ()
 
