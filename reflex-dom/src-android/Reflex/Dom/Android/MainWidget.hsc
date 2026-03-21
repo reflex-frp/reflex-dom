@@ -1,5 +1,25 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Reflex.Dom.Android.MainWidget
+-- Copyright   :  (c) Ryan Trinkle
+-- License     :  BSD3
+--
+-- Maintainer  :  ryan.trinkle@gmail.com
+--
+-- Android-specific JSaddle bridge via WebView.
+--
+--   'startMainWidget' launches a JSaddle session inside an Android
+--   @WebView@ by calling into the C helper @Reflex_Dom_Android_MainWidget_start@.
+--   JavaScript commands are sent as JSON-encoded batches via
+--   @Reflex_Dom_Android_MainWidget_runJS@; synchronous results come back
+--   through @jsaddle.syncMessage@.
+--
+--   'goBack' and 'withGlobalJSExecutor' expose the back-button integration
+--   used by "Reflex.Dom.Location.Platform" on Android.
+--
+-----------------------------------------------------------------------------
 module Reflex.Dom.Android.MainWidget
   ( startMainWidget
   , goBack

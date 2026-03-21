@@ -3,6 +3,31 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Reflex.Dom.Internal
+-- Copyright   :  (c) Ryan Trinkle
+-- License     :  BSD3
+--
+-- Maintainer  :  ryan.trinkle@gmail.com
+--
+-- Platform-specific runtime dispatch for @reflex-dom@.
+--
+--   Defines the polymorphic 'run' function that selects the correct
+--   JSaddle backend at compile time via CPP:
+--
+--   * __GHCJS__: @run = id@ (no runtime wrapper needed)
+--   * __jsaddle-warp__: Warp dev server on @JSADDLE_WARP_PORT@ (default 3003)
+--   * __jsaddle-wkwebview__: macOS\/iOS WKWebView (with iOS base-URL handling)
+--   * __Android__: @android-activity@ + @startMainWidget@
+--   * __WASM__: @jsaddle-wasm@ backend
+--   * __Default__: @jsaddle-webkit2gtk@ (Linux desktop)
+--
+--   All @main*@ entry points ('mainWidget', 'mainWidgetWithCss', etc.)
+--   are thin wrappers that compose 'run' with the corresponding
+--   function from "Reflex.Dom.Main".
+--
+-----------------------------------------------------------------------------
 module Reflex.Dom.Internal
   ( module Main
   , run
