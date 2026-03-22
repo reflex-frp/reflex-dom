@@ -98,10 +98,10 @@ import qualified GHCJS.DOM.Types as DOM
 -- and @DomBuilderSpace m ~ GhcjsDomSpace@.
 type PrerenderClientConstraint t m =
   ( DomBuilder t m
-  , DomBuilderSpace m ~ GhcjsDomSpace  -- ^ Real DOM elements, not ()
+  , DomBuilderSpace m ~ GhcjsDomSpace
   , DomRenderHook t m
-  , HasDocument m                       -- ^ Access to DOM.Document
-  , TriggerEvent t m                    -- ^ Create events from callbacks
+  , HasDocument m
+  , TriggerEvent t m
   , PrerenderBaseConstraints t m
   )
 
@@ -111,8 +111,8 @@ type PrerenderClientConstraint t m =
 type PrerenderBaseConstraints t m =
   ( MonadFix m
   , MonadHold t m
-  , MonadJSM (Performable m)           -- ^ Run JS in event handlers
-  , MonadJSM m                         -- ^ Run JS directly
+  , MonadJSM (Performable m)
+  , MonadJSM m
   , MonadRef (Performable m)
   , MonadRef m
   , MonadReflexCreateTrigger t m
