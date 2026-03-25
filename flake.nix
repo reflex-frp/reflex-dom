@@ -1,5 +1,13 @@
 {
-  outputs = { self, nixpkgs, ... }:
+  inputs = {
+    nix-haskell.url = "git+file:./deps/nix-haskell";
+    flake-compat.follows = "nix-haskell/flake-compat";
+    nixpkgs.follows = "nix-haskell/nixpkgs";
+    haskell-nix.follows = "nix-haskell/haskell-nix";
+    reflex-platform.follows = "nix-haskell/reflex-platform";
+  };
+
+  outputs = inputs@{ self, nixpkgs, ... }:
     let eachSystem = nixpkgs.lib.genAttrs
           [ "x86_64-linux"
             "aarch64-linux"
@@ -7,7 +15,7 @@
     in {
       legacyPackages = eachSystem (system:
         let pkgs = nixpkgs.legacyPackages.${system};
-            project = import ./default.nix { inherit system; };
+            project = import ./default.nix { inherit system inputs; };
         in project
       );
     };
