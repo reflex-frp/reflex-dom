@@ -66,12 +66,12 @@ library
     cpp-options: -DANDROID
     build-tools: hsc2hs
   build-depends:
-    base >= 4.7 && < 4.22,
+    base >= 4.7 && < 4.23,
     bytestring >= 0.10 && < 0.13,
     reflex >= 0.8 && < 1,
     reflex-dom-core >= 0.8.1.0 && <0.9,
     text >= 1.2 && < 2.2
-  if !impl(ghcjs)
+  if !(impl(ghcjs) || arch(javascript))
     if flag(use-warp)
       build-depends:
         jsaddle >= 0.9.6 && < 0.10,
@@ -86,7 +86,7 @@ library
         if arch(wasm32)
           build-depends:
             jsaddle >= 0.9.6 && < 0.10,
-            jsaddle-wasm >= 0.1 && < 0.2
+            jsaddle-wasm >= 0.1 && < 0.3
         else
           if flag(webkit2gtk) && !os(android)
             build-depends:
