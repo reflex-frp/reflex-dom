@@ -71,7 +71,7 @@ library
     reflex >= 0.8 && < 1,
     reflex-dom-core >= 0.8.1.0 && <0.9,
     text >= 1.2 && < 2.2
-  if !impl(ghcjs)
+  if !(impl(ghcjs) || arch(javascript))
     if flag(use-warp)
       build-depends:
         jsaddle >= 0.9.6 && < 0.10,
