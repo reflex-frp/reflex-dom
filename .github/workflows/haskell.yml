@@ -16,6 +16,9 @@ jobs:
     - uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
     - name: Cache
       uses: actions/cache@v3
       env:

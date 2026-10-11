@@ -1,5 +1,9 @@
 # Revision history for reflex-dom-core
 
+## Unreleased
+
+* Use the patched JSaddle-Warp sender in repository test builds.
+
 ## 0.8.1.4
 * Support hashable 1.5 in JS backend
 

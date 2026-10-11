@@ -7,3 +7,11 @@ package reflex-dom-core
 
 package reflex-dom
   flags: +use-warp -webkit2gtk +build-examples
+
+-- https://github.com/ghcjs/jsaddle/pull/172
+source-repository-package
+  type: git
+  location: https://github.com/obsidiansystems/jsaddle.git
+  tag: 2152422657602dc29c89140cebd3d7fae080acf1
+  subdir: jsaddle-warp
+  post-checkout-command: npm ci --ignore-scripts --prefix jsaddle-warp/node-client

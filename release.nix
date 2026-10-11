@@ -10,6 +10,7 @@ let
 
   perPlatform = lib.genAttrs supportedSystems (system: let
     reflex-platform = reflex-platform-fun { inherit system; };
+    pkgs = reflex-platform.nixpkgs;
     compilers = [
       "ghc"
       "ghcjs"
@@ -22,6 +23,7 @@ let
       reflex-platform = reflex-platform-fun {
         inherit system;
         haskellOverlays = [
+          (import ./dep/jsaddle-warp.nix { inherit pkgs; })
           # Use this package's source for reflex-dom
           (self: super: {
             _dep = super._dep // {
