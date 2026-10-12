@@ -20,3 +20,11 @@ source-repository-package
   type: git
   location: https://github.com/alexfmpe/splitmix
   tag: bd53859c0f41d12f16c3f44fee52f5e9aae26243
+
+-- https://github.com/ghcjs/jsaddle/pull/172
+source-repository-package
+  type: git
+  location: https://github.com/obsidiansystems/jsaddle.git
+  tag: 2152422657602dc29c89140cebd3d7fae080acf1
+  subdir: jsaddle-warp
+  post-checkout-command: npm ci --ignore-scripts --prefix jsaddle-warp/node-client

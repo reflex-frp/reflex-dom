@@ -6,8 +6,8 @@ jobs:
   build:
     strategy:
       matrix:
-        ghc: ['8.6', '8.8', '8.10', '9.0', '9.2', '9.4', '9.6', '9.8', '9.10', '9.12']
-        os: ['ubuntu-latest', 'macos-13'] # https://github.com/haskell-actions/setup/issues/77
+        ghc: ['9.2', '9.4', '9.6', '9.8', '9.10', '9.12']
+        os: ['ubuntu-latest', 'macos-15']
     runs-on: ${{ matrix.os }}
 
     name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
@@ -16,18 +16,21 @@ jobs:
     - uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
     - name: Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       env:
         cache-name: cache-cabal
       with:
         path: ~/.cabal
-        key: ${{ runner.os }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-${{ matrix.ghc }}-build-
-          ${{ runner.os }}-${{ matrix.ghc }}-
-          ${{ runner.os }}
+          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-
+          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-
+          ${{ runner.os }}-${{ runner.arch }}-
 
     - name: Set up cabal project file to avoid webkit2gtk
       run: cp cabal.project-nogtk cabal.project

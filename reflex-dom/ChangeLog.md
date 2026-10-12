@@ -1,5 +1,9 @@
 # Revision history for reflex-dom
 
+## Unreleased
+
+* Pin the patched JSaddle-Warp sender in repository Cabal and Nix builds.
+
 ## 0.6.3.4
 
 * Fix WASM related issues
