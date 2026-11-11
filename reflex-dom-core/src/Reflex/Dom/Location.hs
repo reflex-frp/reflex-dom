@@ -121,11 +121,11 @@ data HistoryCommand
 runHistoryCommand :: MonadJSM m => History -> HistoryCommand -> m ()
 runHistoryCommand history = \case
   HistoryCommand_PushState su -> History.pushState history
-    (_historyStateUpdate_state su)
+    (unSerializedScriptValue (_historyStateUpdate_state su))
     (_historyStateUpdate_title su)
     (show <$> _historyStateUpdate_uri su)
   HistoryCommand_ReplaceState su -> History.replaceState history
-    (_historyStateUpdate_state su)
+    (unSerializedScriptValue (_historyStateUpdate_state su))
     (_historyStateUpdate_title su)
     (show <$> _historyStateUpdate_uri su)
 
@@ -151,7 +151,7 @@ manageHistory runCmd = do
   location <- Window.getLocation window
   history <- Window.getHistory window
   let getCurrentHistoryItem = HistoryItem
-        <$> History.getState history
+        <$> (SerializedScriptValue <$> History.getState history)
         <*> getLocationUri location
   item0 <- liftJSM getCurrentHistoryItem
   itemSetInternal <- performEvent $ ffor runCmd $ \cmd -> liftJSM $ do
@@ -184,7 +184,7 @@ manageHistoryExposingExternalUpdates switchover runCmd = do
   location <- Window.getLocation window
   history <- Window.getHistory window
   let getCurrentHistoryItem = HistoryItem
-        <$> History.getState history
+        <$> (SerializedScriptValue <$> History.getState history)
         <*> getLocationUri location
   item0 <- liftJSM getCurrentHistoryItem
   itemSetExternal' <- wrapDomEvent window (`DOM.on` DOM.popState) $ do

@@ -60,7 +60,7 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
           itemsInWindow = zipDynWith (\(_,(idx,num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
   performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i ->
-    setScrollTop (_element_raw container) (i * rowPx)
+    setScrollTop (_element_raw container) (fromIntegral (i * rowPx))
   let indexAndLength = fmap snd window
   return (indexAndLength, sel)
   where
@@ -104,7 +104,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
                                              ]
       let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
   performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i ->
-    setScrollTop (_element_raw viewport) (i * rowPx)
+    setScrollTop (_element_raw viewport) (fromIntegral (i * rowPx))
   uniqWindow <- holdUniqDyn window
   return (uniqWindow, result)
   where
