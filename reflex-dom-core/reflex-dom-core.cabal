@@ -1,6 +1,6 @@
 cabal-version: 1.24
 Name: reflex-dom-core
-Version: 0.8.1.4
+Version: 0.9.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Web applications without callbacks or side-effects.
@@ -54,6 +54,11 @@ flag split-these
   manual:      False
   default:     True
 
+flag jsffi
+  description: On the JavaScript backends, use the JavaScript FFI implementation (src-ghcjs, which needs ghcjs-dom's jsffi flavour).  Turn it off together with ghcjs-dom's jsffi flag to use the jsaddle implementation (src-ghc) there instead, for code written against jsaddle.
+  default: True
+  manual: True
+
 flag hydration-tests
   description: Whether to run the hydration tests (currently only available on linux)
   default: True
@@ -88,7 +93,7 @@ library
     dependent-sum >= 0.6 && < 0.8,
     directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
-    ghcjs-dom >= 0.9.1.0 && < 0.10,
+    ghcjs-dom >= 0.10.0.0 && < 0.11,
     jsaddle >= 0.9.0.0 && < 0.10,
     -- keycode-0.2 has a bug on firefox
     keycode >= 0.2.1 && < 0.3,
@@ -107,10 +112,11 @@ library
     zenc == 0.1.*
 
   if impl(ghcjs) || arch(javascript)
-    hs-source-dirs: src-ghcjs
     build-depends:
       ghcjs-base,
       hashable >= 1.2 && < 1.6
+  if (impl(ghcjs) || arch(javascript)) && flag(jsffi)
+    hs-source-dirs: src-ghcjs
   else
     hs-source-dirs: src-ghc
     if !os(windows)

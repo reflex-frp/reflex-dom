@@ -68,20 +68,21 @@ resizeDetectorWithAttrs attrs w = do
             ech = eoh + 10
         setAttribute (_element_raw expandChild) ("style" :: Text) (childStyle <> "width: " <> T.pack (show ecw) <> "px;" <> "height: " <> T.pack (show ech) <> "px;")
         esw <- getScrollWidth e
-        setScrollLeft e esw
+        setScrollLeft e (fromIntegral esw)
         esh <- getScrollHeight e
-        setScrollTop e esh
+        setScrollTop e (fromIntegral esh)
         ssw <- getScrollWidth s
-        setScrollLeft s ssw
+        setScrollLeft s (fromIntegral ssw)
         ssh <- getScrollHeight s
-        setScrollTop s ssh
+        setScrollTop s (fromIntegral ssh)
         lastWidth <- getOffsetWidth p
         lastHeight <- getOffsetHeight p
-        return (Just lastWidth, Just lastHeight)
+        -- offsetWidth/offsetHeight are long in CSSOM View; the result stays Double
+        return (Just (fromIntegral lastWidth), Just (fromIntegral lastHeight))
       resetIfChanged ds = do
         pow <- getOffsetWidth p
         poh <- getOffsetHeight p
-        if ds == (Just pow, Just poh)
+        if ds == (Just (fromIntegral pow), Just (fromIntegral poh))
           then return Nothing
           else fmap Just reset
   pb <- delay 0 =<< getPostBuild

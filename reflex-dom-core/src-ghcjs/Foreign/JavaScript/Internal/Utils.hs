@@ -11,15 +11,15 @@ module Foreign.JavaScript.Internal.Utils
   ) where
 
 import GHCJS.Concurrent
-import GHCJS.DOM.Types (JSM, JSVal, RequestAnimationFrameCallback (..))
+import GHCJS.DOM.Types (JSM, JSVal, FrameRequestCallback (..))
 #if __GLASGOW_HASKELL__ < 900
 import GHCJS.Foreign.Callback (releaseCallback)
 #else
 import GHC.JS.Foreign.Callback (releaseCallback)
 #endif
 
-freeRequestAnimationFrameCallback :: RequestAnimationFrameCallback -> JSM ()
-freeRequestAnimationFrameCallback (RequestAnimationFrameCallback cb) = releaseCallback cb
+freeRequestAnimationFrameCallback :: FrameRequestCallback -> JSM ()
+freeRequestAnimationFrameCallback (FrameRequestCallback cb) = releaseCallback cb
 
 #if __GLASGOW_HASKELL__ < 900
 foreign import javascript safe "new DataView($3,$1,$2)"

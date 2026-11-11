@@ -1,8 +1,12 @@
 # Revision history for reflex-dom
 
-## Unreleased
+## 0.7.0.0
 
 * Pin the patched JSaddle-Warp sender in repository Cabal and Nix builds.
+* Build with reflex-dom-core 0.9 (ghcjs-dom / jsaddle-dom 0.10, with
+  bindings regenerated from current specifications).  reflex-dom
+  re-exports reflex-dom-core, so this inherits its breaking changes: see
+  reflex-dom-core's ChangeLog.md.
 
 ## 0.6.3.4
 

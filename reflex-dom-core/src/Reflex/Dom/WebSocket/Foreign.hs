@@ -48,7 +48,7 @@ instance IsWebSocketMessage LBS.ByteString where
 
 -- Use plaintext websocket communication for Text, and String
 instance IsWebSocketMessage Text where
-  webSocketSend (JSWebSocket ws) = DOM.sendString ws
+  webSocketSend (JSWebSocket ws) = DOM.send ws
 
 closeWebSocket :: JSWebSocket -> Word -> Text -> JSM ()
 closeWebSocket (JSWebSocket ws) code reason = DOM.close ws (Just code) (Just reason)

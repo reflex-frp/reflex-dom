@@ -16,7 +16,7 @@ import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on, onSync)
 import GHCJS.DOM.EventTarget (dispatchEvent)
-import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, XMLHttpRequestProgressEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
+import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import qualified Language.Javascript.JSaddle.Monad as JS (catch)
@@ -91,13 +91,13 @@ xmlHttpRequestOverrideMimeType = overrideMimeType
 xmlHttpRequestDispatchEvent :: (IsEvent evt, MonadJSM m) => XMLHttpRequest -> evt -> m Bool
 xmlHttpRequestDispatchEvent = dispatchEvent
 
-xmlHttpRequestOnabort :: XMLHttpRequest -> EventM XMLHttpRequest XMLHttpRequestProgressEvent () -> JSM (JSM ())
+xmlHttpRequestOnabort :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
 xmlHttpRequestOnabort = (`on` abortEvent)
 
-xmlHttpRequestOnerror :: XMLHttpRequest -> EventM XMLHttpRequest XMLHttpRequestProgressEvent () -> JSM (JSM ())
+xmlHttpRequestOnerror :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
 xmlHttpRequestOnerror = (`on` error)
 
-xmlHttpRequestOnload :: XMLHttpRequest -> EventM XMLHttpRequest XMLHttpRequestProgressEvent () -> JSM (JSM ())
+xmlHttpRequestOnload :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
 xmlHttpRequestOnload = (`on` load)
 
 xmlHttpRequestOnloadend :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
@@ -106,7 +106,7 @@ xmlHttpRequestOnloadend = (`on` loadEnd)
 xmlHttpRequestOnloadstart :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
 xmlHttpRequestOnloadstart = (`on` loadStart)
 
-xmlHttpRequestOnprogress :: XMLHttpRequest -> EventM XMLHttpRequest XMLHttpRequestProgressEvent () -> JSM (JSM ())
+xmlHttpRequestOnprogress :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
 xmlHttpRequestOnprogress = (`on` progress)
 
 xmlHttpRequestOntimeout :: XMLHttpRequest -> EventM XMLHttpRequest ProgressEvent () -> JSM (JSM ())
@@ -134,7 +134,7 @@ xmlHttpRequestGetUpload :: MonadJSM m => XMLHttpRequest -> m (Maybe XMLHttpReque
 xmlHttpRequestGetUpload = fmap Just . getUpload
 
 xmlHttpRequestGetResponseText :: (FromJSString result, MonadJSM m) => XMLHttpRequest -> m (Maybe result)
-xmlHttpRequestGetResponseText = getResponseText
+xmlHttpRequestGetResponseText = fmap Just . getResponseText  -- responseText is no longer nullable
 
 xmlHttpRequestGetResponseXML :: MonadJSM m => XMLHttpRequest -> m (Maybe Document)
 xmlHttpRequestGetResponseXML = getResponseXML

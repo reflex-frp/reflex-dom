@@ -1,8 +1,19 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.9.0.0
 
 * Use the patched JSaddle-Warp sender in repository test builds.
+* Build with ghcjs-dom 0.10 / jsaddle-dom 0.10 (bindings regenerated from
+  current specifications).  The `EventType` family follows the
+  specifications' event types: `Click` and `Contextmenu` are
+  `PointerEvent`s, the drag events `DragEvent`s, `Input` an `InputEvent`
+  and `Submit` a `SubmitEvent`.
+  Events no longer in any specification (`beforecut`, `beforecopy`,
+  `beforepaste`, `mousewheel`, `search`) are still bound by name.
+* New manual flag `jsffi` (default on).  On the JavaScript backends,
+  turning it off (together with ghcjs-dom's `jsffi` flag) builds the jsaddle
+  implementation (`src-ghc`) instead of the JavaScript FFI one, for
+  applications written against jsaddle.
 
 ## 0.8.1.4
 * Support hashable 1.5 in JS backend

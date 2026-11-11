@@ -153,6 +153,7 @@ import GHCJS.DOM.Document (Document, createDocumentFragment, createElement, crea
 import GHCJS.DOM.Element (getScrollTop, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS, hasAttribute)
 import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
+import qualified GHCJS.DOM.UIEvent as UIEvent
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
 import GHCJS.DOM.Types (liftJSM, askJSM, runJSM, JSM, MonadJSM, FocusEvent, IsElement, IsEvent, IsNode, Node, TouchEvent, WheelEvent, uncheckedCastTo)
@@ -186,7 +187,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified GHCJS.DOM as DOM
 import qualified GHCJS.DOM.DataTransfer as DataTransfer
-import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
+import qualified GHCJS.DOM.EventTargetClosures as DOMEvents
 import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
 import qualified GHCJS.DOM.Element as Element
 import qualified GHCJS.DOM.Event as Event
@@ -2241,27 +2242,27 @@ instance MonadAtomicRef m => MonadAtomicRef (HydrationDomBuilderT s t m) where
   atomicModifyRef r = lift . atomicModifyRef r
 
 type family EventType en where
-  EventType 'AbortTag = UIEvent
+  EventType 'AbortTag = DOM.Event
   EventType 'BlurTag = FocusEvent
   EventType 'ChangeTag = DOM.Event
-  EventType 'ClickTag = MouseEvent
-  EventType 'ContextmenuTag = MouseEvent
+  EventType 'ClickTag = DOM.PointerEvent
+  EventType 'ContextmenuTag = DOM.PointerEvent
   EventType 'DblclickTag = MouseEvent
-  EventType 'DragTag = MouseEvent
-  EventType 'DragendTag = MouseEvent
-  EventType 'DragenterTag = MouseEvent
-  EventType 'DragleaveTag = MouseEvent
-  EventType 'DragoverTag = MouseEvent
-  EventType 'DragstartTag = MouseEvent
-  EventType 'DropTag = MouseEvent
-  EventType 'ErrorTag = UIEvent
+  EventType 'DragTag = DOM.DragEvent
+  EventType 'DragendTag = DOM.DragEvent
+  EventType 'DragenterTag = DOM.DragEvent
+  EventType 'DragleaveTag = DOM.DragEvent
+  EventType 'DragoverTag = DOM.DragEvent
+  EventType 'DragstartTag = DOM.DragEvent
+  EventType 'DropTag = DOM.DragEvent
+  EventType 'ErrorTag = DOM.Event
   EventType 'FocusTag = FocusEvent
-  EventType 'InputTag = DOM.Event
+  EventType 'InputTag = DOM.InputEvent
   EventType 'InvalidTag = DOM.Event
   EventType 'KeydownTag = KeyboardEvent
   EventType 'KeypressTag = KeyboardEvent
   EventType 'KeyupTag = KeyboardEvent
-  EventType 'LoadTag = UIEvent
+  EventType 'LoadTag = DOM.Event
   EventType 'MousedownTag = MouseEvent
   EventType 'MouseenterTag = MouseEvent
   EventType 'MouseleaveTag = MouseEvent
@@ -2270,9 +2271,9 @@ type family EventType en where
   EventType 'MouseoverTag = MouseEvent
   EventType 'MouseupTag = MouseEvent
   EventType 'MousewheelTag = MouseEvent
-  EventType 'ScrollTag = UIEvent
-  EventType 'SelectTag = UIEvent
-  EventType 'SubmitTag = DOM.Event
+  EventType 'ScrollTag = DOM.Event
+  EventType 'SelectTag = DOM.Event
+  EventType 'SubmitTag = DOM.SubmitEvent
   EventType 'WheelTag = WheelEvent
   EventType 'BeforecutTag = ClipboardEvent
   EventType 'CutTag = ClipboardEvent
@@ -2294,7 +2295,7 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Click -> return ()
   Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
-  Scroll -> fromIntegral <$> getScrollTop e
+  Scroll -> getScrollTop e
   Keydown -> getKeyEvent
   Keyup -> getKeyEvent
   Mousemove -> getMouseEventCoords
@@ -2489,12 +2490,28 @@ showEventName en = case en of
 
 --TODO: Get rid of this hack
 -- ElementEventTarget is here to allow us to treat SVG and HTML elements as the same thing; without it, we'll break any existing SVG code.
-newtype ElementEventTarget = ElementEventTarget DOM.Element deriving (DOM.IsGObject, DOM.ToJSVal, DOM.IsSlotable, DOM.IsParentNode, DOM.IsNonDocumentTypeChildNode, DOM.IsChildNode, DOM.IsAnimatable, IsNode, IsElement)
+newtype ElementEventTarget = ElementEventTarget DOM.Element deriving (DOM.IsGObject, DOM.ToJSVal, DOM.IsARIAMixin, DOM.IsARIANotifyMixin, DOM.IsSlottable, DOM.IsParentNode, DOM.IsNonDocumentTypeChildNode, DOM.IsChildNode, DOM.IsAnimatable, IsNode, IsElement)
 instance DOM.FromJSVal ElementEventTarget where
   fromJSVal = fmap (fmap ElementEventTarget) . DOM.fromJSVal
 instance DOM.IsEventTarget ElementEventTarget
 instance DOM.IsGlobalEventHandlers ElementEventTarget
-instance DOM.IsDocumentAndElementEventHandlers ElementEventTarget
+
+-- | Non-standard clipboard events: WebKit and Blink fire them, but they are
+-- in no specification (so ghcjs-dom, generated from the specs, does not
+-- have them).
+beforeCutEvent, beforeCopyEvent, beforePasteEvent :: DOMEvents.EventName t ClipboardEvent
+beforeCutEvent = DOMEvents.unsafeEventName (DOM.toJSString ("beforecut" :: Text))
+beforeCopyEvent = DOMEvents.unsafeEventName (DOM.toJSString ("beforecopy" :: Text))
+beforePasteEvent = DOMEvents.unsafeEventName (DOM.toJSString ("beforepaste" :: Text))
+
+-- | Non-standard (WebKit and Blink) events, also in no specification:
+-- @mousewheel@ (the standard event is @wheel@) and @search@ (fired by
+-- @\<input type=search\>@).
+mouseWheelEvent :: DOMEvents.EventName t MouseEvent
+mouseWheelEvent = DOMEvents.unsafeEventName (DOM.toJSString ("mousewheel" :: Text))
+
+searchEvent :: DOMEvents.EventName t DOM.Event
+searchEvent = DOMEvents.unsafeEventName (DOM.toJSString ("search" :: Text))
 
 {-# INLINABLE elementOnEventName #-}
 elementOnEventName :: IsElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
@@ -2527,20 +2544,20 @@ elementOnEventName en e_ = let e = ElementEventTarget (DOM.toElement e_) in case
   Mouseout -> on e Events.mouseOut
   Mouseover -> on e Events.mouseOver
   Mouseup -> on e Events.mouseUp
-  Mousewheel -> on e Events.mouseWheel
+  Mousewheel -> on e mouseWheelEvent
   Scroll -> on e Events.scroll
   Select -> on e Events.select
   Submit -> on e Events.submit
   Wheel -> on e Events.wheel
-  Beforecut -> on e Events.beforeCut
+  Beforecut -> on e beforeCutEvent
   Cut -> on e Events.cut
-  Beforecopy -> on e Events.beforeCopy
+  Beforecopy -> on e beforeCopyEvent
   Copy -> on e Events.copy
-  Beforepaste -> on e Events.beforePaste
+  Beforepaste -> on e beforePasteEvent
   Paste -> on e Events.paste
   Reset -> on e Events.reset
-  Search -> on e Events.search
-  Selectstart -> on e Element.selectStart
+  Search -> on e searchEvent
+  Selectstart -> on e Events.selectStart
   Touchstart -> on e Events.touchStart
   Touchmove -> on e Events.touchMove
   Touchend -> on e Events.touchEnd
@@ -2577,7 +2594,7 @@ windowOnEventName en e = case en of
   Mouseout -> on e Events.mouseOut
   Mouseover -> on e Events.mouseOver
   Mouseup -> on e Events.mouseUp
-  Mousewheel -> on e Events.mouseWheel
+  Mousewheel -> on e mouseWheelEvent
   Scroll -> on e Events.scroll
   Select -> on e Events.select
   Submit -> on e Events.submit
@@ -2589,7 +2606,7 @@ windowOnEventName en e = case en of
   Beforepaste -> const $ return $ return () --TODO
   Paste -> const $ return $ return () --TODO
   Reset -> on e Events.reset
-  Search -> on e Events.search
+  Search -> on e searchEvent
   Selectstart -> const $ return $ return () --TODO
   Touchstart -> on e Events.touchStart
   Touchmove -> on e Events.touchMove
@@ -2642,7 +2659,7 @@ wrapDomEventsMaybe target handlers onEventName = do
 getKeyEvent :: EventM e KeyboardEvent Word
 getKeyEvent = do
   e <- event
-  which <- KeyboardEvent.getWhich e
+  which <- UIEvent.getWhich e  -- `which` is a UIEvent attribute in UI Events
   if which /= 0 then return which else do
     charCode <- getCharCode e
     if charCode /= 0 then return charCode else
@@ -2669,7 +2686,7 @@ getTouchEvent = do
   let touchResults ts = do
           n <- TouchList.getLength ts
           forM (takeWhile (< n) [0..]) $ \ix -> do
-            t <- TouchList.item ts ix
+            t <- TouchList.itemUnchecked ts ix  -- ix < length, so never null
             identifier <- Touch.getIdentifier t
             screenX <- Touch.getScreenX t
             screenY <- Touch.getScreenY t
@@ -2677,14 +2694,16 @@ getTouchEvent = do
             clientY <- Touch.getClientY t
             pageX <- Touch.getPageX t
             pageY <- Touch.getPageY t
+            -- The spec types are long (identifier) and double (coordinates);
+            -- TouchResult keeps its integral fields.
             return TouchResult
-              { _touchResult_identifier = identifier
-              , _touchResult_screenX = screenX
-              , _touchResult_screenY = screenY
-              , _touchResult_clientX = clientX
-              , _touchResult_clientY = clientY
-              , _touchResult_pageX = pageX
-              , _touchResult_pageY = pageY
+              { _touchResult_identifier = fromIntegral identifier
+              , _touchResult_screenX = round screenX
+              , _touchResult_screenY = round screenY
+              , _touchResult_clientX = round clientX
+              , _touchResult_clientY = round clientY
+              , _touchResult_pageX = round pageX
+              , _touchResult_pageY = round pageY
               }
   e <- event
   altKey <- TouchEvent.getAltKey e
