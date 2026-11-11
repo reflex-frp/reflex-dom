@@ -1,6 +1,6 @@
 cabal-version: 1.24
 Name: reflex-dom
-Version: 0.6.3.4
+Version: 0.7.0.0
 Synopsis: Functional Reactive Web Apps with Reflex
 Description:
   Web applications without callbacks or side-effects.
@@ -69,7 +69,7 @@ library
     base >= 4.7 && < 4.23,
     bytestring >= 0.10 && < 0.13,
     reflex >= 0.8 && < 1,
-    reflex-dom-core >= 0.8.1.0 && <0.9,
+    reflex-dom-core >= 0.9.0.0 && <0.10,
     text >= 1.2 && < 2.2
   if !(impl(ghcjs) || arch(javascript))
     if flag(use-warp)

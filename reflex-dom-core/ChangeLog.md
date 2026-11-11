@@ -1,6 +1,6 @@
 # Revision history for reflex-dom-core
 
-## Unreleased
+## 0.9.0.0
 
 * Use the patched JSaddle-Warp sender in repository test builds.
 * Build with ghcjs-dom 0.10 / jsaddle-dom 0.10 (bindings regenerated from
