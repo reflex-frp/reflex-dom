@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 import Control.Lens
 import Control.Monad.Fix
 import Control.Monad.IO.Class
@@ -9,8 +10,9 @@ import Data.Ord
 import Data.Patch.MapWithMove
 import qualified Data.Text as T
 import Data.Time.Clock
-import Reflex.Dom
 import System.Random
+
+import Reflex.Dom
 
 #if defined(wasm32_HOST_ARCH)
 foreign export javascript "hs_start" main :: IO ()
@@ -27,14 +29,17 @@ main = mainWidget $ do
       values :: [(Int, Int, Int)]
       values = zip3 (randoms (mkStdGen 0)) (randoms (mkStdGen 1)) (randoms (mkStdGen 2))
       testMap = Map.fromList $ zip keys values
-      resortButtons = el "div" $ leftmost <$> sequence
-        [ (comparing (view _1) <$) <$> button "A ASC"
-        , (flip (comparing (view _1)) <$) <$> button "A DESC"
-        , (comparing (view _2) <$) <$> button "B ASC"
-        , (flip (comparing (view _2)) <$) <$> button "B DESC"
-        , (comparing (view _3) <$) <$> button "C ASC"
-        , (flip (comparing (view _3)) <$) <$> button "C DESC"
-        ]
+      resortButtons =
+        el "div" $
+          leftmost
+            <$> sequence
+              [ (comparing (view _1) <$) <$> button "A ASC"
+              , (flip (comparing (view _1)) <$) <$> button "A DESC"
+              , (comparing (view _2) <$) <$> button "B ASC"
+              , (flip (comparing (view _2)) <$) <$> button "B DESC"
+              , (comparing (view _3) <$) <$> button "C ASC"
+              , (flip (comparing (view _3)) <$) <$> button "C DESC"
+              ]
   el "h1" $ text "Improved list sorting"
   el "p" $ text $ "This app shows a table of " <> T.pack (show numKeys) <> " rows, and allows you to re-sort by columns a, b, and c, which are full of pseudorandom numbers.  Each row also includes an element with internal state (a textbox) to demonstrate that the state is preserved, only when using the new way."
   el "h3" $ text "Re-sort the list the OLD way (by redrawing everything)"
@@ -69,10 +74,11 @@ simpleSortableList f m0 resortFunc resortSlowFunc = do
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v
           redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
           resortPatchSlow = attachWith redrawPatch (currentIncremental m) resortSlowFunc
-          resortPatch = leftmost
-            [ resortPatchFast
-            , resortPatchSlow
-            ]
+          resortPatch =
+            leftmost
+              [ resortPatchFast
+              , resortPatchSlow
+              ]
       m <- holdIncremental m0 resortPatch
   _ <- mapMapWithAdjustWithMove f m0 resortPatch
   return ()

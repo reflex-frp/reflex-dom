@@ -15,7 +15,7 @@ spec = do
       getFirstEventAndHalt return `shouldReturn` ()
 
     it "works multiple times" $ do
-      forM_ [1 .. 100] $ \ i -> do
+      forM_ [1 .. 100] $ \i -> do
         getFirstEventAndHalt return `shouldReturn` ()
 
 type SpiderM =
@@ -27,7 +27,7 @@ getFirstEventAndHalt action = do
     tick <- getPostBuild
     event <- action tick
     webView <- askWebView
-    _ <- foldDynM (\ a () -> liftIO $ haltGui webView) () event
+    _ <- foldDynM (\a () -> liftIO $ haltGui webView) () event
     return ()
   return ()
 

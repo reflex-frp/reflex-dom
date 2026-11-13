@@ -154,7 +154,7 @@ library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 2.3,
-    base >= 4.7 && < 4.23,
+    base >= 4.9.1 && < 4.23,
     bimap >= 0.3 && < 0.6,
     blaze-builder >= 0.4.1 && < 0.5,
     bytestring >= 0.10 && < 0.13,

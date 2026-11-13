@@ -16,4 +16,3 @@ module Reflex.Dom.Location.Platform (Reflex.Dom.Location.popHistoryState) where
 import qualified Reflex.Dom.Location
 
 #endif
-

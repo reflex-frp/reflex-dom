@@ -1,39 +1,40 @@
 {-# OPTIONS_GHC -ddump-simpl -ddump-rules -ddump-spec -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+
 module Main (main) where
 
 import Control.Monad.State
-import Data.Monoid
-import Data.Text (Text)
-import qualified Data.Text as T
-import Reflex.Dom
-import System.Random
-import qualified Data.Map as Map
 import Data.Dependent.Map (DMap (..))
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum (DSum (..))
-import Data.Functor.Misc
-import Data.Functor.Identity
+import Data.FastMutableIntMap
 import Data.Functor.Compose
-import Data.IORef
-import GHCJS.DOM.Types (JSM)
-import qualified Data.Some as Some
 import Data.Functor.Constant
+import Data.Functor.Identity
+import Data.Functor.Misc
+import Data.IORef
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
-import Data.FastMutableIntMap
-
+import qualified Data.Map as Map
+import Data.Monoid
+import qualified Data.Some as Some
+import Data.Text (Text)
+import qualified Data.Text as T
 import qualified GHCJS.DOM.Element as DOM
+import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
+import System.Random
 
---{-
+import Reflex.Dom
+
+-- {-
 main :: IO ()
 main = mainWidget' $ do
   create1000 <- button "Create 1,000 rows"
   let row k _ = el "li" $ text $ T.pack $ show k
   el "ul" $ traverseIntMapWithKeyWithAdjust row IntMap.empty $ PatchIntMap (IntMap.fromDistinctAscList [(x, Just ()) | x <- [1 :: Int .. 1000]]) <$ create1000
   return ()
---}
 
+-- }
 
 {-
 main :: IO ()
@@ -131,7 +132,6 @@ rowW dynSelected dynRow = elDynClass "tr" trClass $
   where
     trClass = (\b -> if b then "danger" else "") <$> dynSelected
     tagClick f el = (tag . current) (f <$> dynRow) (domEvent Click el)
-
 
 {- Domain logic -}
 

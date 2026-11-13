@@ -1,27 +1,19 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Reflex.Dom.Builder.Class
-       ( module Reflex.Dom.Builder.Class
-       , module Reflex.Dom.Builder.Class.Events
-       , module Reflex.NotReady.Class
-       ) where
+  ( module Reflex.Dom.Builder.Class
+  , module Reflex.Dom.Builder.Class.Events
+  , module Reflex.NotReady.Class
+  ) where
 
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
+
 import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
-import Reflex.BehaviorWriter.Base
-import Reflex.DynamicWriter.Base
-import Reflex.EventWriter.Base
-import Reflex.NotReady.Class
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Base
-import Reflex.Query.Base
-import Reflex.Query.Class
-import Reflex.Requester.Base
-
 import qualified Control.Category
 import Control.Lens hiding (element)
 import Control.Monad.Fix
@@ -42,6 +34,15 @@ import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
 import qualified GHCJS.DOM.Types as DOM
+import Reflex.BehaviorWriter.Base
+import Reflex.DynamicWriter.Base
+import Reflex.EventWriter.Base
+import Reflex.NotReady.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Base
+import Reflex.Query.Base
+import Reflex.Query.Class
+import Reflex.Requester.Base
 
 class Default (EventSpec d EventResult) => DomSpace d where
   type EventSpec d :: (EventTag -> Type) -> Type
@@ -59,82 +60,93 @@ class Default (EventSpec d EventResult) => DomSpace d where
 class (Monad m, Reflex t, DomSpace (DomBuilderSpace m), NotReady t m, Adjustable t m) => DomBuilder t m | m -> t where
   type DomBuilderSpace m :: Type
   textNode :: TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
-  default textNode :: ( MonadTrans f
-                      , m ~ f m'
-                      , DomBuilderSpace m' ~ DomBuilderSpace m
-                      , DomBuilder t m'
-                      )
-                   => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
+  default textNode
+    :: ( MonadTrans f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => TextNodeConfig t -> m (TextNode (DomBuilderSpace m) t)
   textNode = lift . textNode
-  {-# INLINABLE textNode #-}
+  {-# INLINEABLE textNode #-}
   commentNode :: CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
-  default commentNode :: ( MonadTrans f
-                      , m ~ f m'
-                      , DomBuilderSpace m' ~ DomBuilderSpace m
-                      , DomBuilder t m'
-                      )
-                   => CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
+  default commentNode
+    :: ( MonadTrans f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => CommentNodeConfig t -> m (CommentNode (DomBuilderSpace m) t)
   commentNode = lift . commentNode
-  {-# INLINABLE commentNode #-}
+  {-# INLINEABLE commentNode #-}
   element :: Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
-  default element :: ( MonadTransControl f
-                     , StT f a ~ a
-                     , m ~ f m'
-                     , DomBuilderSpace m' ~ DomBuilderSpace m
-                     , DomBuilder t m'
-                     )
-                  => Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
+  default element
+    :: ( MonadTransControl f
+       , StT f a ~ a
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => Text -> ElementConfig er t (DomBuilderSpace m) -> m a -> m (Element er (DomBuilderSpace m) t, a)
   element t cfg child = liftWith $ \run -> element t cfg $ run child
-  {-# INLINABLE element #-}
+  {-# INLINEABLE element #-}
   inputElement :: InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
-  default inputElement :: ( MonadTransControl f
-                          , m ~ f m'
-                          , DomBuilderSpace m' ~ DomBuilderSpace m
-                          , DomBuilder t m'
-                          )
-                       => InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
+  default inputElement
+    :: ( MonadTransControl f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => InputElementConfig er t (DomBuilderSpace m) -> m (InputElement er (DomBuilderSpace m) t)
   inputElement = lift . inputElement
-  {-# INLINABLE inputElement #-}
+  {-# INLINEABLE inputElement #-}
   textAreaElement :: TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
-  default textAreaElement :: ( MonadTransControl f
-                             , m ~ f m'
-                             , DomBuilderSpace m' ~ DomBuilderSpace m
-                             , DomBuilder t m'
-                             )
-                          => TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
+  default textAreaElement
+    :: ( MonadTransControl f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => TextAreaElementConfig er t (DomBuilderSpace m) -> m (TextAreaElement er (DomBuilderSpace m) t)
   textAreaElement = lift . textAreaElement
-  {-# INLINABLE textAreaElement #-}
+  {-# INLINEABLE textAreaElement #-}
   selectElement :: SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
-  default selectElement :: ( MonadTransControl f
-                           , StT f a ~ a
-                           , m ~ f m'
-                           , DomBuilderSpace m' ~ DomBuilderSpace m
-                           , DomBuilder t m'
-                           )
-                        => SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
+  default selectElement
+    :: ( MonadTransControl f
+       , StT f a ~ a
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => SelectElementConfig er t (DomBuilderSpace m) -> m a -> m (SelectElement er (DomBuilderSpace m) t, a)
   selectElement cfg child = do
     liftWith $ \run -> selectElement cfg $ run child
-  {-# INLINABLE selectElement #-}
+  {-# INLINEABLE selectElement #-}
   placeRawElement :: RawElement (DomBuilderSpace m) -> m ()
-  default placeRawElement :: ( MonadTrans f
-                             , m ~ f m'
-                             , DomBuilderSpace m' ~ DomBuilderSpace m
-                             , DomBuilder t m'
-                             )
-                          => RawElement (DomBuilderSpace m) -> m ()
+  default placeRawElement
+    :: ( MonadTrans f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => RawElement (DomBuilderSpace m) -> m ()
   placeRawElement = lift . placeRawElement
-  {-# INLINABLE placeRawElement #-}
+  {-# INLINEABLE placeRawElement #-}
   wrapRawElement :: RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
-  default wrapRawElement :: ( MonadTrans f
-                            , m ~ f m'
-                            , DomBuilderSpace m' ~ DomBuilderSpace m
-                            , DomBuilder t m'
-                            )
-                         => RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
-  wrapRawElement e cfg = lift $ wrapRawElement e $ cfg
-    { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
-    }
-  {-# INLINABLE wrapRawElement #-}
+  default wrapRawElement
+    :: ( MonadTrans f
+       , m ~ f m'
+       , DomBuilderSpace m' ~ DomBuilderSpace m
+       , DomBuilder t m'
+       )
+    => RawElement (DomBuilderSpace m) -> RawElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t)
+  wrapRawElement e cfg =
+    lift
+      $ wrapRawElement e
+      $ cfg
+        { _rawElementConfig_eventSpec = _rawElementConfig_eventSpec cfg
+        }
+  {-# INLINEABLE wrapRawElement #-}
 
 class DomBuilder t m => MountableDomBuilder t m where
   type DomFragment m :: Type
@@ -144,9 +156,10 @@ class DomBuilder t m => MountableDomBuilder t m where
 type Namespace = Text
 
 data TextNodeConfig t
-   = TextNodeConfig { _textNodeConfig_initialContents :: {-# UNPACK #-} !Text
-                    , _textNodeConfig_setContents :: !(Maybe (Event t Text))
-                    }
+  = TextNodeConfig
+  { _textNodeConfig_initialContents :: {-# UNPACK #-} !Text
+  , _textNodeConfig_setContents :: !(Maybe (Event t Text))
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 textNodeConfig_initialContents :: Lens' (TextNodeConfig t) Text
@@ -154,21 +167,23 @@ textNodeConfig_initialContents f (TextNodeConfig a b) = (\a' -> TextNodeConfig a
 {-# INLINE textNodeConfig_initialContents #-}
 #endif
 
-instance (Reflex t) => Default (TextNodeConfig t) where
-  {-# INLINABLE def #-}
-  def = TextNodeConfig
-    { _textNodeConfig_initialContents = mempty
-    , _textNodeConfig_setContents = Nothing
-    }
+instance Reflex t => Default (TextNodeConfig t) where
+  {-# INLINEABLE def #-}
+  def =
+    TextNodeConfig
+      { _textNodeConfig_initialContents = mempty
+      , _textNodeConfig_setContents = Nothing
+      }
 
 newtype TextNode d t = TextNode
   { _textNode_raw :: RawTextNode d
   }
 
 data CommentNodeConfig t
-   = CommentNodeConfig { _commentNodeConfig_initialContents :: {-# UNPACK #-} !Text
-                       , _commentNodeConfig_setContents :: !(Maybe (Event t Text))
-                       }
+  = CommentNodeConfig
+  { _commentNodeConfig_initialContents :: {-# UNPACK #-} !Text
+  , _commentNodeConfig_setContents :: !(Maybe (Event t Text))
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Text
@@ -176,18 +191,19 @@ commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNod
 {-# INLINE commentNodeConfig_initialContents #-}
 #endif
 
-instance (Reflex t) => Default (CommentNodeConfig t) where
-  {-# INLINABLE def #-}
-  def = CommentNodeConfig
-    { _commentNodeConfig_initialContents = mempty
-    , _commentNodeConfig_setContents = Nothing
-    }
+instance Reflex t => Default (CommentNodeConfig t) where
+  {-# INLINEABLE def #-}
+  def =
+    CommentNodeConfig
+      { _commentNodeConfig_initialContents = mempty
+      , _commentNodeConfig_setContents = Nothing
+      }
 
 newtype CommentNode d t = CommentNode
   { _commentNode_raw :: RawCommentNode d
   }
 
-data AttributeName = AttributeName !(Maybe Namespace) !Text deriving stock (Show, Read, Eq, Ord)
+data AttributeName = AttributeName !(Maybe Namespace) !Text deriving stock (Eq, Ord, Read, Show)
 
 mapKeysToAttributeName :: Map Text v -> Map AttributeName v
 mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
@@ -197,48 +213,49 @@ instance IsString AttributeName where
   fromString = AttributeName Nothing . fromString
 
 data Propagation
-   = Propagation_Continue
-   | Propagation_Stop
-   | Propagation_StopImmediate
-   deriving stock (Show, Read, Eq, Ord)
+  = Propagation_Continue
+  | Propagation_Stop
+  | Propagation_StopImmediate
+  deriving stock (Eq, Ord, Read, Show)
 
 instance Semigroup Propagation where
-  {-# INLINABLE (<>) #-}
+  {-# INLINEABLE (<>) #-}
   (<>) = max
 
 instance Monoid Propagation where
-  {-# INLINABLE mempty #-}
+  {-# INLINEABLE mempty #-}
   mempty = Propagation_Continue
-  {-# INLINABLE mappend #-}
+  {-# INLINEABLE mappend #-}
   mappend = (<>)
 
-data EventFlags = EventFlags --TODO: Monoid; ways of building each flag
+data EventFlags = EventFlags -- TODO: Monoid; ways of building each flag
   { _eventFlags_propagation :: Propagation
   , _eventFlags_preventDefault :: Bool
   }
 
 instance Semigroup EventFlags where
-  {-# INLINABLE (<>) #-}
+  {-# INLINEABLE (<>) #-}
   EventFlags p pd <> EventFlags p' pd' = EventFlags (p <> p') (pd || pd')
 
 instance Monoid EventFlags where
-  {-# INLINABLE mempty #-}
+  {-# INLINEABLE mempty #-}
   mempty = EventFlags Propagation_Continue False
-  {-# INLINABLE mappend #-}
+  {-# INLINEABLE mappend #-}
   mappend = (<>)
 
 preventDefault :: EventFlags
-preventDefault = mempty { _eventFlags_preventDefault = True }
+preventDefault = mempty {_eventFlags_preventDefault = True}
 
 stopPropagation :: EventFlags
-stopPropagation = mempty { _eventFlags_propagation = Propagation_Stop }
+stopPropagation = mempty {_eventFlags_propagation = Propagation_Stop}
 
 data ElementConfig er t s
-   = ElementConfig { _elementConfig_namespace :: Maybe Namespace
-                   , _elementConfig_initialAttributes :: Map AttributeName Text
-                   , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
-                   , _elementConfig_eventSpec :: EventSpec s er
-                   }
+  = ElementConfig
+  { _elementConfig_namespace :: Maybe Namespace
+  , _elementConfig_initialAttributes :: Map AttributeName Text
+  , _elementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
+  , _elementConfig_eventSpec :: EventSpec s er
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 elementConfig_namespace :: Lens' (ElementConfig er t s) (Maybe Namespace)
@@ -257,17 +274,19 @@ elementConfig_eventSpec f (ElementConfig a b c d) = (\d' -> ElementConfig a b c 
 #endif
 
 data Element er d t
-   = Element { _element_events :: EventSelector t (WrapArg er EventName) --TODO: EventSelector should have two arguments
-             , _element_raw :: RawElement d
-             }
+  = Element
+  { _element_events :: EventSelector t (WrapArg er EventName) -- TODO: EventSelector should have two arguments
+  , _element_raw :: RawElement d
+  }
 
 data InputElementConfig er t s
-   = InputElementConfig { _inputElementConfig_initialValue :: Text
-                        , _inputElementConfig_setValue :: Maybe (Event t Text)
-                        , _inputElementConfig_initialChecked :: Bool
-                        , _inputElementConfig_setChecked :: Maybe (Event t Bool)
-                        , _inputElementConfig_elementConfig :: ElementConfig er t s
-                        }
+  = InputElementConfig
+  { _inputElementConfig_initialValue :: Text
+  , _inputElementConfig_setValue :: Maybe (Event t Text)
+  , _inputElementConfig_initialChecked :: Bool
+  , _inputElementConfig_setChecked :: Maybe (Event t Bool)
+  , _inputElementConfig_elementConfig :: ElementConfig er t s
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 inputElementConfig_initialValue :: Lens' (InputElementConfig er t m) Text
@@ -286,40 +305,44 @@ inputElementConfig_elementConfig f (InputElementConfig a b c d e) = (\e' -> Inpu
 #endif
 
 instance (Reflex t, er ~ EventResult, DomSpace s) => Default (ElementConfig er t s) where
-  {-# INLINABLE def #-}
-  def = ElementConfig
-    { _elementConfig_namespace = Nothing
-    , _elementConfig_initialAttributes = mempty
-    , _elementConfig_modifyAttributes = Nothing
-    , _elementConfig_eventSpec = def
-    }
+  {-# INLINEABLE def #-}
+  def =
+    ElementConfig
+      { _elementConfig_namespace = Nothing
+      , _elementConfig_initialAttributes = mempty
+      , _elementConfig_modifyAttributes = Nothing
+      , _elementConfig_eventSpec = def
+      }
 
 instance (Reflex t, er ~ EventResult, DomSpace s) => Default (InputElementConfig er t s) where
-  {-# INLINABLE def #-}
-  def = InputElementConfig
-    { _inputElementConfig_initialValue = ""
-    , _inputElementConfig_setValue = Nothing
-    , _inputElementConfig_initialChecked = False
-    , _inputElementConfig_setChecked = Nothing
-    , _inputElementConfig_elementConfig = def
-    }
+  {-# INLINEABLE def #-}
+  def =
+    InputElementConfig
+      { _inputElementConfig_initialValue = ""
+      , _inputElementConfig_setValue = Nothing
+      , _inputElementConfig_initialChecked = False
+      , _inputElementConfig_setChecked = Nothing
+      , _inputElementConfig_elementConfig = def
+      }
 
 data InputElement er d t
-   = InputElement { _inputElement_value :: Dynamic t Text
-                  , _inputElement_checked :: Dynamic t Bool
-                  , _inputElement_checkedChange :: Event t Bool
-                  , _inputElement_input :: Event t Text
-                  , _inputElement_hasFocus :: Dynamic t Bool
-                  , _inputElement_element :: Element er d t
-                  , _inputElement_raw :: RawInputElement d
-                  , _inputElement_files :: Dynamic t [DOM.File]
-                  }
+  = InputElement
+  { _inputElement_value :: Dynamic t Text
+  , _inputElement_checked :: Dynamic t Bool
+  , _inputElement_checkedChange :: Event t Bool
+  , _inputElement_input :: Event t Text
+  , _inputElement_hasFocus :: Dynamic t Bool
+  , _inputElement_element :: Element er d t
+  , _inputElement_raw :: RawInputElement d
+  , _inputElement_files :: Dynamic t [DOM.File]
+  }
 
 data TextAreaElementConfig er t m
-   = TextAreaElementConfig { _textAreaElementConfig_initialValue :: Text
-                           , _textAreaElementConfig_setValue :: Maybe (Event t Text)
-                           , _textAreaElementConfig_elementConfig :: ElementConfig er t m
-                           }
+  = TextAreaElementConfig
+  { _textAreaElementConfig_initialValue :: Text
+  , _textAreaElementConfig_setValue :: Maybe (Event t Text)
+  , _textAreaElementConfig_elementConfig :: ElementConfig er t m
+  }
 
 #ifndef USE_TEMPLATE_HASKELL
 textAreaElementConfig_initialValue :: Lens' (TextAreaElementConfig er t m) Text
@@ -335,26 +358,29 @@ textAreaElementConfig_elementConfig f (TextAreaElementConfig a b c) = (\c' -> Te
 #endif
 
 instance (Reflex t, er ~ EventResult, DomSpace s) => Default (TextAreaElementConfig er t s) where
-  {-# INLINABLE def #-}
-  def = TextAreaElementConfig
-    { _textAreaElementConfig_initialValue = ""
-    , _textAreaElementConfig_setValue = Nothing
-    , _textAreaElementConfig_elementConfig = def
-    }
+  {-# INLINEABLE def #-}
+  def =
+    TextAreaElementConfig
+      { _textAreaElementConfig_initialValue = ""
+      , _textAreaElementConfig_setValue = Nothing
+      , _textAreaElementConfig_elementConfig = def
+      }
 
 data TextAreaElement er d t
-   = TextAreaElement { _textAreaElement_value :: Dynamic t Text
-                     , _textAreaElement_input :: Event t Text
-                     , _textAreaElement_hasFocus :: Dynamic t Bool
-                     , _textAreaElement_element :: Element er d t
-                     , _textAreaElement_raw :: RawTextAreaElement d
-                     }
+  = TextAreaElement
+  { _textAreaElement_value :: Dynamic t Text
+  , _textAreaElement_input :: Event t Text
+  , _textAreaElement_hasFocus :: Dynamic t Bool
+  , _textAreaElement_element :: Element er d t
+  , _textAreaElement_raw :: RawTextAreaElement d
+  }
 
 extractRawElementConfig :: ElementConfig er t m -> RawElementConfig er t m
-extractRawElementConfig cfg = RawElementConfig
-  { _rawElementConfig_modifyAttributes = _elementConfig_modifyAttributes cfg
-  , _rawElementConfig_eventSpec = _elementConfig_eventSpec cfg
-  }
+extractRawElementConfig cfg =
+  RawElementConfig
+    { _rawElementConfig_modifyAttributes = _elementConfig_modifyAttributes cfg
+    , _rawElementConfig_eventSpec = _elementConfig_eventSpec cfg
+    }
 
 data RawElementConfig er t s = RawElementConfig
   { _rawElementConfig_modifyAttributes :: Maybe (Event t (Map AttributeName (Maybe Text)))
@@ -372,10 +398,11 @@ rawElementConfig_eventSpec f (RawElementConfig a b) = (\b' -> RawElementConfig a
 #endif
 
 instance (Reflex t, er ~ EventResult, DomSpace s) => Default (RawElementConfig er t s) where
-  def = RawElementConfig
-    { _rawElementConfig_modifyAttributes = Nothing
-    , _rawElementConfig_eventSpec = def
-    }
+  def =
+    RawElementConfig
+      { _rawElementConfig_modifyAttributes = Nothing
+      , _rawElementConfig_eventSpec = def
+      }
 
 data SelectElementConfig er t m = SelectElementConfig
   { _selectElementConfig_initialValue :: Text
@@ -397,16 +424,18 @@ selectElementConfig_elementConfig f (SelectElementConfig a b c) = (\c' -> Select
 #endif
 
 instance (Reflex t, er ~ EventResult, DomSpace s) => Default (SelectElementConfig er t s) where
-  def = SelectElementConfig
-    { _selectElementConfig_initialValue = ""
-    , _selectElementConfig_setValue = Nothing
-    , _selectElementConfig_elementConfig = def
-    }
+  def =
+    SelectElementConfig
+      { _selectElementConfig_initialValue = ""
+      , _selectElementConfig_setValue = Nothing
+      , _selectElementConfig_elementConfig = def
+      }
 
 data SelectElement er d t = SelectElement
   { _selectElement_element :: Element er d t
   , _selectElement_value :: Dynamic t Text
-  , _selectElement_change :: Event t Text -- ^ Fires when the value is changed by the user, but not when it is set by setValue
+  , _selectElement_change :: Event t Text
+  -- ^ Fires when the value is changed by the user, but not when it is set by setValue
   , _selectElement_hasFocus :: Dynamic t Bool
   , _selectElement_raw :: RawSelectElement d
   }
@@ -428,105 +457,105 @@ concat <$> mapM (uncurry makeLensesWithoutField)
 textNodeConfig_setContents :: Reflex t => Lens' (TextNodeConfig t) (Event t Text)
 textNodeConfig_setContents =
   let getter = fromMaybe never . _textNodeConfig_setContents
-      setter t e = t { _textNodeConfig_setContents = Just e }
+      setter t e = t {_textNodeConfig_setContents = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'CommentNodeConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'CommentNodeConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 commentNodeConfig_setContents :: Reflex t => Lens (CommentNodeConfig t) (CommentNodeConfig t) (Event t Text) (Event t Text)
 commentNodeConfig_setContents =
   let getter = fromMaybe never . _commentNodeConfig_setContents
-      setter t e = t { _commentNodeConfig_setContents = Just e }
+      setter t e = t {_commentNodeConfig_setContents = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 inputElementConfig_setValue :: Reflex t => Lens' (InputElementConfig er t m) (Event t Text)
 inputElementConfig_setValue =
   let getter = fromMaybe never . _inputElementConfig_setValue
-      setter t e = t { _inputElementConfig_setValue = Just e }
+      setter t e = t {_inputElementConfig_setValue = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'InputElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'InputElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 inputElementConfig_setChecked :: Reflex t => Lens' (InputElementConfig er t m) (Event t Bool)
 inputElementConfig_setChecked =
   let getter = fromMaybe never . _inputElementConfig_setChecked
-      setter t e = t { _inputElementConfig_setChecked = Just e }
+      setter t e = t {_inputElementConfig_setChecked = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 rawElementConfig_modifyAttributes :: Reflex t => Lens' (RawElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
 rawElementConfig_modifyAttributes =
   let getter = fromMaybe never . _rawElementConfig_modifyAttributes
-      setter t e = t { _rawElementConfig_modifyAttributes = Just e }
+      setter t e = t {_rawElementConfig_modifyAttributes = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'RawElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'RawElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 elementConfig_modifyAttributes :: Reflex t => Lens' (ElementConfig er t m) (Event t (Map AttributeName (Maybe Text)))
 elementConfig_modifyAttributes =
   let getter = fromMaybe never . _elementConfig_modifyAttributes
-      setter t e = t { _elementConfig_modifyAttributes = Just e }
+      setter t e = t {_elementConfig_modifyAttributes = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'TextAreaElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'TextAreaElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 textAreaElementConfig_setValue :: Reflex t => Lens' (TextAreaElementConfig er t m) (Event t Text)
 textAreaElementConfig_setValue =
   let getter = fromMaybe never . _textAreaElementConfig_setValue
-      setter t e = t { _textAreaElementConfig_setValue = Just e }
+      setter t e = t {_textAreaElementConfig_setValue = Just e}
   in lens getter setter
 
 -- | This lens is technically illegal. The implementation of 'SelectElementConfig' uses a 'Maybe' under the hood for efficiency reasons. However, always interacting with 'SelectElementConfig' via lenses will always behave correctly, and if you pattern match on it, you should always treat 'Nothing' as 'never'.
 selectElementConfig_setValue :: Reflex t => Lens' (SelectElementConfig er t m) (Event t Text)
 selectElementConfig_setValue =
   let getter = fromMaybe never . _selectElementConfig_setValue
-      setter t e = t { _selectElementConfig_setValue = Just e }
+      setter t e = t {_selectElementConfig_setValue = Just e}
   in lens getter setter
 
 class InitialAttributes a where
   initialAttributes :: Lens' a (Map AttributeName Text)
 
 instance InitialAttributes (ElementConfig er t m) where
-  {-# INLINABLE initialAttributes #-}
+  {-# INLINEABLE initialAttributes #-}
   initialAttributes = elementConfig_initialAttributes
 
 instance InitialAttributes (InputElementConfig er t m) where
-  {-# INLINABLE initialAttributes #-}
+  {-# INLINEABLE initialAttributes #-}
   initialAttributes = inputElementConfig_elementConfig . elementConfig_initialAttributes
 
 instance InitialAttributes (TextAreaElementConfig er t m) where
-  {-# INLINABLE initialAttributes #-}
+  {-# INLINEABLE initialAttributes #-}
   initialAttributes = textAreaElementConfig_elementConfig . elementConfig_initialAttributes
 
 instance InitialAttributes (SelectElementConfig er t m) where
-  {-# INLINABLE initialAttributes #-}
+  {-# INLINEABLE initialAttributes #-}
   initialAttributes = selectElementConfig_elementConfig . elementConfig_initialAttributes
 
 class ModifyAttributes t a | a -> t where
   modifyAttributes :: Reflex t => Lens' a (Event t (Map AttributeName (Maybe Text)))
 
 instance ModifyAttributes t (ElementConfig er t m) where
-  {-# INLINABLE modifyAttributes #-}
+  {-# INLINEABLE modifyAttributes #-}
   modifyAttributes = elementConfig_modifyAttributes
 
 instance ModifyAttributes t (InputElementConfig er t m) where
-  {-# INLINABLE modifyAttributes #-}
+  {-# INLINEABLE modifyAttributes #-}
   modifyAttributes = inputElementConfig_elementConfig . elementConfig_modifyAttributes
 
 instance ModifyAttributes t (TextAreaElementConfig er t m) where
-  {-# INLINABLE modifyAttributes #-}
+  {-# INLINEABLE modifyAttributes #-}
   modifyAttributes = textAreaElementConfig_elementConfig . elementConfig_modifyAttributes
 
 instance ModifyAttributes t (SelectElementConfig er t m) where
-  {-# INLINABLE modifyAttributes #-}
+  {-# INLINEABLE modifyAttributes #-}
   modifyAttributes = selectElementConfig_elementConfig . elementConfig_modifyAttributes
 
 instance ModifyAttributes t (RawElementConfig er t m) where
-  {-# INLINABLE modifyAttributes #-}
+  {-# INLINEABLE modifyAttributes #-}
   modifyAttributes = rawElementConfig_modifyAttributes
 
 class HasNamespace a where
   namespace :: Lens' a (Maybe Namespace)
 
 instance HasNamespace (ElementConfig er t m) where
-  {-# INLINABLE namespace #-}
+  {-# INLINEABLE namespace #-}
   namespace = elementConfig_namespace
 
 instance (DomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => DomBuilder t (PostBuildT t m) where
@@ -624,17 +653,17 @@ class HasDomEvent t target eventName | target -> t where
 
 instance Reflex t => HasDomEvent t (Element EventResult d t) en where
   type DomEventType (Element EventResult d t) en = EventResultType en
-  {-# INLINABLE domEvent #-}
+  {-# INLINEABLE domEvent #-}
   domEvent en e = coerceEvent $ Reflex.select (_element_events e) (WrapArg en)
 
 instance Reflex t => HasDomEvent t (InputElement EventResult d t) en where
   type DomEventType (InputElement EventResult d t) en = EventResultType en
-  {-# INLINABLE domEvent #-}
+  {-# INLINEABLE domEvent #-}
   domEvent en = domEvent en . _inputElement_element
 
 instance Reflex t => HasDomEvent t (TextAreaElement EventResult d t) en where
   type DomEventType (TextAreaElement EventResult d t) en = EventResultType en
-  {-# INLINABLE domEvent #-}
+  {-# INLINEABLE domEvent #-}
   domEvent en = domEvent en . _textAreaElement_element
 
 instance DomBuilder t m => DomBuilder t (ReaderT r m) where
@@ -650,7 +679,7 @@ type LiftDomBuilder t f m =
 
 class MonadTransControl t => MonadTransControlStateless t where
   stTCoercion :: proxy t -> Coercion (StT t a) a
-  default stTCoercion :: (a ~ StT t a) => proxy t -> Coercion (StT t a) a
+  default stTCoercion :: a ~ StT t a => proxy t -> Coercion (StT t a) a
   stTCoercion _ = Control.Category.id
 
 toStT :: MonadTransControlStateless t => proxy t -> a -> StT t a

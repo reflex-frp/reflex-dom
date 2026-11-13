@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Reflex.Dom.Builder.Hydratable where
 
 import Control.Monad.Fix
@@ -13,14 +14,15 @@ import qualified Data.Map as Map
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif
 import Reflex
+import Reflex.Host.Class
+
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Immediate (hydratableAttribute)
-import Reflex.Host.Class
 
 -- | A DomBuilder transformer that adds an attribute to all elements such that the
 -- hydration builder knows which bits of DOM were added by us, and which were
 -- added by external scripts.
-newtype HydratableT m a = HydratableT { runHydratableT :: m a } deriving newtype (Functor, Applicative, Monad, MonadAtomicRef, MonadFix, MonadIO)
+newtype HydratableT m a = HydratableT {runHydratableT :: m a} deriving newtype (Applicative, Functor, Monad, MonadAtomicRef, MonadFix, MonadIO)
 
 #ifndef ghcjs_HOST_OS
 instance MonadJSM m => MonadJSM (HydratableT m) where
@@ -54,10 +56,11 @@ instance PrimMonad m => PrimMonad (HydratableT m) where
   primitive = lift . primitive
 
 makeHydratable :: Reflex t => ElementConfig er t m -> ElementConfig er t m
-makeHydratable cfg = cfg
-  { _elementConfig_initialAttributes = Map.insert hydratableAttribute "" $ _elementConfig_initialAttributes cfg
-  , _elementConfig_modifyAttributes = fmap (Map.delete hydratableAttribute) <$> _elementConfig_modifyAttributes cfg
-  }
+makeHydratable cfg =
+  cfg
+    { _elementConfig_initialAttributes = Map.insert hydratableAttribute "" $ _elementConfig_initialAttributes cfg
+    , _elementConfig_modifyAttributes = fmap (Map.delete hydratableAttribute) <$> _elementConfig_modifyAttributes cfg
+    }
 
 instance PostBuild t m => PostBuild t (HydratableT m) where
   getPostBuild = lift getPostBuild
@@ -81,16 +84,23 @@ instance NotReady t m => NotReady t (HydratableT m) where
 instance DomBuilder t m => DomBuilder t (HydratableT m) where
   type DomBuilderSpace (HydratableT m) = DomBuilderSpace m
   element t cfg = lift . element t (makeHydratable cfg) . runHydratableT
-  inputElement cfg = lift $ inputElement $ cfg
-    { _inputElementConfig_elementConfig = makeHydratable $ _inputElementConfig_elementConfig cfg
-    }
-  textAreaElement cfg = lift $ textAreaElement $ cfg
-    { _textAreaElementConfig_elementConfig = makeHydratable $ _textAreaElementConfig_elementConfig cfg
-    }
+  inputElement cfg =
+    lift
+      $ inputElement
+      $ cfg
+        { _inputElementConfig_elementConfig = makeHydratable $ _inputElementConfig_elementConfig cfg
+        }
+  textAreaElement cfg =
+    lift
+      $ textAreaElement
+      $ cfg
+        { _textAreaElementConfig_elementConfig = makeHydratable $ _textAreaElementConfig_elementConfig cfg
+        }
   selectElement cfg child = do
-    let cfg' = cfg
-          { _selectElementConfig_elementConfig = makeHydratable $ _selectElementConfig_elementConfig cfg
-          }
+    let cfg' =
+          cfg
+            { _selectElementConfig_elementConfig = makeHydratable $ _selectElementConfig_elementConfig cfg
+            }
     lift $ selectElement cfg' $ runHydratableT child
 
 instance HasDocument m => HasDocument (HydratableT m)

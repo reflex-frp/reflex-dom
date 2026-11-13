@@ -1,8 +1,8 @@
-{-# OPTIONS_HADDOCK hide #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_HADDOCK hide #-}
+
 module Foreign.JavaScript.Orphans where
 
 #ifndef ghcjs_HOST_OS

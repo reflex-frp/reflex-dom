@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 module Reflex.Dom.Builder.Class.Events where
 
 #ifdef USE_TEMPLATE_HASKELL
@@ -12,52 +13,52 @@ import Data.Kind (Type)
 import Data.Text (Text)
 
 data EventTag
-   = AbortTag
-   | BlurTag
-   | ChangeTag
-   | ClickTag
-   | ContextmenuTag
-   | DblclickTag
-   | DragTag
-   | DragendTag
-   | DragenterTag
-   | DragleaveTag
-   | DragoverTag
-   | DragstartTag
-   | DropTag
-   | ErrorTag
-   | FocusTag
-   | InputTag
-   | InvalidTag
-   | KeydownTag
-   | KeypressTag
-   | KeyupTag
-   | LoadTag
-   | MousedownTag
-   | MouseenterTag
-   | MouseleaveTag
-   | MousemoveTag
-   | MouseoutTag
-   | MouseoverTag
-   | MouseupTag
-   | MousewheelTag
-   | ScrollTag
-   | SelectTag
-   | SubmitTag
-   | WheelTag
-   | BeforecutTag
-   | CutTag
-   | BeforecopyTag
-   | CopyTag
-   | BeforepasteTag
-   | PasteTag
-   | ResetTag
-   | SearchTag
-   | SelectstartTag
-   | TouchstartTag
-   | TouchmoveTag
-   | TouchendTag
-   | TouchcancelTag
+  = AbortTag
+  | BlurTag
+  | ChangeTag
+  | ClickTag
+  | ContextmenuTag
+  | DblclickTag
+  | DragTag
+  | DragendTag
+  | DragenterTag
+  | DragleaveTag
+  | DragoverTag
+  | DragstartTag
+  | DropTag
+  | ErrorTag
+  | FocusTag
+  | InputTag
+  | InvalidTag
+  | KeydownTag
+  | KeypressTag
+  | KeyupTag
+  | LoadTag
+  | MousedownTag
+  | MouseenterTag
+  | MouseleaveTag
+  | MousemoveTag
+  | MouseoutTag
+  | MouseoverTag
+  | MouseupTag
+  | MousewheelTag
+  | ScrollTag
+  | SelectTag
+  | SubmitTag
+  | WheelTag
+  | BeforecutTag
+  | CutTag
+  | BeforecopyTag
+  | CopyTag
+  | BeforepasteTag
+  | PasteTag
+  | ResetTag
+  | SearchTag
+  | SelectstartTag
+  | TouchstartTag
+  | TouchmoveTag
+  | TouchendTag
+  | TouchcancelTag
 
 data EventName :: EventTag -> Type where
   Abort :: EventName 'AbortTag
@@ -107,7 +108,7 @@ data EventName :: EventTag -> Type where
   Touchend :: EventName 'TouchendTag
   Touchcancel :: EventName 'TouchcancelTag
 
-newtype EventResult en = EventResult { unEventResult :: EventResultType en }
+newtype EventResult en = EventResult {unEventResult :: EventResultType en}
 
 type family EventResultType (en :: EventTag) :: Type where
   EventResultType 'ClickTag = ()
@@ -158,14 +159,15 @@ type family EventResultType (en :: EventTag) :: Type where
   EventResultType 'WheelTag = WheelEventResult
 
 data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
-  deriving stock (Show, Read, Eq, Ord, Bounded, Enum)
+  deriving stock (Bounded, Enum, Eq, Ord, Read, Show)
 
 data WheelEventResult = WheelEventResult
   { _wheelEventResult_deltaX :: Double
   , _wheelEventResult_deltaY :: Double
   , _wheelEventResult_deltaZ :: Double
   , _wheelEventResult_deltaMode :: DeltaMode
-  } deriving stock (Show, Read, Eq, Ord)
+  }
+  deriving stock (Eq, Ord, Read, Show)
 
 data TouchEventResult = TouchEventResult
   { _touchEventResult_altKey :: Bool
@@ -176,7 +178,7 @@ data TouchEventResult = TouchEventResult
   , _touchEventResult_targetTouches :: [TouchResult]
   , _touchEventResult_touches :: [TouchResult]
   }
-  deriving stock (Show, Read, Eq, Ord)
+  deriving stock (Eq, Ord, Read, Show)
 
 data TouchResult = TouchResult
   { _touchResult_identifier :: Word
@@ -187,7 +189,7 @@ data TouchResult = TouchResult
   , _touchResult_pageX :: Int
   , _touchResult_pageY :: Int
   }
-  deriving stock (Show, Read, Eq, Ord)
+  deriving stock (Eq, Ord, Read, Show)
 
 #ifdef USE_TEMPLATE_HASKELL
 deriveGEq ''EventName

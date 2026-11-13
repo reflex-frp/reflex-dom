@@ -5,7 +5,7 @@ type Key = Text
 type Value = Text
 
 data StorageConfig t = StorageConfig
-  { _storageConfig_getLength :: Event t () --TODO: Traversable functor on each of these
+  { _storageConfig_getLength :: Event t () -- TODO: Traversable functor on each of these
   , _storageConfig_getKey :: Event t Integer
   , _storageConfig_getItem :: Event t Key
   , _storageConfig_setItem :: Event t (Key, Value)
@@ -27,5 +27,5 @@ data StorageEvent = StorageEvent
   { _storageEvent_key :: Key
   , _storageEvent_oldValue :: Value
   , _storageEvent_newValue :: Value
-  , _storageEvent_url :: Text --URL
+  , _storageEvent_url :: Text -- URL
   }

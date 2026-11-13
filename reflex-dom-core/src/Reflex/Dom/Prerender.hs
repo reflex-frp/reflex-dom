@@ -3,36 +3,36 @@
 
 -- | Render the first widget on the server, and the second on the client.
 module Reflex.Dom.Prerender
-       ( Prerender (..)
-       , prerender_
-       , PrerenderClientConstraint
-       , PrerenderBaseConstraints
-       ) where
+  ( Prerender (..)
+  , prerender_
+  , PrerenderClientConstraint
+  , PrerenderBaseConstraints
+  ) where
 
 import Control.Monad
 import Control.Monad.Fix
-import Control.Monad.Primitive (PrimMonad(..))
+import Control.Monad.Primitive (PrimMonad (..))
 import Control.Monad.Reader
-import Control.Monad.Ref (MonadRef(..), MonadAtomicRef(..))
+import Control.Monad.Ref (MonadAtomicRef (..), MonadRef (..))
 import Data.IORef (IORef, newIORef)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Kind (Type)
 import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Void
+import qualified GHCJS.DOM.Document as Document
+import qualified GHCJS.DOM.Node as Node
 import GHCJS.DOM.Types (MonadJSM)
+import qualified GHCJS.DOM.Types as DOM
 import Reflex hiding (askEvents)
+import Reflex.Host.Class
+
 import Reflex.Dom.Builder.Class
 import Reflex.Dom.Builder.Hydratable
 import Reflex.Dom.Builder.Immediate
 import Reflex.Dom.Builder.InputDisabled
 import Reflex.Dom.Builder.Static
-import Reflex.Host.Class
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
-
-import qualified GHCJS.DOM.Document as Document
-import qualified GHCJS.DOM.Node as Node
-import qualified GHCJS.DOM.Types as DOM
 
 type PrerenderClientConstraint t m =
   ( DomBuilder t m
@@ -63,12 +63,13 @@ type PrerenderBaseConstraints t m =
 -- hydration builder will run *both* widgets.
 prerender_
   :: (Functor m, Prerender t m)
-  => m () ->  Client m () -> m ()
+  => m () -> Client m () -> m ()
 prerender_ server client = void $ prerender server client
 
 class (PrerenderClientConstraint t (Client m), Client (Client m) ~ Client m, Prerender t (Client m)) => Prerender t m | m -> t where
   -- | Monad in which the client widget is built
   type Client m :: Type -> Type
+
   -- | Render the first widget on the server, and the second on the client. The
   -- hydration builder will run *both* widgets, updating the result dynamic at
   -- switchover time.
@@ -79,10 +80,11 @@ instance (ReflexHost t, Adjustable t m, PrerenderBaseConstraints t m) => Prerend
   prerender _ client = pure <$> client
 
 instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerender t (HydrationDomBuilderT HydrationDomSpace t m) where
-  -- | PostBuildT is needed here because we delay running the client builder
+  -- \| PostBuildT is needed here because we delay running the client builder
   -- until after switchover, at which point the postBuild of @m@ has already fired
   type Client (HydrationDomBuilderT HydrationDomSpace t m) = PostBuildT t (HydrationDomBuilderT GhcjsDomSpace t m)
-  -- | Runs the server widget up until switchover, then replaces it with the
+
+  -- \| Runs the server widget up until switchover, then replaces it with the
   -- client widget.
   prerender server client = do
     env <- HydrationDomBuilderT ask
@@ -93,19 +95,21 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
     unreadyChildren <- HydrationDomBuilderT $ asks _hydrationDomBuilderEnv_unreadyChildren
     immediateMode <- liftIO $ newIORef HydrationMode_Immediate
     delayed <- liftIO $ newIORef $ pure ()
-    let clientEnv = env
-          { _hydrationDomBuilderEnv_parent = Left $ DOM.toNode df
-          , _hydrationDomBuilderEnv_hydrationMode = immediateMode
-          }
-        serverEnv = HydrationDomBuilderEnv
-          { _hydrationDomBuilderEnv_document = doc
-          , _hydrationDomBuilderEnv_parent = Left $ DOM.toNode serverDf
-          , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-          , _hydrationDomBuilderEnv_commitAction = pure ()
-          , _hydrationDomBuilderEnv_delayed = delayed
-          , _hydrationDomBuilderEnv_hydrationMode = immediateMode
-          , _hydrationDomBuilderEnv_switchover = never
-          }
+    let clientEnv =
+          env
+            { _hydrationDomBuilderEnv_parent = Left $ DOM.toNode df
+            , _hydrationDomBuilderEnv_hydrationMode = immediateMode
+            }
+        serverEnv =
+          HydrationDomBuilderEnv
+            { _hydrationDomBuilderEnv_document = doc
+            , _hydrationDomBuilderEnv_parent = Left $ DOM.toNode serverDf
+            , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
+            , _hydrationDomBuilderEnv_commitAction = pure ()
+            , _hydrationDomBuilderEnv_delayed = delayed
+            , _hydrationDomBuilderEnv_hydrationMode = immediateMode
+            , _hydrationDomBuilderEnv_switchover = never
+            }
     a0 <- lift $ runHydrationDomBuilderT server serverEnv events
     (a', trigger) <- newTriggerEvent
     getHydrationMode >>= \case
@@ -118,7 +122,7 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
     holdDyn a0 a'
 
 newtype UnrunnableT t m a = UnrunnableT (ReaderT Void m a)
-  deriving newtype (Functor, Applicative, Monad, MonadTrans)
+  deriving newtype (Applicative, Functor, Monad, MonadTrans)
 
 unrunnable :: UnrunnableT t m a
 unrunnable = UnrunnableT $ ReaderT $ \case {}
@@ -191,7 +195,7 @@ instance (Reflex t, Monad m, MonadHold t m) => Prerender t (UnrunnableT t m) whe
   type Client (UnrunnableT t m) = UnrunnableT t m
   prerender _ _ = unrunnable
 
-instance (SupportsStaticDomBuilder t m) => Prerender t (StaticDomBuilderT t m) where
+instance SupportsStaticDomBuilder t m => Prerender t (StaticDomBuilderT t m) where
   type Client (StaticDomBuilderT t m) = UnrunnableT t m
   prerender server _ = do
     _ <- commentNode $ CommentNodeConfig startMarker Nothing
@@ -265,19 +269,23 @@ endMarker = "prerender/end"
 deleteToPrerenderEnd :: (MonadJSM m, Reflex t, MonadFix m) => DOM.Document -> HydrationRunnerT t m DOM.Comment
 deleteToPrerenderEnd doc = do
   startNode <- hydrateComment doc startMarker Nothing
-  let go (n :: Int) lastNode = Node.getNextSibling lastNode >>= \case
-        Nothing -> do
-          c <- Document.createComment doc endMarker
-          insertAfterPreviousNode c
-          pure c
-        Just node -> DOM.castTo DOM.Comment node >>= \case
-          Nothing -> go n node
-          Just c -> Node.getTextContentUnchecked c >>= \case
-            t | t == startMarker -> go (succ n) node
-              | t == endMarker -> case n of
-                0 -> pure c
-                _ -> go (pred n) node
-              | otherwise -> go n node
+  let go (n :: Int) lastNode =
+        Node.getNextSibling lastNode >>= \case
+          Nothing -> do
+            c <- Document.createComment doc endMarker
+            insertAfterPreviousNode c
+            pure c
+          Just node ->
+            DOM.castTo DOM.Comment node >>= \case
+              Nothing -> go n node
+              Just c ->
+                Node.getTextContentUnchecked c >>= \case
+                  t
+                    | t == startMarker -> go (succ n) node
+                    | t == endMarker -> case n of
+                        0 -> pure c
+                        _ -> go (pred n) node
+                    | otherwise -> go n node
   endNode <- go 0 $ DOM.toNode startNode
   deleteBetweenExclusive startNode endNode
   setPreviousNode $ Just $ DOM.toNode endNode

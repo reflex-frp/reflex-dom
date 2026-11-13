@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- Notice to those working on this test suite:
@@ -11,7 +10,6 @@
 -- issue. `xit` tests must be the last tests in the session, or the session will
 -- hang in the following test.
 
-import Prelude hiding (fail)
 import Control.Concurrent
 import qualified Control.Concurrent.Async as Async
 import Control.Lens.Operators
@@ -21,55 +19,55 @@ import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Ref
+import qualified Data.ByteString.Lazy as LBS
 import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
-import Data.Dependent.Sum (DSum(..), (==>))
+import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Sum (DSum (..), (==>))
 import Data.Foldable (traverse_)
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
+import qualified Data.IntMap as IntMap
 import Data.List (sort)
 import Data.Maybe
 import Data.Proxy
 import Data.Text (Text)
-import Language.Javascript.JSaddle (syncPoint, liftJSM)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified GHCJS.DOM.File as File
+import Language.Javascript.JSaddle (liftJSM, syncPoint)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Socket
 import Network.Wai
+import qualified Network.Wai.Handler.Warp as Warp
 import Network.WebSockets
-import Reflex.Dom.Core
 import Reflex.Patch.DMapWithMove
 import System.Directory
 import System.Environment
+import qualified System.FilePath as FilePath
 import System.IO (stderr)
 import System.IO.Silently
 import System.IO.Temp
 import System.Process
 import System.Which (staticWhich)
 import qualified Test.HUnit as HUnit
+import Test.Hspec (xit)
 import qualified Test.Hspec as H
 import qualified Test.Hspec.Core.Spec as H
-import Test.Hspec (xit)
-import Test.Hspec.WebDriver hiding (runWD, click, uploadFile, WD)
+import Test.Hspec.WebDriver hiding (WD, click, runWD, uploadFile)
 import qualified Test.Hspec.WebDriver as WD
-import Test.WebDriver (WD(..))
-
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Dependent.Map as DMap
-import qualified Data.IntMap as IntMap
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified GHCJS.DOM.File as File
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified System.FilePath as FilePath
+import Test.Util.ChromeFlags
+import Test.WebDriver (WD (..))
 import qualified Test.WebDriver as WD
 import qualified Test.WebDriver.Capabilities as WD
+import Prelude hiding (fail)
 
-import Test.Util.ChromeFlags
+import Reflex.Dom.Core
 
 chromium :: FilePath
 chromium = $(staticWhich "chromium")
@@ -93,13 +91,14 @@ assertFailure = liftIO . HUnit.assertFailure
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags = WD.useBrowser browser WD.defaultConfig
   where
-    browser = WD.Chrome
-      { WD.chromeDriverVersion = Nothing
-      , WD.chromeBinary = Just $ T.unpack fp
-      , WD.chromeOptions = T.unpack <$> flags
-      , WD.chromeExtensions = []
-      , WD.chromeExperimentalOptions = mempty
-      }
+    browser =
+      WD.Chrome
+        { WD.chromeDriverVersion = Nothing
+        , WD.chromeBinary = Just $ T.unpack fp
+        , WD.chromeOptions = T.unpack <$> flags
+        , WD.chromeExtensions = []
+        , WD.chromeExperimentalOptions = mempty
+        }
 
 data DKey a where
   Key_Int :: DKey Int
@@ -118,10 +117,11 @@ deriveGCompare ''DKey
 deriveGShow ''DKey
 
 keyMap :: DMap DKey Identity
-keyMap = DMap.fromList
-  [ Key_Int ==> 0
-  , Key_Char ==> 'A'
-  ]
+keyMap =
+  DMap.fromList
+    [ Key_Int ==> 0
+    , Key_Char ==> 'A'
+    ]
 
 data Key2 a where
   Key2_Int :: Int -> Key2 Int
@@ -142,7 +142,7 @@ main = do
       let browserPath = T.strip $ T.pack chromium
       when (T.null browserPath) $ fail "No browser found"
       withDebugging <- isNothing <$> lookupEnv "NO_DEBUG"
-      let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _selenium_portNumber selenium }
+      let wdConfig = WD.defaultConfig {WD.wdPort = fromIntegral $ _selenium_portNumber selenium}
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
       hspec (tests withDebugging wdConfig [(chromeCaps', "chrome")] selenium) `finally` _selenium_stopServer selenium
 
@@ -204,16 +204,16 @@ tests withDebugging wdConfig caps _selenium = do
         el "div" $ do
           el "span" $ text "hello world"
           text ""
--- TODO I think these two tests are broken
---    it "updates after postBuild" $ runWD $ do
---      testWidget (checkBodyText "initial") (checkBodyText "after") $ do
---        after <- delay 0 =<< getPostBuild
---        void $ textNode $ TextNodeConfig "initial" $ Just $ "after" <$ after
---    it "updates immediately after postBuild" $ runWD $ do
---      testWidget (checkBodyText "pb") (checkBodyText "after") $ do
---        pb <- getPostBuild
---        after <- delay 0 pb
---        void $ textNode $ TextNodeConfig "initial" $ Just $ leftmost ["pb" <$ pb, "after" <$ after]
+    -- TODO I think these two tests are broken
+    --    it "updates after postBuild" $ runWD $ do
+    --      testWidget (checkBodyText "initial") (checkBodyText "after") $ do
+    --        after <- delay 0 =<< getPostBuild
+    --        void $ textNode $ TextNodeConfig "initial" $ Just $ "after" <$ after
+    --    it "updates immediately after postBuild" $ runWD $ do
+    --      testWidget (checkBodyText "pb") (checkBodyText "after") $ do
+    --        pb <- getPostBuild
+    --        after <- delay 0 pb
+    --        void $ textNode $ TextNodeConfig "initial" $ Just $ leftmost ["pb" <$ pb, "after" <$ after]
     it "updates in immediate mode" $ runWD $ do
       let checkUpdated = do
             checkBodyText "initial"
@@ -242,9 +242,10 @@ tests withDebugging wdConfig caps _selenium = do
         performEvent_ $ liftIO (writeRef firstClickedRef True) <$ domEvent Click firstDivEl
         (secondDivEl, _) <- el' "div" $ prerender_ (pure ()) $ do
           let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
-              conf = (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
-                & initialAttributes .~ "id" =: "second"
-                & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def
+              conf =
+                (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
+                  & initialAttributes .~ "id" =: "second"
+                  & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def
           void $ element "span" conf $ text "hello world"
         performEvent_ $ liftIO (writeRef secondClickedRef True) <$ domEvent Click secondDivEl
       firstClicked <- readRef firstClickedRef
@@ -259,9 +260,10 @@ tests withDebugging wdConfig caps _selenium = do
             pure (s0, s1)
       clicked <- testWidget (pure ()) click $ prerender_ (pure ()) $ do
         let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
-            conf = (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
-              & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> preventDefault) def
-              & initialAttributes .~ "type" =: "checkbox"
+            conf =
+              (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
+                & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> preventDefault) def
+                & initialAttributes .~ "type" =: "checkbox"
         void $ element "input" conf $ text "hello world"
       assertEqual "Click not prevented" (False, False) clicked
     it "can add/update/remove attributes" $ runWD $ do
@@ -280,9 +282,10 @@ tests withDebugging wdConfig caps _selenium = do
               assertAttr e "init" (Just "click")
               assertAttr e "click" (Just "click")
       testWidget' checkInitialAttrs checkModifyAttrs $ mdo
-        let conf = def
-              & initialAttributes .~ "const" =: "const" <> "delete" =: "delete" <> "init" =: "init"
-              & modifyAttributes .~ (("delete" =: Nothing <> "init" =: Just "click" <> "click" =: Just "click") <$ click)
+        let conf =
+              def
+                & initialAttributes .~ "const" =: "const" <> "delete" =: "delete" <> "init" =: "init"
+                & modifyAttributes .~ (("delete" =: Nothing <> "init" =: Just "click" <> "click" =: Just "click") <$ click)
         (e, ()) <- element "div" conf $ text "hello world"
         let click = domEvent Click e
         return ()
@@ -296,8 +299,11 @@ tests withDebugging wdConfig caps _selenium = do
               pure e
             checkHydrated e = do
               WD.attr e "value" `shouldBeWithRetryM` Just "test"
-        testWidget' checkStatic checkHydrated $ void $ inputElement $ def
-          & inputElementConfig_initialValue .~ "test"
+        testWidget' checkStatic checkHydrated
+          $ void
+          $ inputElement
+          $ def
+            & inputElementConfig_initialValue .~ "test"
       it "updates value attribute at postBuild" $ runWD $ do
         let checkStatic = do
               e <- findElemWithRetry $ WD.ByTag "input"
@@ -307,9 +313,11 @@ tests withDebugging wdConfig caps _selenium = do
               WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
         testWidget' checkStatic checkHydrated $ do
           pb <- getPostBuild
-          _ <- inputElement $ def
-            & inputElementConfig_initialValue .~ "test"
-            & inputElementConfig_setValue .~ ("test-updated" <$ pb)
+          _ <-
+            inputElement $
+              def
+                & inputElementConfig_initialValue .~ "test"
+                & inputElementConfig_setValue .~ ("test-updated" <$ pb)
           pure ()
       it "sets checked attr appropriately" $ runWD $ do
         setCheckedChan <- liftIO newChan
@@ -326,10 +334,12 @@ tests withDebugging wdConfig caps _selenium = do
               WD.attr e "checked" `shouldBeWithRetryM` Just "true"
         testWidget' checkStatic checkValue $ do
           setChecked <- triggerEventWithChan setCheckedChan
-          _ <- inputElement $ def
-            & initialAttributes .~ "type" =: "checkbox"
-            & inputElementConfig_initialChecked .~ True
-            & inputElementConfig_setChecked .~ setChecked
+          _ <-
+            inputElement $
+              def
+                & initialAttributes .~ "type" =: "checkbox"
+                & inputElementConfig_initialChecked .~ True
+                & inputElementConfig_setChecked .~ setChecked
           pure ()
       it "sets checked attr appropriately at postbuild" $ runWD $ do
         let checkStatic = do
@@ -340,27 +350,31 @@ tests withDebugging wdConfig caps _selenium = do
               WD.attr e "checked" `shouldBeWithRetryM` Just "true"
         testWidget' checkStatic checkValue $ do
           pb <- getPostBuild
-          _ <- inputElement $ def
-            & initialAttributes .~ "type" =: "checkbox"
-            & inputElementConfig_initialChecked .~ False
-            & inputElementConfig_setChecked .~ (True <$ pb)
+          _ <-
+            inputElement $
+              def
+                & initialAttributes .~ "type" =: "checkbox"
+                & inputElementConfig_initialChecked .~ False
+                & inputElementConfig_setChecked .~ (True <$ pb)
           pure ()
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("hello " :: Text)
         testWidget'
-          (do
-            e <- findElemWithRetry $ WD.ByTag "input"
-            WD.sendKeys "world" e
-            pure e)
-          (\e -> do
-            WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
-            WD.click =<< findElemWithRetry (WD.ByTag "button")
-            readRef inputRef `shouldBeWithRetryM` "hello world"
-          ) $ do
-          e <- inputElement $ def & inputElementConfig_initialValue .~ "hello "
-          click <- button "save"
-          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
+          ( do
+              e <- findElemWithRetry $ WD.ByTag "input"
+              WD.sendKeys "world" e
+              pure e
+          )
+          ( \e -> do
+              WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
+              WD.click =<< findElemWithRetry (WD.ByTag "button")
+              readRef inputRef `shouldBeWithRetryM` "hello world"
+          )
+          $ do
+            e <- inputElement $ def & inputElementConfig_initialValue .~ "hello "
+            click <- button "save"
+            performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "captures user input after switchover" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         let checkValue = do
@@ -434,9 +448,11 @@ tests withDebugging wdConfig caps _selenium = do
               WD.attr e "checked" `shouldBeWithRetryM` Nothing
         testWidget' checkStatic checkValue $ do
           setChecked <- triggerEventWithChan setCheckedChan
-          e <- inputElement $ def
-            & initialAttributes .~ "type" =: "checkbox"
-            & inputElementConfig_setChecked .~ setChecked
+          e <-
+            inputElement $
+              def
+                & initialAttributes .~ "type" =: "checkbox"
+                & inputElementConfig_setChecked .~ setChecked
           performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
           performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
       it "respects user updates to checked which happen before hydration" $ runWD $ do
@@ -454,8 +470,10 @@ tests withDebugging wdConfig caps _selenium = do
               readRef checkedByUIRef `shouldBeWithRetryM` True
               readRef checkedRef `shouldBeWithRetryM` True
         testWidget' checkStatic checkValue $ do
-          e <- inputElement $ def
-            & initialAttributes .~ "type" =: "checkbox"
+          e <-
+            inputElement $
+              def
+                & initialAttributes .~ "type" =: "checkbox"
           performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
           performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
       it "captures file uploads" $ runWD $ do
@@ -558,7 +576,7 @@ tests withDebugging wdConfig caps _selenium = do
       it "input event and (updated value) fire correctly when both setValue AND user updated value happen before switchover" $ runWD $ do
         valRef <- newRef ([] :: [Text])
         inputRef <- newRef ([] :: [Text])
-        let consRef ref a = liftIO $ atomicModifyRef ref $ \as -> (a:as, ())
+        let consRef ref a = liftIO $ atomicModifyRef ref $ \as -> (a : as, ())
             checkStatic = do
               input <- findElemWithRetry $ WD.ByTag "input"
               p <- findElemWithRetry (WD.ByTag "p")
@@ -642,9 +660,11 @@ tests withDebugging wdConfig caps _selenium = do
         testWidget (pure ()) checkValue $ do
           setChecked <- triggerEventWithChan setCheckedChan
           prerender_ (pure ()) $ do
-            e <- inputElement $ def
-              & initialAttributes .~ "type" =: "checkbox"
-              & inputElementConfig_setChecked .~ setChecked
+            e <-
+              inputElement $
+                def
+                  & initialAttributes .~ "type" =: "checkbox"
+                  & inputElementConfig_setChecked .~ setChecked
             performEvent_ $ liftIO . writeRef checkedByUIRef <$> _inputElement_checkedChange e
             performEvent_ $ liftIO . writeRef checkedRef <$> updated (_inputElement_checked e)
       it "captures file uploads" $ runWD $ do
@@ -672,8 +692,11 @@ tests withDebugging wdConfig caps _selenium = do
               pure e
             checkHydrated e = do
               WD.attr e "value" `shouldBeWithRetryM` Just "test"
-        testWidget' checkStatic checkHydrated $ void $ textAreaElement $ def
-          & textAreaElementConfig_initialValue .~ "test"
+        testWidget' checkStatic checkHydrated
+          $ void
+          $ textAreaElement
+          $ def
+            & textAreaElementConfig_initialValue .~ "test"
       it "updates value attribute at postBuild" $ runWD $ do
         let checkStatic = do
               e <- findElemWithRetry $ WD.ByTag "textarea"
@@ -683,26 +706,30 @@ tests withDebugging wdConfig caps _selenium = do
               WD.attr e "value" `shouldBeWithRetryM` Just "test-updated"
         testWidget' checkStatic checkHydrated $ do
           pb <- getPostBuild
-          _ <- textAreaElement $ def
-            & textAreaElementConfig_initialValue .~ "test"
-            & textAreaElementConfig_setValue .~ ("test-updated" <$ pb)
+          _ <-
+            textAreaElement $
+              def
+                & textAreaElementConfig_initialValue .~ "test"
+                & textAreaElementConfig_setValue .~ ("test-updated" <$ pb)
           pure ()
     describe "hydration" $ do
       it "doesn't wipe user input when switching over" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         testWidget'
-          (do
-            e <- findElemWithRetry $ WD.ByTag "textarea"
-            WD.sendKeys "hello world" e
-            pure e)
-          (\e -> do
-            WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
-            WD.click <=< findElemWithRetry $ WD.ByTag "button"
-            readRef inputRef `shouldBeWithRetryM` "hello world"
-          ) $ do
-          e <- textAreaElement def
-          click <- button "save"
-          performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
+          ( do
+              e <- findElemWithRetry $ WD.ByTag "textarea"
+              WD.sendKeys "hello world" e
+              pure e
+          )
+          ( \e -> do
+              WD.attr e "value" `shouldBeWithRetryM` Just "hello world"
+              WD.click <=< findElemWithRetry $ WD.ByTag "button"
+              readRef inputRef `shouldBeWithRetryM` "hello world"
+          )
+          $ do
+            e <- textAreaElement def
+            click <- button "save"
+            performEvent_ $ liftIO . writeRef inputRef <$> tag (current (value e)) click
       it "captures user input after switchover" $ runWD $ do
         inputRef <- newRef ("" :: Text)
         let checkValue = do
@@ -752,7 +779,7 @@ tests withDebugging wdConfig caps _selenium = do
               readRef valueRef `shouldBeWithRetryM` "world"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
-          e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
+          e <- textAreaElement $ def {_textAreaElementConfig_setValue = Just setValue'}
           performEvent_ $ liftIO . writeRef valueByUIRef <$> _textAreaElement_input e
           performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
       it "fires _input event if the user altered the value before hydration" $ runWD $ do
@@ -876,7 +903,7 @@ tests withDebugging wdConfig caps _selenium = do
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           prerender_ (pure ()) $ do
-            e <- textAreaElement $ def { _textAreaElementConfig_setValue = Just setValue' }
+            e <- textAreaElement $ def {_textAreaElementConfig_setValue = Just setValue'}
             performEvent_ $ liftIO . writeRef valueByUIRef <$> _textAreaElement_input e
             performEvent_ $ liftIO . writeRef valueRef <$> updated (value e)
 
@@ -901,7 +928,7 @@ tests withDebugging wdConfig caps _selenium = do
               assertAttr e "value" (Just "two")
               readRef inputRef `shouldBeWithRetryM` "two"
         testWidget' setup check $ do
-          (e, ()) <- selectElement (def { _selectElementConfig_initialValue = "three" }) options
+          (e, ()) <- selectElement (def {_selectElementConfig_initialValue = "three"}) options
           click <- button "save"
           liftIO . writeRef inputRef <=< sample $ current $ _selectElement_value e
           performEvent_ $ liftIO . writeRef inputRef <$> tag (current (_selectElement_value e)) click
@@ -958,7 +985,7 @@ tests withDebugging wdConfig caps _selenium = do
               readRef valueRef `shouldBeWithRetryM` "three"
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
-          (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+          (e, ()) <- selectElement def {_selectElementConfig_setValue = Just setValue'} options
           performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
           performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
@@ -991,7 +1018,7 @@ tests withDebugging wdConfig caps _selenium = do
               readRef valueRef `shouldBeWithRetryM` "one"
         testWidget (pure ()) checkValue $ do
           prerender_ (pure ()) $ do
-            (e, ()) <- selectElement def { _selectElementConfig_initialValue = "one" } options
+            (e, ()) <- selectElement def {_selectElementConfig_initialValue = "one"} options
             liftIO . writeRef valueRef <=< sample $ current $ _selectElement_value e
       it "sets value appropriately" $ runWD $ do
         valueByUIRef :: IORef Text <- newRef ""
@@ -1007,7 +1034,7 @@ tests withDebugging wdConfig caps _selenium = do
         testWidget (pure ()) checkValue $ do
           setValue' <- triggerEventWithChan setValueChan
           prerender_ (pure ()) $ do
-            (e, ()) <- selectElement def { _selectElementConfig_setValue = Just setValue' } options
+            (e, ()) <- selectElement def {_selectElementConfig_setValue = Just setValue'} options
             performEvent_ $ liftIO . writeRef valueByUIRef <$> _selectElement_change e
             performEvent_ $ liftIO . writeRef valueRef <$> updated (_selectElement_value e)
 
@@ -1027,7 +1054,8 @@ tests withDebugging wdConfig caps _selenium = do
     it "works with prerender_ siblings" $ runWD $ do
       testWidget
         (checkTextInId "a1" "One" >> checkTextInId "b1" "Three" >> checkTextInId "c1" "Five")
-        (checkTextInId "a2" "Two" >> checkTextInId "b2" "Four" >> checkTextInId "c2" "Six") $ do
+        (checkTextInId "a2" "Two" >> checkTextInId "b2" "Four" >> checkTextInId "c2" "Six")
+        $ do
           prerender_ (divId "a1" $ text "One") (divId "a2" $ text "Two")
           prerender_ (divId "b1" $ text "Three") (divId "b2" $ text "Four")
           prerender_ (divId "c1" $ text "Five") (divId "c2" $ text "Six")
@@ -1036,18 +1064,21 @@ tests withDebugging wdConfig caps _selenium = do
         el "div" $ prerender_ (text "One") (text "Two")
     it "places fences and removes them" $ runWD $ do
       testWidget'
-        (do
-          scripts <- WD.findElems $ WD.ByTag "script"
-          filterM (\s -> maybe False (\t -> "prerender" `T.isPrefixOf` t) <$> WD.attr s "type") scripts
+        ( do
+            scripts <- WD.findElems $ WD.ByTag "script"
+            filterM (\s -> maybe False (\t -> "prerender" `T.isPrefixOf` t) <$> WD.attr s "type") scripts
         )
         (traverse_ elementShouldBeRemoved)
         (el "span" $ prerender_ (text "One") (text "Two"))
     it "postBuild works on server side" $ runWD $ do
       lock :: MVar () <- liftIO newEmptyMVar
       testWidget (liftIO $ takeMVar lock) (pure ()) $ do
-        prerender_ (do
-          pb <- getPostBuild
-          performEvent_ $ liftIO (putMVar lock ()) <$ pb) blank
+        prerender_
+          ( do
+              pb <- getPostBuild
+              performEvent_ $ liftIO (putMVar lock ()) <$ pb
+          )
+          blank
     it "postBuild works on client side" $ runWD $ do
       lock :: MVar () <- liftIO newEmptyMVar
       testWidget (pure ()) (liftIO $ takeMVar lock) $ do
@@ -1082,9 +1113,10 @@ tests withDebugging wdConfig caps _selenium = do
   session' "namespaces" $ do
     it "dyn can be nested in namespaced widget" $ runWD $ do
       testWidget (pure ()) (checkTextInTag "svg" "one") $ do
-        let svgRootCfg = def
-              & (elementConfig_namespace ?~ "http://www.w3.org/2000/svg")
-              & (elementConfig_initialAttributes .~ ("width" =: "100%" <> "height" =: "100%" <> "viewBox" =: "0 0 1536 2048"))
+        let svgRootCfg =
+              def
+                & (elementConfig_namespace ?~ "http://www.w3.org/2000/svg")
+                & (elementConfig_initialAttributes .~ ("width" =: "100%" <> "height" =: "100%" <> "viewBox" =: "0 0 1536 2048"))
         void $ element "svg" svgRootCfg $ do
           dyn_ $ text "one" <$ pure ()
 
@@ -1101,10 +1133,12 @@ tests withDebugging wdConfig caps _selenium = do
       testWidget' setup check $ do
         replace <- triggerEventWithChan replaceChan
         pb <- getPostBuild
-        void $ runWithReplace (el "div" $ text "one") $ leftmost
-          [ el "div" (text "two") <$ pb
-          , el "span" . text <$> replace
-          ]
+        void
+          $ runWithReplace (el "div" $ text "one")
+          $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
     it "can be nested in initial widget" $ runWD $ do
       replaceChan :: Chan Text <- liftIO newChan
       let setup = findElemWithRetry $ WD.ByTag "div"
@@ -1117,10 +1151,12 @@ tests withDebugging wdConfig caps _selenium = do
       testWidget' setup check $ void $ flip runWithReplace never $ do
         replace <- triggerEventWithChan replaceChan
         pb <- getPostBuild
-        void $ runWithReplace (el "div" $ text "one") $ leftmost
-          [ el "div" (text "two") <$ pb
-          , el "span" . text <$> replace
-          ]
+        void
+          $ runWithReplace (el "div" $ text "one")
+          $ leftmost
+            [ el "div" (text "two") <$ pb
+            , el "span" . text <$> replace
+            ]
     it "can be nested in postBuild widget" $ runWD $ do
       replaceChan :: Chan Text <- liftIO newChan
       let setup = findElemWithRetry $ WD.ByTag "div"
@@ -1135,10 +1171,12 @@ tests withDebugging wdConfig caps _selenium = do
         runWithReplace (pure ()) $ ffor pb $ \() -> do
           replace <- triggerEventWithChan replaceChan
           pb' <- getPostBuild
-          void $ runWithReplace (el "div" $ text "one") $ leftmost
-            [ el "div" (text "two") <$ pb'
-            , el "span" . text <$> replace
-            ]
+          void
+            $ runWithReplace (el "div" $ text "one")
+            $ leftmost
+              [ el "div" (text "two") <$ pb'
+              , el "span" . text <$> replace
+              ]
     it "postBuild works in replaced widget" $ runWD $ do
       replaceChan <- liftIO newChan
       pbLock <- liftIO newEmptyMVar
@@ -1172,10 +1210,12 @@ tests withDebugging wdConfig caps _selenium = do
           replace2 <- triggerEventWithChan replaceChan2
           pb <- getPostBuild
           performEvent_ $ liftIO (putMVar lock ()) <$ pb
-          void $ runWithReplace (el "div" $ text r1) $ leftmost
-            [ el "span" . text <$> replace2
-            , el "div" (text "pb") <$ pb
-            ]
+          void
+            $ runWithReplace (el "div" $ text r1)
+            $ leftmost
+              [ el "span" . text <$> replace2
+              , el "div" (text "pb") <$ pb
+              ]
     it "prerender works in replaced widget" $ runWD $ do
       replaceChan <- liftIO newChan
       lock :: MVar () <- liftIO newEmptyMVar
@@ -1229,20 +1269,21 @@ tests withDebugging wdConfig caps _selenium = do
         replace <- triggerEventWithChan replaceChan
         prerender_ blank $ do
           pb <- getPostBuild
-          void $ runWithReplace (el "div" $ text "one") $ leftmost
-            [ el "div" (text "two") <$ pb
-            , el "span" . text <$> replace
-            ]
+          void
+            $ runWithReplace (el "div" $ text "one")
+            $ leftmost
+              [ el "div" (text "two") <$ pb
+              , el "span" . text <$> replace
+              ]
 
     let checkInnerHtml t x = findElemWithRetry (WD.ByTag t) >>= (`attr` "innerHTML") >>= (`shouldBe` Just x)
     it "removes bracketing comments" $ runWD $ do
       replaceChan :: Chan () <- liftIO newChan
-      let
-        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
-        check () = do
-          liftIO $ writeChan replaceChan () -- trigger creation of p tag
-          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
-          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      let preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+          check () = do
+            liftIO $ writeChan replaceChan () -- trigger creation of p tag
+            _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+            checkInnerHtml "div" "before|<p>inner2</p>|after"
       testWidget' preSwitchover check $ do
         replace <- triggerEventWithChan replaceChan
         el "div" $ do
@@ -1251,12 +1292,11 @@ tests withDebugging wdConfig caps _selenium = do
           text "|after"
     it "ignores extra ending bracketing comment" $ runWD $ do
       replaceChan :: Chan () <- liftIO newChan
-      let
-        preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0--><!--replace-end-0-->|after"
-        check () = do
-          liftIO $ writeChan replaceChan () -- trigger creation of p tag
-          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
-          checkInnerHtml "div" "before|inner2|after"
+      let preSwitchover = checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0--><!--replace-end-0-->|after"
+          check () = do
+            liftIO $ writeChan replaceChan () -- trigger creation of p tag
+            _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+            checkInnerHtml "div" "before|inner2|after"
       testWidget' preSwitchover check $ do
         replace <- triggerEventWithChan replaceChan
         el "div" $ do
@@ -1264,24 +1304,24 @@ tests withDebugging wdConfig caps _selenium = do
           _ <- runWithReplace (text "inner1" *> comment "replace-end-0") $ text "inner2" <$ replace
           text "|after"
         void $ runWithReplace blank $ el "p" blank <$ replace -- Signal tag for end of test
-    -- TODO This test actually causes a hydration failure, but it wasn't
-    -- previously detected, so I've marked it pending
+        -- TODO This test actually causes a hydration failure, but it wasn't
+        -- previously detected, so I've marked it pending
     xit "ignores missing ending bracketing comments" $ runWD $ do
       replaceChan :: Chan () <- liftIO newChan
-      let
-        preSwitchover = do
-          checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
-          divEl <- findElemWithRetry (WD.ByTag "div")
-          let wrongHtml :: String
-              wrongHtml = "<!--replace-start-0-->inner1"
-          actualHtml :: String <- WD.executeJS
-            [WD.JSArg divEl, WD.JSArg wrongHtml]
-            "arguments[0].innerHTML = arguments[1]; return arguments[0].innerHTML"
-          actualHtml `shouldBe` wrongHtml
-        check () = do
-          liftIO $ writeChan replaceChan () -- trigger creation of p tag
-          _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
-          checkInnerHtml "div" "before|<p>inner2</p>|after"
+      let preSwitchover = do
+            checkInnerHtml "div" "before|<!--replace-start-0-->inner1<!--replace-end-0-->|after"
+            divEl <- findElemWithRetry (WD.ByTag "div")
+            let wrongHtml :: String
+                wrongHtml = "<!--replace-start-0-->inner1"
+            actualHtml :: String <-
+              WD.executeJS
+                [WD.JSArg divEl, WD.JSArg wrongHtml]
+                "arguments[0].innerHTML = arguments[1]; return arguments[0].innerHTML"
+            actualHtml `shouldBe` wrongHtml
+          check () = do
+            liftIO $ writeChan replaceChan () -- trigger creation of p tag
+            _ <- findElemWithRetry $ WD.ByTag "p" -- wait till p tag is created
+            checkInnerHtml "div" "before|<p>inner2</p>|after"
       testWidget' preSwitchover check $ do
         replace <- triggerEventWithChan replaceChan
         el "div" $ do
@@ -1394,11 +1434,12 @@ tests withDebugging wdConfig caps _selenium = do
 
   session' "traverseIntMapWithKeyWithAdjust" $ do
     let textKeyInt k = "key" <> T.pack (show k)
-        intMap = IntMap.fromList
-          [ (1, "one")
-          , (2, "two")
-          , (3, "three")
-          ]
+        intMap =
+          IntMap.fromList
+            [ (1, "one")
+            , (2, "two")
+            , (3, "three")
+            ]
     let widget :: DomBuilder t m => IntMap.Key -> Text -> m Text
         widget k v = elAttr "li" ("id" =: textKeyInt k) $ do
           elClass "span" "key" $ text $ textKeyInt k
@@ -1525,28 +1566,28 @@ tests withDebugging wdConfig caps _selenium = do
           -> H.SpecM (WdTestSession ()) ()
         moveSpec testMove = do
           it "can insert an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3]) $ \body chan -> do
-            shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i33"]) body
             liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2)
-            shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i22", "i33"]) body
           it "can delete an item" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3]) $ \body chan -> do
-            shouldContainText (T.strip $ T.unlines ["i11","i22","i33"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i22", "i33"]) body
             liftIO $ writeChan chan (deleteDMapKey (Key2_Int 2))
-            shouldContainText (T.strip $ T.unlines ["i11","i33"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i33"]) body
           it "can swap items" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
-            shouldContainText (T.strip $ T.unlines ["i11","i22","i33","i44"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i22", "i33", "i44"]) body
             liftIO $ writeChan chan (swapDMapKey (Key2_Int 2) (Key2_Int 3))
-            shouldContainText (T.strip $ T.unlines ["i11","i33","i22","i44"]) body
--- TODO re-enable this
---          it "can move items" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
---            shouldContainText (T.strip $ T.unlines ["i11","i22","i33", "i44"]) body
---            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3))
---            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
---            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- attempt a move to nonexistent key should delete
---            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
---            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- this causes a JSException in immediate builder too
---            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
---            liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2) -- this step will fail if the above caused an exception, thus works as a proxy for detecting the exception given we can't catch it
---            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
+            shouldContainText (T.strip $ T.unlines ["i11", "i33", "i22", "i44"]) body
+    -- TODO re-enable this
+    --          it "can move items" $ runWD $ testMove (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3, Key2_Int 4 ==> 4]) $ \body chan -> do
+    --            shouldContainText (T.strip $ T.unlines ["i11","i22","i33", "i44"]) body
+    --            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3))
+    --            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
+    --            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- attempt a move to nonexistent key should delete
+    --            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
+    --            liftIO $ writeChan chan (moveDMapKey (Key2_Int 2) (Key2_Int 3)) -- this causes a JSException in immediate builder too
+    --            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
+    --            liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2) -- this step will fail if the above caused an exception, thus works as a proxy for detecting the exception given we can't catch it
+    --            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
 
     describe "hydration" $ moveSpec $ \initMap test -> do
       chan <- liftIO newChan
@@ -1584,9 +1625,10 @@ tests withDebugging wdConfig caps _selenium = do
       let preSwitchover = do
             checkBodyText "before\ninner\nafter"
             -- Two <p> tags should be present
-            (p1, p2) <- WD.findElems (WD.ByTag "p") >>= \case
-              [p1, p2] -> pure (p1, p2)
-              _ -> error "Unexpected number of `p` tags (expected 2)"
+            (p1, p2) <-
+              WD.findElems (WD.ByTag "p") >>= \case
+                [p1, p2] -> pure (p1, p2)
+                _ -> error "Unexpected number of `p` tags (expected 2)"
             ol <- findElemWithRetry (WD.ByTag "ol")
             shouldContainText "before" p1
             shouldContainText "inner" ol
@@ -1618,16 +1660,16 @@ tests withDebugging wdConfig caps _selenium = do
           testWidget doCheck doCheck $ do
             void $ dropdown initialValue (constDyn (("aa" :: Text) =: "aaa" <> "bb" =: "bbb")) def
         fetchElement e = do
-           val <- WD.attr e "value"
-           sel <- WD.attr e "selected"
-           return (fromMaybe "" val, isJust sel)
+          val <- WD.attr e "value"
+          sel <- WD.attr e "selected"
+          return (fromMaybe "" val, isJust sel)
     -- The "aa" test case is important,  but a good test implementation probably needs to avoid selenium,  because HTML parsers will insert a "selected" attribute on the first "option" tag if no selected attributes are present;  thus as written, this erroneously succeeds on the old implementation (but properly implemented, should fail)
     -- Thus, it would appear that we do actually need a HTML5 or maybe XML parser for this test suite.
     xit "statically renders initial values (on aa)" $ runWD $ do
-      doTest [("0",True),("1",False)] "aa"
+      doTest [("0", True), ("1", False)] "aa"
     -- These tests are currently marked "pending" (by using "xit" instead of "it") because this test has a high chance of non-deterministically failing, which is a problem elsewhere in this test suite as well
     xit "statically renders initial values (on bb)" $ runWD $ do
-      doTest [("0",False),("1",True)] "bb"
+      doTest [("0", False), ("1", True)] "bb"
 
 data Selenium = Selenium
   { _selenium_portNumber :: PortNumber
@@ -1636,21 +1678,24 @@ data Selenium = Selenium
 
 startSeleniumServer :: PortNumber -> IO (IO ())
 startSeleniumServer port = do
-  (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
-    { std_in = NoStream
-    , std_out = NoStream
-    , std_err = NoStream
-    }
+  (_, _, _, ph) <-
+    createProcess $
+      (proc "selenium-server" ["-port", show port])
+        { std_in = NoStream
+        , std_out = NoStream
+        , std_err = NoStream
+        }
   return $ terminateProcess ph
 
 withSeleniumServer :: (Selenium -> IO ()) -> IO ()
 withSeleniumServer f = do
   stopServer <- startSeleniumServer seleniumPort
   threadDelay $ 1000 * 1000 * 2 -- TODO poll or wait on a a signal to block on
-  f $ Selenium
-    { _selenium_portNumber = seleniumPort
-    , _selenium_stopServer = stopServer
-    }
+  f $
+    Selenium
+      { _selenium_portNumber = seleniumPort
+      , _selenium_stopServer = stopServer
+      }
 
 triggerEventWithChan :: (TriggerEvent t m, Prerender t m) => Chan a -> m (Event t a)
 triggerEventWithChan chan = do
@@ -1704,13 +1749,15 @@ getBody = WD.findElem $ WD.ByTag "body"
 
 withRetry :: forall a. WD a -> WD a
 withRetry a = wait 300
-  where wait :: Int -> WD a
-        wait 0 = a
-        wait n = try a >>= \case
-          Left (e :: SomeException) -> do
-            liftIO $ putStrLn ("(retrying due to " <> show e <> ")") *> threadDelay 100000
-            wait $ n - 1
-          Right v -> return v
+  where
+    wait :: Int -> WD a
+    wait 0 = a
+    wait n =
+      try a >>= \case
+        Left (e :: SomeException) -> do
+          liftIO $ putStrLn ("(retrying due to " <> show e <> ")") *> threadDelay 100000
+          wait $ n - 1
+        Right v -> return v
 
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
@@ -1740,7 +1787,7 @@ testWidgetDebug
 testWidgetDebug hardFailure withDebugging beforeJS afterSwitchover =
   testWidgetDebug' hardFailure withDebugging beforeJS (const afterSwitchover)
 
-data HydrationFailedException = HydrationFailedException deriving stock Show
+data HydrationFailedException = HydrationFailedException deriving stock (Show)
 instance Exception HydrationFailedException
 
 -- | TODO: do something about JSExceptions not causing tests to fail
@@ -1793,13 +1840,16 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
     p <- socketPort sock
     close sock
     return p
-  let settings = foldr ($) Warp.defaultSettings
-        [ Warp.setPort $ fromIntegral port
-        , Warp.setBeforeMainLoop $ do
-            putStrLnDebug "putting waitJSaddle"
-            putMVar waitJSaddle ()
-            putStrLnDebug "put waitJSaddle"
-        ]
+  let settings =
+        foldr
+          ($)
+          Warp.defaultSettings
+          [ Warp.setPort $ fromIntegral port
+          , Warp.setBeforeMainLoop $ do
+              putStrLnDebug "putting waitJSaddle"
+              putMVar waitJSaddle ()
+              putStrLnDebug "put waitJSaddle"
+          ]
       -- hSilence to get rid of ConnectionClosed logs
       silenceIfDebug = if withDebugging then id else hSilence [stderr]
       jsaddleWarp = silenceIfDebug $ Warp.runSettings settings application
@@ -1818,7 +1868,8 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
     afterSwitchover a
 
 withAsync' :: (MonadIO m, MonadMask m) => IO a -> m b -> m b
-withAsync' f g = bracket
-  (liftIO $ Async.async f)
-  (liftIO . Async.uninterruptibleCancel)
-  (const g)
+withAsync' f g =
+  bracket
+    (liftIO $ Async.async f)
+    (liftIO . Async.uninterruptibleCancel)
+    (const g)

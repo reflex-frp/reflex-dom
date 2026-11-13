@@ -1,22 +1,40 @@
 {-# LANGUAGE CPP #-}
+
 module Reflex.Dom.Internal
   ( module Main
   , run
   , mainWidget
-  , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
-  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  , mainWidgetWithHead
+  , mainWidgetWithCss
+  , mainWidgetWithHead'
+  , mainWidgetInElementById
+  , runApp'
+  , mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
   ) where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Reflex.Dom.Main as Main hiding
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
+  ( mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
+  , mainWidget
+  , mainWidgetInElementById
+  , mainWidgetWithCss
+  , mainWidgetWithHead
+  , mainWidgetWithHead'
+  , runApp'
+  )
 import qualified Reflex.Dom.Main as Main
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
+  ( mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
+  , mainWidget
+  , mainWidgetInElementById
+  , mainWidgetWithCss
+  , mainWidgetWithHead
+  , mainWidgetWithHead'
+  , runApp'
+  )
 
 #if defined(ghcjs_HOST_OS)
 run :: a -> a

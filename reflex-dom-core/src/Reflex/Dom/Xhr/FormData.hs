@@ -4,42 +4,54 @@ module Reflex.Dom.Xhr.FormData
   , FormValue (..)
   , fileToFormValue
   )
-  where
+where
 
 import Control.Lens
 import Data.Default
 import Data.Map (Map)
 import Data.Text (Text)
 import Data.Traversable
-import qualified GHCJS.DOM.FormData as FD
 import GHCJS.DOM.File (getName)
+import qualified GHCJS.DOM.FormData as FD
 import GHCJS.DOM.Types (File, IsBlob)
 import Language.Javascript.JSaddle.Monad (MonadJSM, liftJSM)
 import Reflex
+
 import Reflex.Dom.Xhr
 
 -- | A FormData value may be a blob/file or a string. The file can optionally be provided with filename.
-data FormValue blob = FormValue_Text Text
-                    | FormValue_File blob (Maybe Text) -- maybe filename
+data FormValue blob
+  = FormValue_Text Text
+  | FormValue_File blob (Maybe Text) -- maybe filename
 
 -- | Performs a POST request with the provided FormData payload
 postForms
-  :: ( IsBlob blob, MonadJSM (Performable m)
-     , PerformEvent t m, TriggerEvent t m
-     , Traversable f)
-  => Text -- ^ The target url
-  -> Event t (f (Map Text (FormValue blob))) -- ^ Maps of text keys and values that will be sent as "FormData"
+  :: ( IsBlob blob
+     , MonadJSM (Performable m)
+     , PerformEvent t m
+     , TriggerEvent t m
+     , Traversable f
+     )
+  => Text
+  -- ^ The target url
+  -> Event t (f (Map Text (FormValue blob)))
+  -- ^ Maps of text keys and values that will be sent as "FormData"
   -> m (Event t (f XhrResponse))
 postForms t = postForms' t def
 
 -- | Like 'postForms' but doesn't use a default 'XhrRequestConfig', so a custom one can be provided.
 postForms'
-  :: ( IsBlob blob, MonadJSM (Performable m)
-     , PerformEvent t m, TriggerEvent t m
-     , Traversable f)
-  => Text -- ^ The target url
+  :: ( IsBlob blob
+     , MonadJSM (Performable m)
+     , PerformEvent t m
+     , TriggerEvent t m
+     , Traversable f
+     )
+  => Text
+  -- ^ The target url
   -> XhrRequestConfig a
-  -> Event t (f (Map Text (FormValue blob))) -- ^ Maps of text keys and values that will be sent as "FormData"
+  -> Event t (f (Map Text (FormValue blob)))
+  -- ^ Maps of text keys and values that will be sent as "FormData"
   -> m (Event t (f XhrResponse))
 postForms' url cfg payload = do
   performMkRequestsAsync $ ffor payload $ \fs -> for fs $ \u -> liftJSM $ do

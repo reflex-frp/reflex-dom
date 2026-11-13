@@ -9,25 +9,25 @@ module Reflex.Dom.WebSocket.Foreign
   , JSVal
   ) where
 
-import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
-
 import Control.Lens ((^.))
 import Data.Bifoldable
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import Data.Text.Encoding
-import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.CloseEvent
 import GHCJS.DOM.MessageEvent
-import GHCJS.DOM.Types (JSM, JSVal, liftJSM, fromJSValUnchecked, WebSocket(..))
+import GHCJS.DOM.Types (JSM, JSVal, WebSocket (..), fromJSValUnchecked, liftJSM)
 import qualified GHCJS.DOM.WebSocket as DOM
-import GHCJS.Foreign (JSType(..), jsTypeOf)
-import Language.Javascript.JSaddle (fun, new, jsg, js2, jss)
+import GHCJS.Foreign (JSType (..), jsTypeOf)
+import Language.Javascript.JSaddle (fun, js2, jsg, jss, new)
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
 import Language.Javascript.JSaddle.Types (ghcjsPure)
+import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
 
-newtype JSWebSocket = JSWebSocket { unWebSocket :: WebSocket }
+import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
+
+newtype JSWebSocket = JSWebSocket {unWebSocket :: WebSocket}
 
 class IsWebSocketMessage a where
   webSocketSend :: JSWebSocket -> a -> JSM ()
@@ -65,7 +65,7 @@ newWebSocket url protocols onMessage onOpen onError onClose = do
       onErrorWrapped = fun $ \_ _ _ -> onError
       onCloseWrapped = fun $ \_ _ -> \case
         [] -> pure ()
-        e:_ -> do
+        e : _ -> do
           let e' = CloseEvent e
           wasClean <- getWasClean e'
           code <- getCode e'
@@ -73,14 +73,15 @@ newWebSocket url protocols onMessage onOpen onError onClose = do
           liftJSM $ onClose (wasClean, code, reason)
       onMessageWrapped = fun $ \_ _ -> \case
         [] -> pure ()
-        e:_ -> do
+        e : _ -> do
           let e' = MessageEvent e
           d <- getData e'
-          liftJSM $ ghcjsPure (jsTypeOf d) >>= \case
-            String -> onMessage $ Right d
-            _ -> do
-              ab <- mutableArrayBufferFromJSVal d
-              bsFromMutableArrayBuffer ab >>= onMessage . Left
+          liftJSM $
+            ghcjsPure (jsTypeOf d) >>= \case
+              String -> onMessage $ Right d
+              _ -> do
+                ab <- mutableArrayBufferFromJSVal d
+                bsFromMutableArrayBuffer ab >>= onMessage . Left
       addEventListener = "addEventListener" :: String
   ws <- new (jsg ("WebSocket" :: String)) (url, protocols)
   ws ^. jss ("binaryType" :: String) ("arraybuffer" :: String)

@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | Utilities for testing reflex-dom widgets with Selenium.
@@ -10,40 +9,42 @@
 module Reflex.Dom.Test.Selenium
   ( TestWidget
   , TestWidgetConfig (..)
-  , testWidget, testWidget', testWidgetStatic, testWidgetHydrated
+  , testWidget
+  , testWidget'
+  , testWidgetStatic
+  , testWidgetHydrated
   , withSeleniumSpec
   , embedSpec
   , SeleniumSetupConfig (..)
   ) where
 
-import Control.Concurrent (threadDelay, newEmptyMVar, takeMVar, putMVar)
+import Control.Concurrent (newEmptyMVar, putMVar, takeMVar, threadDelay)
+import qualified Control.Concurrent.Async as Async
 import Control.Exception (throwIO)
 import Control.Monad (when)
 import Control.Monad.Catch (MonadMask, handle)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Socket (PortNumber)
 import Network.Wai (responseLBS)
+import qualified Network.Wai.Handler.Warp as Warp
 import Network.WebSockets (defaultConnectionOptions)
 import Reflex.Dom.Core
 import System.IO (stderr)
 import System.IO.Silently (hSilence)
-import System.Process (std_in, std_out, std_err, createProcess, proc, StdStream (..), terminateProcess)
+import System.Process (StdStream (..), createProcess, proc, std_err, std_in, std_out, terminateProcess)
+import qualified Test.Hspec.Core.Spec as Hspec
 import Test.Hspec.WebDriver (Spec, SpecWith, WdTestSession, sessionWith, using)
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 import Test.WebDriver (WD)
-
-import qualified Control.Concurrent.Async as Async
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Test.Hspec.Core.Spec as Hspec
 import qualified Test.WebDriver as WD
 import qualified Test.WebDriver.Capabilities as WD
 
@@ -73,17 +74,19 @@ withSeleniumSpec config runSpec = do
     withSeleniumServer (_seleniumSetupConfig_seleniumPort config) $ do
       let browserPath = T.strip $ T.pack $ _seleniumSetupConfig_chromiumPath config
       when (T.null browserPath) $ fail "No browser found"
-      let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _seleniumSetupConfig_seleniumPort config }
+      let wdConfig = WD.defaultConfig {WD.wdPort = fromIntegral $ _seleniumSetupConfig_seleniumPort config}
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
       runSpec $ sessionWith wdConfig "" . using [(chromeCaps', "chrome")]
 
 startSeleniumServer :: PortNumber -> IO (IO ())
 startSeleniumServer port = do
-  (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
-    { std_in = NoStream
-    , std_out = NoStream
-    , std_err = NoStream
-    }
+  (_, _, _, ph) <-
+    createProcess $
+      (proc "selenium-server" ["-port", show port])
+        { std_in = NoStream
+        , std_out = NoStream
+        , std_err = NoStream
+        }
   return $ terminateProcess ph
 
 withSeleniumServer :: PortNumber -> IO a -> IO a
@@ -94,7 +97,7 @@ withSeleniumServer port f = bracket (startSeleniumServer port) id $ \_ -> do
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags =
   WD.useBrowser
-    (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags })
+    (WD.chrome {WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags})
     WD.defaultConfig
 
 --------------------------------------------------------------------------------
@@ -103,9 +106,16 @@ chromeConfig fp flags =
 
 -- | The environment in which your widgets can be tested
 type TestWidget t m =
-  (DomBuilder t m, MonadHold t m, PostBuild t m
-  , Prerender t m, PerformEvent t m, TriggerEvent t m
-  , MonadFix m, MonadIO (Performable m), MonadIO m)
+  ( DomBuilder t m
+  , MonadHold t m
+  , PostBuild t m
+  , Prerender t m
+  , PerformEvent t m
+  , TriggerEvent t m
+  , MonadFix m
+  , MonadIO (Performable m)
+  , MonadIO m
+  )
 
 -- | Configuration of individual tests
 data TestWidgetConfig = TestWidgetConfig
@@ -147,7 +157,7 @@ testWidgetHydrated
   :: TestWidgetConfig
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m . TestWidget (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidgetHydrated cfg after widget = testWidget' cfg (pure ()) (const after) widget
@@ -196,13 +206,16 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
     putStrLnDebug "sent response"
     return r
   waitJSaddle <- liftIO newEmptyMVar
-  let settings = foldr ($) Warp.defaultSettings
-        [ Warp.setPort $ fromIntegral $ toInteger jsaddlePort
-        , Warp.setBeforeMainLoop $ do
-            putStrLnDebug "putting waitJSaddle"
-            putMVar waitJSaddle ()
-            putStrLnDebug "put waitJSaddle"
-        ]
+  let settings =
+        foldr
+          ($)
+          Warp.defaultSettings
+          [ Warp.setPort $ fromIntegral $ toInteger jsaddlePort
+          , Warp.setBeforeMainLoop $ do
+              putStrLnDebug "putting waitJSaddle"
+              putMVar waitJSaddle ()
+              putStrLnDebug "put waitJSaddle"
+          ]
       -- hSilence to get rid of ConnectionClosed logs
       silenceIfNotDebugging = if withDebugging then id else hSilence [stderr]
       jsaddleWarp = silenceIfNotDebugging $ Warp.runSettings settings application
@@ -227,18 +240,20 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
 -- | Embed a different spec type by evaluating it directly.
 embedSpec :: (Hspec.Example a, MonadIO m) => Hspec.Arg a -> a -> m ()
 embedSpec arg spec = liftIO $ do
-  Hspec.Result _info status <- Hspec.evaluateExample
-    spec
-    Hspec.defaultParams
-    (\actionWith -> actionWith arg)
-    (\_ -> pure ())
+  Hspec.Result _info status <-
+    Hspec.evaluateExample
+      spec
+      Hspec.defaultParams
+      (\actionWith -> actionWith arg)
+      (\_ -> pure ())
   case status of
     Hspec.Success -> pure ()
     Hspec.Pending _ _ -> pure () -- should not happen
     failure -> throwIO failure
 
 withAsync' :: (MonadIO m, MonadMask m) => IO a -> m b -> m b
-withAsync' f g = bracket
-  (liftIO $ Async.async f)
-  (liftIO . Async.uninterruptibleCancel)
-  (const g)
+withAsync' f g =
+  bracket
+    (liftIO $ Async.async f)
+    (liftIO . Async.uninterruptibleCancel)
+    (const g)
