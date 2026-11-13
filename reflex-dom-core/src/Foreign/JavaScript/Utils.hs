@@ -54,4 +54,4 @@ jsonDecode = decode . LBS.fromStrict . encodeUtf8 . textFromJSString
 #endif
 
 js_jsonParse :: JSString -> JSM JSVal
-js_jsonParse a = jsg "JSON" ^. js1 "parse" a
+js_jsonParse a = jsg ("JSON" :: String) ^. js1 ("parse" :: String) a

@@ -56,8 +56,9 @@ import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
 import Data.Coerce (coerce)
+import qualified Data.Kind as Kind
 
-newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
+newtype WithJSContextSingleton x m a = WithJSContextSingleton { unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a } deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadTrans, MonadException, MonadAsyncException)
 
 instance PrimMonad m => PrimMonad (WithJSContextSingleton x m) where
   type PrimState (WithJSContextSingleton x m) = PrimState m
@@ -136,7 +137,7 @@ withJSContextSingletonMono :: MonadJSM m => (JSContextSingleton () -> m r) -> m 
 withJSContextSingletonMono f = askJSM >>= f . JSContextSingleton
 
 -- | A singleton type for a given JSContext; we use this to statically guarantee that different JSContexts don't get mixed up
-newtype JSContextSingleton x = JSContextSingleton { unJSContextSingleton :: JSContextRef }
+newtype JSContextSingleton (x :: Kind.Type) = JSContextSingleton { unJSContextSingleton :: JSContextRef }
 
 #ifndef ghcjs_HOST_OS
 instance MonadIO m => MonadJSM (WithJSContextSingleton x m) where

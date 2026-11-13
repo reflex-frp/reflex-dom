@@ -172,7 +172,7 @@ data XhrRequest a
                 , _xhrRequest_url :: Text
                 , _xhrRequest_config :: XhrRequestConfig a
                 }
-   deriving (Show, Read, Eq, Ord, Functor)
+   deriving stock (Show, Read, Eq, Ord, Functor)
 
 data XhrRequestConfig a
    = XhrRequestConfig { _xhrRequestConfig_headers :: Map Text Text
@@ -183,7 +183,7 @@ data XhrRequestConfig a
                       , _xhrRequestConfig_withCredentials :: Bool
                       , _xhrRequestConfig_responseHeaders :: XhrResponseHeaders
                       }
-   deriving (Show, Read, Eq, Ord, Functor)
+   deriving stock (Show, Read, Eq, Ord, Functor)
 
 data XhrResponse
    = XhrResponse { _xhrResponse_status :: Word
@@ -196,7 +196,7 @@ data XhrResponse
 data XhrResponseHeaders =
     OnlyHeaders (Set.Set (CI Text)) -- ^ Parse a subset of headers from the XHR Response
   | AllHeaders -- ^ Parse all headers from the XHR Response
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Show, Read, Eq, Ord)
 
 instance Default XhrResponseHeaders where
   def = OnlyHeaders mempty

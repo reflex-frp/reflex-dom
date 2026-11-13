@@ -8,8 +8,8 @@ if os(linux) && arch(x86_64)
     reflex-dom-test-selenium/
 
 if os(linux) || os(osx)
-   tests: true
-   benchmarks: true
+   tests: True
+   benchmarks: True
 
 package reflex-dom
   flags: +build-examples
@@ -47,3 +47,13 @@ if impl(ghc == 9.14.*)
     , template-haskell < 2.25
     , ghc-experimental < 9.1500
     , ghc-internal < 9.1500
+  allow-newer: *:*
+  -- prim-uniq 0.2 predates the EqP/OrdP superclasses of some 1.1;
+  -- reflex 0.9.4.1 predates the class hierarchy of semialign 1.4
+  -- time 1.14 passes an integer clock id where wasi-libc takes a pointer
+  -- hspec-webdriver 1.2.2 imports the Test.WebDriver.Config that webdriver 0.13 removed
+  constraints:
+      some < 1.1
+    , semialign < 1.4
+    , time >= 1.15
+    , webdriver < 0.13

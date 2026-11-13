@@ -20,15 +20,15 @@ import Reflex.Host.Class
 -- 'textAreaElement's, and 'selectElement's by adding the "disabled" HTML
 -- attribute.  Note that 'element's that happen to have "input", "textarea", or
 -- "select" as their tag will NOT be disabled.
-newtype InputDisabledT m a = InputDisabledT { runInputDisabledT :: m a } deriving (Functor, Applicative, Monad, MonadAtomicRef, MonadFix, MonadIO)
+newtype InputDisabledT m a = InputDisabledT { runInputDisabledT :: m a } deriving newtype (Functor, Applicative, Monad, MonadAtomicRef, MonadFix, MonadIO)
 
 #ifndef ghcjs_HOST_OS
 instance MonadJSM m => MonadJSM (InputDisabledT m) where
     liftJSM' = InputDisabledT . liftJSM'
 #endif
 
-deriving instance MonadSample t m => MonadSample t (InputDisabledT m)
-deriving instance MonadHold t m => MonadHold t (InputDisabledT m)
+deriving newtype instance MonadSample t m => MonadSample t (InputDisabledT m)
+deriving newtype instance MonadHold t m => MonadHold t (InputDisabledT m)
 
 instance MonadTrans InputDisabledT where
   lift = InputDisabledT
@@ -62,7 +62,7 @@ disableElementConfig cfg = cfg
 instance PostBuild t m => PostBuild t (InputDisabledT m) where
   getPostBuild = lift getPostBuild
 
-deriving instance TriggerEvent t m => TriggerEvent t (InputDisabledT m)
+deriving newtype instance TriggerEvent t m => TriggerEvent t (InputDisabledT m)
 
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (InputDisabledT m) where
   newEventWithTrigger = lift . newEventWithTrigger

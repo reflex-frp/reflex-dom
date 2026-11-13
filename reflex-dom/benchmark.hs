@@ -70,9 +70,9 @@ type RNG = StdGen
 type Entropy     = Int
 type RowPosition = Int
 type RowNumber   = Int
-data Row   = Row { pos :: RowPosition, num :: RowNumber , txt :: Text } deriving (Eq, Show)
+data Row   = Row { pos :: RowPosition, num :: RowNumber , txt :: Text } deriving stock (Eq, Show)
 type Table = Map RowPosition Row
-data Model = Model { rng :: RNG, table :: Table, nextNum :: RowNumber, selected :: Maybe Row } deriving Show
+data Model = Model { rng :: RNG, table :: Table, nextNum :: RowNumber, selected :: Maybe Row } deriving stock Show
 
 {- Widgets -}
 

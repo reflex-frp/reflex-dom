@@ -1,4 +1,4 @@
-{ nix-haskell-patches, ... }:
+{ pkgs, nix-haskell-patches, ... }:
 
 {
   imports = [
@@ -48,6 +48,11 @@
       # Haskell package set cannot resolve when splitmix is built from source.
       # The suite is behind a manual flag and never built.
       (_: _: { testu01 = null; })
+
+      # The browser suites need chromium and selenium, and a HOME chromium can write to.
+      (_: super: {
+        reflex-dom-core = import ./reflex-dom-test-selenium/add-overrides.nix { nixpkgs = pkgs; } super.reflex-dom-core;
+      })
     ];
 
     # This driver has no wasm compiler of its own worth building against,

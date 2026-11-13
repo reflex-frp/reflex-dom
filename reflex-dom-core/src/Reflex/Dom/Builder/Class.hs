@@ -187,7 +187,7 @@ newtype CommentNode d t = CommentNode
   { _commentNode_raw :: RawCommentNode d
   }
 
-data AttributeName = AttributeName !(Maybe Namespace) !Text deriving (Show, Read, Eq, Ord)
+data AttributeName = AttributeName !(Maybe Namespace) !Text deriving stock (Show, Read, Eq, Ord)
 
 mapKeysToAttributeName :: Map Text v -> Map AttributeName v
 mapKeysToAttributeName = Map.mapKeysMonotonic (AttributeName Nothing)
@@ -200,7 +200,7 @@ data Propagation
    = Propagation_Continue
    | Propagation_Stop
    | Propagation_StopImmediate
-   deriving (Show, Read, Eq, Ord)
+   deriving stock (Show, Read, Eq, Ord)
 
 instance Semigroup Propagation where
   {-# INLINABLE (<>) #-}
@@ -538,7 +538,7 @@ instance (MountableDomBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) 
   buildDomFragment = liftThrough buildDomFragment
   mountDomFragment f0 f' = lift $ mountDomFragment f0 f'
 
-instance (DomBuilder t m, MonadFix m, Monoid w, MonadHold t m) => DomBuilder t (DynamicWriterT t w m) where
+instance (DomBuilder t m, Monoid w, MonadHold t m) => DomBuilder t (DynamicWriterT t w m) where
   type DomBuilderSpace (DynamicWriterT t w m) = DomBuilderSpace m
   textNode = liftTextNode
   commentNode = liftCommentNode
@@ -695,12 +695,12 @@ instance DomRenderHook t m => DomRenderHook t (Lazy.StateT e m) where
   requestDomAction = lift . requestDomAction
   requestDomAction_ = lift . requestDomAction_
 
-deriving instance DomRenderHook t m => DomRenderHook t (BehaviorWriterT t w m)
-deriving instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
-deriving instance DomRenderHook t m => DomRenderHook t (DynamicWriterT t w m)
-deriving instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
-deriving instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
-deriving instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (BehaviorWriterT t w m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (EventWriterT t w m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (DynamicWriterT t w m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (RequesterT t req rsp m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (PostBuildT t m)
+deriving newtype instance DomRenderHook t m => DomRenderHook t (QueryT t q m)
 
 {-# DEPRECATED liftElementConfig "Use 'id' instead; this function is no longer necessary" #-}
 liftElementConfig :: ElementConfig er t s -> ElementConfig er t s

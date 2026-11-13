@@ -118,7 +118,7 @@ instance (Adjustable t m, PrerenderBaseConstraints t m, ReflexHost t) => Prerend
     holdDyn a0 a'
 
 newtype UnrunnableT t m a = UnrunnableT (ReaderT Void m a)
-  deriving (Functor, Applicative, Monad, MonadTrans)
+  deriving newtype (Functor, Applicative, Monad, MonadTrans)
 
 unrunnable :: UnrunnableT t m a
 unrunnable = UnrunnableT $ ReaderT $ \case {}
@@ -205,7 +205,7 @@ instance (Prerender t m, Monad m) => Prerender t (ReaderT r m) where
     r <- ask
     lift $ prerender (runReaderT server r) (runReaderT client r)
 
-instance (Prerender t m, Monad m, MonadFix m, Reflex t, Monoid w) => Prerender t (DynamicWriterT t w m) where
+instance (Prerender t m, Monad m, Reflex t, Monoid w) => Prerender t (DynamicWriterT t w m) where
   type Client (DynamicWriterT t w m) = DynamicWriterT t w (Client m)
   prerender server client = do
     x <- lift $ prerender (runDynamicWriterT server) (runDynamicWriterT client)

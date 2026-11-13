@@ -14,9 +14,9 @@ type RNG = StdGen
 type Entropy   = Int
 type RowNumber = Int
 type RowIndex  = Int
-data Row   = Row { num :: RowNumber, txt :: Text, selected :: Bool } deriving (Eq, Show)
+data Row   = Row { num :: RowNumber, txt :: Text, selected :: Bool } deriving stock (Eq, Show)
 type Table = IntMap Row
-data Model = Model { rng :: RNG, nextNum :: RowNumber, selection :: Maybe Row } deriving Show
+data Model = Model { rng :: RNG, nextNum :: RowNumber, selection :: Maybe Row } deriving stock Show
 type TableDiff = PatchIntMap Row
 
 main :: IO ()

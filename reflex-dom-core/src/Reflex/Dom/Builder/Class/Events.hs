@@ -158,14 +158,14 @@ type family EventResultType (en :: EventTag) :: Type where
   EventResultType 'WheelTag = WheelEventResult
 
 data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
-  deriving (Show, Read, Eq, Ord, Bounded, Enum)
+  deriving stock (Show, Read, Eq, Ord, Bounded, Enum)
 
 data WheelEventResult = WheelEventResult
   { _wheelEventResult_deltaX :: Double
   , _wheelEventResult_deltaY :: Double
   , _wheelEventResult_deltaZ :: Double
   , _wheelEventResult_deltaMode :: DeltaMode
-  } deriving (Show, Read, Eq, Ord)
+  } deriving stock (Show, Read, Eq, Ord)
 
 data TouchEventResult = TouchEventResult
   { _touchEventResult_altKey :: Bool
@@ -176,7 +176,7 @@ data TouchEventResult = TouchEventResult
   , _touchEventResult_targetTouches :: [TouchResult]
   , _touchEventResult_touches :: [TouchResult]
   }
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Show, Read, Eq, Ord)
 
 data TouchResult = TouchResult
   { _touchResult_identifier :: Word
@@ -187,7 +187,7 @@ data TouchResult = TouchResult
   , _touchResult_pageX :: Int
   , _touchResult_pageY :: Int
   }
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Show, Read, Eq, Ord)
 
 #ifdef USE_TEMPLATE_HASKELL
 deriveGEq ''EventName

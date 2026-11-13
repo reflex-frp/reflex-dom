@@ -9,7 +9,7 @@ data XhrResponseType
   | XhrResponseType_ArrayBuffer
   | XhrResponseType_Blob
   | XhrResponseType_Text
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Show, Read, Eq, Ord)
 
 data XhrResponseBody
   = XhrResponseBody_Default Text

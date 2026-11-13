@@ -48,7 +48,7 @@ import qualified Test.WebDriver as WD
 import qualified Test.WebDriver.Capabilities as WD
 
 #if !MIN_VERSION_webdriver(0,10,0)
-deriving instance MonadMask WD
+deriving newtype instance MonadMask WD
 #endif
 
 data SeleniumSetupConfig = SeleniumSetupConfig

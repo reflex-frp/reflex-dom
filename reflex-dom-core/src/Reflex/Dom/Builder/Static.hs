@@ -57,7 +57,7 @@ data StaticDomBuilderEnv t = StaticDomBuilderEnv
 newtype StaticDomBuilderT t m a = StaticDomBuilderT
     { unStaticDomBuilderT :: ReaderT (StaticDomBuilderEnv t) (StateT [Behavior t Builder] m) a -- Accumulated Html will be in reversed order
     }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
+  deriving newtype (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)
 
 instance PrimMonad m => PrimMonad (StaticDomBuilderT x m) where
   type PrimState (StaticDomBuilderT x m) = PrimState m
@@ -131,7 +131,7 @@ data StaticDomEvent (a :: k)
 -- | Static documents don't process events, so all handlers are equivalent
 data StaticDomHandler (a :: k) (b :: k) = StaticDomHandler
 
-data StaticEventSpec (er :: EventTag -> Type) = StaticEventSpec deriving (Generic)
+data StaticEventSpec (er :: EventTag -> Type) = StaticEventSpec deriving stock (Generic)
 
 instance Default (StaticEventSpec er)
 

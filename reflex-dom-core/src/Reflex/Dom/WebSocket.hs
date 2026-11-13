@@ -92,7 +92,7 @@ webSocket' url config onRawMessage = do
     mws <- liftIO $ readIORef currentSocketRef
     case mws of
       Nothing -> return ()
-      Just ws -> closeWebSocket ws (fromIntegral code) reason
+      Just ws -> closeWebSocket ws code reason
 
   ctx <- askJSM
   _ <- liftIO $ forkIO $ forever $ do

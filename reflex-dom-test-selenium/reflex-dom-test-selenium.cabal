@@ -27,6 +27,7 @@ common common
     DeriveFunctor
     DeriveGeneric
     DeriveTraversable
+    DerivingStrategies
     EmptyCase
     EmptyDataDecls
     ExistentialQuantification
@@ -56,6 +57,11 @@ common common
 
   if flag(strict)
     ghc-options:  -Werror
+
+  -- GHC's wasm Template Haskell loader cannot load liblibdl.so, and says
+  -- that is harmless
+  if arch(wasm32)
+    ghc-options:  -Wno-error=missed-extra-shared-lib
 
   ghc-options:    -O2
                   -fexpose-all-unfoldings
@@ -106,7 +112,7 @@ library
     text >= 1.2 && < 2.2,
     wai,
     warp,
-    webdriver,
+    webdriver < 0.13,
     websockets
 
   exposed-modules:

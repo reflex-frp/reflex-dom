@@ -66,6 +66,7 @@ common common
     DeriveFunctor
     DeriveGeneric
     DeriveTraversable
+    DerivingStrategies
     EmptyCase
     EmptyDataDecls
     ExistentialQuantification
@@ -95,6 +96,11 @@ common common
 
   if flag(strict)
     ghc-options:  -Werror
+
+  -- GHC's wasm Template Haskell loader cannot load liblibdl.so, and says
+  -- that is harmless
+  if arch(wasm32)
+    ghc-options:  -Wno-error=missed-extra-shared-lib
 
   ghc-options:    -O2
                   -fexpose-all-unfoldings
@@ -134,7 +140,8 @@ library
       aeson >= 1.4 && < 2.3,
       android-activity == 0.2.*,
       data-default >= 0.7 && < 0.9,
-      jsaddle >= 0.9.6 && < 0.10
+      jsaddle >= 0.9.6 && < 0.10,
+      reflex >= 0.8 && < 1
     c-sources: cbits/MainWidget.c
     include-dirs: cbits/include
     install-includes: MainWidget.h
@@ -143,7 +150,6 @@ library
   build-depends:
     base >= 4.7 && < 4.23,
     bytestring >= 0.10 && < 0.13,
-    reflex >= 0.8 && < 1,
     reflex-dom-core >= 0.8.1.0 && <0.9,
     text >= 1.2 && < 2.2
   if !(impl(ghcjs) || arch(javascript))

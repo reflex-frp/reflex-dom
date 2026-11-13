@@ -63,26 +63,31 @@ newWebSocket
 newWebSocket url protocols onMessage onOpen onError onClose = do
   let onOpenWrapped = fun $ \_ _ _ -> onOpen
       onErrorWrapped = fun $ \_ _ _ -> onError
-      onCloseWrapped = fun $ \_ _ (e:_) -> do
-        let e' = CloseEvent e
-        wasClean <- getWasClean e'
-        code <- getCode e'
-        reason <- getReason e'
-        liftJSM $ onClose (wasClean, code, reason)
-      onMessageWrapped = fun $ \_ _ (e:_) -> do
-        let e' = MessageEvent e
-        d <- getData e'
-        liftJSM $ ghcjsPure (jsTypeOf d) >>= \case
-          String -> onMessage $ Right d
-          _ -> do
-            ab <- mutableArrayBufferFromJSVal d
-            bsFromMutableArrayBuffer ab >>= onMessage . Left
-  ws <- new (jsg "WebSocket") (url, protocols)
-  ws ^. jss "binaryType" "arraybuffer"
-  _ <- ws ^. js2 "addEventListener" "open" onOpenWrapped
-  _ <- ws ^. js2 "addEventListener" "error" onErrorWrapped
-  _ <- ws ^. js2 "addEventListener" "close" onCloseWrapped
-  _ <- ws ^. js2 "addEventListener" "message" onMessageWrapped
+      onCloseWrapped = fun $ \_ _ -> \case
+        [] -> pure ()
+        e:_ -> do
+          let e' = CloseEvent e
+          wasClean <- getWasClean e'
+          code <- getCode e'
+          reason <- getReason e'
+          liftJSM $ onClose (wasClean, code, reason)
+      onMessageWrapped = fun $ \_ _ -> \case
+        [] -> pure ()
+        e:_ -> do
+          let e' = MessageEvent e
+          d <- getData e'
+          liftJSM $ ghcjsPure (jsTypeOf d) >>= \case
+            String -> onMessage $ Right d
+            _ -> do
+              ab <- mutableArrayBufferFromJSVal d
+              bsFromMutableArrayBuffer ab >>= onMessage . Left
+      addEventListener = "addEventListener" :: String
+  ws <- new (jsg ("WebSocket" :: String)) (url, protocols)
+  ws ^. jss ("binaryType" :: String) ("arraybuffer" :: String)
+  _ <- ws ^. js2 addEventListener ("open" :: String) onOpenWrapped
+  _ <- ws ^. js2 addEventListener ("error" :: String) onErrorWrapped
+  _ <- ws ^. js2 addEventListener ("close" :: String) onCloseWrapped
+  _ <- ws ^. js2 addEventListener ("message" :: String) onMessageWrapped
   return $ JSWebSocket $ WebSocket ws
 
 onBSMessage :: Either ByteString JSVal -> JSM ByteString

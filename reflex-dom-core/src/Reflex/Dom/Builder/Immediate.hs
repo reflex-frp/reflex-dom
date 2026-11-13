@@ -228,7 +228,7 @@ data HydrationDomBuilderEnv t m = HydrationDomBuilderEnv
 -- DOM takeover and sets up the events, after which point this monad will
 -- continue in the vein of 'ImmediateDomBuilderT'.
 newtype HydrationDomBuilderT s t m a = HydrationDomBuilderT { unHydrationDomBuilderT :: ReaderT (HydrationDomBuilderEnv t m) (DomRenderHookT t m) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
+  deriving newtype (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
 #endif
@@ -249,7 +249,7 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (HydrationDomBuilderT s t m) 
 -- | The monad which performs the delayed actions to reuse prerendered nodes and set up events.
 -- State contains reference to the previous node sibling, if any, and the reader contains reference to the parent node.
 newtype HydrationRunnerT t m a = HydrationRunnerT { unHydrationRunnerT :: StateT HydrationState (ReaderT Node (DomRenderHookT t m)) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
+  deriving newtype (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
 #endif
@@ -327,7 +327,7 @@ addHydrationStep m = do
 
 -- | Shared behavior for HydrationDomBuilderT and HydrationRunnerT
 newtype DomRenderHookT t m a = DomRenderHookT { unDomRenderHookT :: RequesterT t JSM Identity (TriggerEventT t m) a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
+  deriving newtype (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException
 #if MIN_VERSION_base(4,9,1)
            , MonadAsyncException
 #endif
@@ -414,7 +414,7 @@ data HydrationMode
   -- ^ The time from initial load to parity with static builder
   | HydrationMode_Immediate
   -- ^ After hydration
-  deriving (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show)
 
 {-# INLINABLE getPreviousNode #-}
 getPreviousNode :: Monad m => HydrationRunnerT t m (Maybe DOM.Node)
@@ -1519,11 +1519,13 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
     appendChild_ parent $ _immediateDomFragment_document fragment
     after <- textNodeImmediate $ TextNodeConfig ("" :: Text) Nothing
     xs <- foldDyn (\new (previous, _) -> (new, Just previous)) (fragment, Nothing) setFragment
-    requestDomAction_ $ ffor (updated xs) $ \(childFragment, Just previousFragment) -> do
-      extractFragment previousFragment
-      extractFragment childFragment
-      insertBefore (_immediateDomFragment_document childFragment) after
-      liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
+    requestDomAction_ $ ffor (updated xs) $ \case
+      (_, Nothing) -> pure ()
+      (childFragment, Just previousFragment) -> do
+        extractFragment previousFragment
+        extractFragment childFragment
+        insertBefore (_immediateDomFragment_document childFragment) after
+        liftIO $ writeIORef (_immediateDomFragment_state childFragment) $ FragmentState_Mounted (before, after)
     liftIO $ writeIORef (_immediateDomFragment_state fragment) $ FragmentState_Mounted (before, after)
 
 instance (Reflex t, Monad m, Adjustable t m, MonadHold t m, MonadFix m) => Adjustable t (DomRenderHookT t m) where
@@ -1800,7 +1802,7 @@ traverseIntMapWithKeyWithAdjust' = do
 data ChildReadyState a
    = ChildReadyState_Ready
    | ChildReadyState_Unready !(Maybe a)
-   deriving (Show, Read, Eq, Ord)
+   deriving stock (Show, Read, Eq, Ord)
 
 insertAfterPreviousNode :: MonadJSM m => DOM.IsNode node => node -> HydrationRunnerT t m ()
 insertAfterPreviousNode node = do
@@ -2072,7 +2074,7 @@ newtype TraverseChildHydration t m = TraverseChildHydration
 data TraverseChild t m k a = TraverseChild
   { _traverseChild_mode :: !(Either (TraverseChildHydration t m) (TraverseChildImmediate k))
   , _traverseChild_result :: !a
-  } deriving Functor
+  } deriving stock Functor
 
 {-# INLINABLE drawChildUpdate #-}
 drawChildUpdate :: MonadJSM m
@@ -2465,7 +2467,7 @@ showEventName en = case en of
 
 --TODO: Get rid of this hack
 -- ElementEventTarget is here to allow us to treat SVG and HTML elements as the same thing; without it, we'll break any existing SVG code.
-newtype ElementEventTarget = ElementEventTarget DOM.Element deriving (DOM.IsGObject, DOM.ToJSVal, DOM.IsSlotable, DOM.IsParentNode, DOM.IsNonDocumentTypeChildNode, DOM.IsChildNode, DOM.IsAnimatable, IsNode, IsElement)
+newtype ElementEventTarget = ElementEventTarget DOM.Element deriving newtype (DOM.IsGObject, DOM.ToJSVal, DOM.IsSlotable, DOM.IsParentNode, DOM.IsNonDocumentTypeChildNode, DOM.IsChildNode, DOM.IsAnimatable, IsNode, IsElement)
 instance DOM.FromJSVal ElementEventTarget where
   fromJSVal = fmap (fmap ElementEventTarget) . DOM.fromJSVal
 instance DOM.IsEventTarget ElementEventTarget

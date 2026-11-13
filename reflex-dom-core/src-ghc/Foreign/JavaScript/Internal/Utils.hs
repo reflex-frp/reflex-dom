@@ -14,4 +14,4 @@ freeRequestAnimationFrameCallback :: RequestAnimationFrameCallback -> JSM ()
 freeRequestAnimationFrameCallback (RequestAnimationFrameCallback (Callback cb)) = freeFunction cb
 
 js_dataView :: Int -> Int -> JSVal -> JSM JSVal
-js_dataView off len ref = new (jsg "DataView") (ref, off, len)
+js_dataView off len ref = new (jsg ("DataView" :: String)) (ref, off, len)

@@ -4,6 +4,6 @@ import Control.Exception (Exception (..))
 
 data XhrException = XhrException_Error
                   | XhrException_Aborted
-     deriving (Show, Read, Eq, Ord)
+     deriving stock (Show, Read, Eq, Ord)
 
 instance Exception XhrException
