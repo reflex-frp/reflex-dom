@@ -14,17 +14,36 @@ if os(linux) || os(osx)
 package reflex-dom
   flags: +build-examples
 
+if !arch(wasm32)
+  package reflex-dom
+    flags: +use-warp -webkit2gtk
+
 -- https://github.com/haskellari/splitmix/pull/73
 -- https://github.com/haskellari/splitmix/pull/75
 source-repository-package
   type: git
   location: https://github.com/alexfmpe/splitmix
   tag: bd53859c0f41d12f16c3f44fee52f5e9aae26243
+  --sha256: 1r3b75axljbnfjcjbpjxc8dqqcrbsz9mhr4fwngqd1is70d9msp0
 
 -- https://github.com/ghcjs/jsaddle/pull/172
+-- Pinned until the package index carries jsaddle-warp 0.9.9.7
 source-repository-package
   type: git
-  location: https://github.com/obsidiansystems/jsaddle.git
-  tag: 2152422657602dc29c89140cebd3d7fae080acf1
+  location: https://github.com/ghcjs/jsaddle.git
+  tag: 8cba4b691f6f75c47d2517c61956ab5de6d9656f
+  --sha256: 1wz99a38zkhbib9j7ripafsklvsmvdnw3r6cim6iic3pcg6ags7y
   subdir: jsaddle-warp
-  post-checkout-command: npm ci --ignore-scripts --prefix jsaddle-warp/node-client
+
+if impl(ghc == 9.14.*)
+  allow-newer:
+      *:base
+    , *:template-haskell
+    , *:ghc-experimental
+    , *:ghc-internal
+    , patch:containers
+  constraints:
+      base < 4.23
+    , template-haskell < 2.25
+    , ghc-experimental < 9.1500
+    , ghc-internal < 9.1500
