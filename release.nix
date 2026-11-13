@@ -128,13 +128,6 @@ let
           chmod -R u+w source
           cd source
 
-          # The sandbox has no network to fetch a source-repository-package
-          # with, and the shell's package database already carries each one.
-          awk '/^source-repository-package/ { skip = 1; next }
-               skip && /^[[:space:]]/ { next }
-               { skip = 0; print }' cabal.project > cabal.project.pinless
-          mv cabal.project.pinless cabal.project
-
           export HOME=$TMPDIR
           export CABAL_CONFIG=$TMPDIR/cabal.config
           echo 'jobs: $ncpus' > $CABAL_CONFIG

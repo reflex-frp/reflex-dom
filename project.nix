@@ -8,6 +8,10 @@
   name = "reflex-dom";
   src = ./.;
 
+  extraCabalProject = [
+    (builtins.readFile ./cabal.project.pins)
+  ];
+
   haskell-nix = {
     options.shell.withHaddock = false;
   };
