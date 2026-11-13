@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 module Reflex.Dom.Xhr.Foreign (
     XMLHttpRequest
   , XMLHttpRequestResponseType(..)

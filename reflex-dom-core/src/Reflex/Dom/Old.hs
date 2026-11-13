@@ -1,17 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE LambdaCase #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeOperators #-}
 module Reflex.Dom.Old
        ( MonadWidget
        , El

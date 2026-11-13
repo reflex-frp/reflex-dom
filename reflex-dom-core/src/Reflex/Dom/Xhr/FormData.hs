@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Reflex.Dom.Xhr.FormData
   ( postForms
   , postForms'

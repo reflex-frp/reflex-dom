@@ -1,11 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeFamilies #-}
 module Reflex.Dom.Builder.Class.Events where
 
 #ifdef USE_TEMPLATE_HASKELL

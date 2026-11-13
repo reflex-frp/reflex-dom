@@ -1,28 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-#if !MIN_VERSION_base(4,9,0)
-{-# LANGUAGE ImpredicativeTypes #-}
-#else
-{-# LANGUAGE Rank2Types #-} -- Implied by ImpredicativeTypes
-#endif
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Dom.Builder.Class
        ( module Reflex.Dom.Builder.Class

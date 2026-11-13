@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
   , bsToArrayBuffer

@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
 #if defined(ANDROID)
 module Reflex.Dom.Location.Platform where
 

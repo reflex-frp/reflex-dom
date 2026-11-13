@@ -1,4 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
 module Reflex.Dom.Class ( module Reflex.Dom.Class
                         , module Foreign.JavaScript.TH
                         , module Web.KeyCode

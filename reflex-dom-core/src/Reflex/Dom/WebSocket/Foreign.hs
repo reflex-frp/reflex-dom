@@ -3,7 +3,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE JavaScriptFFI #-}
 #endif
-{-# LANGUAGE LambdaCase #-}
 
 module Reflex.Dom.WebSocket.Foreign
   ( module Reflex.Dom.WebSocket.Foreign

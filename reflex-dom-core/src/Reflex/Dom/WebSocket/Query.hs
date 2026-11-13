@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecursiveDo #-}
 module Reflex.Dom.WebSocket.Query (cropQueryT, runWebSocketQuery) where
 
 import Data.Default

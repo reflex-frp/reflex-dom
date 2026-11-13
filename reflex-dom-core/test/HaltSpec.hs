@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 import Control.Monad.IO.Class
 import Data.Foldable
 import GHCJS.DOM

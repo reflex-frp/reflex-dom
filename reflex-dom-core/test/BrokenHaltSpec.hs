@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module HaltSpec where
 
 import Control.Monad.IO.Class

@@ -1,10 +1,3 @@
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -ddump-simpl -ddump-rules -ddump-spec -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
 module Main (main) where
 
