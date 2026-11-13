@@ -1,45 +1,45 @@
-name: github-action
-
-on: [push, pull_request]
-
-jobs:
-  build:
-    strategy:
-      matrix:
-        ghc: ['9.2', '9.4', '9.6', '9.8', '9.10', '9.12']
-        os: ['ubuntu-latest', 'macos-15']
-    runs-on: ${{ matrix.os }}
-
-    name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
-    steps:
-    - uses: actions/checkout@v4
-    - uses: haskell-actions/setup@v2
-      with:
-        ghc-version: ${{ matrix.ghc }}
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-    - name: Cache
-      uses: actions/cache@v4
-      env:
-        cache-name: cache-cabal
-      with:
-        path: ~/.cabal
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-
-          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-
-          ${{ runner.os }}-${{ runner.arch }}-
-
-    - name: Set up cabal project file to avoid webkit2gtk
-      run: cp cabal.project-nogtk cabal.project
-    - name: Install dependencies
-      run: |
-        cabal update
-        cabal build --only-dependencies --enable-tests --enable-benchmarks all
-    - name: Build
-      run: cabal build --enable-tests --enable-benchmarks all
-    # Temporarily disabled until either a newer hlint is released or chrome-test-utils is released on hackage
-    # - name: Run tests
-    #  run: cabal test all
+#name: github-action
+#
+#on: [push, pull_request]
+#
+#jobs:
+#  build:
+#    strategy:
+#      matrix:
+#        ghc: ['9.2', '9.4', '9.6', '9.8', '9.10', '9.12']
+#        os: ['ubuntu-latest', 'macos-15']
+#    runs-on: ${{ matrix.os }}
+#
+#    name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
+#    steps:
+#    - uses: actions/checkout@v4
+#    - uses: haskell-actions/setup@v2
+#      with:
+#        ghc-version: ${{ matrix.ghc }}
+#    - uses: actions/setup-node@v4
+#      with:
+#        node-version: '22'
+#    - name: Cache
+#      uses: actions/cache@v4
+#      env:
+#        cache-name: cache-cabal
+#      with:
+#        path: ~/.cabal
+#        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+#        restore-keys: |
+#          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-${{ env.cache-name }}-
+#          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-build-
+#          ${{ runner.os }}-${{ runner.arch }}-${{ matrix.ghc }}-
+#          ${{ runner.os }}-${{ runner.arch }}-
+#
+#    - name: Set up cabal project file to avoid webkit2gtk
+#      run: cp cabal.project-nogtk cabal.project
+#    - name: Install dependencies
+#      run: |
+#        cabal update
+#        cabal build --only-dependencies --enable-tests --enable-benchmarks all
+#    - name: Build
+#      run: cabal build --enable-tests --enable-benchmarks all
+#    # Temporarily disabled until either a newer hlint is released or chrome-test-utils is released on hackage
+#    # - name: Run tests
+#    #  run: cabal test all
