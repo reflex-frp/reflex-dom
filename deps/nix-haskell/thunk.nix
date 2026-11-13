@@ -1,0 +1,34 @@
+# DO NOT HAND-EDIT THIS FILE
+let fetch = { private ? false, fetchSubmodules ? false, branch ? null, owner, repo, rev, sha256, ... }:
+  let hashArgs =
+        if builtins ? convertHash
+        then {
+          narHash = builtins.convertHash {
+            hash = sha256;
+            hashAlgo = "sha256";
+            toHashFormat = "sri";
+          };
+        }
+        else {};
+  in if !fetchSubmodules && !private
+  then builtins.fetchTarball {
+    url = "https://github.com/${owner}/${repo}/archive/${rev}.tar.gz";
+    inherit sha256;
+  }
+  else if builtins ? currentSystem
+  then (import (builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/3aad50c30c826430b0270fcf8264c8c41b005403.tar.gz";
+    sha256 = "0xwqsf08sywd23x0xvw4c4ghq0l28w2ki22h0bdn766i16z9q2gr";
+  }) {}).fetchFromGitHub {
+    inherit owner repo rev sha256 fetchSubmodules private;
+  }
+  else builtins.fetchTree ({
+    type = "git";
+    url = "${if private then "ssh://git@github.com" else "https://github.com"}/${owner}/${repo}.git";
+    inherit rev;
+    submodules = fetchSubmodules;
+    ${if branch == null then null else "ref"} = branch;
+    allRefs = branch == null;
+  } // hashArgs);
+  json = builtins.fromJSON (builtins.readFile ./github.json);
+in fetch json
