@@ -1,4 +1,4 @@
-{ config, lib, nix-haskell-patches, ... }:
+{ nix-haskell-patches, ... }:
 
 {
   imports = [
@@ -13,15 +13,9 @@
   };
 
   nixpkgs = {
-    # Where this driver builds against a compiler newer than the bounds its
-    # package set was written for, the bounds are the problem: 9.14 ships
-    # ghc-experimental 9.1401.0 and template-haskell 2.24, which
-    # jsaddle-wasm and dependent-sum-template exclude. Reading cabal.project
-    # through cabal brings `exact-configuration` with it. Cabal is then told
-    # every dependency and reads no bound. For a driver with no solver, that
-    # amounts to the `allow-newer: *:*` of that same file.
-    options.use-plan =
-      lib.versionAtLeast config.nixpkgs.compiler-version "9.14";
+    # The packages sit in subdirectories, which this driver finds only
+    # through a cabal plan.
+    options.use-plan = true;
 
     packages = {
       # The plan carries the project's structure, not the flag assignments of an
@@ -48,6 +42,13 @@
       reflex-dom-core.enableLibraryProfiling = false;
       reflex-dom.enableLibraryProfiling = false;
     };
+
+    options.overrides = [
+      # splitmix's testu01 test-suite names the testu01 C library, which a
+      # Haskell package set cannot resolve when splitmix is built from source.
+      # The suite is behind a manual flag and never built.
+      (_: _: { testu01 = null; })
+    ];
 
     # This driver has no wasm compiler of its own worth building against,
     # so the matrix gives it a wasm target only through the ghc-wasm-meta
