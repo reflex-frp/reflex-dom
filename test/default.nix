@@ -1,4 +1,7 @@
-{ pkgs ? (import ../dep/reflex-platform {}).nixpkgs }:
+{ system ? builtins.currentSystem
+, inputs ? import ../inputs.nix { inherit system; }
+, pkgs ? inputs.pkgs
+}:
 {
   test-reflex-dom-reexports = pkgs.runCommand "test-reflex-dom-reexports" {} (
     let
