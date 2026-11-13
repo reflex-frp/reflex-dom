@@ -1,9 +1,9 @@
-cabal-version: 1.24
+cabal-version: 2.2
 Name: reflex-dom-test-selenium
 Version: 0.0.0.1
 Synopsis: Testing framework for selenium tests
 Description:
-License: BSD3
+License: BSD-3-Clause
 License-file: LICENSE
 Author: Ryan Trinkle
 Maintainer: ryan.trinkle@gmail.com
@@ -11,7 +11,89 @@ Stability: Experimental
 Category: FRP, Web, GUI, HTML, Javascript, Reactive, Reactivity, User Interfaces, User-interface
 Build-type: Simple
 
+flag strict
+  description: Build with options, such as -Werror, which are inconvenient for development but good for CI
+  default: False
+  manual: True
+
+common common
+  default-extensions:
+    AllowAmbiguousTypes
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveDataTypeable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    DerivingStrategies
+    EmptyCase
+    EmptyDataDecls
+    ExistentialQuantification
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    MultiParamTypeClasses
+    NoMonomorphismRestriction
+    OverloadedStrings
+    PatternGuards
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    RecursiveDo
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    UndecidableSuperClasses
+    ViewPatterns
+
+  if flag(strict)
+    ghc-options:  -Werror
+
+  -- GHC's wasm Template Haskell loader cannot load liblibdl.so, and says
+  -- that is harmless
+  if arch(wasm32)
+    ghc-options:  -Wno-error=missed-extra-shared-lib
+
+  ghc-options:    -O2
+                  -fexpose-all-unfoldings
+                  -fspecialise
+                  -fspecialise-aggressively
+                  -flate-specialise
+                  -fcross-module-specialise
+
+  if !(arch(wasm32))
+    ghc-options:  -threaded -rtsopts -with-rtsopts=-N
+
+  ghc-options:    -Wall
+                  -fno-show-valid-hole-fits
+                  -Wno-type-defaults
+                  -Wno-partial-type-signatures
+                  -Wincomplete-record-updates -Werror=incomplete-record-updates
+                  -Wincomplete-patterns -Werror=incomplete-patterns
+                  -Wincomplete-uni-patterns -Werror=incomplete-uni-patterns
+                  -Wpartial-fields -Werror=partial-fields
+                  -Wmissing-fields -Werror=missing-fields
+                  -Widentities
+                  -Wredundant-constraints
+                  -Wunused-packages
+
+  if impl(ghc >= 8.8)
+    ghc-options:
+                  -Wmissing-deriving-strategies
+                  -Werror=missing-deriving-strategies
+
 library
+  import: common
   hs-source-dirs: src
   build-depends:
     async,
@@ -28,10 +110,10 @@ library
     process,
     reflex-dom-core,
     silently,
-    text >= 1.2 && < 2.2,
+    text >= 2.0 && < 2.2,
     wai,
     warp,
-    webdriver,
+    webdriver < 0.13,
     websockets
 
   exposed-modules:

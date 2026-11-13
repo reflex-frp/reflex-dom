@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+
 module Foreign.JavaScript.Utils
   ( bsFromMutableArrayBuffer
   , bsToArrayBuffer
@@ -10,38 +10,42 @@ module Foreign.JavaScript.Utils
 import Control.Lens
 import Data.Aeson
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import Foreign.JavaScript.Internal.Utils (js_dataView)
-import qualified GHCJS.Buffer as JS
+import Data.ByteString qualified as BS
+import GHCJS.Buffer qualified as JS
 import GHCJS.DOM.Types (ArrayBuffer (..))
 import GHCJS.Marshal ()
-import Language.Javascript.JSaddle (jsg, js1)
-import qualified JavaScript.TypedArray.ArrayBuffer as JS
-import Language.Javascript.JSaddle.Types (JSString, JSM, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
+import JavaScript.TypedArray.ArrayBuffer qualified as JS
+import Language.Javascript.JSaddle.Types (JSM, JSString, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
+
+import Foreign.JavaScript.Internal.Utils (js_dataView)
 #ifdef ghcjs_HOST_OS
 import Control.Exception (SomeException)
-import Language.Javascript.JSaddle (fromJSVal, catch)
+import Language.Javascript.JSaddle (catch, fromJSVal, js1, jsg)
 import System.IO.Unsafe
 #else
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text.Encoding
-import Language.Javascript.JSaddle (textFromJSString)
+import Language.Javascript.JSaddle (js1, jsg, textFromJSString)
 #endif
 
-{-# INLINABLE bsFromMutableArrayBuffer #-}
+{-# INLINEABLE bsFromMutableArrayBuffer #-}
 bsFromMutableArrayBuffer :: MonadJSM m => JS.MutableArrayBuffer -> m ByteString
-bsFromMutableArrayBuffer ab = liftJSM $ JS.unsafeFreeze ab >>=
-    ghcjsPure . JS.createFromArrayBuffer >>= ghcjsPure . JS.toByteString 0 Nothing
+bsFromMutableArrayBuffer ab =
+  liftJSM $
+    JS.unsafeFreeze ab
+      >>= ghcjsPure . JS.createFromArrayBuffer
+      >>= ghcjsPure . JS.toByteString 0 Nothing
 
-{-# INLINABLE bsToArrayBuffer #-}
+{-# INLINEABLE bsToArrayBuffer #-}
 bsToArrayBuffer :: MonadJSM m => ByteString -> m ArrayBuffer
 bsToArrayBuffer bs = liftJSM $ do
   (b, off, len) <- ghcjsPure $ JS.fromByteString bs
-  ArrayBuffer <$> if BS.length bs == 0 --TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
-                  then JS.create 0 >>= ghcjsPure . JS.getArrayBuffer >>= ghcjsPure . jsval
-                  else do
-                    ref <- ghcjsPure (JS.getArrayBuffer b) >>= ghcjsPure . jsval
-                    js_dataView off len ref
+  ArrayBuffer
+    <$> if BS.length bs == 0 -- TODO: remove this logic when https://github.com/ghcjs/ghcjs-base/issues/49 is fixed
+      then JS.create 0 >>= ghcjsPure . JS.getArrayBuffer >>= ghcjsPure . jsval
+      else do
+        ref <- ghcjsPure (JS.getArrayBuffer b) >>= ghcjsPure . jsval
+        js_dataView off len ref
 
 jsonDecode :: FromJSON a => JSString -> Maybe a
 #ifdef ghcjs_HOST_OS
@@ -55,4 +59,4 @@ jsonDecode = decode . LBS.fromStrict . encodeUtf8 . textFromJSString
 #endif
 
 js_jsonParse :: JSString -> JSM JSVal
-js_jsonParse a = jsg "JSON" ^. js1 "parse" a
+js_jsonParse a = jsg ("JSON" :: String) ^. js1 ("parse" :: String) a

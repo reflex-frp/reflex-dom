@@ -1,39 +1,10 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Reflex.Dom.WebSocket
   ( module Reflex.Dom.WebSocket
   , jsonDecode
   ) where
-
-import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
-
-import Reflex.Class
-import Reflex.Dom.WebSocket.Foreign
-import Reflex.PerformEvent.Class
-import Reflex.PostBuild.Class
-import Reflex.TriggerEvent.Class
 
 import Control.Concurrent
 import Control.Concurrent.STM
@@ -45,23 +16,32 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
+import Data.Foldable (for_)
 import Data.IORef
 import Data.JSString.Text
 import Data.Maybe (isJust)
 import Data.Text
 import Data.Text.Encoding
-import Foreign.JavaScript.Utils (jsonDecode)
-import GHCJS.DOM.Types (runJSM, askJSM, MonadJSM, liftJSM, JSM)
+import GHCJS.DOM.Types (JSM, MonadJSM, askJSM, liftJSM, runJSM)
 import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+import Language.Javascript.JSaddle.Monad qualified as JS (catch)
+import Reflex.Class
+import Reflex.PerformEvent.Class
+import Reflex.PostBuild.Class
+import Reflex.TriggerEvent.Class
+import Prelude hiding (all, concat, concatMap, div, mapM, mapM_, sequence, span)
+
+import Foreign.JavaScript.Utils (jsonDecode)
+import Reflex.Dom.WebSocket.Foreign
 
 data WebSocketConfig t a
-   = WebSocketConfig { _webSocketConfig_send :: Event t [a]
-                     , _webSocketConfig_close :: Event t (Word, Text)
-                     , _webSocketConfig_reconnect :: Bool
-                     , _webSocketConfig_protocols :: [Text]
-                     }
+  = WebSocketConfig
+  { _webSocketConfig_send :: Event t [a]
+  , _webSocketConfig_close :: Event t (Word, Text)
+  , _webSocketConfig_reconnect :: Bool
+  , _webSocketConfig_protocols :: [Text]
+  }
 
 instance Reflex t => Default (WebSocketConfig t a) where
   def = WebSocketConfig never never True []
@@ -69,16 +49,20 @@ instance Reflex t => Default (WebSocketConfig t a) where
 type WebSocket t = RawWebSocket t ByteString
 
 data RawWebSocket t a
-   = RawWebSocket { _webSocket_recv :: Event t a
-                  , _webSocket_open :: Event t ()
-                  , _webSocket_error :: Event t () -- eror event does not carry any data and is always
-                                                   -- followed by termination of the connection
-                                                   -- for details see the close event
-                  , _webSocket_close :: Event t ( Bool -- wasClean
-                                                , Word -- code
-                                                , Text -- reason
-                                                )
-                  }
+  = RawWebSocket
+  { _webSocket_recv :: Event t a
+  , _webSocket_open :: Event t ()
+  , _webSocket_error :: Event t () -- eror event does not carry any data and is always
+  -- followed by termination of the connection
+  -- for details see the close event
+  , _webSocket_close
+      :: Event
+           t
+           ( Bool -- wasClean
+           , Word -- code
+           , Text -- reason
+           )
+  }
 
 webSocket :: (MonadJSM m, MonadJSM (Performable m), PerformEvent t m, TriggerEvent t m, PostBuild t m, IsWebSocketMessage a) => Text -> WebSocketConfig t a -> m (WebSocket t)
 webSocket url config = webSocket' url config onBSMessage
@@ -91,7 +75,7 @@ webSocket' url config onRawMessage = do
   (eError, triggerEError) <- newTriggerEvent
   (eClose, triggerEClose) <- newTriggerEvent
   payloadQueue <- liftIO newTQueueIO
-  isOpen       <- liftIO newEmptyTMVarIO
+  isOpen <- liftIO newEmptyTMVarIO
   let onOpen = triggerEOpen () $ liftIO $ void $ atomically $ tryPutTMVar isOpen ()
       onError = triggerEError ()
       onClose args = do
@@ -104,41 +88,41 @@ webSocket' url config onRawMessage = do
       start = do
         ws <- newWebSocket url (_webSocketConfig_protocols config) (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
-        return ()
+        pure ()
   performEvent_ . (liftJSM start <$) =<< getPostBuild
-  performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> forM_ payloads $ \payload ->
+  performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> for_ payloads $ \payload ->
     liftIO $ atomically $ writeTQueue payloadQueue payload
-  performEvent_ $ ffor (_webSocketConfig_close config) $ \(code,reason) -> liftJSM $ do
+  performEvent_ $ ffor (_webSocketConfig_close config) $ \(code, reason) -> liftJSM $ do
     mws <- liftIO $ readIORef currentSocketRef
     case mws of
-      Nothing -> return ()
-      Just ws -> closeWebSocket ws (fromIntegral code) reason
+      Nothing -> pure ()
+      Just ws -> closeWebSocket ws code reason
 
   ctx <- askJSM
   _ <- liftIO $ forkIO $ forever $ do
     payload <- atomically $ do
-      pl     <- readTQueue payloadQueue
-      open   <- tryReadTMVar isOpen
-      if isJust open then return pl else retry
+      pl <- readTQueue payloadQueue
+      open <- tryReadTMVar isOpen
+      if isJust open then pure pl else retry
 
     mws <- liftIO $ readIORef currentSocketRef
     success <- case mws of
-      Nothing -> return False
+      Nothing -> pure False
       Just ws -> flip runJSM ctx $ do
         rs <- getReadyState $ unWebSocket ws
         if rs == 1
-          then (webSocketSend ws payload >> return True) `JS.catch` (\(_ :: SomeException) -> return False)
-          else return False
+          then (webSocketSend ws payload >> pure True) `JS.catch` (\(_ :: SomeException) -> pure False)
+          else pure False
     unless success $ atomically $ unGetTQueue payloadQueue payload
-  return $ RawWebSocket eRecv eOpen eError eClose
+  pure $ RawWebSocket eRecv eOpen eError eClose
 
 textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
-textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
+textWebSocket url cfg = webSocket' url cfg (either (pure . decodeUtf8Lenient) fromJSValUnchecked)
 
 jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
 jsonWebSocket url cfg = do
-  ws <- textWebSocket url $ cfg { _webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg }
-  return ws { _webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws }
+  ws <- textWebSocket url $ cfg {_webSocketConfig_send = fmap (decodeUtf8Lenient . toStrict . encode) <$> _webSocketConfig_send cfg}
+  pure ws {_webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws}
 
 forkJSM :: JSM () -> JSM ()
 forkJSM a = do

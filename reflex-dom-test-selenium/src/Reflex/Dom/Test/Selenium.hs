@@ -1,13 +1,4 @@
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | Utilities for testing reflex-dom widgets with Selenium.
@@ -18,46 +9,53 @@
 module Reflex.Dom.Test.Selenium
   ( TestWidget
   , TestWidgetConfig (..)
-  , testWidget, testWidget', testWidgetStatic, testWidgetHydrated
+  , testWidget
+  , testWidget'
+  , testWidgetStatic
+  , testWidgetHydrated
   , withSeleniumSpec
   , embedSpec
   , SeleniumSetupConfig (..)
   ) where
 
-import Control.Concurrent (threadDelay, newEmptyMVar, takeMVar, putMVar)
+import Control.Concurrent (newEmptyMVar, putMVar, takeMVar, threadDelay)
+import Control.Concurrent.Async qualified as Async
 import Control.Exception (throwIO)
 import Control.Monad (when)
 import Control.Monad.Catch (MonadMask, handle)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Socket (PortNumber)
 import Network.Wai (responseLBS)
+import Network.Wai.Handler.Warp qualified as Warp
 import Network.WebSockets (defaultConnectionOptions)
 import Reflex.Dom.Core
 import System.IO (stderr)
 import System.IO.Silently (hSilence)
-import System.Process (std_in, std_out, std_err, createProcess, proc, StdStream (..), terminateProcess)
+import System.Process (StdStream (..), createProcess, proc, std_err, std_in, std_out, terminateProcess)
+import Test.Hspec.Core.Spec qualified as Hspec
 import Test.Hspec.WebDriver (Spec, SpecWith, WdTestSession, sessionWith, using)
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 import Test.WebDriver (WD)
-
-import qualified Control.Concurrent.Async as Async
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Test.Hspec.Core.Spec as Hspec
-import qualified Test.WebDriver as WD
-import qualified Test.WebDriver.Capabilities as WD
+import Test.WebDriver qualified as WD
+import Test.WebDriver.Capabilities qualified as WD
 
 #if !MIN_VERSION_webdriver(0,10,0)
-deriving instance MonadMask WD
+deriving newtype instance MonadMask WD
 #endif
+
+-- Eta reduction does not type-check against these rank-N arguments.
+{- HLINT ignore testWidget "Eta reduce" -}
+{- HLINT ignore testWidgetStatic "Eta reduce" -}
+{- HLINT ignore testWidgetHydrated "Eta reduce" -}
 
 data SeleniumSetupConfig = SeleniumSetupConfig
   { _seleniumSetupConfig_chromiumPath :: FilePath
@@ -76,23 +74,25 @@ data SeleniumSetupConfig = SeleniumSetupConfig
 --    webdriver tests here
 withSeleniumSpec :: SeleniumSetupConfig -> ((forall multi. SpecWith (WdTestSession multi) -> Spec) -> IO a) -> IO a
 withSeleniumSpec config runSpec = do
-  liftIO $ handle (\(_ :: IOError) -> return ()) $ unshareNetwork -- If we run into an exception with sandboxing, just don't bother
+  liftIO $ handle (\(_ :: IOError) -> pure ()) unshareNetwork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags (_seleniumSetupConfig_headless config) $ \chromeFlags -> do
     withSeleniumServer (_seleniumSetupConfig_seleniumPort config) $ do
       let browserPath = T.strip $ T.pack $ _seleniumSetupConfig_chromiumPath config
       when (T.null browserPath) $ fail "No browser found"
-      let wdConfig = WD.defaultConfig { WD.wdPort = fromIntegral $ _seleniumSetupConfig_seleniumPort config }
+      let wdConfig = WD.defaultConfig {WD.wdPort = fromIntegral $ _seleniumSetupConfig_seleniumPort config}
           chromeCaps' = WD.getCaps $ chromeConfig browserPath chromeFlags
       runSpec $ sessionWith wdConfig "" . using [(chromeCaps', "chrome")]
 
 startSeleniumServer :: PortNumber -> IO (IO ())
 startSeleniumServer port = do
-  (_,_,_,ph) <- createProcess $ (proc "selenium-server" ["-port", show port])
-    { std_in = NoStream
-    , std_out = NoStream
-    , std_err = NoStream
-    }
-  return $ terminateProcess ph
+  (_, _, _, ph) <-
+    createProcess $
+      (proc "selenium-server" ["-port", show port])
+        { std_in = NoStream
+        , std_out = NoStream
+        , std_err = NoStream
+        }
+  pure $ terminateProcess ph
 
 withSeleniumServer :: PortNumber -> IO a -> IO a
 withSeleniumServer port f = bracket (startSeleniumServer port) id $ \_ -> do
@@ -102,7 +102,7 @@ withSeleniumServer port f = bracket (startSeleniumServer port) id $ \_ -> do
 chromeConfig :: Text -> [Text] -> WD.WDConfig
 chromeConfig fp flags =
   WD.useBrowser
-    (WD.chrome { WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags })
+    (WD.chrome {WD.chromeBinary = Just $ T.unpack fp, WD.chromeOptions = T.unpack <$> flags})
     WD.defaultConfig
 
 --------------------------------------------------------------------------------
@@ -111,15 +111,22 @@ chromeConfig fp flags =
 
 -- | The environment in which your widgets can be tested
 type TestWidget t m =
-  (DomBuilder t m, MonadHold t m, PostBuild t m
-  , Prerender t m, PerformEvent t m, TriggerEvent t m
-  , MonadFix m, MonadIO (Performable m), MonadIO m)
+  ( DomBuilder t m
+  , MonadHold t m
+  , PostBuild t m
+  , Prerender t m
+  , PerformEvent t m
+  , TriggerEvent t m
+  , MonadFix m
+  , MonadIO (Performable m)
+  , MonadIO m
+  )
 
 -- | Configuration of individual tests
 data TestWidgetConfig = TestWidgetConfig
   { _testWidgetConfig_debug :: Bool
   -- ^ If this flag is set to True, during the test we will emit debug messages
-  , _testWidgetConfig_headWidget :: (forall m. TestWidget (SpiderTimeline Global) m => m ())
+  , _testWidgetConfig_headWidget :: forall m. TestWidget (SpiderTimeline Global) m => m ()
   -- ^ We can add widgets here that will be included in the head of the page
   --   (useful for example to include external js libraries in the tests)
   , _testWidgetConfig_jsaddlePort :: PortNumber
@@ -155,7 +162,7 @@ testWidgetHydrated
   :: TestWidgetConfig
   -> WD b
   -- ^ Webdriver commands to run after hydration switchover
-  -> (forall m . TestWidget (SpiderTimeline Global) m => m ())
+  -> (forall m. TestWidget (SpiderTimeline Global) m => m ())
   -- ^ Widget we are testing (contents of body)
   -> WD b
 testWidgetHydrated cfg after widget = testWidget' cfg (pure ()) (const after) widget
@@ -176,10 +183,10 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
   let putStrLnDebug :: MonadIO m => Text -> m ()
       putStrLnDebug m = when withDebugging $ liftIO $ putStrLn $ T.unpack m
       staticApp = do
-        el "head" $ headWidget
+        el "head" headWidget
         el "body" $ do
           bodyWidget
-          el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
+          el "script" $ text $ TE.decodeUtf8Lenient $ LBS.toStrict $ jsaddleJs False
   putStrLnDebug "rendering static"
   ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
@@ -202,15 +209,18 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
     putStrLnDebug "sending response"
     r <- sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
     putStrLnDebug "sent response"
-    return r
+    pure r
   waitJSaddle <- liftIO newEmptyMVar
-  let settings = foldr ($) Warp.defaultSettings
-        [ Warp.setPort $ fromIntegral $ toInteger jsaddlePort
-        , Warp.setBeforeMainLoop $ do
-            putStrLnDebug "putting waitJSaddle"
-            putMVar waitJSaddle ()
-            putStrLnDebug "put waitJSaddle"
-        ]
+  let settings =
+        foldr
+          ($)
+          Warp.defaultSettings
+          [ Warp.setPort $ fromIntegral $ toInteger jsaddlePort
+          , Warp.setBeforeMainLoop $ do
+              putStrLnDebug "putting waitJSaddle"
+              putMVar waitJSaddle ()
+              putStrLnDebug "put waitJSaddle"
+          ]
       -- hSilence to get rid of ConnectionClosed logs
       silenceIfNotDebugging = if withDebugging then id else hSilence [stderr]
       jsaddleWarp = silenceIfNotDebugging $ Warp.runSettings settings application
@@ -235,18 +245,20 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
 -- | Embed a different spec type by evaluating it directly.
 embedSpec :: (Hspec.Example a, MonadIO m) => Hspec.Arg a -> a -> m ()
 embedSpec arg spec = liftIO $ do
-  Hspec.Result _info status <- Hspec.evaluateExample
-    spec
-    Hspec.defaultParams
-    (\actionWith -> actionWith arg)
-    (\_ -> pure ())
+  Hspec.Result _info status <-
+    Hspec.evaluateExample
+      spec
+      Hspec.defaultParams
+      (\actionWith -> actionWith arg)
+      (\_ -> pure ())
   case status of
     Hspec.Success -> pure ()
     Hspec.Pending _ _ -> pure () -- should not happen
     failure -> throwIO failure
 
 withAsync' :: (MonadIO m, MonadMask m) => IO a -> m b -> m b
-withAsync' f g = bracket
-  (liftIO $ Async.async f)
-  (liftIO . Async.uninterruptibleCancel)
-  (const g)
+withAsync' f g =
+  bracket
+    (liftIO $ Async.async f)
+    (liftIO . Async.uninterruptibleCancel)
+    (const g)

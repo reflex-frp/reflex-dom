@@ -1,46 +1,40 @@
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -ddump-simpl -ddump-rules -ddump-spec -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+
 module Main (main) where
 
 import Control.Monad.State
-import Data.Monoid
-import Data.Text (Text)
-import qualified Data.Text as T
-import Reflex.Dom
-import System.Random
-import qualified Data.Map as Map
 import Data.Dependent.Map (DMap (..))
-import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Map qualified as DMap
 import Data.Dependent.Sum (DSum (..))
-import Data.Functor.Misc
-import Data.Functor.Identity
-import Data.Functor.Compose
-import Data.IORef
-import GHCJS.DOM.Types (JSM)
-import qualified Data.Some as Some
-import Data.Functor.Constant
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
 import Data.FastMutableIntMap
+import Data.Functor.Compose
+import Data.Functor.Constant
+import Data.Functor.Identity
+import Data.Functor.Misc
+import Data.IORef
+import Data.IntMap.Strict (IntMap)
+import Data.IntMap.Strict qualified as IntMap
+import Data.Map qualified as Map
+import Data.Monoid
+import Data.Some qualified as Some
+import Data.Text (Text)
+import Data.Text qualified as T
+import GHCJS.DOM.Element qualified as DOM
+import GHCJS.DOM.Types (JSM)
+import GHCJS.DOM.Types qualified as DOM
+import System.Random
 
-import qualified GHCJS.DOM.Element as DOM
-import qualified GHCJS.DOM.Types as DOM
+import Reflex.Dom
 
---{-
+-- {-
 main :: IO ()
 main = mainWidget' $ do
   create1000 <- button "Create 1,000 rows"
   let row k _ = el "li" $ text $ T.pack $ show k
   el "ul" $ traverseIntMapWithKeyWithAdjust row IntMap.empty $ PatchIntMap (IntMap.fromDistinctAscList [(x, Just ()) | x <- [1 :: Int .. 1000]]) <$ create1000
-  return ()
---}
+  pure ()
 
+-- }
 
 {-
 main :: IO ()
@@ -56,7 +50,7 @@ main = do
                 , PatchIntMap <$> deletes
                 ]
           (_, deletes) <- runEventWriterT $ traverseIntMapWithKeyWithAdjust (\k _ -> row k) mempty u
-      return ()
+      pure ()
 
 row :: MonadWidget t m => Int -> EventWriterT t (IntMap (Maybe ())) m ()
 row rowNum = el "tr" $ do
@@ -77,9 +71,9 @@ type RNG = StdGen
 type Entropy     = Int
 type RowPosition = Int
 type RowNumber   = Int
-data Row   = Row { pos :: RowPosition, num :: RowNumber , txt :: Text } deriving (Eq, Show)
+data Row   = Row { pos :: RowPosition, num :: RowNumber , txt :: Text } deriving stock (Eq, Show)
 type Table = Map RowPosition Row
-data Model = Model { rng :: RNG, table :: Table, nextNum :: RowNumber, selected :: Maybe Row } deriving Show
+data Model = Model { rng :: RNG, table :: Table, nextNum :: RowNumber, selected :: Maybe Row } deriving stock Show
 
 {- Widgets -}
 
@@ -138,7 +132,6 @@ rowW dynSelected dynRow = elDynClass "tr" trClass $
   where
     trClass = (\b -> if b then "danger" else "") <$> dynSelected
     tagClick f el = (tag . current) (f <$> dynRow) (domEvent Click el)
-
 
 {- Domain logic -}
 

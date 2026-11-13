@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
 #if defined(ANDROID)
 module Reflex.Dom.Location.Platform where
 
@@ -14,7 +13,6 @@ popHistoryState
 popHistoryState evt = performEvent_ $ withGlobalJSExecutor goBack <$ evt
 #else
 module Reflex.Dom.Location.Platform (Reflex.Dom.Location.popHistoryState) where
-import qualified Reflex.Dom.Location
+import Reflex.Dom.Location qualified
 
 #endif
-

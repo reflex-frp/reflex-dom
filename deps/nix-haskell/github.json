@@ -1,0 +1,8 @@
+{
+  "owner": "reflex-frp",
+  "repo": "nix-haskell",
+  "fetchSubmodules": true,
+  "private": false,
+  "rev": "4a280fbca1d2238dc63a5935b69cdf1ae44ad28e",
+  "sha256": "18qc0rfs06dm334z1ygvdvrr8zjfrkkfnx5vmnza85fz81n12avf"
+}

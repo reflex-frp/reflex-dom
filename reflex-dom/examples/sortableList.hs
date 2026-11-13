@@ -1,22 +1,19 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+
 import Control.Lens
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Foldable (toList, traverse_)
 import Data.List
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Ord
 import Data.Patch.MapWithMove
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Time.Clock
-import Reflex.Dom
 import System.Random
+
+import Reflex.Dom
 
 #if defined(wasm32_HOST_ARCH)
 foreign export javascript "hs_start" main :: IO ()
@@ -25,22 +22,25 @@ foreign export javascript "hs_start" main :: IO ()
 main :: IO ()
 main = mainWidget $ do
   let f _ (a, b, c) = el "tr" $ do
-        mapM_ (el "td" . text . T.pack . show) [a, b, c]
+        traverse_ (el "td" . text . T.pack . show) [a, b, c]
         _ <- el "td" $ inputElement def
-        return ()
+        pure ()
   let numKeys = 1000 :: Int
       keys = take numKeys [0 :: Int ..]
       values :: [(Int, Int, Int)]
       values = zip3 (randoms (mkStdGen 0)) (randoms (mkStdGen 1)) (randoms (mkStdGen 2))
       testMap = Map.fromList $ zip keys values
-      resortButtons = el "div" $ leftmost <$> sequence
-        [ (comparing (view _1) <$) <$> button "A ASC"
-        , (flip (comparing (view _1)) <$) <$> button "A DESC"
-        , (comparing (view _2) <$) <$> button "B ASC"
-        , (flip (comparing (view _2)) <$) <$> button "B DESC"
-        , (comparing (view _3) <$) <$> button "C ASC"
-        , (flip (comparing (view _3)) <$) <$> button "C DESC"
-        ]
+      resortButtons =
+        el "div" $
+          leftmost
+            <$> sequence
+              [ (comparing (view _1) <$) <$> button "A ASC"
+              , (flip (comparing (view _1)) <$) <$> button "A DESC"
+              , (comparing (view _2) <$) <$> button "B ASC"
+              , (flip (comparing (view _2)) <$) <$> button "B DESC"
+              , (comparing (view _3) <$) <$> button "C ASC"
+              , (flip (comparing (view _3)) <$) <$> button "C DESC"
+              ]
   el "h1" $ text "Improved list sorting"
   el "p" $ text $ "This app shows a table of " <> T.pack (show numKeys) <> " rows, and allows you to re-sort by columns a, b, and c, which are full of pseudorandom numbers.  Each row also includes an element with internal state (a textbox) to demonstrate that the state is preserved, only when using the new way."
   el "h3" $ text "Re-sort the list the OLD way (by redrawing everything)"
@@ -57,7 +57,7 @@ main = mainWidget $ do
       el "th" $ text "C"
       el "th" $ text "Stateful Element (textbox)"
     simpleSortableList f testMap resort resortSlow
-  return ()
+  pure ()
 
 displayRedrawTime :: (DomBuilder t m, MonadHold t m, PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => Event t a -> m ()
 displayRedrawTime e = do
@@ -65,7 +65,7 @@ displayRedrawTime e = do
   et1' <- delay 0 et1
   diff <- performEvent $ ffor et1' $ \t1 -> do
     t2 <- liftIO getCurrentTime
-    return $ t2 `diffUTCTime` t1
+    pure $ t2 `diffUTCTime` t1
   text "Time: "
   dynText =<< holdDyn "not yet run" (T.pack . show <$> diff)
 
@@ -73,12 +73,13 @@ simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, Adjustable t m
 simpleSortableList f m0 resortFunc resortSlowFunc = do
   rec let resortPatchFast = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v
-          redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
+          redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ toList d)
           resortPatchSlow = attachWith redrawPatch (currentIncremental m) resortSlowFunc
-          resortPatch = leftmost
-            [ resortPatchFast
-            , resortPatchSlow
-            ]
+          resortPatch =
+            leftmost
+              [ resortPatchFast
+              , resortPatchSlow
+              ]
       m <- holdIncremental m0 resortPatch
   _ <- mapMapWithAdjustWithMove f m0 resortPatch
-  return ()
+  pure ()

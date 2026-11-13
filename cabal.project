@@ -8,23 +8,35 @@ if os(linux) && arch(x86_64)
     reflex-dom-test-selenium/
 
 if os(linux) || os(osx)
-   tests: true
-   benchmarks: true
+   tests: True
+   benchmarks: True
 
 package reflex-dom
   flags: +build-examples
 
--- https://github.com/haskellari/splitmix/pull/73
--- https://github.com/haskellari/splitmix/pull/75
-source-repository-package
-  type: git
-  location: https://github.com/alexfmpe/splitmix
-  tag: bd53859c0f41d12f16c3f44fee52f5e9aae26243
+if !arch(wasm32)
+  package reflex-dom
+    flags: +use-warp -webkit2gtk
 
--- https://github.com/ghcjs/jsaddle/pull/172
-source-repository-package
-  type: git
-  location: https://github.com/obsidiansystems/jsaddle.git
-  tag: 2152422657602dc29c89140cebd3d7fae080acf1
-  subdir: jsaddle-warp
-  post-checkout-command: npm ci --ignore-scripts --prefix jsaddle-warp/node-client
+if impl(ghc == 9.14.*)
+  allow-newer:
+      *:base
+    , *:template-haskell
+    , *:ghc-experimental
+    , *:ghc-internal
+    , patch:containers
+  constraints:
+      base < 4.23
+    , template-haskell < 2.25
+    , ghc-experimental < 9.1500
+    , ghc-internal < 9.1500
+  allow-newer: *:*
+  -- prim-uniq 0.2 predates the EqP/OrdP superclasses of some 1.1;
+  -- reflex 0.9.4.1 predates the class hierarchy of semialign 1.4
+  -- time 1.14 passes an integer clock id where wasi-libc takes a pointer
+  -- hspec-webdriver 1.2.2 imports the Test.WebDriver.Config that webdriver 0.13 removed
+  constraints:
+      some < 1.1
+    , semialign < 1.4
+    , time >= 1.15
+    , webdriver < 0.13

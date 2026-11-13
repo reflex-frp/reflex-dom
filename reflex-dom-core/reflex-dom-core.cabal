@@ -1,4 +1,4 @@
-cabal-version: 1.24
+cabal-version: 2.2
 Name: reflex-dom-core
 Version: 0.8.1.4
 Synopsis: Functional Reactive Web Apps with Reflex
@@ -13,7 +13,7 @@ Description:
   correct set of dependencies for each target platform (GHCJS, WebKitGTK, WASM, mobile, etc.).
   Libraries should depend on @reflex-dom-core@ and executables will usually depend on @reflex-dom@.
   All of @reflex-dom-core@'s modules are re-exported by @reflex-dom@.
-License: BSD3
+License: BSD-3-Clause
 License-file: LICENSE
 Author: Ryan Trinkle
 Maintainer: ryan.trinkle@gmail.com
@@ -69,24 +69,102 @@ flag hlint-tests
   default: False
   manual: True
 
+flag strict
+  description: Build with options, such as -Werror, which are inconvenient for development but good for CI
+  default: False
+  manual: True
+
+common common
+  default-extensions:
+    AllowAmbiguousTypes
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveDataTypeable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    DerivingStrategies
+    EmptyCase
+    EmptyDataDecls
+    ExistentialQuantification
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    MultiParamTypeClasses
+    NoMonomorphismRestriction
+    OverloadedStrings
+    PatternGuards
+    PolyKinds
+    RankNTypes
+    RecordWildCards
+    RecursiveDo
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    UndecidableSuperClasses
+    ViewPatterns
+
+  if flag(strict)
+    ghc-options:  -Werror
+
+  -- GHC's wasm Template Haskell loader cannot load liblibdl.so, and says
+  -- that is harmless
+  if arch(wasm32)
+    ghc-options:  -Wno-error=missed-extra-shared-lib
+
+  ghc-options:    -O2
+                  -fexpose-all-unfoldings
+                  -fspecialise
+                  -fspecialise-aggressively
+                  -flate-specialise
+                  -fcross-module-specialise
+
+  if !(arch(wasm32))
+    ghc-options:  -threaded -rtsopts -with-rtsopts=-N
+
+  ghc-options:    -Wall
+                  -fno-show-valid-hole-fits
+                  -Wno-type-defaults
+                  -Wno-partial-type-signatures
+                  -Wincomplete-record-updates -Werror=incomplete-record-updates
+                  -Wincomplete-patterns -Werror=incomplete-patterns
+                  -Wincomplete-uni-patterns -Werror=incomplete-uni-patterns
+                  -Wpartial-fields -Werror=partial-fields
+                  -Wmissing-fields -Werror=missing-fields
+                  -Widentities
+                  -Wredundant-constraints
+                  -Wunused-packages
+
+  if impl(ghc >= 8.8)
+    ghc-options:
+                  -Wmissing-deriving-strategies
+                  -Werror=missing-deriving-strategies
+
 library
+  import: common
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 2.3,
-    base >= 4.7 && < 4.23,
-    bifunctors >= 4.2 && < 6,
+    base >= 4.14 && < 4.23,
     bimap >= 0.3 && < 0.6,
     blaze-builder >= 0.4.1 && < 0.5,
     bytestring >= 0.10 && < 0.13,
     case-insensitive < 1.3,
     commutative-semigroups >=0.1 && <0.3,
     containers >= 0.6 && < 0.9,
-    constraints >= 0.9 && < 0.15,
-    contravariant >= 1.4 && < 1.6,
     data-default >= 0.5 && < 0.9,
     dependent-map >= 0.3 && < 0.5,
     dependent-sum >= 0.6 && < 0.8,
-    directory >= 1.2 && < 1.4,
     exception-transformers == 0.4.*,
     ghcjs-dom >= 0.9.1.0 && < 0.10,
     jsaddle >= 0.9.0.0 && < 0.10,
@@ -96,25 +174,25 @@ library
     monad-control >= 1.0.1 && < 1.1,
     mtl >= 2.1 && < 2.4,
     primitive >= 0.5 && < 0.10,
-    random >= 1.1 && < 1.4,
     ref-tf >= 0.4 && < 0.6,
     reflex >= 0.8.2.1 && < 1,
-    semigroups >= 0.16 && < 0.21,
     stm >= 2.4 && < 2.6,
-    text >= 1.2 && < 2.2,
+    text >= 2.0 && < 2.2,
     transformers >= 0.3 && < 0.7,
-    network-uri >= 2.6.1 && < 2.7,
-    zenc == 0.1.*
+    network-uri >= 2.6.1 && < 2.7
 
   if impl(ghcjs) || arch(javascript)
     hs-source-dirs: src-ghcjs
     build-depends:
-      ghcjs-base,
-      hashable >= 1.2 && < 1.6
+      ghcjs-base
   else
     hs-source-dirs: src-ghc
-    if !os(windows)
-      build-depends: unix >= 2.7 && <2.9
+
+  -- Foreign.JavaScript.TH uses these only before GHC 9, under GHCJS
+  if impl(ghcjs)
+    build-depends:
+      hashable >= 1.2 && < 1.6,
+      zenc == 0.1.*
 
   if flag(split-these)
     build-depends:
@@ -181,6 +259,7 @@ library
       Reflex.Dom.Builder.Class.TH
 
 test-suite hlint
+  import: common
   build-depends:
     base,
     hlint >= 2.0 && < 4.0,
@@ -193,12 +272,11 @@ test-suite hlint
     buildable: False
 
 test-suite hydration
+  import: common
   build-depends: base
-               , aeson
                , async
                , bytestring
                , chrome-test-utils
-               , constraints
                , constraints-extras
                , containers
                , dependent-map
@@ -216,9 +294,7 @@ test-suite hydration
                , jsaddle
                , jsaddle-warp
                , lens
-               , lifted-base
                , network
-               , random
                , ref-tf
                , reflex
                , reflex-dom-core
@@ -227,13 +303,14 @@ test-suite hydration
                , temporary
                , text
                , wai
-               , wai-websockets
                , warp
-               , webdriver
+               , webdriver < 0.13
                , websockets
                , which
   hs-source-dirs: test
-  ghc-options: -rtsopts "-with-rtsopts=-T -V0" -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  if !(arch(wasm32))
+    ghc-options: "-with-rtsopts=-N -T -V0"
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: hydration.hs
   type: exitcode-stdio-1.0
@@ -244,16 +321,17 @@ test-suite hydration
 -- broken test on base 4.11 & ghc 8.4.3
 -- needs to be updated for changes in GHC.Stats
 test-suite gc
+  import: common
   build-depends: base
                , chrome-test-utils
-               , jsaddle
                , jsaddle-warp
                , process
-               , reflex
                , reflex-dom-core
                , text
   hs-source-dirs: test
-  ghc-options: -rtsopts -with-rtsopts=-T -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2 -ferror-spans
+  if !(arch(wasm32))
+    ghc-options: "-with-rtsopts=-N1 -T"
   ghc-prof-options: -fprof-auto -optP-DPROFILING
   main-is: gc.hs
   type: exitcode-stdio-1.0

@@ -1,32 +1,33 @@
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fmax-simplifier-iterations=5 -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo #-}
+
 import Control.Monad.State
-import Data.Monoid
-import Data.IntMap (IntMap, assocs, elems, empty, fromList, size, singleton)
-import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Vector (Vector)
-import qualified Data.Vector as Vector
-import Reflex.Dom
 import Data.FastMutableIntMap
+import Data.IntMap (IntMap, assocs, elems, empty, fromList, singleton, size)
+import Data.Monoid
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Vector (Vector)
+import Data.Vector qualified as Vector
 import System.Random
 
+import Reflex.Dom
+
+-- Benchmark code, not shipped in the library.
+{- HLINT ignore "Avoid restricted function" -}
+
 type RNG = StdGen
-type Entropy   = Int
+type Entropy = Int
 type RowNumber = Int
-type RowIndex  = Int
-data Row   = Row { num :: RowNumber, txt :: Text, selected :: Bool } deriving (Eq, Show)
+type RowIndex = Int
+data Row = Row {num :: RowNumber, txt :: Text, selected :: Bool} deriving stock (Eq, Show)
 type Table = IntMap Row
-data Model = Model { rng :: RNG, nextNum :: RowNumber, selection :: Maybe Row } deriving Show
+data Model = Model {rng :: RNG, nextNum :: RowNumber, selection :: Maybe Row} deriving stock (Show)
 type TableDiff = PatchIntMap Row
 
 main :: IO ()
 main = do
   seed <- randomIO
-  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed)
+  mainWidgetWithHead' (const headW, \_ -> bodyW seed)
 
 titleW :: DomBuilder t m => m ()
 titleW = text "Reflex-dom keyed"
@@ -40,16 +41,18 @@ bodyW :: forall t m. (MonadFix m, MonadHold t m, DomBuilder t m) => Entropy -> m
 bodyW seed = divClass "main" $ divClass "container" $ mdo
   buttonEvents <- divClass "jumbotron" $ divClass "row" $ do
     divClass "col-md-6" $ el "h1" titleW
-    divClass "col-md-6" $ divClass "row" $ sequence
-      [ buttonW "run"      "Create 1,000 rows"     $ resetRows 1000
-      , buttonW "runlots"  "Create 10,000 rows"    $ resetRows 10000
-      , buttonW "add"      "Append 1,000 rows"     $ appendRows 1000
-      , buttonW "update"   "Update every 10th row" $ updateRows (\i -> mod i 10 == 0) (<> " !!!")
-      , buttonW "clear"    "Clear"                 $ clearRows
-      , buttonW "swaprows" "Swap Rows"             $ swapRows (1, 998)
-      ]
+    divClass "col-md-6"
+      $ divClass "row"
+      $ sequence
+        [ buttonW "run" "Create 1,000 rows" $ resetRows 1000
+        , buttonW "runlots" "Create 10,000 rows" $ resetRows 10000
+        , buttonW "add" "Append 1,000 rows" $ appendRows 1000
+        , buttonW "update" "Update every 10th row" $ updateRows (\i -> mod i 10 == 0) (<> " !!!")
+        , buttonW "clear" "Clear" clearRows
+        , buttonW "swaprows" "Swap Rows" $ swapRows (1, 998)
+        ]
 
-  let initial = Model { rng = mkStdGen seed, nextNum = 1, selection = Nothing }
+  let initial = Model {rng = mkStdGen seed, nextNum = 1, selection = Nothing}
   let events = leftmost $ fmap (foldl1 sequenceSteps) rowEvents : buttonEvents
 
   rowEvents <- tableW dynMT
@@ -86,38 +89,37 @@ tableW :: (MonadHold t m, DomBuilder t m) => Event t TableDiff -> m (Event t (In
 tableW diff = do
   elClass "table" "table table-hover table-striped test-data" $ do
     el "tbody" $ do
-      (v0, v') <- traverseIntMapWithKeyWithAdjust (\_ -> rowW) empty diff
+      (v0, v') <- traverseIntMapWithKeyWithAdjust (const rowW) empty diff
       rowEvents <- holdIncremental v0 v'
-      return $ mergeIntIncremental rowEvents
+      pure $ mergeIntIncremental rowEvents
 
 rowW :: DomBuilder t m => Row -> m (Event t Step)
 rowW row = elClass "tr" (if selected row then "danger" else "") $
   do
     elClass "td" "col-md-1" $ do
       text $ T.pack $ show $ num row
-    (sel, _) <- elClass' "td" "col-md-4". el "a" . text $ txt row
+    (sel, _) <- elClass' "td" "col-md-4" . el "a" . text $ txt row
     (del, _) <- elClass' "td" "col-md-1" deleteW
     elClass "td" "col-md-6" blank
     pure . leftmost $ zipWith tagClick [selectRow, deleteRow] [sel, del]
   where
-    tagClick f el = f row <$ (domEvent Click el)
+    tagClick f el = f row <$ domEvent Click el
 
 deleteW :: DomBuilder t m => m ()
 deleteW = el "a" $ elAttr "span" ("aria-hidden" =: "true" <> "class" =: "glyphicon glyphicon-remove") blank
 
-
 {- Domain logic -}
 clearRows :: (Model, Table) -> (Model, TableDiff)
-clearRows (m, t) = (m { selection = Nothing }, PatchIntMap $ Nothing <$ t)
+clearRows (m, t) = (m {selection = Nothing}, PatchIntMap $ Nothing <$ t)
 
 updateRows :: (RowIndex -> Bool) -> (Text -> Text) -> (Model, Table) -> (Model, TableDiff)
 updateRows p f (m, t) = (m, PatchIntMap $ Just . update <$> targets)
   where
     targets = fromList . filterByIndex p . assocs $ t
-    update  = \r -> r { txt = f $ txt r }
+    update r = r {txt = f $ txt r}
 
 filterByIndex :: (Int -> Bool) -> [a] -> [a]
-filterByIndex p = map snd . filter (\(i, _) -> p i) . zip [0..]
+filterByIndex p = fmap snd . filter (\(i, _) -> p i) . zip [0 ..]
 
 swapRows :: (RowIndex, RowIndex) -> (Model, Table) -> (Model, TableDiff)
 swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else empty)
@@ -127,33 +129,33 @@ swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else 
     val = (assocs t !!)
 
 selectRow :: Row -> (Model, Table) -> (Model, TableDiff)
-selectRow r (m, t) = (m { selection = Just r}, PatchIntMap $ dr <> ds)
+selectRow r (m, t) = (m {selection = Just r}, PatchIntMap $ dr <> ds)
   where
     dr = sel True r
     ds = maybe empty (sel False) $ selection m
-    sel b r' = singleton (num r') $ Just r' { selected = b }
+    sel b r' = singleton (num r') $ Just r' {selected = b}
 
 deleteRow :: Row -> (Model, Table) -> (Model, TableDiff)
-deleteRow r (m, t) = (m { selection = mfilter (/= r) (selection m) }, PatchIntMap $ singleton (num r) Nothing)
+deleteRow r (m, t) = (m {selection = mfilter (/= r) (selection m)}, PatchIntMap $ singleton (num r) Nothing)
 
 resetRows :: Int -> (Model, Table) -> (Model, TableDiff)
 resetRows n (m, t) = (m'', dt <> dt')
   where
-    (m',  dt ) = addRows n (m, t)
+    (m', dt) = addRows n (m, t)
     (m'', dt') = clearRows (m', t)
 
 appendRows :: Int -> (Model, Table) -> (Model, TableDiff)
 appendRows n (m, t) = addRows n (m, t)
 
 addRows :: Int -> (Model, Table) -> (Model, TableDiff)
-addRows count (m, t) = (m { rng = rng', nextNum = nextNum' }, PatchIntMap diff)
+addRows count (m, t) = (m {rng = rng', nextNum = nextNum'}, PatchIntMap diff)
   where
-    rowsST = sequence (rowST <$ [0..count-1])
+    rowsST = sequence (rowST <$ [0 .. count - 1])
     (rows, (nextNum', rng')) = runState rowsST (nextNum m, rng m)
     diff = fromList . fmap (\r -> (num r, Just r)) $ rows
 
 rowST :: State (RowNumber, RNG) Row
-rowST  = state (\(n, g) -> let (e, g') = next g in (Row {num = n, txt = randomName e, selected = False}, (n+1, g')))
+rowST = state (\(n, g) -> let (e, g') = next g in (Row {num = n, txt = randomName e, selected = False}, (n + 1, g')))
 
 randomName :: Entropy -> Text
 randomName e = T.intercalate " " $ (`modIndex` e) <$> [adjectives, colours, nouns]
@@ -165,58 +167,61 @@ modIndex :: Vector a -> Int -> a
 modIndex v n = Vector.unsafeIndex v $ n `mod` Vector.length v
 
 adjectives, colours, nouns :: Vector Text
-adjectives = Vector.fromList
-  [ "pretty"
-  , "large"
-  , "big"
-  , "small"
-  , "tall"
-  , "short"
-  , "long"
-  , "handsome"
-  , "plain"
-  , "quaint"
-  , "clean"
-  , "elegant"
-  , "easy"
-  , "angry"
-  , "crazy"
-  , "helpful"
-  , "mushy"
-  , "odd"
-  , "unsightly"
-  , "adorable"
-  , "important"
-  , "inexpensive"
-  , "cheap"
-  , "expensive"
-  , "fancy"
-  ]
-colours = Vector.fromList
-  [ "red"
-  , "yellow"
-  , "blue"
-  , "green"
-  , "pink"
-  , "brown"
-  , "purple"
-  , "brown"
-  , "white"
-  , "black"
-  , "orange"
-  ]
-nouns = Vector.fromList
-  [ "table"
-  , "chair"
-  , "house"
-  , "bbq"
-  , "desk"
-  , "car"
-  , "pony"
-  , "cookie"
-  , "sandwich"
-  , "burger"
-  , "pizza"
-  , "mouse"
-  , "keyboard"
-  ]
+adjectives =
+  Vector.fromList
+    [ "pretty"
+    , "large"
+    , "big"
+    , "small"
+    , "tall"
+    , "short"
+    , "long"
+    , "handsome"
+    , "plain"
+    , "quaint"
+    , "clean"
+    , "elegant"
+    , "easy"
+    , "angry"
+    , "crazy"
+    , "helpful"
+    , "mushy"
+    , "odd"
+    , "unsightly"
+    , "adorable"
+    , "important"
+    , "inexpensive"
+    , "cheap"
+    , "expensive"
+    , "fancy"
+    ]
+colours =
+  Vector.fromList
+    [ "red"
+    , "yellow"
+    , "blue"
+    , "green"
+    , "pink"
+    , "brown"
+    , "purple"
+    , "brown"
+    , "white"
+    , "black"
+    , "orange"
+    ]
+nouns =
+  Vector.fromList
+    [ "table"
+    , "chair"
+    , "house"
+    , "bbq"
+    , "desk"
+    , "car"
+    , "pony"
+    , "cookie"
+    , "sandwich"
+    , "burger"
+    , "pizza"
+    , "mouse"
+    , "keyboard"
+    ]

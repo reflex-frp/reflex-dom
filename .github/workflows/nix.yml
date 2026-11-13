@@ -1,0 +1,59 @@
+name: nix
+
+on:
+  pull_request:
+  push:
+    branches: [ develop, master ]
+
+env:
+  # The nix every job installs. release.nix evaluates through
+  # import-from-derivation.
+  EXTRA_NIX_CONFIG: |
+    experimental-features = nix-command flakes
+    allow-import-from-derivation = true
+    extra-substituters = https://cache.iog.io https://nixcache.reflex-frp.org
+    extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= ryantrinkle.com-1:JJiAKaRv9mWgpVAz8dwewnZe0AzzEAzPkagE9SP5NWI=
+
+jobs:
+  # The `-A` path of every cell of release.nix, for the smoke matrix. The
+  # parts state their cells from their matrix lists, so this evaluation
+  # builds nothing.
+  nix-attrs:
+    # A pull request whose head is `develop` or `master` in this repository
+    # gets the push run for the same commit, so its own run is skipped. The
+    # jobs below need this one, so the skip covers the whole run. The branch
+    # list repeats the push trigger's: an expression cannot read it.
+    if: >-
+      github.event_name == 'push'
+      || github.event.pull_request.head.repo.full_name != github.repository
+      || !contains(fromJSON('["develop", "master"]'), github.head_ref)
+    runs-on: ubuntu-latest
+    outputs:
+      paths: ${{ steps.eval.outputs.paths }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: ${{ env.EXTRA_NIX_CONFIG }}
+      - name: Evaluate release.nix -A attr-paths
+        id: eval
+        run: |
+          paths=$(nix-instantiate --eval --strict --json --read-write-mode release.nix -A attr-paths)
+          echo "paths=$paths" >> "$GITHUB_OUTPUT"
+
+  # One build per cell, each on its own runner. A broken cell cancels no
+  # other build.
+  nix-smoke:
+    needs: nix-attrs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        attr: ${{ fromJSON(needs.nix-attrs.outputs.paths) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: ${{ env.EXTRA_NIX_CONFIG }}
+      - name: Build release.nix -A ${{ matrix.attr }}
+        run: nix-build release.nix -A ${{ matrix.attr }} --keep-going --no-out-link

@@ -1,33 +1,47 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Internal
   ( module Main
   , run
   , mainWidget
-  , mainWidgetWithHead, mainWidgetWithCss, mainWidgetWithHead', mainWidgetInElementById, runApp'
-  , mainHydrationWidgetWithHead, mainHydrationWidgetWithHead'
+  , mainWidgetWithHead
+  , mainWidgetWithCss
+  , mainWidgetWithHead'
+  , mainWidgetInElementById
+  , runApp'
+  , mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
   ) where
 
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Reflex.Dom.Main as Main hiding
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
-import qualified Reflex.Dom.Main as Main
-       (mainWidget, mainWidgetWithHead, mainWidgetWithCss,
-        mainWidgetWithHead', mainWidgetInElementById, runApp',
-        mainHydrationWidgetWithHead, mainHydrationWidgetWithHead')
+  ( mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
+  , mainWidget
+  , mainWidgetInElementById
+  , mainWidgetWithCss
+  , mainWidgetWithHead
+  , mainWidgetWithHead'
+  , runApp'
+  )
+import Reflex.Dom.Main qualified as Main
+  ( mainHydrationWidgetWithHead
+  , mainHydrationWidgetWithHead'
+  , mainWidget
+  , mainWidgetInElementById
+  , mainWidgetWithCss
+  , mainWidgetWithHead
+  , mainWidgetWithHead'
+  , runApp'
+  )
 
 #if defined(ghcjs_HOST_OS)
 run :: a -> a
 run = id
 #elif defined(MIN_VERSION_jsaddle_warp)
 import Language.Javascript.JSaddle (JSM)
-import qualified Language.Javascript.JSaddle.Warp as JW
+import Language.Javascript.JSaddle.Warp qualified as JW
 import System.Environment (lookupEnv)
 
 run :: JSM () -> IO()
@@ -51,8 +65,8 @@ run jsm = do
   baseUrl <- mainBundleResourcePath >>= \case
     Nothing -> do
       putStrLn "Reflex.Dom.run: unable to find main bundle resource path. Assets may not load properly."
-      return ""
-    Just p -> return $ "file://" <> p <> "/index.html"
+      pure ""
+    Just p -> pure $ "file://" <> p <> "/index.html"
   run' def $ jsaddleMainHTMLWithBaseURL indexHtml baseUrl jsm
 
 #else
@@ -90,7 +104,7 @@ triggerBackButton :: MonadIO m => m ()
 triggerBackButton = withGlobalJSExecutor goBack
 
 #elif defined(MIN_VERSION_jsaddle_wasm)
-import qualified Language.Javascript.JSaddle.Wasm as Wasm (run)
+import Language.Javascript.JSaddle.Wasm qualified as Wasm (run)
 import Language.Javascript.JSaddle (JSM)
 run :: JSM () -> IO ()
 run = Wasm.run
@@ -99,7 +113,7 @@ run = Wasm.run
 import Language.Javascript.JSaddle.WebKitGTK (run)
 
 #else
-import qualified GHC.TypeLits as GHC
+import GHC.TypeLits qualified as GHC
 run :: GHC.TypeError (GHC.Text "Attempting to compile reflex-dom for unsupported platform")
 run = error "unreachable"
 #endif

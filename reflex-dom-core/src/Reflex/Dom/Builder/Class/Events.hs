@@ -1,11 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE PolyKinds #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeFamilies #-}
+
 module Reflex.Dom.Builder.Class.Events where
 
 #ifdef USE_TEMPLATE_HASKELL
@@ -19,52 +13,52 @@ import Data.Kind (Type)
 import Data.Text (Text)
 
 data EventTag
-   = AbortTag
-   | BlurTag
-   | ChangeTag
-   | ClickTag
-   | ContextmenuTag
-   | DblclickTag
-   | DragTag
-   | DragendTag
-   | DragenterTag
-   | DragleaveTag
-   | DragoverTag
-   | DragstartTag
-   | DropTag
-   | ErrorTag
-   | FocusTag
-   | InputTag
-   | InvalidTag
-   | KeydownTag
-   | KeypressTag
-   | KeyupTag
-   | LoadTag
-   | MousedownTag
-   | MouseenterTag
-   | MouseleaveTag
-   | MousemoveTag
-   | MouseoutTag
-   | MouseoverTag
-   | MouseupTag
-   | MousewheelTag
-   | ScrollTag
-   | SelectTag
-   | SubmitTag
-   | WheelTag
-   | BeforecutTag
-   | CutTag
-   | BeforecopyTag
-   | CopyTag
-   | BeforepasteTag
-   | PasteTag
-   | ResetTag
-   | SearchTag
-   | SelectstartTag
-   | TouchstartTag
-   | TouchmoveTag
-   | TouchendTag
-   | TouchcancelTag
+  = AbortTag
+  | BlurTag
+  | ChangeTag
+  | ClickTag
+  | ContextmenuTag
+  | DblclickTag
+  | DragTag
+  | DragendTag
+  | DragenterTag
+  | DragleaveTag
+  | DragoverTag
+  | DragstartTag
+  | DropTag
+  | ErrorTag
+  | FocusTag
+  | InputTag
+  | InvalidTag
+  | KeydownTag
+  | KeypressTag
+  | KeyupTag
+  | LoadTag
+  | MousedownTag
+  | MouseenterTag
+  | MouseleaveTag
+  | MousemoveTag
+  | MouseoutTag
+  | MouseoverTag
+  | MouseupTag
+  | MousewheelTag
+  | ScrollTag
+  | SelectTag
+  | SubmitTag
+  | WheelTag
+  | BeforecutTag
+  | CutTag
+  | BeforecopyTag
+  | CopyTag
+  | BeforepasteTag
+  | PasteTag
+  | ResetTag
+  | SearchTag
+  | SelectstartTag
+  | TouchstartTag
+  | TouchmoveTag
+  | TouchendTag
+  | TouchcancelTag
 
 data EventName :: EventTag -> Type where
   Abort :: EventName 'AbortTag
@@ -114,7 +108,7 @@ data EventName :: EventTag -> Type where
   Touchend :: EventName 'TouchendTag
   Touchcancel :: EventName 'TouchcancelTag
 
-newtype EventResult en = EventResult { unEventResult :: EventResultType en }
+newtype EventResult en = EventResult {unEventResult :: EventResultType en}
 
 type family EventResultType (en :: EventTag) :: Type where
   EventResultType 'ClickTag = ()
@@ -165,14 +159,15 @@ type family EventResultType (en :: EventTag) :: Type where
   EventResultType 'WheelTag = WheelEventResult
 
 data DeltaMode = DeltaPixel | DeltaLine | DeltaPage
-  deriving (Show, Read, Eq, Ord, Bounded, Enum)
+  deriving stock (Bounded, Enum, Eq, Ord, Read, Show)
 
 data WheelEventResult = WheelEventResult
   { _wheelEventResult_deltaX :: Double
   , _wheelEventResult_deltaY :: Double
   , _wheelEventResult_deltaZ :: Double
   , _wheelEventResult_deltaMode :: DeltaMode
-  } deriving (Show, Read, Eq, Ord)
+  }
+  deriving stock (Eq, Ord, Read, Show)
 
 data TouchEventResult = TouchEventResult
   { _touchEventResult_altKey :: Bool
@@ -183,7 +178,7 @@ data TouchEventResult = TouchEventResult
   , _touchEventResult_targetTouches :: [TouchResult]
   , _touchEventResult_touches :: [TouchResult]
   }
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Eq, Ord, Read, Show)
 
 data TouchResult = TouchResult
   { _touchResult_identifier :: Word
@@ -194,59 +189,59 @@ data TouchResult = TouchResult
   , _touchResult_pageX :: Int
   , _touchResult_pageY :: Int
   }
-  deriving (Show, Read, Eq, Ord)
+  deriving stock (Eq, Ord, Read, Show)
 
 #ifdef USE_TEMPLATE_HASKELL
 deriveGEq ''EventName
 deriveGCompare ''EventName
 #else
 instance GEq EventName
-    where geq Abort Abort             = return Refl
-          geq Blur Blur               = return Refl
-          geq Change Change           = return Refl
-          geq Click Click             = return Refl
-          geq Contextmenu Contextmenu = return Refl
-          geq Dblclick Dblclick       = return Refl
-          geq Drag Drag               = return Refl
-          geq Dragend Dragend         = return Refl
-          geq Dragenter Dragenter     = return Refl
-          geq Dragleave Dragleave     = return Refl
-          geq Dragover Dragover       = return Refl
-          geq Dragstart Dragstart     = return Refl
-          geq Drop Drop               = return Refl
-          geq Error Error             = return Refl
-          geq Focus Focus             = return Refl
-          geq Input Input             = return Refl
-          geq Invalid Invalid         = return Refl
-          geq Keydown Keydown         = return Refl
-          geq Keypress Keypress       = return Refl
-          geq Keyup Keyup             = return Refl
-          geq Load Load               = return Refl
-          geq Mousedown Mousedown     = return Refl
-          geq Mouseenter Mouseenter   = return Refl
-          geq Mouseleave Mouseleave   = return Refl
-          geq Mousemove Mousemove     = return Refl
-          geq Mouseout Mouseout       = return Refl
-          geq Mouseover Mouseover     = return Refl
-          geq Mouseup Mouseup         = return Refl
-          geq Mousewheel Mousewheel   = return Refl
-          geq Scroll Scroll           = return Refl
-          geq Select Select           = return Refl
-          geq Submit Submit           = return Refl
-          geq Wheel Wheel             = return Refl
-          geq Beforecut Beforecut     = return Refl
-          geq Cut Cut                 = return Refl
-          geq Beforecopy Beforecopy   = return Refl
-          geq Copy Copy               = return Refl
-          geq Beforepaste Beforepaste = return Refl
-          geq Paste Paste             = return Refl
-          geq Reset Reset             = return Refl
-          geq Search Search           = return Refl
-          geq Selectstart Selectstart = return Refl
-          geq Touchstart Touchstart   = return Refl
-          geq Touchmove Touchmove     = return Refl
-          geq Touchend Touchend       = return Refl
-          geq Touchcancel Touchcancel = return Refl
+    where geq Abort Abort             = pure Refl
+          geq Blur Blur               = pure Refl
+          geq Change Change           = pure Refl
+          geq Click Click             = pure Refl
+          geq Contextmenu Contextmenu = pure Refl
+          geq Dblclick Dblclick       = pure Refl
+          geq Drag Drag               = pure Refl
+          geq Dragend Dragend         = pure Refl
+          geq Dragenter Dragenter     = pure Refl
+          geq Dragleave Dragleave     = pure Refl
+          geq Dragover Dragover       = pure Refl
+          geq Dragstart Dragstart     = pure Refl
+          geq Drop Drop               = pure Refl
+          geq Error Error             = pure Refl
+          geq Focus Focus             = pure Refl
+          geq Input Input             = pure Refl
+          geq Invalid Invalid         = pure Refl
+          geq Keydown Keydown         = pure Refl
+          geq Keypress Keypress       = pure Refl
+          geq Keyup Keyup             = pure Refl
+          geq Load Load               = pure Refl
+          geq Mousedown Mousedown     = pure Refl
+          geq Mouseenter Mouseenter   = pure Refl
+          geq Mouseleave Mouseleave   = pure Refl
+          geq Mousemove Mousemove     = pure Refl
+          geq Mouseout Mouseout       = pure Refl
+          geq Mouseover Mouseover     = pure Refl
+          geq Mouseup Mouseup         = pure Refl
+          geq Mousewheel Mousewheel   = pure Refl
+          geq Scroll Scroll           = pure Refl
+          geq Select Select           = pure Refl
+          geq Submit Submit           = pure Refl
+          geq Wheel Wheel             = pure Refl
+          geq Beforecut Beforecut     = pure Refl
+          geq Cut Cut                 = pure Refl
+          geq Beforecopy Beforecopy   = pure Refl
+          geq Copy Copy               = pure Refl
+          geq Beforepaste Beforepaste = pure Refl
+          geq Paste Paste             = pure Refl
+          geq Reset Reset             = pure Refl
+          geq Search Search           = pure Refl
+          geq Selectstart Selectstart = pure Refl
+          geq Touchstart Touchstart   = pure Refl
+          geq Touchmove Touchmove     = pure Refl
+          geq Touchend Touchend       = pure Refl
+          geq Touchcancel Touchcancel = pure Refl
           geq _ _ = Nothing
 
 instance GCompare EventName

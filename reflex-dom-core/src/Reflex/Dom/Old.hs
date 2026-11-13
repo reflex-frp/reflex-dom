@@ -1,49 +1,38 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE LambdaCase #-}
-#ifdef USE_TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
-{-# LANGUAGE TypeOperators #-}
+
 module Reflex.Dom.Old
-       ( MonadWidget
-       , El
-       , ElConfig (..)
-       , elConfig_namespace
-       , elConfig_attributes
-       , _el_clicked
-       , _el_element
-       , _el_events
-       , addVoidAction
-       , AttributeMap
-       , Attributes (..)
-       , buildElement
-       , buildElementNS
-       , buildEmptyElement
-       , buildEmptyElementNS
-       , elDynHtml'
-       , elDynHtmlAttr'
-       , elStopPropagationNS
-       , elWith
-       , elWith'
-       , emptyElWith
-       , emptyElWith'
-       , namedNodeMapGetNames
-       , nodeClear
-       , onEventName
-       , schedulePostBuild
-       , text'
-       , unsafePlaceElement
-       , WidgetHost
-       , wrapElement
-       ) where
+  ( MonadWidget
+  , El
+  , ElConfig (..)
+  , elConfig_namespace
+  , elConfig_attributes
+  , _el_clicked
+  , _el_element
+  , _el_events
+  , addVoidAction
+  , AttributeMap
+  , Attributes (..)
+  , buildElement
+  , buildElementNS
+  , buildEmptyElement
+  , buildEmptyElementNS
+  , elDynHtml'
+  , elDynHtmlAttr'
+  , elStopPropagationNS
+  , elWith
+  , elWith'
+  , emptyElWith
+  , emptyElWith'
+  , namedNodeMapGetNames
+  , nodeClear
+  , onEventName
+  , schedulePostBuild
+  , text'
+  , unsafePlaceElement
+  , WidgetHost
+  , wrapElement
+  ) where
 
 import Control.Arrow (first)
 #ifdef USE_TEMPLATE_HASKELL
@@ -60,25 +49,31 @@ import Data.Default
 import Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Data.Text (Text)
-import qualified GHCJS.DOM.Element as Element
+import Data.Traversable (for)
+import GHCJS.DOM.Element qualified as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChild)
 import GHCJS.DOM.Types
-       (liftJSM, JSM, IsHTMLElement, IsNode)
-import qualified GHCJS.DOM.Types as DOM
+  ( IsHTMLElement
+  , IsNode
+  , JSM
+  , liftJSM
+  )
+import GHCJS.DOM.Types qualified as DOM
 import Reflex.Class
-import Reflex.Dom.Builder.Class
-import Reflex.Dom.Builder.Immediate
-import Reflex.Dom.Widget.Basic
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
 import Reflex.TriggerEvent.Class
+
+import Reflex.Dom.Builder.Class
+import Reflex.Dom.Builder.Immediate
+import Reflex.Dom.Widget.Basic
 
 data ElConfig attrs = ElConfig
   { _elConfig_namespace :: Maybe Text
@@ -86,22 +81,24 @@ data ElConfig attrs = ElConfig
   }
 
 instance attrs ~ Map Text Text => Default (ElConfig attrs) where
-  def = ElConfig
-    { _elConfig_namespace = Nothing
-    , _elConfig_attributes = mempty
-    }
+  def =
+    ElConfig
+      { _elConfig_namespace = Nothing
+      , _elConfig_attributes = mempty
+      }
 
 #ifdef USE_TEMPLATE_HASKELL
 makeLenses ''ElConfig
 #else
 elConfig_namespace :: Lens' (ElConfig attrs1) (Maybe Text)
-elConfig_namespace f (ElConfig a b) = (\a' -> ElConfig a' b) <$> f a
+elConfig_namespace f (ElConfig a b) = (`ElConfig` b) <$> f a
 {-# INLINE elConfig_namespace #-}
 elConfig_attributes :: Lens (ElConfig attrs1) (ElConfig attrs2) attrs1 attrs2
 elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
 {-# INLINE elConfig_attributes #-}
 #endif
 
+#ifndef ghcjs_HOST_OS
 type MonadWidgetConstraints t m =
   ( DomBuilder t m
   , DomBuilderSpace m ~ GhcjsDomSpace
@@ -113,10 +110,8 @@ type MonadWidgetConstraints t m =
   , PerformEvent t m
   , MonadIO m
   , MonadIO (Performable m)
-#ifndef ghcjs_HOST_OS
   , DOM.MonadJSM m
   , DOM.MonadJSM (Performable m)
-#endif
   , TriggerEvent t m
   , HasDocument m
   , MonadRef m
@@ -124,6 +119,26 @@ type MonadWidgetConstraints t m =
   , MonadRef (Performable m)
   , Ref (Performable m) ~ Ref IO
   )
+#else
+type MonadWidgetConstraints t m =
+  ( DomBuilder t m
+  , DomBuilderSpace m ~ GhcjsDomSpace
+  , MonadFix m
+  , MonadHold t m
+  , MonadSample t (Performable m)
+  , MonadReflexCreateTrigger t m
+  , PostBuild t m
+  , PerformEvent t m
+  , MonadIO m
+  , MonadIO (Performable m)
+  , TriggerEvent t m
+  , HasDocument m
+  , MonadRef m
+  , Ref m ~ Ref IO
+  , MonadRef (Performable m)
+  , Ref (Performable m) ~ Ref IO
+  )
+#endif
 
 class MonadWidgetConstraints t m => MonadWidget t m
 instance MonadWidgetConstraints t m => MonadWidget t m
@@ -170,11 +185,10 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  return $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
+  pure $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
-
 
 onEventName :: IsHTMLElement e => EventName en -> e -> EventM e (EventType en) () -> JSM (JSM ())
 onEventName = elementOnEventName
@@ -204,7 +218,7 @@ emptyElWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs
 emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 
 emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
-emptyElWith' elementTag cfg = fmap fst $ elWith' elementTag cfg $ return ()
+emptyElWith' elementTag cfg = fmap fst $ elWith' elementTag cfg $ pure ()
 
 {-# DEPRECATED _el_clicked "Use 'domEvent Click' instead" #-}
 _el_clicked :: Reflex t => Element EventResult d t -> Event t ()
@@ -230,11 +244,13 @@ wrapElement :: forall t m. MonadWidget t m => (forall en. DOM.HTMLElement -> Eve
 wrapElement eh e = do
   let h :: (EventName en, GhcjsDomEvent en) -> JSM (Maybe (EventResult en))
       h (en, GhcjsDomEvent evt) = runReaderT (eh e en) evt
-  wrapRawElement (DOM.toElement e) $ (def :: RawElementConfig EventResult t (DomBuilderSpace m))
-    { _rawElementConfig_eventSpec = def
-        { _ghcjsEventSpec_handler = GhcjsEventHandler h
-        }
-    }
+  wrapRawElement (DOM.toElement e) $
+    (def :: RawElementConfig EventResult t (DomBuilderSpace m))
+      { _rawElementConfig_eventSpec =
+          def
+            { _ghcjsEventSpec_handler = GhcjsEventHandler h
+            }
+      }
 
 unsafePlaceElement :: MonadWidget t m => DOM.HTMLElement -> m (Element EventResult (DomBuilderSpace m) t)
 unsafePlaceElement e = do
@@ -244,34 +260,37 @@ unsafePlaceElement e = do
 namedNodeMapGetNames :: DOM.NamedNodeMap -> JSM (Set Text)
 namedNodeMapGetNames self = do
   l <- NNM.getLength self
-  Set.fromList <$> forM (take (fromIntegral l) [0..]) (
-    NNM.itemUnchecked self >=> getNodeName)
+  Set.fromList
+    <$> for
+      (take (fromIntegral l) [0 ..])
+      (NNM.itemUnchecked self >=> getNodeName)
 
 nodeClear :: IsNode self => self -> JSM ()
 nodeClear n = do
   mfc <- getFirstChild n
   case mfc of
-    Nothing -> return ()
+    Nothing -> pure ()
     Just fc -> do
       _ <- removeChild n fc
       nodeClear n
 
-elStopPropagationNS :: forall t m en a. (MonadWidget t m) => Maybe Text -> Text -> EventName en -> m a -> m a
+elStopPropagationNS :: forall t m en a. MonadWidget t m => Maybe Text -> Text -> EventName en -> m a -> m a
 elStopPropagationNS ns elementTag en child = do
   let f = GhcjsEventFilter $ \_ -> do
-        return (stopPropagation, return Nothing)
-      cfg = (def :: ElementConfig EventResult t (DomBuilderSpace m))
-        & namespace .~ ns
-        & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
+        pure (stopPropagation, pure Nothing)
+      cfg =
+        (def :: ElementConfig EventResult t (DomBuilderSpace m))
+          & namespace .~ ns
+          & elementConfig_eventSpec . ghcjsEventSpec_filters %~ DMap.insert en f
   snd <$> element elementTag cfg child
 
 elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
   let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
-  (e, _) <- element elementTag cfg $ return ()
+  (e, _) <- element elementTag cfg $ pure ()
   postBuild <- getPostBuild
   performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) <$> leftmost [updated html, tag (current html) postBuild]
-  return e
+  pure e
 
 elDynHtml' :: MonadWidget t m => Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtml' elementTag = elDynHtmlAttr' elementTag mempty

@@ -2,9 +2,11 @@
 -- reexporting on ghc > 8.2.
 -- https://github.com/haskell/haddock/issues/979
 {-# OPTIONS_HADDOCK hide, prune, ignore-exports #-}
+
 module Reflex.Dom.Core (module X) where
 
 import Reflex as X hiding (askEvents)
+
 import Reflex.Dom.Builder.Class as X
 import Reflex.Dom.Builder.Hydratable as X
 import Reflex.Dom.Builder.Immediate as X

@@ -1,35 +1,33 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
-
-module Reflex.Dom.Xhr.Foreign (
-    XMLHttpRequest
-  , XMLHttpRequestResponseType(..)
+module Reflex.Dom.Xhr.Foreign
+  ( XMLHttpRequest
+  , XMLHttpRequestResponseType (..)
   , module Reflex.Dom.Xhr.Foreign
-) where
+  ) where
 
 import Control.Exception (throwIO)
-import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.IO.Class (MonadIO (..))
+import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.ByteString (ByteString)
-import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import GHCJS.DOM.Enums
 import GHCJS.DOM.EventM (EventM, on, onSync)
 import GHCJS.DOM.EventTarget (dispatchEvent)
-import GHCJS.DOM.Types (MonadJSM, ToJSString, FormData, Document, Blob (..), ArrayBuffer (..), JSVal, JSM, IsEvent, XMLHttpRequestProgressEvent, ProgressEvent, Event, XMLHttpRequestUpload, FromJSString, ArrayBufferView (..), liftJSM, castTo)
+import GHCJS.DOM.Types (ArrayBuffer (..), ArrayBufferView (..), Blob (..), Document, Event, FormData, FromJSString, IsEvent, JSM, JSVal, MonadJSM, ProgressEvent, ToJSString, XMLHttpRequestProgressEvent, XMLHttpRequestUpload, castTo, liftJSM)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+import Language.Javascript.JSaddle.Monad qualified as JS (catch)
 import Prelude hiding (error)
+
+import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
 import Reflex.Dom.Xhr.Exception
 import Reflex.Dom.Xhr.ResponseType
 
 xmlHttpRequestNew :: MonadJSM m => m XMLHttpRequest
 xmlHttpRequestNew = newXMLHttpRequest
 
-xmlHttpRequestOpen ::
-                   (ToJSString method, ToJSString url, ToJSString user, ToJSString password, MonadJSM m) =>
-                     XMLHttpRequest -> method -> url -> Bool -> user -> password -> m ()
+xmlHttpRequestOpen
+  :: (ToJSString method, ToJSString url, ToJSString user, ToJSString password, MonadJSM m)
+  => XMLHttpRequest -> method -> url -> Bool -> user -> password -> m ()
 xmlHttpRequestOpen request method url async user password = open request method url async (Just user) (Just password)
 
 convertException :: XHRError -> XhrException
@@ -64,15 +62,15 @@ instance IsXhrPayload ArrayBuffer where
 instance IsXhrPayload ByteString where
   sendXhrPayload xhr bs = sendXhrPayload xhr =<< liftJSM (bsToArrayBuffer bs)
 
-newtype XhrPayload = XhrPayload { unXhrPayload :: JSVal }
+newtype XhrPayload = XhrPayload {unXhrPayload :: JSVal}
 
 -- This used to be a non blocking call, but now it uses an interruptible ffi
 xmlHttpRequestSend :: IsXhrPayload payload => XMLHttpRequest -> payload -> JSM ()
 xmlHttpRequestSend self p = sendXhrPayload self p `JS.catch` (liftIO . throwIO . convertException)
 
-
-xmlHttpRequestSetRequestHeader :: (ToJSString header, ToJSString value, MonadJSM m)
-                               => XMLHttpRequest -> header -> value -> m ()
+xmlHttpRequestSetRequestHeader
+  :: (ToJSString header, ToJSString value, MonadJSM m)
+  => XMLHttpRequest -> header -> value -> m ()
 xmlHttpRequestSetRequestHeader = setRequestHeader
 
 xmlHttpRequestAbort :: MonadJSM m => XMLHttpRequest -> m ()
@@ -81,8 +79,9 @@ xmlHttpRequestAbort = abort
 xmlHttpRequestGetAllResponseHeaders :: MonadJSM m => XMLHttpRequest -> m Text
 xmlHttpRequestGetAllResponseHeaders = getAllResponseHeaders
 
-xmlHttpRequestGetResponseHeader :: (ToJSString header, MonadJSM m)
-                                => XMLHttpRequest -> header -> m Text
+xmlHttpRequestGetResponseHeader
+  :: (ToJSString header, MonadJSM m)
+  => XMLHttpRequest -> header -> m Text
 xmlHttpRequestGetResponseHeader self header = fromMaybe "" <$> getResponseHeader self header
 
 xmlHttpRequestOverrideMimeType :: (ToJSString override, MonadJSM m) => XMLHttpRequest -> override -> m ()
@@ -172,10 +171,10 @@ xmlHttpRequestGetResponse xhr = do
   mr <- getResponse xhr
   rt <- xmlHttpRequestGetResponseType xhr
   case rt of
-       Just XhrResponseType_Blob -> fmap XhrResponseBody_Blob <$> castTo Blob mr
-       Just XhrResponseType_Text -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
-       Just XhrResponseType_ArrayBuffer -> do
-           ab <- liftJSM $ mutableArrayBufferFromJSVal mr
-           Just . XhrResponseBody_ArrayBuffer <$> bsFromMutableArrayBuffer ab
-       _ -> return Nothing
+    Just XhrResponseType_Blob -> fmap XhrResponseBody_Blob <$> castTo Blob mr
+    Just XhrResponseType_Text -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+    Just XhrResponseType_Default -> Just . XhrResponseBody_Text <$> xmlHttpRequestGetStatusText xhr
+    Just XhrResponseType_ArrayBuffer -> do
+      ab <- liftJSM $ mutableArrayBufferFromJSVal mr
+      Just . XhrResponseBody_ArrayBuffer <$> bsFromMutableArrayBuffer ab
+    _ -> pure Nothing

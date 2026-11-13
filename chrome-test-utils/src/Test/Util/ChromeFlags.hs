@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Test.Util.ChromeFlags where
 
 import Data.Text
