@@ -16,15 +16,15 @@ import Control.Monad.Reader
 import Control.Monad.Ref (MonadAtomicRef (..), MonadRef (..))
 import Data.IORef (IORef, newIORef)
 import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
+import Data.IntMap.Strict qualified as IntMap
 import Data.Kind (Type)
 import Data.Semigroup.Commutative
 import Data.Text (Text)
 import Data.Void
-import qualified GHCJS.DOM.Document as Document
-import qualified GHCJS.DOM.Node as Node
+import GHCJS.DOM.Document qualified as Document
+import GHCJS.DOM.Node qualified as Node
 import GHCJS.DOM.Types (MonadJSM)
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.Types qualified as DOM
 import Reflex hiding (askEvents)
 import Reflex.Host.Class
 
@@ -237,7 +237,7 @@ instance (Prerender t m, MonadFix m, Reflex t) => Prerender t (RequesterT t requ
           pure (x, fmapCheap (IntMap.singleton selector) e)
     (result, requestsDyn) <- fmap splitDynPure $ lift $ prerender (withFannedResponses server 0) (withFannedResponses client 1)
     responses <- fmap (fmapCheap unMultiEntry) $ requesting' $ fmapCheap multiEntry $ switchPromptlyDyn requestsDyn
-    return result
+    pure result
 
 instance (Prerender t m, Monad m, Reflex t, MonadFix m, Group q, Commutative q, Query q, Eq q) => Prerender t (QueryT t q m) where
   type Client (QueryT t q m) = QueryT t q (Client m)

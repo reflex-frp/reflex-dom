@@ -1,18 +1,19 @@
 -- This tests that reflex-dom re-exports all of reflex-dom-core's modules.
 -- Without this test they easily drift.
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
 module Main where
 
 import Control.Monad (when)
 import Data.List (intercalate)
-import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe, isNothing, mapMaybe)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Distribution.Compiler (CompilerFlavor (GHC))
 import Distribution.ModuleName (ModuleName, components)
 import Distribution.PackageDescription.Parsec (parseGenericPackageDescription, runParseResult)
-import qualified Distribution.System as Dist
+import Distribution.System qualified as Dist
 import Distribution.Types.BuildInfo (buildable, defaultExtensions, defaultLanguage, hsSourceDirs, options)
 import Distribution.Types.CondTree (simplifyCondTree)
 #if MIN_VERSION_Cabal(3,2,0)
@@ -26,7 +27,7 @@ import Distribution.Types.ModuleReexport (ModuleReexport, moduleReexportOriginal
 import Distribution.Types.PackageName (mkPackageName)
 import Distribution.Utils.Generic (readUTF8File, toUTF8BS)
 import System.Environment (getArgs)
-import qualified System.Info
+import System.Info qualified
 
 main :: IO ()
 main = do
@@ -51,7 +52,7 @@ main = do
     error
       $ intercalate "\n\t"
       $ "reflex-dom does not re-export the following modules from reflex-dom-core:"
-        : map
+        : fmap
           (intercalate "." . components)
           (Set.toAscList $ reflexDomCoreExports `Set.difference` reflexDomReexportsFromCore)
 
@@ -76,4 +77,4 @@ parseCabalExports file = do
       let (_, lib) = simplifyCondTree evalConfVar condLib
       in (exposedModules lib, reexportedModules lib)
     Right Nothing -> error $ "Haskell package has no library component: " <> file
-    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (map show (NE.toList errors))
+    Left (_, errors) -> error $ "Failed to parse " <> file <> ":\n" <> unlines (show <$> NE.toList errors)

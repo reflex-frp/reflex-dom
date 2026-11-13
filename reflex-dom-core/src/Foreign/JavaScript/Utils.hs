@@ -10,23 +10,22 @@ module Foreign.JavaScript.Utils
 import Control.Lens
 import Data.Aeson
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified GHCJS.Buffer as JS
+import Data.ByteString qualified as BS
+import GHCJS.Buffer qualified as JS
 import GHCJS.DOM.Types (ArrayBuffer (..))
 import GHCJS.Marshal ()
-import qualified JavaScript.TypedArray.ArrayBuffer as JS
-import Language.Javascript.JSaddle (js1, jsg)
+import JavaScript.TypedArray.ArrayBuffer qualified as JS
 import Language.Javascript.JSaddle.Types (JSM, JSString, JSVal, MonadJSM, ghcjsPure, jsval, liftJSM)
 
 import Foreign.JavaScript.Internal.Utils (js_dataView)
 #ifdef ghcjs_HOST_OS
 import Control.Exception (SomeException)
-import Language.Javascript.JSaddle (fromJSVal, catch)
+import Language.Javascript.JSaddle (catch, fromJSVal, js1, jsg)
 import System.IO.Unsafe
 #else
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text.Encoding
-import Language.Javascript.JSaddle (textFromJSString)
+import Language.Javascript.JSaddle (js1, jsg, textFromJSString)
 #endif
 
 {-# INLINEABLE bsFromMutableArrayBuffer #-}

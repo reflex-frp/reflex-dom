@@ -12,13 +12,13 @@ module Reflex.Dom.WebSocket.Foreign
 import Control.Lens ((^.))
 import Data.Bifoldable
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Text.Encoding
 import GHCJS.DOM.CloseEvent
 import GHCJS.DOM.MessageEvent
 import GHCJS.DOM.Types (JSM, JSVal, WebSocket (..), fromJSValUnchecked, liftJSM)
-import qualified GHCJS.DOM.WebSocket as DOM
+import GHCJS.DOM.WebSocket qualified as DOM
 import GHCJS.Foreign (JSType (..), jsTypeOf)
 import Language.Javascript.JSaddle (fun, js2, jsg, jss, new)
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
@@ -89,7 +89,7 @@ newWebSocket url protocols onMessage onOpen onError onClose = do
   _ <- ws ^. js2 addEventListener ("error" :: String) onErrorWrapped
   _ <- ws ^. js2 addEventListener ("close" :: String) onCloseWrapped
   _ <- ws ^. js2 addEventListener ("message" :: String) onMessageWrapped
-  return $ JSWebSocket $ WebSocket ws
+  pure $ JSWebSocket $ WebSocket ws
 
 onBSMessage :: Either ByteString JSVal -> JSM ByteString
-onBSMessage = either return $ fmap encodeUtf8 . fromJSValUnchecked
+onBSMessage = either pure $ fmap encodeUtf8 . fromJSValUnchecked

@@ -3,12 +3,13 @@
 import Control.Lens
 import Control.Monad.Fix
 import Control.Monad.IO.Class
+import Data.Foldable (toList, traverse_)
 import Data.List
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Ord
 import Data.Patch.MapWithMove
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Time.Clock
 import System.Random
 
@@ -21,9 +22,9 @@ foreign export javascript "hs_start" main :: IO ()
 main :: IO ()
 main = mainWidget $ do
   let f _ (a, b, c) = el "tr" $ do
-        mapM_ (el "td" . text . T.pack . show) [a, b, c]
+        traverse_ (el "td" . text . T.pack . show) [a, b, c]
         _ <- el "td" $ inputElement def
-        return ()
+        pure ()
   let numKeys = 1000 :: Int
       keys = take numKeys [0 :: Int ..]
       values :: [(Int, Int, Int)]
@@ -56,7 +57,7 @@ main = mainWidget $ do
       el "th" $ text "C"
       el "th" $ text "Stateful Element (textbox)"
     simpleSortableList f testMap resort resortSlow
-  return ()
+  pure ()
 
 displayRedrawTime :: (DomBuilder t m, MonadHold t m, PostBuild t m, PerformEvent t m, TriggerEvent t m, MonadIO (Performable m)) => Event t a -> m ()
 displayRedrawTime e = do
@@ -64,7 +65,7 @@ displayRedrawTime e = do
   et1' <- delay 0 et1
   diff <- performEvent $ ffor et1' $ \t1 -> do
     t2 <- liftIO getCurrentTime
-    return $ t2 `diffUTCTime` t1
+    pure $ t2 `diffUTCTime` t1
   text "Time: "
   dynText =<< holdDyn "not yet run" (T.pack . show <$> diff)
 
@@ -72,7 +73,7 @@ simpleSortableList :: forall t m k v. (MonadHold t m, MonadFix m, Adjustable t m
 simpleSortableList f m0 resortFunc resortSlowFunc = do
   rec let resortPatchFast = attachWith (flip patchThatSortsMapWith) (currentIncremental m) resortFunc
           redrawPatch :: Map k v -> (v -> v -> Ordering) -> PatchMapWithMove k v
-          redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ Map.elems d)
+          redrawPatch d cmp = patchMapWithMoveInsertAll $ Map.fromList $ zip (Map.keys d) (sortBy cmp $ toList d)
           resortPatchSlow = attachWith redrawPatch (currentIncremental m) resortSlowFunc
           resortPatch =
             leftmost
@@ -81,4 +82,4 @@ simpleSortableList f m0 resortFunc resortSlowFunc = do
               ]
       m <- holdIncremental m0 resortPatch
   _ <- mapMapWithAdjustWithMove f m0 resortPatch
-  return ()
+  pure ()

@@ -31,15 +31,16 @@ import Data.Foldable (for_)
 import Data.IORef
 import Data.Maybe
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Text.Encoding
+import Data.Traversable (for)
 import GHCJS.DOM
 import GHCJS.DOM.Document
 import GHCJS.DOM.Element
 import GHCJS.DOM.Node
 import GHCJS.DOM.NonElementParentNode
 import GHCJS.DOM.Types (JSM)
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.Types qualified as DOM
 
 #ifdef PROFILE_REFLEX
 import Reflex.Profiled
@@ -107,10 +108,10 @@ attachHydrationWidgetWithFailure onFailure switchoverAction jsSing w = do
     (syncEvent, fireSync) <- newTriggerEvent
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- lift $ hostPerformEventT $ do
       a <- w syncEvent hydrationMode (Just rootNodesRef) events
-      _ <- runWithReplace (return ()) $ delayedAction <$ syncEvent
+      _ <- runWithReplace (pure ()) $ delayedAction <$ syncEvent
       pure a
     mPostBuildTrigger <- readRef postBuildTriggerRef
-    lift $ forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+    lift $ for_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ pure ()
     liftIO $ fireSync ()
     rootNodes <- liftIO $ readIORef rootNodesRef
     let delayedAction = do
@@ -169,12 +170,12 @@ runHydrationWidgetWithHeadAndBodyWithFailure onFailure switchoverAction app = wi
                     , _hydrationDomBuilderEnv_delayed = delayed
                     }
             a <- runHydrationDomBuilderT w builderEnv events
-            forM_ hydrationResult $ \hr -> do
+            for_ hydrationResult $ \hr -> do
               res <- liftIO $ readIORef delayed
               liftIO $ modifyIORef' hr ((n, res) :)
             pure a
     runWithJSContextSingleton (runPostBuildT (runTriggerEventT (app (hydrateDom $ toNode headElement) (hydrateDom $ toNode bodyElement)) events) postBuild) jsSing
-    return (events, postBuildTriggerRef)
+    pure (events, postBuildTriggerRef)
   liftIO $ processAsyncEvents events fc
 
 {-# INLINE mainWidget #-}
@@ -205,7 +206,7 @@ mainWidgetWithCss :: ByteString -> (forall x. Widget x ()) -> JSM ()
 mainWidgetWithCss css w = withJSContextSingleton $ \jsSing -> do
   doc <- currentDocumentUnchecked
   headElement <- getHeadUnchecked doc
-  setInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8 css) <> "</style>" -- TODO: Fix this
+  setInnerHTML headElement $ "<style>" <> T.unpack (decodeUtf8Lenient css) <> "</style>" -- TODO: Fix this
   body <- getBodyUnchecked doc
   attachWidget body jsSing w
 
@@ -229,6 +230,11 @@ runDomHost = runSpiderHost . runProfiledM
 #else
 runDomHost = runSpiderHost
 #endif
+
+-- Eta reduction does not type-check against these rank-N arguments.
+{- HLINT ignore mainHydrationWidgetWithHead "Eta reduce" -}
+{- HLINT ignore mainHydrationWidgetWithSwitchoverAction "Eta reduce" -}
+{- HLINT ignore mainWidget "Eta reduce" -}
 
 type Widget x = ImmediateDomBuilderT DomTimeline (DomCoreWidget x)
 
@@ -267,7 +273,7 @@ runImmediateWidgetWithHeadAndBody app = withJSContextSingletonMono $ \jsSing -> 
                   }
           lift $ runHydrationDomBuilderT w builderEnv events
     runWithJSContextSingleton (runPostBuildT (runTriggerEventT (app (go headFragment) (go bodyFragment)) events) postBuild) jsSing
-    return (events, postBuildTriggerRef)
+    pure (events, postBuildTriggerRef)
   replaceElementContents headElement headFragment
   replaceElementContents bodyElement bodyFragment
   liftIO $ processAsyncEvents events fc
@@ -283,7 +289,7 @@ replaceElementContents :: DOM.IsElement e => e -> DOM.DocumentFragment -> JSM ()
 replaceElementContents e df = do
   setInnerHTML e ("" :: String)
   _ <- appendChild e df
-  return ()
+  pure ()
 
 {-# INLINEABLE attachWidget' #-}
 attachWidget' :: DOM.IsElement e => e -> JSContextSingleton x -> Widget x a -> JSM (a, FireCommand DomTimeline DomHost)
@@ -299,16 +305,16 @@ attachWidget' rootElement jsSing w = do
             { _hydrationDomBuilderEnv_document = toDocument doc
             , _hydrationDomBuilderEnv_parent = Left $ toNode df
             , _hydrationDomBuilderEnv_unreadyChildren = unreadyChildren
-            , _hydrationDomBuilderEnv_commitAction = return () -- TODO
+            , _hydrationDomBuilderEnv_commitAction = pure () -- TODO
             , _hydrationDomBuilderEnv_switchover = never
             , _hydrationDomBuilderEnv_delayed = delayed
             , _hydrationDomBuilderEnv_hydrationMode = hydrationMode
             }
     a <- runWithJSContextSingleton (runPostBuildT (runHydrationDomBuilderT w builderEnv events) postBuild) jsSing
-    return ((a, events), postBuildTriggerRef)
+    pure ((a, events), postBuildTriggerRef)
   replaceElementContents rootElement df
   liftIO $ processAsyncEvents events fc
-  return (a, fc)
+  pure (a, fc)
 
 type EventChannel = Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
 
@@ -325,19 +331,19 @@ attachImmediateWidget w = do
   runDomHost $ do
     ((result, postBuildTriggerRef), fc@(FireCommand fire)) <- hostPerformEventT $ w hydrationMode events
     mPostBuildTrigger <- readRef postBuildTriggerRef
-    forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
-    return (result, fc)
+    for_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ pure ()
+    pure (result, fc)
 
 processAsyncEvents :: EventChannel -> FireCommand DomTimeline DomHost -> IO ()
 processAsyncEvents events (FireCommand fire) = void $ forkIO $ forever $ do
   ers <- readChan events
   _ <- runDomHost $ do
-    mes <- liftIO $ forM ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
+    mes <- liftIO $ for ers $ \(EventTriggerRef er :=> TriggerInvocation a _) -> do
       me <- readIORef er
-      return $ fmap (\e -> e :=> Identity a) me
-    _ <- fire (catMaybes mes) $ return ()
-    liftIO $ forM_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
-  return ()
+      pure $ fmap (\e -> e :=> Identity a) me
+    _ <- fire (catMaybes mes) $ pure ()
+    liftIO $ for_ ers $ \(_ :=> TriggerInvocation _ cb) -> cb
+  pure ()
 
 -- | Run a reflex-dom application inside of an existing DOM element with the given ID
 mainWidgetInElementById :: Text -> (forall x. Widget x ()) -> JSM ()
@@ -365,7 +371,7 @@ runApp' app = withJSContextSingleton $ \jsSing -> do
           AppInput
             { _appInput_window = w
             }
-  return ()
+  pure ()
 
 {-# DEPRECATED attachWidget'' "Use 'attachImmediateWidget . const' instead" #-}
 {-# INLINEABLE attachWidget'' #-}

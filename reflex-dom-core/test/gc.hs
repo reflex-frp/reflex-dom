@@ -4,6 +4,7 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Foldable (fold)
 import Data.Int
 import Data.Text as T
 import Language.Javascript.JSaddle.Warp
@@ -43,12 +44,12 @@ failureLimit = 0
 
 main :: IO ()
 main = do
-  handle (\(_ :: IOError) -> return ()) $ unshareNetwork -- If we run into an exception with sandboxing, just don't bother
+  handle (\(_ :: IOError) -> pure ()) unshareNetwork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags True $ \chromeFlags -> do
     mainThread <- myThreadId
     browserProcess <-
       spawnCommand $
-        mconcat
+        fold
           [ "echo 'Starting Chromium' ; chromium "
           , unpack $ T.unwords chromeFlags
           , " http://localhost:3911 ; echo 'Chromium exited'"
@@ -65,7 +66,7 @@ main = do
               rec let modifyAttrs = flip pushAlways (updated d) $ \_ -> sample $ current d
                   (e, _) <- element "button" (def & modifyAttributes .~ modifyAttrs) blank
                   d <- holdDyn mempty $ mempty <$ domEvent Click e
-              return ()
+              pure ()
         postBuild <- getPostBuild
         let f (!failures, !n) =
               liftIO $
@@ -83,7 +84,7 @@ main = do
                     when (overMax && failures >= failureLimit) $ do
                       putStrLn "FAILED: currentBytesUsed > maxBytesAllowed"
                       finishTest $ ExitFailure 1
-                    return $
+                    pure $
                       Just
                         ( if overMax
                             then succ failures
@@ -93,7 +94,7 @@ main = do
                   else do
                     putStrLn "SUCCEEDED"
                     finishTest ExitSuccess
-                    return Nothing
+                    pure Nothing
         rec redraw <-
               performEvent <=< delay 0 $
                 f
@@ -102,5 +103,5 @@ main = do
                     , fmapMaybe id redraw
                     ]
         _ <- widgetHold w $ w <$ redraw
-        return ()
+        pure ()
       liftIO $ forever $ threadDelay 1000000000

@@ -27,21 +27,20 @@ import Foreign.JavaScript.Orphans ()
 import Language.Haskell.TH
 #endif
 
-import GHCJS.DOM.Types (JSContextRef, askJSM)
 #ifdef ghcjs_HOST_OS
-import GHCJS.DOM.Types (MonadJSM)
+import GHCJS.DOM.Types (JSContextRef, MonadJSM, askJSM)
 #ifdef __GHCJS__
-import qualified GHCJS.DOM.Types as JS
-import qualified GHCJS.Foreign as JS
+import GHCJS.DOM.Types qualified as JS
+import GHCJS.Foreign qualified as JS
 #endif
 #if __GLASGOW_HASKELL__ < 900
-import qualified GHCJS.Foreign.Callback as JS
-import qualified GHCJS.Foreign.Callback.Internal (Callback (..))
-import qualified JavaScript.Array as JS
-import qualified JavaScript.Array.Internal (SomeJSArray (..))
-import qualified JavaScript.Object as JS
-import qualified JavaScript.Object.Internal (Object (..))
-import qualified JavaScript.TypedArray.ArrayBuffer as JSArrayBuffer
+import GHCJS.Foreign.Callback qualified as JS
+import GHCJS.Foreign.Callback.Internal qualified (Callback (..))
+import JavaScript.Array qualified as JS
+import JavaScript.Array.Internal qualified (SomeJSArray (..))
+import JavaScript.Object qualified as JS
+import JavaScript.Object.Internal qualified (Object (..))
+import JavaScript.TypedArray.ArrayBuffer qualified as JSArrayBuffer
 
 import Data.Hashable
 import Data.Word
@@ -51,7 +50,7 @@ import Text.Encoding.Z
 #endif
 
 #else
-import GHCJS.DOM.Types (MonadJSM (..), runJSM)
+import GHCJS.DOM.Types (JSContextRef, MonadJSM (..), askJSM, runJSM)
 #endif
 
 import Control.Monad.Exception
@@ -62,7 +61,7 @@ import Control.Monad.Reader
 import Control.Monad.Ref
 import Control.Monad.Trans.Control
 import Data.Coerce (coerce)
-import qualified Data.Kind as Kind
+import Data.Kind qualified as Kind
 
 newtype WithJSContextSingleton x m a = WithJSContextSingleton {unWithJSContextSingleton :: ReaderT (JSContextSingleton x) m a} deriving newtype (Applicative, Functor, Monad, MonadAsyncException, MonadException, MonadFix, MonadIO, MonadTrans)
 

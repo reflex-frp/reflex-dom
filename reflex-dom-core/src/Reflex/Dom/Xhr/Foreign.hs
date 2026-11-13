@@ -15,7 +15,7 @@ import GHCJS.DOM.EventTarget (dispatchEvent)
 import GHCJS.DOM.Types (ArrayBuffer (..), ArrayBufferView (..), Blob (..), Document, Event, FormData, FromJSString, IsEvent, JSM, JSVal, MonadJSM, ProgressEvent, ToJSString, XMLHttpRequestProgressEvent, XMLHttpRequestUpload, castTo, liftJSM)
 import GHCJS.DOM.XMLHttpRequest
 import Language.Javascript.JSaddle.Helper (mutableArrayBufferFromJSVal)
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+import Language.Javascript.JSaddle.Monad qualified as JS (catch)
 import Prelude hiding (error)
 
 import Foreign.JavaScript.Utils (bsFromMutableArrayBuffer, bsToArrayBuffer)
@@ -177,4 +177,4 @@ xmlHttpRequestGetResponse xhr = do
     Just XhrResponseType_ArrayBuffer -> do
       ab <- liftJSM $ mutableArrayBufferFromJSVal mr
       Just . XhrResponseBody_ArrayBuffer <$> bsFromMutableArrayBuffer ab
-    _ -> return Nothing
+    _ -> pure Nothing

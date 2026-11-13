@@ -94,6 +94,7 @@ common common
     FunctionalDependencies
     GADTs
     GeneralizedNewtypeDeriving
+    ImportQualifiedPost
     LambdaCase
     MultiParamTypeClasses
     NoMonomorphismRestriction
@@ -154,7 +155,7 @@ library
   hs-source-dirs: src
   build-depends:
     aeson >= 0.8 && < 2.3,
-    base >= 4.9.1 && < 4.23,
+    base >= 4.14 && < 4.23,
     bimap >= 0.3 && < 0.6,
     blaze-builder >= 0.4.1 && < 0.5,
     bytestring >= 0.10 && < 0.13,
@@ -176,7 +177,7 @@ library
     ref-tf >= 0.4 && < 0.6,
     reflex >= 0.8.2.1 && < 1,
     stm >= 2.4 && < 2.6,
-    text >= 1.2 && < 2.2,
+    text >= 2.0 && < 2.2,
     transformers >= 0.3 && < 0.7,
     network-uri >= 2.6.1 && < 2.7
 

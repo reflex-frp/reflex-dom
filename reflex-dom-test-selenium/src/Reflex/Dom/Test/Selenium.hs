@@ -19,38 +19,43 @@ module Reflex.Dom.Test.Selenium
   ) where
 
 import Control.Concurrent (newEmptyMVar, putMVar, takeMVar, threadDelay)
-import qualified Control.Concurrent.Async as Async
+import Control.Concurrent.Async qualified as Async
 import Control.Exception (throwIO)
 import Control.Monad (when)
 import Control.Monad.Catch (MonadMask, handle)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Socket (PortNumber)
 import Network.Wai (responseLBS)
-import qualified Network.Wai.Handler.Warp as Warp
+import Network.Wai.Handler.Warp qualified as Warp
 import Network.WebSockets (defaultConnectionOptions)
 import Reflex.Dom.Core
 import System.IO (stderr)
 import System.IO.Silently (hSilence)
 import System.Process (StdStream (..), createProcess, proc, std_err, std_in, std_out, terminateProcess)
-import qualified Test.Hspec.Core.Spec as Hspec
+import Test.Hspec.Core.Spec qualified as Hspec
 import Test.Hspec.WebDriver (Spec, SpecWith, WdTestSession, sessionWith, using)
 import Test.Util.ChromeFlags
 import Test.Util.UnshareNetwork
 import Test.WebDriver (WD)
-import qualified Test.WebDriver as WD
-import qualified Test.WebDriver.Capabilities as WD
+import Test.WebDriver qualified as WD
+import Test.WebDriver.Capabilities qualified as WD
 
 #if !MIN_VERSION_webdriver(0,10,0)
 deriving newtype instance MonadMask WD
 #endif
+
+-- Eta reduction does not type-check against these rank-N arguments.
+{- HLINT ignore testWidget "Eta reduce" -}
+{- HLINT ignore testWidgetStatic "Eta reduce" -}
+{- HLINT ignore testWidgetHydrated "Eta reduce" -}
 
 data SeleniumSetupConfig = SeleniumSetupConfig
   { _seleniumSetupConfig_chromiumPath :: FilePath
@@ -69,7 +74,7 @@ data SeleniumSetupConfig = SeleniumSetupConfig
 --    webdriver tests here
 withSeleniumSpec :: SeleniumSetupConfig -> ((forall multi. SpecWith (WdTestSession multi) -> Spec) -> IO a) -> IO a
 withSeleniumSpec config runSpec = do
-  liftIO $ handle (\(_ :: IOError) -> return ()) $ unshareNetwork -- If we run into an exception with sandboxing, just don't bother
+  liftIO $ handle (\(_ :: IOError) -> pure ()) unshareNetwork -- If we run into an exception with sandboxing, just don't bother
   withSandboxedChromeFlags (_seleniumSetupConfig_headless config) $ \chromeFlags -> do
     withSeleniumServer (_seleniumSetupConfig_seleniumPort config) $ do
       let browserPath = T.strip $ T.pack $ _seleniumSetupConfig_chromiumPath config
@@ -87,7 +92,7 @@ startSeleniumServer port = do
         , std_out = NoStream
         , std_err = NoStream
         }
-  return $ terminateProcess ph
+  pure $ terminateProcess ph
 
 withSeleniumServer :: PortNumber -> IO a -> IO a
 withSeleniumServer port f = bracket (startSeleniumServer port) id $ \_ -> do
@@ -121,7 +126,7 @@ type TestWidget t m =
 data TestWidgetConfig = TestWidgetConfig
   { _testWidgetConfig_debug :: Bool
   -- ^ If this flag is set to True, during the test we will emit debug messages
-  , _testWidgetConfig_headWidget :: (forall m. TestWidget (SpiderTimeline Global) m => m ())
+  , _testWidgetConfig_headWidget :: forall m. TestWidget (SpiderTimeline Global) m => m ()
   -- ^ We can add widgets here that will be included in the head of the page
   --   (useful for example to include external js libraries in the tests)
   , _testWidgetConfig_jsaddlePort :: PortNumber
@@ -178,10 +183,10 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
   let putStrLnDebug :: MonadIO m => Text -> m ()
       putStrLnDebug m = when withDebugging $ liftIO $ putStrLn $ T.unpack m
       staticApp = do
-        el "head" $ headWidget
+        el "head" headWidget
         el "body" $ do
           bodyWidget
-          el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
+          el "script" $ text $ TE.decodeUtf8Lenient $ LBS.toStrict $ jsaddleJs False
   putStrLnDebug "rendering static"
   ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
@@ -204,7 +209,7 @@ testWidget' (TestWidgetConfig withDebugging headWidget jsaddlePort) beforeJS aft
     putStrLnDebug "sending response"
     r <- sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
     putStrLnDebug "sent response"
-    return r
+    pure r
   waitJSaddle <- liftIO newEmptyMVar
   let settings =
         foldr

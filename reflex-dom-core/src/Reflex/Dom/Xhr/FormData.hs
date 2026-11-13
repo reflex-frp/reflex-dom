@@ -12,7 +12,7 @@ import Data.Map (Map)
 import Data.Text (Text)
 import Data.Traversable
 import GHCJS.DOM.File (getName)
-import qualified GHCJS.DOM.FormData as FD
+import GHCJS.DOM.FormData qualified as FD
 import GHCJS.DOM.Types (File, IsBlob)
 import Language.Javascript.JSaddle.Monad (MonadJSM, liftJSM)
 import Reflex
@@ -59,10 +59,10 @@ postForms' url cfg payload = do
     iforM_ u $ \k v -> case v of
       FormValue_Text t -> FD.append fd k t
       FormValue_File b fn -> FD.appendBlob fd k b fn
-    return $ xhrRequest "POST" url $ cfg & xhrRequestConfig_sendData .~ fd
+    pure $ xhrRequest "POST" url $ cfg & xhrRequestConfig_sendData .~ fd
 
 -- | Converts a File (e.g., the output of a 'FileInput') into a 'FormValue'. The filename will be included if it is available.
 fileToFormValue :: MonadJSM m => File -> m (FormValue File)
 fileToFormValue f = do
   fn <- getName f
-  return $ FormValue_File f $ Just fn
+  pure $ FormValue_File f $ Just fn

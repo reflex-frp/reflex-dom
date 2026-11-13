@@ -11,7 +11,7 @@
 -- hang in the following test.
 
 import Control.Concurrent
-import qualified Control.Concurrent.Async as Async
+import Control.Concurrent.Async qualified as Async
 import Control.Lens.Operators
 import Control.Monad hiding (fail)
 import Control.Monad.Catch
@@ -19,52 +19,52 @@ import Control.Monad.Fail
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Ref
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Constraint.Extras
 import Data.Constraint.Extras.TH
 import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Map qualified as DMap
 import Data.Dependent.Sum (DSum (..), (==>))
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.GADT.Compare.TH
 import Data.GADT.Show.TH
 import Data.IORef (IORef)
-import qualified Data.IntMap as IntMap
+import Data.IntMap qualified as IntMap
 import Data.List (sort)
 import Data.Maybe
 import Data.Proxy
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import qualified GHCJS.DOM.File as File
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
+import GHCJS.DOM.File qualified as File
 import Language.Javascript.JSaddle (liftJSM, syncPoint)
 import Language.Javascript.JSaddle.Warp
 import Network.HTTP.Types (status200)
 import Network.Socket
 import Network.Wai
-import qualified Network.Wai.Handler.Warp as Warp
+import Network.Wai.Handler.Warp qualified as Warp
 import Network.WebSockets
 import Reflex.Patch.DMapWithMove
 import System.Directory
 import System.Environment
-import qualified System.FilePath as FilePath
+import System.FilePath qualified as FilePath
 import System.IO (stderr)
 import System.IO.Silently
 import System.IO.Temp
 import System.Process
 import System.Which (staticWhich)
-import qualified Test.HUnit as HUnit
+import Test.HUnit qualified as HUnit
 import Test.Hspec (xit)
-import qualified Test.Hspec as H
-import qualified Test.Hspec.Core.Spec as H
+import Test.Hspec qualified as H
+import Test.Hspec.Core.Spec qualified as H
 import Test.Hspec.WebDriver hiding (WD, click, runWD, uploadFile)
-import qualified Test.Hspec.WebDriver as WD
+import Test.Hspec.WebDriver qualified as WD
 import Test.Util.ChromeFlags
 import Test.WebDriver (WD (..))
-import qualified Test.WebDriver as WD
-import qualified Test.WebDriver.Capabilities as WD
+import Test.WebDriver qualified as WD
+import Test.WebDriver.Capabilities qualified as WD
 import Prelude hiding (fail)
 
 import Reflex.Dom.Core
@@ -155,7 +155,7 @@ tests withDebugging wdConfig caps _selenium = do
         putStrLnDebug "before"
         r <- m
         putStrLnDebug "after"
-        return r
+        pure r
       testWidgetStatic :: WD b -> (forall m. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
       testWidgetStatic = testWidgetStaticDebug withDebugging
       testWidget :: WD () -> WD b -> (forall m. TestWidget (SpiderTimeline Global) m => m ()) -> WD b
@@ -245,7 +245,7 @@ tests withDebugging wdConfig caps _selenium = do
               conf =
                 (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
                   & initialAttributes .~ "id" =: "second"
-                  & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> stopPropagation) def
+                  & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (const stopPropagation) def
           void $ element "span" conf $ text "hello world"
         performEvent_ $ liftIO (writeRef secondClickedRef True) <$ domEvent Click secondDivEl
       firstClicked <- readRef firstClickedRef
@@ -262,7 +262,7 @@ tests withDebugging wdConfig caps _selenium = do
         let conf :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace
             conf =
               (def :: ElementConfig EventResult (SpiderTimeline Global) GhcjsDomSpace)
-                & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (\_ -> preventDefault) def
+                & elementConfig_eventSpec .~ addEventSpecFlags (Proxy :: Proxy GhcjsDomSpace) Click (const preventDefault) def
                 & initialAttributes .~ "type" =: "checkbox"
         void $ element "input" conf $ text "hello world"
       assertEqual "Click not prevented" (False, False) clicked
@@ -288,7 +288,7 @@ tests withDebugging wdConfig caps _selenium = do
                 & modifyAttributes .~ (("delete" =: Nothing <> "init" =: Just "click" <> "click" =: Just "click") <$ click)
         (e, ()) <- element "div" conf $ text "hello world"
         let click = domEvent Click e
-        return ()
+        pure ()
 
   session' "inputElement" $ do
     describe "static renderer" $ do
@@ -1343,7 +1343,7 @@ tests withDebugging wdConfig caps _selenium = do
         checkInitialItems dm xs = do
           putStrLnDebug "checkInitialItems"
           liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
-          forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey k) (T.pack $ has @Show k $ show v)
+          for_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey k) (T.pack $ has @Show k $ show v)
         getAndCheckInitialItems dm = withRetry $ do
           putStrLnDebug "getAndCheckInitialItems"
           xs <- WD.findElems (WD.ByTag "li")
@@ -1453,7 +1453,7 @@ tests withDebugging wdConfig caps _selenium = do
         checkInitialItems dm xs = do
           putStrLnDebug "checkInitialItems"
           liftIO $ assertEqual "Wrong amount of items in DOM" (IntMap.size dm) (length xs)
-          forM_ (zip xs (IntMap.toList dm)) $ \(e, (k, v)) -> checkItem e (textKeyInt k) v
+          for_ (zip xs (IntMap.toList dm)) $ \(e, (k, v)) -> checkItem e (textKeyInt k) v
         getAndCheckInitialItems dm = withRetry $ do
           putStrLnDebug "getAndCheckInitialItems"
           xs <- WD.findElems (WD.ByTag "li")
@@ -1556,7 +1556,7 @@ tests withDebugging wdConfig caps _selenium = do
           shouldContainTextNoRetry v =<< WD.findElemFrom li (WD.ByClass "value")
         checkInitialItems dm xs = do
           liftIO $ assertEqual "Wrong amount of items in DOM" (DMap.size dm) (length xs)
-          forM_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey2 k) (T.pack $ has @Show k $ show v)
+          for_ (zip xs (DMap.toList dm)) $ \(e, k :=> Identity v) -> checkItem e (textKey2 k) (T.pack $ has @Show k $ show v)
         getAndCheckInitialItems dm = withRetry $ do
           xs <- WD.findElems (WD.ByTag "li")
           checkInitialItems dm xs
@@ -1655,14 +1655,14 @@ tests withDebugging wdConfig caps _selenium = do
     let doTest expectedOpts (initialValue :: Text) = do
           let doCheck = do
                 es <- findElemsWithRetry $ WD.ByTag "option"
-                opts <- mapM fetchElement es
+                opts <- traverse fetchElement es
                 assertEqual "missing/extra/incorrect option element(s)" expectedOpts (sort opts)
           testWidget doCheck doCheck $ do
             void $ dropdown initialValue (constDyn (("aa" :: Text) =: "aaa" <> "bb" =: "bbb")) def
         fetchElement e = do
           val <- WD.attr e "value"
           sel <- WD.attr e "selected"
-          return (fromMaybe "" val, isJust sel)
+          pure (fromMaybe "" val, isJust sel)
     -- The "aa" test case is important,  but a good test implementation probably needs to avoid selenium,  because HTML parsers will insert a "selected" attribute on the first "option" tag if no selected attributes are present;  thus as written, this erroneously succeeds on the old implementation (but properly implemented, should fail)
     -- Thus, it would appear that we do actually need a HTML5 or maybe XML parser for this test suite.
     xit "statically renders initial values (on aa)" $ runWD $ do
@@ -1685,7 +1685,7 @@ startSeleniumServer port = do
         , std_out = NoStream
         , std_err = NoStream
         }
-  return $ terminateProcess ph
+  pure $ terminateProcess ph
 
 withSeleniumServer :: (Selenium -> IO ()) -> IO ()
 withSeleniumServer f = do
@@ -1715,7 +1715,7 @@ assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.att
 elementShouldBeRemoved :: WD.Element -> WD ()
 elementShouldBeRemoved e = withRetry $ do
   try (WD.getText e) >>= \case
-    Left (WD.FailedCommand WD.StaleElementReference _) -> return ()
+    Left (WD.FailedCommand WD.StaleElementReference _) -> pure ()
     Left err -> throwM err
     Right !_ -> liftIO $ assertFailure "Expected element to be removed, but it still exists"
 
@@ -1757,7 +1757,7 @@ withRetry a = wait 300
         Left (e :: SomeException) -> do
           liftIO $ putStrLn ("(retrying due to " <> show e <> ")") *> threadDelay 100000
           wait $ n - 1
-        Right v -> return v
+        Right v -> pure v
 
 divId :: DomBuilder t m => Text -> m a -> m a
 divId i = elAttr "div" ("id" =: i)
@@ -1808,7 +1808,7 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
         el "head" $ pure ()
         el "body" $ do
           bodyWidget
-          el "script" $ text $ TE.decodeUtf8 $ LBS.toStrict $ jsaddleJs False
+          el "script" $ text $ TE.decodeUtf8Lenient $ LBS.toStrict $ jsaddleJs False
   putStrLnDebug "rendering static"
   ((), html) <- liftIO $ renderStatic $ runHydratableT staticApp
   putStrLnDebug "rendered static"
@@ -1832,14 +1832,14 @@ testWidgetDebug' hardFailure withDebugging beforeJS afterSwitchover bodyWidget =
     putStrLnDebug "sending response"
     r <- sendResponse $ responseLBS status200 [] $ "<!doctype html>\n" <> LBS.fromStrict html
     putStrLnDebug "sent response"
-    return r
+    pure r
   waitJSaddle <- liftIO newEmptyMVar
   port <- liftIO $ do
     sock <- socket AF_INET Stream defaultProtocol
     bind sock $ SockAddrInet 0 0
     p <- socketPort sock
     close sock
-    return p
+    pure p
   let settings =
         foldr
           ($)

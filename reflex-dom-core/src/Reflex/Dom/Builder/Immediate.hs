@@ -99,7 +99,6 @@ module Reflex.Dom.Builder.Immediate
 
 import Control.Concurrent
 import Control.Exception (bracketOnError)
-import Control.Lens (Identity (..), iforM_, imapM_, makeLenses, (^.))
 import Control.Monad
 import Control.Monad.Exception
 import Control.Monad.Fix
@@ -124,6 +123,7 @@ import Data.Maybe
 import Data.Some (Some (..))
 import Data.String (IsString)
 import Data.Text (Text)
+import Data.Traversable (for)
 import GHCJS.DOM.ClipboardEvent as ClipboardEvent
 import GHCJS.DOM.Document (Document, createComment, createDocumentFragment, createElement, createElementNS, createTextNode)
 import GHCJS.DOM.Element (getScrollTop, hasAttribute, removeAttribute, removeAttributeNS, setAttribute, setAttributeNS)
@@ -131,13 +131,17 @@ import GHCJS.DOM.EventM (EventM, event, on)
 import GHCJS.DOM.KeyboardEvent as KeyboardEvent
 import GHCJS.DOM.MouseEvent
 import GHCJS.DOM.Node (appendChild_, getOwnerDocumentUnchecked, getParentNodeUnchecked, setNodeValue, toNode)
+#ifdef ghcjs_HOST_OS
 import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, JSM, MonadJSM, Node, TouchEvent, WheelEvent, askJSM, liftJSM, runJSM, uncheckedCastTo)
+#else
+import GHCJS.DOM.Types (FocusEvent, IsElement, IsEvent, IsNode, JSM, MonadJSM (..), Node, TouchEvent, WheelEvent, askJSM, liftJSM, runJSM, uncheckedCastTo)
+#endif
 import GHCJS.DOM.UIEvent
 
 import Foreign.JavaScript.Internal.Utils
 import Foreign.JavaScript.TH
 #ifndef ghcjs_HOST_OS
-import qualified Language.Javascript.JSaddle as JS
+import Language.Javascript.JSaddle qualified as JS
 #endif
 import Reflex.Adjustable.Class
 import Reflex.Class as Reflex
@@ -153,49 +157,49 @@ import Reflex.Dom.Builder.Class
 #ifdef PROFILE_REFLEX
 import Reflex.Profiled
 #endif
-import qualified Data.Dependent.Map as DMap
-import qualified Data.FastMutableIntMap as FastMutableIntMap
-import qualified Data.IntMap.Strict as IntMap
-import qualified Data.Map as Map
-import qualified Data.Text as T
-import qualified GHCJS.DOM as DOM
-import qualified GHCJS.DOM.DataTransfer as DataTransfer
-import qualified GHCJS.DOM.DocumentAndElementEventHandlers as Events
-import qualified GHCJS.DOM.DocumentOrShadowRoot as Document
-import qualified GHCJS.DOM.Element as Element
-import qualified GHCJS.DOM.Event as Event
-import qualified GHCJS.DOM.EventM as DOM
-import qualified GHCJS.DOM.FileList as FileList
-import qualified GHCJS.DOM.GlobalEventHandlers as Events
-import qualified GHCJS.DOM.HTMLInputElement as Input
-import qualified GHCJS.DOM.HTMLSelectElement as Select
-import qualified GHCJS.DOM.HTMLTextAreaElement as TextArea
-import qualified GHCJS.DOM.Node as Node
-import qualified GHCJS.DOM.Text as DOM
-import qualified GHCJS.DOM.Touch as Touch
-import qualified GHCJS.DOM.TouchEvent as TouchEvent
-import qualified GHCJS.DOM.TouchList as TouchList
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.WheelEvent as WheelEvent
-import qualified GHCJS.DOM.Window as Window
-import qualified Reflex.Patch.DMap as PatchDMap
-import qualified Reflex.Patch.DMapWithMove as PatchDMapWithMove
-import qualified Reflex.Patch.MapWithMove as PatchMapWithMove
+import Data.Dependent.Map qualified as DMap
+import Data.FastMutableIntMap qualified as FastMutableIntMap
+import Data.IntMap.Strict qualified as IntMap
+import Data.Map qualified as Map
+import Data.Text qualified as T
+import GHCJS.DOM qualified as DOM
+import GHCJS.DOM.DataTransfer qualified as DataTransfer
+import GHCJS.DOM.DocumentAndElementEventHandlers qualified as Events
+import GHCJS.DOM.DocumentOrShadowRoot qualified as Document
+import GHCJS.DOM.Element qualified as Element
+import GHCJS.DOM.Event qualified as Event
+import GHCJS.DOM.EventM qualified as DOM
+import GHCJS.DOM.FileList qualified as FileList
+import GHCJS.DOM.GlobalEventHandlers qualified as Events
+import GHCJS.DOM.HTMLInputElement qualified as Input
+import GHCJS.DOM.HTMLSelectElement qualified as Select
+import GHCJS.DOM.HTMLTextAreaElement qualified as TextArea
+import GHCJS.DOM.Node qualified as Node
+import GHCJS.DOM.Text qualified as DOM
+import GHCJS.DOM.Touch qualified as Touch
+import GHCJS.DOM.TouchEvent qualified as TouchEvent
+import GHCJS.DOM.TouchList qualified as TouchList
+import GHCJS.DOM.Types qualified as DOM
+import GHCJS.DOM.WheelEvent qualified as WheelEvent
+import GHCJS.DOM.Window qualified as Window
+import Reflex.Patch.DMap qualified as PatchDMap
+import Reflex.Patch.DMapWithMove qualified as PatchDMapWithMove
+import Reflex.Patch.MapWithMove qualified as PatchMapWithMove
 import Reflex.Requester.Base
 import Reflex.Requester.Class
 import Reflex.Spider (Global, Spider, SpiderHost)
 import Reflex.TriggerEvent.Base hiding (askEvents)
-import qualified Reflex.TriggerEvent.Base as TriggerEventT (askEvents)
+import Reflex.TriggerEvent.Base qualified as TriggerEventT (askEvents)
 import Reflex.TriggerEvent.Class
 
-#ifndef USE_TEMPLATE_HASKELL
+#ifdef USE_TEMPLATE_HASKELL
+import Control.Lens (Identity (..), ifor_, itraverse_, makeLenses, (^.))
+#else
+import Control.Lens (Getter, Identity (..), Lens', ifor_, itraverse_, makeLenses, (^.))
 import Data.Functor.Contravariant (phantom)
-import Control.Lens (Lens', Getter)
 #endif
 
 #ifndef ghcjs_HOST_OS
-import GHCJS.DOM.Types (MonadJSM (..))
-
 instance MonadJSM m => MonadJSM (HydrationRunnerT t m) where
   {-# INLINABLE liftJSM' #-}
   liftJSM' = lift . liftJSM'
@@ -259,7 +263,7 @@ data HydrationState = HydrationState
 localRunner :: MonadJSM m => HydrationRunnerT t m a -> Maybe Node -> Node -> HydrationRunnerT t m a
 localRunner (HydrationRunnerT m) s parent = do
   s0 <- HydrationRunnerT get
-  (a, s') <- HydrationRunnerT $ lift $ local (\_ -> parent) $ runStateT m (s0 {_hydrationState_previousNode = s})
+  (a, s') <- HydrationRunnerT $ lift $ local (const parent) $ runStateT m (s0 {_hydrationState_previousNode = s})
   traverse_ removeSubsequentNodes $ _hydrationState_previousNode s'
   HydrationRunnerT $ modify' $ \hs -> hs {_hydrationState_failed = _hydrationState_failed s'}
   pure a
@@ -336,7 +340,7 @@ runDomRenderHookT (DomRenderHookT a) events = do
           liftJSM
             $ runInAnimationFrame f
             $ traverseRequesterData (fmap Identity) rm
-    return result
+    pure result
   where
     runInAnimationFrame f x = void . DOM.inAnimationFrame' $ \_ -> do
       v <- synchronously x
@@ -350,7 +354,7 @@ instance (Reflex t, MonadFix m) => DomRenderHook t (DomRenderHookT t m) where
   withRenderHook hook (DomRenderHookT a) = do
     DomRenderHookT $ withRequesting $ \rsp -> do
       (x, req) <- lift $ runRequesterT a $ runIdentity <$> rsp
-      return (ffor req $ \rm -> hook $ traverseRequesterData (fmap Identity) rm, x)
+      pure (ffor req $ \rm -> hook $ traverseRequesterData (fmap Identity) rm, x)
   requestDomAction = DomRenderHookT . requestingIdentity
   requestDomAction_ = DomRenderHookT . requesting_
 
@@ -394,7 +398,7 @@ append :: MonadJSM m => DOM.Node -> HydrationDomBuilderT s t m ()
 append n = do
   p <- getParent
   liftJSM $ appendChild_ p n
-  return ()
+  pure ()
 {-# SPECIALIZE append ::
   DOM.Node
   -> HydrationDomBuilderT s Spider HydrationM ()
@@ -534,7 +538,7 @@ collectUpToGivenParent currentParent s e = do
   doc <- getOwnerDocumentUnchecked currentParent
   df <- createDocumentFragment doc
   extractUpTo df s e
-  return df
+  pure df
 
 newtype EventFilterTriggerRef t er (en :: EventTag) = EventFilterTriggerRef (IORef (Maybe (EventTrigger t (er en))))
 
@@ -548,10 +552,10 @@ wrap
   -> RawElementConfig er t s
   -> m (DMap EventName (EventFilterTriggerRef t er))
 wrap events e cfg = do
-  forM_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ imapM_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
+  for_ (_rawElementConfig_modifyAttributes cfg) $ \modifyAttrs -> requestDomAction_ $ ffor modifyAttrs $ itraverse_ $ \(AttributeName mAttrNamespace n) mv -> case mAttrNamespace of
     Nothing -> maybe (removeAttribute e n) (setAttribute e n) mv
     Just ns -> maybe (removeAttributeNS e (Just ns) n) (setAttributeNS e (Just ns) n) mv
-  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ forM (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
+  eventTriggerRefs :: DMap EventName (EventFilterTriggerRef t er) <- liftJSM $ fmap DMap.fromList $ for (DMap.toList $ _ghcjsEventSpec_filters $ _rawElementConfig_eventSpec cfg) $ \(en :=> GhcjsEventFilter f) -> do
     triggerRef <- liftIO $ newIORef Nothing
     _ <- elementOnEventName en e $ do
       -- TODO: Something safer than this cast
@@ -559,13 +563,13 @@ wrap events e cfg = do
       (flags, k) <- liftJSM $ f $ GhcjsDomEvent evt
       when (_eventFlags_preventDefault flags) $ withIsEvent en DOM.preventDefault
       case _eventFlags_propagation flags of
-        Propagation_Continue -> return ()
+        Propagation_Continue -> pure ()
         Propagation_Stop -> withIsEvent en DOM.stopPropagation
         Propagation_StopImmediate -> withIsEvent en DOM.stopImmediatePropagation
       mv <- liftJSM k -- TODO: Only do this when the event is subscribed
-      liftIO $ forM_ mv $ \v -> writeChan events [EventTriggerRef triggerRef :=> TriggerInvocation v (return ())]
-    return $ en :=> EventFilterTriggerRef triggerRef
-  return eventTriggerRefs
+      liftIO $ for_ mv $ \v -> writeChan events [EventTriggerRef triggerRef :=> TriggerInvocation v (pure ())]
+    pure $ en :=> EventFilterTriggerRef triggerRef
+  pure eventTriggerRefs
 {-# SPECIALIZE wrap ::
   Chan [DSum (EventTriggerRef DomTimeline) TriggerInvocation]
   -> DOM.Element
@@ -594,7 +598,7 @@ triggerBody
 triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t = case DMap.lookup en eventTriggerRefs of
   Just (EventFilterTriggerRef r) -> do
     writeIORef r $ Just t
-    return $ do
+    pure $ do
       writeIORef r Nothing
   Nothing ->
     (`runJSM` ctx)
@@ -603,11 +607,11 @@ triggerBody ctx cfg events eventTriggerRefs e (WrapArg en) t = case DMap.lookup 
             evt <- DOM.event
             mv <- lift $ unGhcjsEventHandler handler (en, GhcjsDomEvent evt)
             case mv of
-              Nothing -> return ()
+              Nothing -> pure ()
               Just v -> liftIO $ do
                 -- TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
                 ref <- newIORef $ Just t
-                writeChan events [EventTriggerRef ref :=> TriggerInvocation v (return ())]
+                writeChan events [EventTriggerRef ref :=> TriggerInvocation v (pure ())]
         )
   where
     -- Note: this needs to be done strictly and outside of the newFanEventWithTrigger, so that the newFanEventWithTrigger doesn't
@@ -659,12 +663,12 @@ instance DomSpace GhcjsDomSpace where
                 Just . GhcjsEventFilter . \case
                   Nothing -> \evt -> do
                     mEventResult <- unGhcjsEventHandler (_ghcjsEventSpec_handler es) (en, evt)
-                    return (f mEventResult, return mEventResult)
+                    pure (f mEventResult, pure mEventResult)
                   Just (GhcjsEventFilter oldFilter) -> \evt -> do
                     (oldFlags, oldContinuation) <- oldFilter evt
                     mEventResult <- oldContinuation
                     let newFlags = oldFlags <> f mEventResult
-                    return (newFlags, return mEventResult)
+                    pure (newFlags, pure mEventResult)
           in DMap.alter f' en $ _ghcjsEventSpec_filters es
       }
 
@@ -683,7 +687,7 @@ newtype GhcjsEventHandler er = GhcjsEventHandler {unGhcjsEventHandler :: forall 
 
 #ifndef USE_TEMPLATE_HASKELL
 ghcjsEventSpec_filters :: forall er . Lens' (GhcjsEventSpec er) (DMap EventName (GhcjsEventFilter er))
-ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (\a' -> GhcjsEventSpec a' b) <$> f a
+ghcjsEventSpec_filters f (GhcjsEventSpec a b) = (`GhcjsEventSpec` b) <$> f a
 {-# INLINE ghcjsEventSpec_filters #-}
 ghcjsEventSpec_handler :: forall er en . Getter (GhcjsEventSpec er) ((EventName en, GhcjsDomEvent en) -> JSM (Maybe (er en)))
 ghcjsEventSpec_handler f (GhcjsEventSpec _ (GhcjsEventHandler b)) = phantom (f b)
@@ -707,7 +711,7 @@ makeElement doc elementTag cfg = do
     uncheckedCastTo DOM.Element <$> case cfg ^. namespace of
       Nothing -> createElement doc elementTag
       Just ens -> createElementNS doc (Just ens) elementTag
-  iforM_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
+  ifor_ (cfg ^. initialAttributes) $ \(AttributeName mAttrNamespace n) v -> case mAttrNamespace of
     Nothing -> setAttribute e n v
     Just ans -> setAttributeNS e (Just ans) n v
   pure e
@@ -737,7 +741,7 @@ elementImmediate elementTag cfg child = do
   let rawCfg = extractRawElementConfig cfg
   eventTriggerRefs <- wrap events e rawCfg
   es <- newFanEventWithTrigger $ triggerBody ctx rawCfg events eventTriggerRefs e
-  return (Element es e, result)
+  pure (Element es e, result)
 {-# SPECIALIZE elementImmediate ::
   Text
   -> ElementConfig er DomTimeline HydrationDomSpace
@@ -781,7 +785,7 @@ elementInternal elementTag cfg child =
   getHydrationMode >>= \case
     HydrationMode_Immediate -> do
       (Element es _, result) <- elementImmediate elementTag cfg child
-      return (Element es (), result)
+      pure (Element es (), result)
     HydrationMode_Hydrating -> fst <$> hydrateElement elementTag cfg child
 {-# SPECIALIZE elementInternal ::
   Text
@@ -889,7 +893,7 @@ hydrateElement elementTag cfg child = do
       tryReadMVar cleanup >>= \case
         Nothing -> killThread threadId
         Just c -> c
-  return ((Element es (), result), e')
+  pure ((Element es (), result), e')
 {-# SPECIALIZE hydrateElement ::
   Text
   -> ElementConfig er DomTimeline HydrationDomSpace
@@ -911,14 +915,14 @@ inputElementImmediate
      )
   => InputElementConfig er t s -> HydrationDomBuilderT s t m (InputElement er GhcjsDomSpace t)
 inputElementImmediate cfg = do
-  (e@(Element eventSelector domElement), ()) <- elementImmediate "input" (_inputElementConfig_elementConfig cfg) $ return ()
+  (e@(Element eventSelector domElement), ()) <- elementImmediate "input" (_inputElementConfig_elementConfig cfg) $ pure ()
   let domInputElement = uncheckedCastTo DOM.HTMLInputElement domElement
   Input.setValue domInputElement $ cfg ^. inputElementConfig_initialValue
   v0 <- Input.getValue domInputElement
   let getMyValue = Input.getValue domInputElement
   valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select eventSelector (WrapArg Input)
   valueChangedBySetValue <- case _inputElementConfig_setValue cfg of
-    Nothing -> return never
+    Nothing -> pure never
     Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
       Input.setValue domInputElement v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
@@ -932,11 +936,11 @@ inputElementImmediate cfg = do
   checkedChangedByUI <- wrapDomEvent domInputElement (`on` Events.click) $ do
     Input.getChecked domInputElement
   checkedChangedBySetChecked <- case _inputElementConfig_setChecked cfg of
-    Nothing -> return never
+    Nothing -> pure never
     Just eNewchecked -> requestDomAction $ ffor eNewchecked $ \newChecked -> do
       oldChecked <- Input.getChecked domInputElement
       Input.setChecked domInputElement newChecked
-      return $
+      pure $
         if newChecked /= oldChecked
           then Just newChecked
           else Nothing
@@ -949,10 +953,10 @@ inputElementImmediate cfg = do
   hasFocus <- mkHasFocus e
   files <- holdDyn mempty <=< wrapDomEvent domInputElement (`on` Events.change) $ do
     mfiles <- Input.getFiles domInputElement
-    let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0 ..] . fromIntegral =<< FileList.getLength xs
-    maybe (return []) getMyFiles mfiles
+    let getMyFiles xs = fmap catMaybes . traverse (FileList.item xs) . flip take [0 ..] . fromIntegral =<< FileList.getLength xs
+    maybe (pure []) getMyFiles mfiles
   checked <- holdUniqDyn c
-  return $
+  pure $
     InputElement
       { _inputElement_value = v
       , _inputElement_checked = checked
@@ -983,7 +987,7 @@ inputElementInternal cfg =
         , _inputElement_raw = ()
         }
     HydrationMode_Hydrating -> do
-      ((e, _), domElementRef) <- hydrateElement "input" (cfg ^. inputElementConfig_elementConfig) $ return ()
+      ((e, _), domElementRef) <- hydrateElement "input" (cfg ^. inputElementConfig_elementConfig) $ pure ()
       (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
       (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
       (focusChange, triggerFocusChange) <- newTriggerEvent
@@ -1040,18 +1044,18 @@ inputElementInternal cfg =
           when (realChecked /= switchoverChecked)
             $ liftIO
             $ triggerCheckedChangedByUI realChecked
-        _ <- liftJSM $ domInputElement `on` Events.click $ do
+        _ <- liftJSM $ on domInputElement Events.click $ do
           liftIO . triggerCheckedChangedByUI =<< Input.getChecked domInputElement
         for_ (_inputElementConfig_setChecked cfg) $ \eNewchecked ->
           requestDomAction $ ffor eNewchecked $ \newChecked -> do
             oldChecked <- Input.getChecked domInputElement
             Input.setChecked domInputElement newChecked
             when (newChecked /= oldChecked) $ liftIO $ triggerCheckedChangedBySetChecked newChecked
-        _ <- liftJSM $ domInputElement `on` Events.change $ do
+        _ <- liftJSM $ on domInputElement Events.change $ do
           mfiles <- Input.getFiles domInputElement
-          let getMyFiles xs = fmap catMaybes . mapM (FileList.item xs) . flip take [0 ..] . fromIntegral =<< FileList.getLength xs
-          liftIO . triggerFileChange =<< maybe (return []) getMyFiles mfiles
-        return ()
+          let getMyFiles xs = fmap catMaybes . traverse (FileList.item xs) . flip take [0 ..] . fromIntegral =<< FileList.getLength xs
+          liftIO . triggerFileChange =<< maybe (pure []) getMyFiles mfiles
+        pure ()
       checked' <-
         holdDyn c0 $
           leftmost
@@ -1068,7 +1072,7 @@ inputElementInternal cfg =
             , valueChangedByUI
             ]
       files <- holdDyn mempty fileChange
-      return $
+      pure $
         InputElement
           { _inputElement_value = v
           , _inputElement_checked = checked
@@ -1092,14 +1096,14 @@ textAreaElementImmediate
      )
   => TextAreaElementConfig er t s -> HydrationDomBuilderT s t m (TextAreaElement er GhcjsDomSpace t)
 textAreaElementImmediate cfg = do
-  (e@(Element eventSelector domElement), _) <- elementImmediate "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+  (e@(Element eventSelector domElement), _) <- elementImmediate "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ pure ()
   let domTextAreaElement = uncheckedCastTo DOM.HTMLTextAreaElement domElement
   TextArea.setValue domTextAreaElement $ cfg ^. textAreaElementConfig_initialValue
   v0 <- TextArea.getValue domTextAreaElement
   let getMyValue = TextArea.getValue domTextAreaElement
   valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select eventSelector (WrapArg Input)
   valueChangedBySetValue <- case _textAreaElementConfig_setValue cfg of
-    Nothing -> return never
+    Nothing -> pure never
     Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
       TextArea.setValue domTextAreaElement v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
@@ -1110,7 +1114,7 @@ textAreaElementImmediate cfg = do
         , valueChangedByUI
         ]
   hasFocus <- mkHasFocus e
-  return $
+  pure $
     TextAreaElement
       { _textAreaElement_value = v
       , _textAreaElement_input = valueChangedByUI
@@ -1138,7 +1142,7 @@ textAreaElementInternal cfg =
         , _textAreaElement_raw = ()
         }
     HydrationMode_Hydrating -> do
-      ((e, _), domElementRef) <- hydrateElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ return ()
+      ((e, _), domElementRef) <- hydrateElement "textarea" (cfg ^. textAreaElementConfig_elementConfig) $ pure ()
       (valueChangedByUI, triggerChangeByUI) <- newTriggerEvent
       (valueChangedBySetValue, triggerChangeBySetValue) <- newTriggerEvent
       (focusChange, triggerFocusChange) <- newTriggerEvent
@@ -1182,7 +1186,7 @@ textAreaElementInternal cfg =
             [ valueChangedBySetValue
             , valueChangedByUI
             ]
-      return $
+      pure $
         TextAreaElement
           { _textAreaElement_value = v
           , _textAreaElement_input = valueChangedByUI
@@ -1212,7 +1216,7 @@ selectElementImmediate cfg child = do
   let getMyValue = Select.getValue domSelectElement
   valueChangedByUI <- requestDomAction $ liftJSM getMyValue <$ Reflex.select eventSelector (WrapArg Change)
   valueChangedBySetValue <- case _selectElementConfig_setValue cfg of
-    Nothing -> return never
+    Nothing -> pure never
     Just eSetValue -> requestDomAction $ ffor eSetValue $ \v' -> do
       Select.setValue domSelectElement v'
       getMyValue -- We get the value after setting it in case the browser has mucked with it somehow
@@ -1231,7 +1235,7 @@ selectElementImmediate cfg child = do
           , _selectElement_element = e
           , _selectElement_raw = domSelectElement
           }
-  return (wrapped, result)
+  pure (wrapped, result)
 
 {-# INLINE selectElementInternal #-}
 selectElementInternal
@@ -1293,15 +1297,16 @@ selectElementInternal cfg child =
             [ valueChangedBySetValue
             , valueChangedByUI
             ]
-      return
-        $ (,result)
-        $ SelectElement
-          { _selectElement_value = v
-          , _selectElement_change = valueChangedByUI
-          , _selectElement_hasFocus = hasFocus
-          , _selectElement_element = e
-          , _selectElement_raw = ()
-          }
+      pure
+        ( SelectElement
+            { _selectElement_value = v
+            , _selectElement_change = valueChangedByUI
+            , _selectElement_hasFocus = hasFocus
+            , _selectElement_element = e
+            , _selectElement_raw = ()
+            }
+        , result
+        )
 
 {-# INLINE textNodeImmediate #-}
 textNodeImmediate
@@ -1312,7 +1317,7 @@ textNodeImmediate (TextNodeConfig !t mSetContents) = do
   doc <- askDocument
   n <- createTextNode doc t
   appendChild_ p n
-  mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+  traverse_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure n
 {-# SPECIALIZE textNodeImmediate ::
   TextNodeConfig DomTimeline
@@ -1333,7 +1338,7 @@ textNodeInternal tc@(TextNodeConfig !t mSetContents) = do
     HydrationMode_Immediate -> void $ textNodeImmediate tc
     HydrationMode_Hydrating -> addHydrationStepWithSetup (maybe (pure $ pure t) (hold t) mSetContents) $ \currentText -> do
       n <- hydrateTextNode doc =<< sample currentText
-      mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+      traverse_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure $ TextNode ()
 {-# SPECIALIZE textNodeInternal ::
   TextNodeConfig DomTimeline
@@ -1353,7 +1358,7 @@ hydrateTextNode doc t@"" = do
 hydrateTextNode doc t = do
   n <- join $ go <$> askParent <*> getPreviousNode
   setPreviousNode $ Just $ toNode n
-  return n
+  pure n
   where
     go parent mLastNode =
       maybe (Node.getFirstChild parent) Node.getNextSibling mLastNode >>= \case
@@ -1368,12 +1373,12 @@ hydrateTextNode doc t = do
             Just originalNode -> do
               originalText <- Node.getTextContentUnchecked originalNode
               case T.stripPrefix t originalText of
-                Just "" -> return originalNode
+                Just "" -> pure originalNode
                 Just _ -> do
                   -- If we have the right prefix, we split the text node into a node containing the
                   -- required text and a subsequent sibling node containing the rest of the text.
                   DOM.splitText_ originalNode $ fromIntegral $ T.length t
-                  return originalNode
+                  pure originalNode
                 Nothing -> do
                   HydrationRunnerT $ modify' $ \s -> s {_hydrationState_failed = True}
                   n <- createTextNode doc t
@@ -1389,7 +1394,7 @@ commentNodeImmediate (CommentNodeConfig !t mSetContents) = do
   doc <- askDocument
   n <- createComment doc t
   appendChild_ p n
-  mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+  traverse_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure n
 
 {-# INLINE commentNodeInternal #-}
@@ -1428,7 +1433,7 @@ hydrateComment doc t mSetContents = do
                     pure c'
   n <- go =<< getPreviousNode
   setPreviousNode $ Just $ toNode n
-  mapM_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
+  traverse_ (requestDomAction_ . fmap (setNodeValue n . Just)) mSetContents
   pure n
 
 -- | We leave markers in the static builder as comments, and rip these comments
@@ -1491,7 +1496,7 @@ skipToReplaceStart = skipToAndReplaceComment "replace-start" =<< liftIO (newIORe
 
 {-# INLINEABLE skipToReplaceEnd #-}
 skipToReplaceEnd :: (MonadJSM m, MonadFix m, Adjustable t m, RawDocument (DomBuilderSpace (HydrationDomBuilderT s t m)) ~ Document) => IORef (Maybe Text) -> HydrationDomBuilderT s t m (HydrationRunnerT t m (), IORef DOM.Text)
-skipToReplaceEnd key = fmap (\(m, e, _) -> (m, e)) $ skipToAndReplaceComment "replace-end" key
+skipToReplaceEnd key = (\(m, e, _) -> (m, e)) <$> skipToAndReplaceComment "replace-end" key
 
 instance SupportsHydrationDomBuilder t m => NotReady t (HydrationDomBuilderT s t m) where
   notReadyUntil e = do
@@ -1527,12 +1532,12 @@ instance DomSpace HydrationDomSpace where
                 Just . GhcjsEventFilter . \case
                   Nothing -> \evt -> do
                     mEventResult <- unGhcjsEventHandler (_ghcjsEventSpec_handler es) (en, evt)
-                    return (f mEventResult, return mEventResult)
+                    pure (f mEventResult, pure mEventResult)
                   Just (GhcjsEventFilter oldFilter) -> \evt -> do
                     (oldFlags, oldContinuation) <- oldFilter evt
                     mEventResult <- oldContinuation
                     let newFlags = oldFlags <> f mEventResult
-                    return (newFlags, return mEventResult)
+                    pure (newFlags, pure mEventResult)
           in DMap.alter f' en $ _ghcjsEventSpec_filters es
       }
 
@@ -1588,7 +1593,7 @@ extractFragment :: MonadJSM m => ImmediateDomFragment -> m ()
 extractFragment fragment = do
   state <- liftIO $ readIORef $ _immediateDomFragment_state fragment
   case state of
-    FragmentState_Unmounted -> return ()
+    FragmentState_Unmounted -> pure ()
     FragmentState_Mounted (before, after) -> do
       extractBetweenExclusive (_immediateDomFragment_document fragment) before after
       liftIO $ writeIORef (_immediateDomFragment_state fragment) FragmentState_Unmounted
@@ -1602,7 +1607,7 @@ instance SupportsHydrationDomBuilder t m => MountableDomBuilder t (HydrationDomB
         { _hydrationDomBuilderEnv_parent = Left $ toNode df
         }
     state <- liftIO $ newIORef FragmentState_Unmounted
-    return (ImmediateDomFragment df state, result)
+    pure (ImmediateDomFragment df state, result)
   mountDomFragment fragment setFragment = do
     parent <- getParent
     extractFragment fragment
@@ -1636,7 +1641,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
     currentCohort <- liftIO $ newIORef (-1 :: Int) -- Equal to the cohort currently in the DOM
     let myCommitAction = do
           liftIO (readIORef haveEverBeenReady) >>= \case
-            True -> return ()
+            True -> pure ()
             False -> do
               liftIO $ writeIORef haveEverBeenReady True
               old <- liftIO $ readIORef parentUnreadyChildren
@@ -1678,7 +1683,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
             readIORef unreadyChildren >>= \case
               0 -> writeIORef haveEverBeenReady True
               _ -> modifyIORef' parentUnreadyChildren succ
-          return (dom, result)
+          pure (dom, result)
     a'' <- numberOccurrences a'
     ((hydrate0, result0), child') <- HydrationDomBuilderT $ lift $ runWithReplace drawInitialChild $ ffor a'' $ \(cohortId, child) -> do
       h <- liftIO $ readIORef hydrating
@@ -1715,19 +1720,19 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
       uc <- liftIO $ readIORef unreadyChildren
       let commitActionToRunNow =
             if uc == 0
-              then Just $ commitAction
+              then Just commitAction
               else Nothing -- A child will run it when unreadyChildren is decremented to 0
           actions = case h of
             HydrationMode_Hydrating -> Left dom
             HydrationMode_Immediate -> Right commitActionToRunNow
-      return (actions, result)
+      pure (actions, result)
     let (hydrate', commitAction) = fanEither $ fmap fst child'
     addHydrationStepWithSetup (hold hydrate0 hydrate') $ \contents -> do
       hydrateStart
       join $ sample contents
       hydrateEnd
     requestDomAction_ $ fmapMaybe id commitAction
-    return (result0, snd <$> child')
+    pure (result0, snd <$> child')
 
   {-# INLINEABLE traverseIntMapWithKeyWithAdjust #-}
   traverseIntMapWithKeyWithAdjust = traverseIntMapWithKeyWithAdjust'
@@ -1738,22 +1743,22 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
     let updateChildUnreadiness (p :: PatchDMapWithMove k (Compose (TraverseChild t m (Some k)) v')) old = do
           let new :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> IO (PatchDMapWithMove.NodeInfo k (Constant (IORef (ChildReadyState (Some k)))) a)
               new k = PatchDMapWithMove.nodeInfoMapFromM $ \case
-                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Left _hydration) _)) -> return PatchDMapWithMove.From_Delete
+                PatchDMapWithMove.From_Insert (Compose (TraverseChild (Left _hydration) _)) -> pure PatchDMapWithMove.From_Delete
                 PatchDMapWithMove.From_Insert (Compose (TraverseChild (Right immediate) _)) -> do
                   readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
-                    ChildReadyState_Ready -> return PatchDMapWithMove.From_Delete
+                    ChildReadyState_Ready -> pure PatchDMapWithMove.From_Delete
                     ChildReadyState_Unready _ -> do
                       writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
-                      return $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState immediate)
-                PatchDMapWithMove.From_Delete -> return PatchDMapWithMove.From_Delete
-                PatchDMapWithMove.From_Move fromKey -> return $ PatchDMapWithMove.From_Move fromKey
+                      pure $ PatchDMapWithMove.From_Insert $ Constant (_traverseChildImmediate_childReadyState immediate)
+                PatchDMapWithMove.From_Delete -> pure PatchDMapWithMove.From_Delete
+                PatchDMapWithMove.From_Move fromKey -> pure $ PatchDMapWithMove.From_Move fromKey
               deleteOrMove :: forall a. k a -> Product (Constant (IORef (ChildReadyState (Some k)))) (ComposeMaybe k) a -> IO (Constant () a)
               deleteOrMove _ (Pair (Constant sRef) (ComposeMaybe mToKey)) = do
                 writeIORef sRef $ ChildReadyState_Unready $ Some <$> mToKey -- This will be Nothing if deleting, and Just if moving, so it works out in both cases
-                return $ Constant ()
+                pure $ Constant ()
           p' <- fmap unsafePatchDMapWithMove $ DMap.traverseWithKey new $ unPatchDMapWithMove p
           _ <- DMap.traverseWithKey deleteOrMove $ PatchDMapWithMove.getDeletionsAndMoves p old
-          return $ applyAlways p' old
+          pure $ applyAlways p' old
     hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove updateChildUnreadiness $ \placeholders lastPlaceholder (p_ :: PatchDMapWithMove k (Compose (TraverseChild t m (Some k)) v')) -> do
       let p = unPatchDMapWithMove p_
       phsBefore <- liftIO $ readIORef placeholders
@@ -1763,10 +1768,10 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
                 nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phsBefore
             case isJust $ getComposeMaybe $ PatchDMapWithMove._nodeInfo_to e of
               False -> do
-                mapM_ (`deleteUpTo` nextPlaceholder) mThisPlaceholder
-                return $ Constant Nothing
+                traverse_ (`deleteUpTo` nextPlaceholder) mThisPlaceholder
+                pure $ Constant Nothing
               True -> do
-                Constant <$> mapM (`collectUpTo` nextPlaceholder) mThisPlaceholder
+                Constant <$> traverse (`collectUpTo` nextPlaceholder) mThisPlaceholder
       collected <- DMap.traverseWithKey collectIfMoved p
       let !phsAfter = fromMaybe phsBefore $ apply filtered phsBefore
           weakened :: PatchMapWithMove (Some k) (Either (TraverseChildHydration t m) (TraverseChildImmediate (Some k)))
@@ -1776,7 +1781,7 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
             flip PatchMapWithMove.NodeInfo to <$> case from of
               PatchMapWithMove.From_Insert (Left _hydration) -> Nothing
               PatchMapWithMove.From_Insert (Right immediate) -> Just $ PatchMapWithMove.From_Insert $ _traverseChildImmediate_placeholder immediate
-              PatchMapWithMove.From_Delete -> Just $ PatchMapWithMove.From_Delete
+              PatchMapWithMove.From_Delete -> Just PatchMapWithMove.From_Delete
               PatchMapWithMove.From_Move k -> Just $ PatchMapWithMove.From_Move k
       let placeFragment :: forall a. k a -> PatchDMapWithMove.NodeInfo k (Compose (TraverseChild t m (Some k)) v') a -> JSM (Constant () a)
           placeFragment k e = do
@@ -1786,12 +1791,12 @@ instance (Adjustable t m, MonadJSM m, MonadHold t m, MonadFix m, RawDocument (Do
                 Left _ -> pure ()
                 Right immediate -> _traverseChildImmediate_fragment immediate `insertBefore` nextPlaceholder
               PatchDMapWithMove.From_Delete -> do
-                return ()
+                pure ()
               PatchDMapWithMove.From_Move fromKey -> do
-                Just (Constant mdf) <- return $ DMap.lookup fromKey collected
-                mapM_ (`insertBefore` nextPlaceholder) mdf
-            return $ Constant ()
-      mapM_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
+                Just (Constant mdf) <- pure $ DMap.lookup fromKey collected
+                traverse_ (`insertBefore` nextPlaceholder) mdf
+            pure $ Constant ()
+      traverse_ (\(k :=> v) -> void $ placeFragment k v) $ DMap.toDescList p -- We need to go in reverse order here, to make sure the placeholders are in the right spot at the right time
       liftIO $ writeIORef placeholders $! phsAfter
 
 {-# INLINEABLE traverseDMapWithKeyWithAdjust' #-}
@@ -1807,29 +1812,29 @@ traverseDMapWithKeyWithAdjust' = do
         let new :: forall a. k a -> ComposeMaybe (Compose (TraverseChild t m (Some k)) v') a -> IO (ComposeMaybe (Constant (IORef (ChildReadyState (Some k)))) a)
             new k (ComposeMaybe m) =
               ComposeMaybe <$> case m of
-                Nothing -> return Nothing
+                Nothing -> pure Nothing
                 Just (Compose (TraverseChild (Left _hydration) _)) -> pure Nothing
                 Just (Compose (TraverseChild (Right immediate) _)) -> do
                   readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
-                    ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
+                    ChildReadyState_Ready -> pure Nothing -- Delete this child, since it's ready
                     ChildReadyState_Unready _ -> do
                       writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
-                      return $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
+                      pure $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
             delete _ (Constant sRef) = do
               writeIORef sRef $ ChildReadyState_Unready Nothing
-              return $ Constant ()
+              pure $ Constant ()
         p' <- fmap PatchDMap $ DMap.traverseWithKey new $ unPatchDMap p
         _ <- DMap.traverseWithKey delete $ PatchDMap.getDeletions p old
-        return $ applyAlways p' old
+        pure $ applyAlways p' old
   hoistTraverseWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap updateChildUnreadiness $ \placeholders lastPlaceholder (PatchDMap patch) -> do
     phs <- liftIO $ readIORef placeholders
-    forM_ (DMap.toList patch) $ \(k :=> ComposeMaybe mv) -> do
+    for_ (DMap.toList patch) $ \(k :=> ComposeMaybe mv) -> do
       let nextPlaceholder = maybe lastPlaceholder snd $ Map.lookupGT (Some k) phs
       -- Delete old node
-      forM_ (Map.lookup (Some k) phs) $ \thisPlaceholder -> do
+      for_ (Map.lookup (Some k) phs) $ \thisPlaceholder -> do
         thisPlaceholder `deleteUpTo` nextPlaceholder
       -- Insert new node
-      forM_ mv $ \(Compose (TraverseChild e _)) -> case e of
+      for_ mv $ \(Compose (TraverseChild e _)) -> case e of
         Left _hydration -> pure ()
         Right immediate -> do
           _traverseChildImmediate_fragment immediate `insertBefore` nextPlaceholder
@@ -1854,29 +1859,29 @@ traverseIntMapWithKeyWithAdjust' = do
   let updateChildUnreadiness (p@(PatchIntMap pInner) :: PatchIntMap (TraverseChild t m Int v')) old = do
         let new :: IntMap.Key -> Maybe (TraverseChild t m Int v') -> IO (Maybe (IORef (ChildReadyState Int)))
             new k m = case m of
-              Nothing -> return Nothing
+              Nothing -> pure Nothing
               Just (TraverseChild (Left _hydration) _) -> pure Nothing
               Just (TraverseChild (Right immediate) _) -> do
                 let sRef = _traverseChildImmediate_childReadyState immediate
                 readIORef sRef >>= \case
-                  ChildReadyState_Ready -> return Nothing -- Delete this child, since it's ready
+                  ChildReadyState_Ready -> pure Nothing -- Delete this child, since it's ready
                   ChildReadyState_Unready _ -> do
                     writeIORef sRef $ ChildReadyState_Unready $ Just k
-                    return $ Just sRef
+                    pure $ Just sRef
             delete _ sRef = do
               writeIORef sRef $ ChildReadyState_Unready Nothing
-              return ()
+              pure ()
         p' <- PatchIntMap <$> IntMap.traverseWithKey new pInner
         _ <- IntMap.traverseWithKey delete $ FastMutableIntMap.getDeletions p old
-        return $ applyAlways p' old
+        pure $ applyAlways p' old
   hoistTraverseIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust updateChildUnreadiness $ \placeholders lastPlaceholder (PatchIntMap p) -> do
     phs <- liftIO $ readIORef placeholders
-    forM_ (IntMap.toList p) $ \(k, mv) -> do
+    for_ (IntMap.toList p) $ \(k, mv) -> do
       let nextPlaceholder = maybe lastPlaceholder snd $ IntMap.lookupGT k phs
       -- Delete old node
-      forM_ (IntMap.lookup k phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
+      for_ (IntMap.lookup k phs) $ \thisPlaceholder -> thisPlaceholder `deleteUpTo` nextPlaceholder
       -- Insert new node
-      forM_ mv $ \(TraverseChild e _) -> case e of
+      for_ mv $ \(TraverseChild e _) -> case e of
         Left _hydration -> pure ()
         Right immediate -> do
           _traverseChildImmediate_fragment immediate `insertBefore` nextPlaceholder
@@ -1955,7 +1960,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
         liftIO $ writeIORef pendingChange $! mempty
       markSelfReady = do
         liftIO (readIORef haveEverBeenReady) >>= \case
-          True -> return ()
+          True -> pure ()
           False -> do
             liftIO $ writeIORef haveEverBeenReady True
             old <- liftIO $ readIORef parentUnreadyChildren
@@ -1965,11 +1970,11 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       markChildReady :: IORef (ChildReadyState (Some k)) -> JSM ()
       markChildReady childReadyState = do
         liftIO (readIORef childReadyState) >>= \case
-          ChildReadyState_Ready -> return ()
+          ChildReadyState_Ready -> pure ()
           ChildReadyState_Unready countedAt -> do
             liftIO $ writeIORef childReadyState ChildReadyState_Ready
             case countedAt of
-              Nothing -> return ()
+              Nothing -> pure ()
               Just (Some k) -> do
                 -- This child has been counted as unready, so we need to remove it from the unready set
                 (oldUnready, p) <- liftIO $ readIORef pendingChange
@@ -1986,11 +1991,11 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
         Right immediate ->
           ComposeMaybe <$> do
             readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
-              ChildReadyState_Ready -> return Nothing
+              ChildReadyState_Ready -> pure Nothing
               ChildReadyState_Unready _ -> do
                 writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just $ Some k
-                return $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
-  initialUnready <- liftIO $ DMap.mapMaybeWithKey (\_ -> getComposeMaybe) <$> DMap.traverseWithKey processChild children0
+                pure $ Just $ Constant (_traverseChildImmediate_childReadyState immediate)
+  initialUnready <- liftIO $ DMap.mapMaybeWithKey (const getComposeMaybe) <$> DMap.traverseWithKey processChild children0
   liftIO $
     if DMap.null initialUnready
       then writeIORef haveEverBeenReady True
@@ -2019,7 +2024,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       applyDomUpdate newP
   let result0 = DMap.map (_traverseChild_result . getCompose) children0
       result' = ffor children' $ mapPatch $ _traverseChild_result . getCompose
-  return (result0, result')
+  pure (result0, result')
 
 {-# INLINE hoistTraverseIntMapWithKeyWithAdjust #-}
 hoistTraverseIntMapWithKeyWithAdjust
@@ -2068,7 +2073,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
         liftIO $ writeIORef pendingChange $! mempty
       markSelfReady = do
         liftIO (readIORef haveEverBeenReady) >>= \case
-          True -> return ()
+          True -> pure ()
           False -> do
             liftIO $ writeIORef haveEverBeenReady True
             old <- liftIO $ readIORef parentUnreadyChildren
@@ -2078,11 +2083,11 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
       markChildReady :: IORef (ChildReadyState Int) -> JSM ()
       markChildReady childReadyState = do
         liftIO (readIORef childReadyState) >>= \case
-          ChildReadyState_Ready -> return ()
+          ChildReadyState_Ready -> pure ()
           ChildReadyState_Unready countedAt -> do
             liftIO $ writeIORef childReadyState ChildReadyState_Ready
             case countedAt of
-              Nothing -> return ()
+              Nothing -> pure ()
               Just k -> do
                 -- This child has been counted as unready, so we need to remove it from the unready set
                 (oldUnready, p) <- liftIO $ readIORef pendingChange
@@ -2098,10 +2103,10 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
         Left _ -> pure Nothing
         Right immediate -> do
           readIORef (_traverseChildImmediate_childReadyState immediate) >>= \case
-            ChildReadyState_Ready -> return Nothing
+            ChildReadyState_Ready -> pure Nothing
             ChildReadyState_Unready _ -> do
               writeIORef (_traverseChildImmediate_childReadyState immediate) $ ChildReadyState_Unready $ Just k
-              return $ Just (_traverseChildImmediate_childReadyState immediate)
+              pure $ Just (_traverseChildImmediate_childReadyState immediate)
   initialUnready <- liftIO $ IntMap.mapMaybe id <$> IntMap.traverseWithKey processChild children0
   liftIO $
     if IntMap.null initialUnready
@@ -2130,8 +2135,8 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
     when (IntMap.null newUnready) $ do
       applyDomUpdate newP
   let result0 = IntMap.map _traverseChild_result children0
-      result' = ffor children' $ fmap $ _traverseChild_result
-  return (result0, result')
+      result' = ffor children' $ fmap _traverseChild_result
+  pure (result0, result')
 {-# SPECIALIZE hoistTraverseIntMapWithKeyWithAdjust ::
   ( (IntMap.Key -> v -> DomRenderHookT DomTimeline HydrationM (TraverseChild DomTimeline HydrationM Int v'))
     -> IntMap v
@@ -2213,7 +2218,7 @@ drawChildUpdate initialEnv markReady child = do
             , _hydrationDomBuilderEnv_delayed = childDelayedRef
             }
       childDelayed <- liftIO $ readIORef childDelayedRef
-      return
+      pure
         $ Compose
         $ TraverseChild
           { _traverseChild_result = result
@@ -2242,7 +2247,7 @@ drawChildUpdate initialEnv markReady child = do
             }
       u <- liftIO $ readIORef unreadyChildren
       when (u == 0) $ liftIO $ writeIORef childReadyState ChildReadyState_Ready
-      return
+      pure
         $ Compose
         $ TraverseChild
           { _traverseChild_result = result
@@ -2399,7 +2404,7 @@ type family EventType en where
 {-# INLINEABLE defaultDomEventHandler #-}
 defaultDomEventHandler :: IsElement e => e -> EventName en -> EventM e (EventType en) (Maybe (EventResult en))
 defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
-  Click -> return ()
+  Click -> pure ()
   Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> fromIntegral <$> getScrollTop e
@@ -2408,48 +2413,48 @@ defaultDomEventHandler e evt = fmap (Just . EventResult) $ case evt of
   Mousemove -> getMouseEventCoords
   Mouseup -> getMouseEventCoords
   Mousedown -> getMouseEventCoords
-  Mouseenter -> return ()
-  Mouseleave -> return ()
-  Focus -> return ()
-  Blur -> return ()
-  Change -> return ()
-  Drag -> return ()
-  Dragend -> return ()
-  Dragenter -> return ()
-  Dragleave -> return ()
-  Dragover -> return ()
-  Dragstart -> return ()
-  Drop -> return ()
-  Abort -> return ()
-  Contextmenu -> return ()
-  Error -> return ()
-  Input -> return ()
-  Invalid -> return ()
-  Load -> return ()
-  Mouseout -> return ()
-  Mouseover -> return ()
-  Select -> return ()
-  Submit -> return ()
-  Beforecut -> return ()
-  Cut -> return ()
-  Beforecopy -> return ()
-  Copy -> return ()
-  Beforepaste -> return ()
+  Mouseenter -> pure ()
+  Mouseleave -> pure ()
+  Focus -> pure ()
+  Blur -> pure ()
+  Change -> pure ()
+  Drag -> pure ()
+  Dragend -> pure ()
+  Dragenter -> pure ()
+  Dragleave -> pure ()
+  Dragover -> pure ()
+  Dragstart -> pure ()
+  Drop -> pure ()
+  Abort -> pure ()
+  Contextmenu -> pure ()
+  Error -> pure ()
+  Input -> pure ()
+  Invalid -> pure ()
+  Load -> pure ()
+  Mouseout -> pure ()
+  Mouseover -> pure ()
+  Select -> pure ()
+  Submit -> pure ()
+  Beforecut -> pure ()
+  Cut -> pure ()
+  Beforecopy -> pure ()
+  Copy -> pure ()
+  Beforepaste -> pure ()
   Paste -> getPasteData
-  Reset -> return ()
-  Search -> return ()
-  Selectstart -> return ()
+  Reset -> pure ()
+  Search -> pure ()
+  Selectstart -> pure ()
   Touchstart -> getTouchEvent
   Touchmove -> getTouchEvent
   Touchend -> getTouchEvent
   Touchcancel -> getTouchEvent
-  Mousewheel -> return ()
+  Mousewheel -> pure ()
   Wheel -> getWheelEvent
 
 {-# INLINEABLE defaultDomWindowEventHandler #-}
 defaultDomWindowEventHandler :: DOM.Window -> EventName en -> EventM DOM.Window (EventType en) (Maybe (EventResult en))
 defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
-  Click -> return ()
+  Click -> pure ()
   Dblclick -> getMouseEventCoords
   Keypress -> getKeyEvent
   Scroll -> Window.getScrollY w
@@ -2458,42 +2463,42 @@ defaultDomWindowEventHandler w evt = fmap (Just . EventResult) $ case evt of
   Mousemove -> getMouseEventCoords
   Mouseup -> getMouseEventCoords
   Mousedown -> getMouseEventCoords
-  Mouseenter -> return ()
-  Mouseleave -> return ()
-  Focus -> return ()
-  Blur -> return ()
-  Change -> return ()
-  Drag -> return ()
-  Dragend -> return ()
-  Dragenter -> return ()
-  Dragleave -> return ()
-  Dragover -> return ()
-  Dragstart -> return ()
-  Drop -> return ()
-  Abort -> return ()
-  Contextmenu -> return ()
-  Error -> return ()
-  Input -> return ()
-  Invalid -> return ()
-  Load -> return ()
-  Mouseout -> return ()
-  Mouseover -> return ()
-  Select -> return ()
-  Submit -> return ()
-  Beforecut -> return ()
-  Cut -> return ()
-  Beforecopy -> return ()
-  Copy -> return ()
-  Beforepaste -> return ()
+  Mouseenter -> pure ()
+  Mouseleave -> pure ()
+  Focus -> pure ()
+  Blur -> pure ()
+  Change -> pure ()
+  Drag -> pure ()
+  Dragend -> pure ()
+  Dragenter -> pure ()
+  Dragleave -> pure ()
+  Dragover -> pure ()
+  Dragstart -> pure ()
+  Drop -> pure ()
+  Abort -> pure ()
+  Contextmenu -> pure ()
+  Error -> pure ()
+  Input -> pure ()
+  Invalid -> pure ()
+  Load -> pure ()
+  Mouseout -> pure ()
+  Mouseover -> pure ()
+  Select -> pure ()
+  Submit -> pure ()
+  Beforecut -> pure ()
+  Cut -> pure ()
+  Beforecopy -> pure ()
+  Copy -> pure ()
+  Beforepaste -> pure ()
   Paste -> getPasteData
-  Reset -> return ()
-  Search -> return ()
-  Selectstart -> return ()
+  Reset -> pure ()
+  Search -> pure ()
+  Selectstart -> pure ()
   Touchstart -> getTouchEvent
   Touchmove -> getTouchEvent
   Touchend -> getTouchEvent
   Touchcancel -> getTouchEvent
-  Mousewheel -> return ()
+  Mousewheel -> pure ()
   Wheel -> getWheelEvent
 
 {-# INLINEABLE withIsEvent #-}
@@ -2692,15 +2697,15 @@ windowOnEventName en e = case en of
   Select -> on e Events.select
   Submit -> on e Events.submit
   Wheel -> on e Events.wheel
-  Beforecut -> const $ return $ return () -- TODO
-  Cut -> const $ return $ return () -- TODO
-  Beforecopy -> const $ return $ return () -- TODO
-  Copy -> const $ return $ return () -- TODO
-  Beforepaste -> const $ return $ return () -- TODO
-  Paste -> const $ return $ return () -- TODO
+  Beforecut -> const $ pure $ pure () -- TODO
+  Cut -> const $ pure $ pure () -- TODO
+  Beforecopy -> const $ pure $ pure () -- TODO
+  Copy -> const $ pure $ pure () -- TODO
+  Beforepaste -> const $ pure $ pure () -- TODO
+  Paste -> const $ pure $ pure () -- TODO
   Reset -> on e Events.reset
   Search -> on e Events.search
-  Selectstart -> const $ return $ return () -- TODO
+  Selectstart -> const $ pure $ pure () -- TODO
   Touchstart -> on e Events.touchStart
   Touchmove -> on e Events.touchMove
   Touchend -> on e Events.touchEnd
@@ -2719,10 +2724,10 @@ subscribeDomEvent
   -> JSM (JSM ())
 subscribeDomEvent elementOnevent getValue eventChan et = elementOnevent $ do
   mv <- getValue
-  forM_ mv $ \v -> liftIO $ do
+  for_ mv $ \v -> liftIO $ do
     -- TODO: I don't think this is quite right: if a new trigger is created between when this is enqueued and when it fires, this may not work quite right
     etr <- newIORef $ Just et
-    writeChan eventChan [EventTriggerRef etr :=> TriggerInvocation v (return ())]
+    writeChan eventChan [EventTriggerRef etr :=> TriggerInvocation v (pure ())]
 
 {-# INLINEABLE wrapDomEventMaybe #-}
 wrapDomEventMaybe
@@ -2738,7 +2743,7 @@ wrapDomEventMaybe el elementOnevent getValue = do
       <$> (`runJSM` ctx)
         ( elementOnevent el $ do
             mv <- getValue
-            forM_ mv $ \v -> liftIO $ trigger v $ return ()
+            for_ mv $ \v -> liftIO $ trigger v $ pure ()
         )
 
 {-# INLINEABLE wrapDomEventsMaybe #-}
@@ -2755,7 +2760,7 @@ wrapDomEventsMaybe target handlers onEventName = do
     withIsEvent
       en
       (((`runJSM` ctx) <$>) . (`runJSM` ctx) . subscribeDomEvent (onEventName en target) (handlers en) eventChan)
-  return $! e
+  pure $! e
 
 {-# INLINEABLE getKeyEvent #-}
 getKeyEvent :: EventM e KeyboardEvent Word
@@ -2763,11 +2768,11 @@ getKeyEvent = do
   e <- event
   which <- KeyboardEvent.getWhich e
   if which /= 0
-    then return which
+    then pure which
     else do
       charCode <- getCharCode e
       if charCode /= 0
-        then return charCode
+        then pure charCode
         else
           getKeyCode e
 
@@ -2783,7 +2788,7 @@ getPasteData = do
   e <- event
   mdt <- ClipboardEvent.getClipboardData e
   case mdt of
-    Nothing -> return Nothing
+    Nothing -> pure Nothing
     Just dt -> Just <$> DataTransfer.getData dt ("text" :: Text)
 
 {-# INLINEABLE getTouchEvent #-}
@@ -2791,7 +2796,7 @@ getTouchEvent :: EventM e TouchEvent TouchEventResult
 getTouchEvent = do
   let touchResults ts = do
         n <- TouchList.getLength ts
-        forM (takeWhile (< n) [0 ..]) $ \ix -> do
+        for (takeWhile (< n) [0 ..]) $ \ix -> do
           t <- TouchList.item ts ix
           identifier <- Touch.getIdentifier t
           screenX <- Touch.getScreenX t
@@ -2800,7 +2805,7 @@ getTouchEvent = do
           clientY <- Touch.getClientY t
           pageX <- Touch.getPageX t
           pageY <- Touch.getPageY t
-          return
+          pure
             TouchResult
               { _touchResult_identifier = identifier
               , _touchResult_screenX = screenX
@@ -2818,7 +2823,7 @@ getTouchEvent = do
   changedTouches <- touchResults =<< TouchEvent.getChangedTouches e
   targetTouches <- touchResults =<< TouchEvent.getTargetTouches e
   touches <- touchResults =<< TouchEvent.getTouches e
-  return $
+  pure $
     TouchEventResult
       { _touchEventResult_altKey = altKey
       , _touchEventResult_changedTouches = changedTouches
@@ -2837,7 +2842,7 @@ getWheelEvent = do
   dy :: Double <- WheelEvent.getDeltaY e
   dz :: Double <- WheelEvent.getDeltaZ e
   deltaMode :: Word <- WheelEvent.getDeltaMode e
-  return $
+  pure $
     WheelEventResult
       { _wheelEventResult_deltaX = dx
       , _wheelEventResult_deltaY = dy
@@ -2879,7 +2884,7 @@ data Window t = Window
 wrapWindow :: (MonadJSM m, MonadReflexCreateTrigger t m) => DOM.Window -> WindowConfig t -> HydrationDomBuilderT GhcjsDomSpace t m (Window t)
 wrapWindow wv _ = do
   events <- wrapDomEventsMaybe wv (defaultDomWindowEventHandler wv) windowOnEventName
-  return $
+  pure $
     Window
       { _window_events = events
       , _window_raw = wv

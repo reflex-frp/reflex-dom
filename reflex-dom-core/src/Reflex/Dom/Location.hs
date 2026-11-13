@@ -20,17 +20,18 @@ import Control.Lens ((^.))
 import Control.Monad ((>=>))
 import Control.Monad.Fix (MonadFix)
 import Data.Align (align)
+import Data.Foldable (fold)
 import Data.Text (Text)
 import Data.These (These (..))
-import qualified GHCJS.DOM as DOM
-import qualified GHCJS.DOM.EventM as DOM
-import qualified GHCJS.DOM.History as History
-import qualified GHCJS.DOM.Location as Location
-import qualified GHCJS.DOM.PopStateEvent as PopStateEvent
+import GHCJS.DOM qualified as DOM
+import GHCJS.DOM.EventM qualified as DOM
+import GHCJS.DOM.History qualified as History
+import GHCJS.DOM.Location qualified as Location
+import GHCJS.DOM.PopStateEvent qualified as PopStateEvent
 import GHCJS.DOM.Types (History, Location, SerializedScriptValue (..), liftJSM)
-import qualified GHCJS.DOM.Types as DOM
-import qualified GHCJS.DOM.Window as Window
-import qualified GHCJS.DOM.WindowEventHandlers as DOM
+import GHCJS.DOM.Types qualified as DOM
+import GHCJS.DOM.Window qualified as Window
+import GHCJS.DOM.WindowEventHandlers qualified as DOM
 import Language.Javascript.JSaddle (FromJSString, FromJSVal (..), MonadJSM, ToJSString, ToJSVal (..), fromJSValUnchecked, js1)
 import Network.URI
 import Reflex
@@ -58,7 +59,7 @@ getLocationAfterHost = withLocation $ \loc -> do
   pathname <- Location.getPathname loc
   search <- Location.getSearch loc
   hash <- Location.getHash loc
-  decodeURI (mconcat [pathname, search, hash] :: Text)
+  decodeURI (fold [pathname, search, hash] :: Text)
 
 -- | Returns the URI-decoded path of the current window location.
 getLocationPath :: MonadJSM m => m Text
@@ -163,7 +164,8 @@ manageHistory runCmd = do
   itemSetExternal <- wrapDomEvent window (`DOM.on` DOM.popState) $ do
     e <- DOM.event
     HistoryItem
-      <$> (SerializedScriptValue <$> PopStateEvent.getState e)
+      . SerializedScriptValue
+      <$> PopStateEvent.getState e
       <*> getLocationUri location
   holdDyn item0 $ leftmost [itemSetInternal, itemSetExternal]
 
@@ -195,7 +197,8 @@ manageHistoryExposingExternalUpdates switchover runCmd = do
   itemSetExternal' <- wrapDomEvent window (`DOM.on` DOM.popState) $ do
     e <- DOM.event
     HistoryItem
-      <$> (SerializedScriptValue <$> PopStateEvent.getState e)
+      . SerializedScriptValue
+      <$> PopStateEvent.getState e
       <*> getLocationUri location
   let f :: (Bool, Maybe a) -> These a () -> (Maybe (Bool, Maybe a), Maybe a)
       f (switched, acc) = \case

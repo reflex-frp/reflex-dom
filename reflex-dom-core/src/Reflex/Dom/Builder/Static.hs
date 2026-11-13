@@ -13,24 +13,26 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Reader
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
-import qualified Data.ByteString.Lazy as LBS
+import Data.ByteString.Lazy qualified as LBS
 import Data.Default
 import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Map qualified as DMap
 import Data.Dependent.Sum (DSum (..))
+import Data.Foldable (fold, for_)
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.IORef (IORef)
 import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
+import Data.IntMap qualified as IntMap
 import Data.Kind (Type)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Map.Misc (applyMap)
 import Data.Maybe (fromMaybe)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Text.Encoding
+import Data.Traversable (for)
 import Data.Tuple
 import GHC.Generics
 import Reflex.Adjustable.Class
@@ -71,7 +73,7 @@ instance MonadTrans (StaticDomBuilderT t) where
 runStaticDomBuilderT :: (Monad m, Reflex t) => StaticDomBuilderT t m a -> StaticDomBuilderEnv t -> m (a, Behavior t Builder)
 runStaticDomBuilderT (StaticDomBuilderT a) e = do
   (result, a') <- runStateT (runReaderT a e) []
-  return (result, mconcat $ reverse a')
+  pure (result, fold $ reverse a')
 
 instance PostBuild t m => PostBuild t (StaticDomBuilderT t m) where
   {-# INLINEABLE getPostBuild #-}
@@ -108,11 +110,11 @@ instance MonadHold t m => MonadHold t (StaticDomBuilderT t m) where
 
 instance (Monad m, Ref m ~ Ref IO, Reflex t) => TriggerEvent t (StaticDomBuilderT t m) where
   {-# INLINEABLE newTriggerEvent #-}
-  newTriggerEvent = return (never, const $ return ())
+  newTriggerEvent = pure (never, const $ pure ())
   {-# INLINEABLE newTriggerEventWithOnComplete #-}
-  newTriggerEventWithOnComplete = return (never, \_ _ -> return ())
+  newTriggerEventWithOnComplete = pure (never, \_ _ -> pure ())
   {-# INLINEABLE newEventWithLazyTriggerWithOnComplete #-}
-  newEventWithLazyTriggerWithOnComplete _ = return never
+  newEventWithLazyTriggerWithOnComplete _ = pure never
 
 instance MonadRef m => MonadRef (StaticDomBuilderT t m) where
   type Ref (StaticDomBuilderT t m) = Ref m
@@ -159,7 +161,7 @@ instance (Reflex t, Adjustable t m, MonadHold t m, SupportsStaticDomBuilder t m)
     o <- hold (snd result0) $ fmapCheap snd result'
     StaticDomBuilderT $ modify $ (:) $ join o
     replaceEnd key
-    return (fst result0, fmapCheap fst result')
+    pure (fst result0, fmapCheap fst result')
   traverseIntMapWithKeyWithAdjust = hoistIntMapWithKeyWithAdjust traverseIntMapWithKeyWithAdjust
   traverseDMapWithKeyWithAdjust = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjust mapPatchDMap
   traverseDMapWithKeyWithAdjustWithMove = hoistDMapWithKeyWithAdjust traverseDMapWithKeyWithAdjustWithMove mapPatchDMapWithMove
@@ -205,9 +207,9 @@ hoistIntMapWithKeyWithAdjust base f im0 im' = do
   outputs <- holdIncremental outputs0 outputs'
   StaticDomBuilderT $ modify $ (:) $ pull $ do
     os <- sample $ currentIncremental outputs
-    fmap mconcat $ forM (IntMap.toList os) $ \(_, o) -> do
+    fmap fold $ for (IntMap.toList os) $ \(_, o) -> do
       sample o
-  return (result0, result')
+  pure (result0, result')
 
 hoistDMapWithKeyWithAdjust
   :: forall (k :: Type -> Type) v v' t m p
@@ -241,9 +243,9 @@ hoistDMapWithKeyWithAdjust base mapPatch f dm0 dm' = do
   outputs <- holdIncremental outputs0 outputs'
   StaticDomBuilderT $ modify $ (:) $ pull $ do
     os <- sample $ currentIncremental outputs
-    fmap mconcat $ forM (DMap.toList os) $ \(_ :=> Constant o) -> do
+    fmap fold $ for (DMap.toList os) $ \(_ :=> Constant o) -> do
       sample o
-  return (result0, result')
+  pure (result0, result')
 
 instance SupportsStaticDomBuilder t m => NotReady t (StaticDomBuilderT t m) where
   notReadyUntil _ = pure ()
@@ -258,25 +260,25 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
     shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
     let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
     modify . (:) =<< case mSetContents of
-      Nothing -> return (pure (escape initialContents))
+      Nothing -> pure (pure (escape initialContents))
       Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents -- Only because it doesn't get optimized when profiling is on
-    return $ TextNode ()
+    pure $ TextNode ()
   {-# INLINEABLE commentNode #-}
   commentNode (CommentNodeConfig initialContents mSetContents) = StaticDomBuilderT $ do
     -- TODO: Do not escape quotation marks; see https://stackoverflow.com/questions/25612166/what-characters-must-be-escaped-in-html-5
     shouldEscape <- asks _staticDomBuilderEnv_shouldEscape
     let escape = if shouldEscape then fromHtmlEscapedText else byteString . encodeUtf8
     (modify . (:)) . (\c -> "<!--" <> c <> "-->") =<< case mSetContents of
-      Nothing -> return (pure (escape initialContents))
+      Nothing -> pure (pure (escape initialContents))
       Just setContents -> hold (escape initialContents) $ fmapCheap escape setContents -- Only because it doesn't get optimized when profiling is on
-    return $ CommentNode ()
+    pure $ CommentNode ()
   {-# INLINEABLE element #-}
   element elementTag cfg child = do
     -- https://www.w3.org/TR/html-markup/syntax.html#syntax-elements
     let voidElements = Set.fromList ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"]
     let noEscapeElements = Set.fromList ["style", "script"]
     let toAttr (AttributeName _mns k) v = byteString (encodeUtf8 k) <> byteString "=\"" <> fromHtmlEscapedText v <> byteString "\""
-    es <- newFanEventWithTrigger $ \_ _ -> return (return ())
+    es <- newFanEventWithTrigger $ \_ _ -> pure (pure ())
     StaticDomBuilderT $ do
       let shouldEscape = elementTag `Set.notMember` noEscapeElements
       nextRunWithReplaceKey <- asks _staticDomBuilderEnv_nextRunWithReplaceKey
@@ -289,20 +291,20 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       let attrs1 = case (elementTag, selectValue) of
             ("option", Just sv) -> pull $ addSelectedAttr <$> sample (current attrs0) <*> sample sv
             _ -> current attrs0
-      let attrs2 = ffor attrs1 $ mconcat . fmap (\(k, v) -> " " <> toAttr k v) . Map.toList
+      let attrs2 = ffor attrs1 $ foldMap (\(k, v) -> " " <> toAttr k v) . Map.toList
       let tagBS = encodeUtf8 elementTag
       if Set.member elementTag voidElements
-        then modify $ (:) $ mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString " />")]
+        then modify $ (:) $ fold [constant ("<" <> byteString tagBS), attrs2, constant (byteString " />")]
         else do
-          let open = mconcat [constant ("<" <> byteString tagBS), attrs2, constant (byteString ">")]
+          let open = fold [constant ("<" <> byteString tagBS), attrs2, constant (byteString ">")]
           let close = constant $ byteString $ "</" <> tagBS <> ">"
-          modify $ (:) $ mconcat [open, innerHtml, close]
+          modify $ (:) $ fold [open, innerHtml, close]
       let e =
             Element
               { _element_events = es
               , _element_raw = ()
               }
-      return (e, result)
+      pure (e, result)
   {-# INLINEABLE inputElement #-}
   inputElement cfg = do
     -- Tweak the config to update the "value" and "checked" attributes appropriately.
@@ -321,7 +323,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
           _inputElementConfig_elementConfig cfg
             & elementConfig_initialAttributes %~ setInitialValue . setInitialChecked
             & elementConfig_modifyAttributes %~ setUpdatedValue . setUpdatedChecked
-    (e, _result) <- element "input" adjustedConfig $ return ()
+    (e, _result) <- element "input" adjustedConfig $ pure ()
     v <- case _inputElementConfig_setValue cfg of
       Nothing -> pure $ constDyn (cfg ^. inputElementConfig_initialValue)
       Just ev -> holdDyn (cfg ^. inputElementConfig_initialValue) ev
@@ -329,7 +331,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       Nothing -> pure $ constDyn $ _inputElementConfig_initialChecked cfg
       Just ev -> holdDyn (_inputElementConfig_initialChecked cfg) ev
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
-    return $
+    pure $
       InputElement
         { _inputElement_value = v
         , _inputElement_checked = c
@@ -353,7 +355,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
       Nothing -> pure $ constDyn (cfg ^. textAreaElementConfig_initialValue)
       Just ev -> holdDyn (cfg ^. textAreaElementConfig_initialValue) ev
     let hasFocus = constDyn False -- TODO should this be coming from initialAtttributes
-    return $
+    pure $
       TextAreaElement
         { _textAreaElement_value = v
         , _textAreaElement_input = never
@@ -368,7 +370,7 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
         nextRunWithReplaceKey <- asks _staticDomBuilderEnv_nextRunWithReplaceKey
         lift $ lift $ runStaticDomBuilderT child $ StaticDomBuilderEnv False (Just $ current v) nextRunWithReplaceKey
       StaticDomBuilderT $ lift $ modify $ (:) innerHtml
-      return a
+      pure a
     let wrapped =
           SelectElement
             { _selectElement_value = v
@@ -377,9 +379,9 @@ instance SupportsStaticDomBuilder t m => DomBuilder t (StaticDomBuilderT t m) wh
             , _selectElement_element = e
             , _selectElement_raw = ()
             }
-    return (wrapped, result)
-  placeRawElement () = return ()
-  wrapRawElement () _ = return $ Element (EventSelector $ const never) ()
+    pure (wrapped, result)
+  placeRawElement () = pure ()
+  wrapRawElement () _ = pure $ Element (EventSelector $ const never) ()
 
 -- TODO: Make this more abstract --TODO: Put the WithWebView underneath PerformEventT - I think this would perform better
 type StaticWidget x = PostBuildT DomTimeline (StaticDomBuilderT DomTimeline (PerformEventT DomTimeline DomHost))
@@ -393,6 +395,6 @@ renderStatic w = do
     let env0 = StaticDomBuilderEnv True Nothing nextRunWithReplaceKey
     ((res, bs), FireCommand fire) <- hostPerformEventT $ runStaticDomBuilderT (runPostBuildT w postBuild) env0
     mPostBuildTrigger <- readRef postBuildTriggerRef
-    forM_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ return ()
+    for_ mPostBuildTrigger $ \postBuildTrigger -> fire [postBuildTrigger :=> Identity ()] $ pure ()
     bs' <- sample bs
-    return (res, LBS.toStrict $ toLazyByteString bs')
+    pure (res, LBS.toStrict $ toLazyByteString bs')

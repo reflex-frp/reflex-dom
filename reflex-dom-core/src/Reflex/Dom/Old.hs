@@ -49,11 +49,12 @@ import Data.Default
 import Data.Dependent.Map as DMap
 import Data.Functor.Misc
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Data.Text (Text)
-import qualified GHCJS.DOM.Element as Element
+import Data.Traversable (for)
+import GHCJS.DOM.Element qualified as Element
 import GHCJS.DOM.EventM (EventM)
 import GHCJS.DOM.NamedNodeMap as NNM
 import GHCJS.DOM.Node (getFirstChild, getNodeName, removeChild)
@@ -63,7 +64,7 @@ import GHCJS.DOM.Types
   , JSM
   , liftJSM
   )
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.Types qualified as DOM
 import Reflex.Class
 import Reflex.Host.Class
 import Reflex.PerformEvent.Class
@@ -90,7 +91,7 @@ instance attrs ~ Map Text Text => Default (ElConfig attrs) where
 makeLenses ''ElConfig
 #else
 elConfig_namespace :: Lens' (ElConfig attrs1) (Maybe Text)
-elConfig_namespace f (ElConfig a b) = (\a' -> ElConfig a' b) <$> f a
+elConfig_namespace f (ElConfig a b) = (`ElConfig` b) <$> f a
 {-# INLINE elConfig_namespace #-}
 elConfig_attributes :: Lens (ElConfig attrs1) (ElConfig attrs2) attrs1 attrs2
 elConfig_attributes f (ElConfig a b) = (\b' -> ElConfig a b') <$> f b
@@ -184,7 +185,7 @@ instance PostBuild t m => Attributes m (Dynamic t (Map Text Text)) t where
 addDynamicAttributes :: PostBuild t m => Dynamic t (Map Text Text) -> ElementConfig er t (DomBuilderSpace m) -> m (ElementConfig er t (DomBuilderSpace m))
 addDynamicAttributes attrs cfg = do
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
-  return $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
+  pure $ cfg & elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
 
 buildElementCommon :: MonadWidget t m => Text -> m a -> ElementConfig er t (DomBuilderSpace m) -> m (Element er (DomBuilderSpace m) t, a)
 buildElementCommon elementTag child cfg = element elementTag cfg child
@@ -217,7 +218,7 @@ emptyElWith :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs
 emptyElWith elementTag cfg = void $ emptyElWith' elementTag cfg
 
 emptyElWith' :: (MonadWidget t m, Attributes m attrs t) => Text -> ElConfig attrs -> m (Element EventResult (DomBuilderSpace m) t)
-emptyElWith' elementTag cfg = fmap fst $ elWith' elementTag cfg $ return ()
+emptyElWith' elementTag cfg = fmap fst $ elWith' elementTag cfg $ pure ()
 
 {-# DEPRECATED _el_clicked "Use 'domEvent Click' instead" #-}
 _el_clicked :: Reflex t => Element EventResult d t -> Event t ()
@@ -260,7 +261,7 @@ namedNodeMapGetNames :: DOM.NamedNodeMap -> JSM (Set Text)
 namedNodeMapGetNames self = do
   l <- NNM.getLength self
   Set.fromList
-    <$> forM
+    <$> for
       (take (fromIntegral l) [0 ..])
       (NNM.itemUnchecked self >=> getNodeName)
 
@@ -268,7 +269,7 @@ nodeClear :: IsNode self => self -> JSM ()
 nodeClear n = do
   mfc <- getFirstChild n
   case mfc of
-    Nothing -> return ()
+    Nothing -> pure ()
     Just fc -> do
       _ <- removeChild n fc
       nodeClear n
@@ -276,7 +277,7 @@ nodeClear n = do
 elStopPropagationNS :: forall t m en a. MonadWidget t m => Maybe Text -> Text -> EventName en -> m a -> m a
 elStopPropagationNS ns elementTag en child = do
   let f = GhcjsEventFilter $ \_ -> do
-        return (stopPropagation, return Nothing)
+        pure (stopPropagation, pure Nothing)
       cfg =
         (def :: ElementConfig EventResult t (DomBuilderSpace m))
           & namespace .~ ns
@@ -286,10 +287,10 @@ elStopPropagationNS ns elementTag en child = do
 elDynHtmlAttr' :: MonadWidget t m => Text -> Map Text Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtmlAttr' elementTag attrs html = do
   let cfg = def & initialAttributes .~ Map.mapKeys (AttributeName Nothing) attrs
-  (e, _) <- element elementTag cfg $ return ()
+  (e, _) <- element elementTag cfg $ pure ()
   postBuild <- getPostBuild
   performEvent_ $ liftJSM . Element.setInnerHTML (_element_raw e) <$> leftmost [updated html, tag (current html) postBuild]
-  return e
+  pure e
 
 elDynHtml' :: MonadWidget t m => Text -> Dynamic t Text -> m (Element EventResult GhcjsDomSpace t)
 elDynHtml' elementTag = elDynHtmlAttr' elementTag mempty

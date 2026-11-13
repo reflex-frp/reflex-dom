@@ -4,7 +4,7 @@ module Main (main) where
 
 import Control.Monad.State
 import Data.Dependent.Map (DMap (..))
-import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Map qualified as DMap
 import Data.Dependent.Sum (DSum (..))
 import Data.FastMutableIntMap
 import Data.Functor.Compose
@@ -13,15 +13,15 @@ import Data.Functor.Identity
 import Data.Functor.Misc
 import Data.IORef
 import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
-import qualified Data.Map as Map
+import Data.IntMap.Strict qualified as IntMap
+import Data.Map qualified as Map
 import Data.Monoid
-import qualified Data.Some as Some
+import Data.Some qualified as Some
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified GHCJS.DOM.Element as DOM
+import Data.Text qualified as T
+import GHCJS.DOM.Element qualified as DOM
 import GHCJS.DOM.Types (JSM)
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.Types qualified as DOM
 import System.Random
 
 import Reflex.Dom
@@ -32,7 +32,7 @@ main = mainWidget' $ do
   create1000 <- button "Create 1,000 rows"
   let row k _ = el "li" $ text $ T.pack $ show k
   el "ul" $ traverseIntMapWithKeyWithAdjust row IntMap.empty $ PatchIntMap (IntMap.fromDistinctAscList [(x, Just ()) | x <- [1 :: Int .. 1000]]) <$ create1000
-  return ()
+  pure ()
 
 -- }
 
@@ -50,7 +50,7 @@ main = do
                 , PatchIntMap <$> deletes
                 ]
           (_, deletes) <- runEventWriterT $ traverseIntMapWithKeyWithAdjust (\k _ -> row k) mempty u
-      return ()
+      pure ()
 
 row :: MonadWidget t m => Int -> EventWriterT t (IntMap (Maybe ())) m ()
 row rowNum = el "tr" $ do

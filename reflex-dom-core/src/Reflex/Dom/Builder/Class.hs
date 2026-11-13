@@ -14,18 +14,18 @@ import Reflex.Dom.Builder.Class.Events
 #ifdef USE_TEMPLATE_HASKELL
 import Reflex.Dom.Builder.Class.TH
 #endif
-import qualified Control.Category
+import Control.Category qualified
 import Control.Lens hiding (element)
 import Control.Monad.Fix
 import Control.Monad.Reader
-import qualified Control.Monad.State as Lazy
+import Control.Monad.State qualified as Lazy
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Control
 import Data.Default
 import Data.Functor.Misc
 import Data.Kind (Type)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Maybe
 import Data.Proxy
 import Data.Semigroup.Commutative
@@ -33,7 +33,7 @@ import Data.String
 import Data.Text (Text)
 import Data.Type.Coercion
 import GHCJS.DOM.Types (JSM)
-import qualified GHCJS.DOM.Types as DOM
+import GHCJS.DOM.Types qualified as DOM
 import Reflex.BehaviorWriter.Base
 import Reflex.DynamicWriter.Base
 import Reflex.EventWriter.Base
@@ -163,7 +163,7 @@ data TextNodeConfig t
 
 #ifndef USE_TEMPLATE_HASKELL
 textNodeConfig_initialContents :: Lens' (TextNodeConfig t) Text
-textNodeConfig_initialContents f (TextNodeConfig a b) = (\a' -> TextNodeConfig a' b) <$> f a
+textNodeConfig_initialContents f (TextNodeConfig a b) = (`TextNodeConfig` b) <$> f a
 {-# INLINE textNodeConfig_initialContents #-}
 #endif
 
@@ -187,7 +187,7 @@ data CommentNodeConfig t
 
 #ifndef USE_TEMPLATE_HASKELL
 commentNodeConfig_initialContents :: Lens' (CommentNodeConfig t) Text
-commentNodeConfig_initialContents f (CommentNodeConfig a b) = (\a' -> CommentNodeConfig a' b) <$> f a
+commentNodeConfig_initialContents f (CommentNodeConfig a b) = (`CommentNodeConfig` b) <$> f a
 {-# INLINE commentNodeConfig_initialContents #-}
 #endif
 
@@ -575,14 +575,14 @@ instance (DomBuilder t m, Monoid w, MonadHold t m) => DomBuilder t (DynamicWrite
     s <- get
     (el, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
     put newS
-    return (el, a)
+    pure (el, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
   selectElement cfg (DynamicWriterT child) = DynamicWriterT $ do
     s <- get
     (el, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
     put newS
-    return (el, a)
+    pure (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
@@ -595,7 +595,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
     old <- get
     (el, (a, new)) <- lift $ lift $ element elementTag cfg $ runReaderT (runStateT child old) r
     put new
-    return (el, a)
+    pure (el, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
   selectElement cfg (RequesterT child) = RequesterT $ do
@@ -603,7 +603,7 @@ instance (DomBuilder t m, MonadHold t m, MonadFix m) => DomBuilder t (RequesterT
     old <- get
     (el, (a, new)) <- lift $ lift $ selectElement cfg $ runReaderT (runStateT child old) r
     put new
-    return (el, a)
+    pure (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
@@ -615,14 +615,14 @@ instance (DomBuilder t m, MonadHold t m, Semigroup w) => DomBuilder t (EventWrit
     old <- get
     (el, (a, new)) <- lift $ element elementTag cfg $ runStateT child old
     put new
-    return (el, a)
+    pure (el, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
   selectElement cfg (EventWriterT child) = EventWriterT $ do
     old <- get
     (el, (a, new)) <- lift $ selectElement cfg $ runStateT child old
     put new
-    return (el, a)
+    pure (el, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 
@@ -634,14 +634,14 @@ instance (DomBuilder t m, MonadFix m, MonadHold t m, Group q, Query q, Commutati
     s <- get
     (e, (a, newS)) <- lift $ element elementTag cfg $ runStateT child s
     put newS
-    return (e, a)
+    pure (e, a)
   inputElement = lift . inputElement
   textAreaElement = lift . textAreaElement
   selectElement cfg (QueryT child) = QueryT $ do
     s <- get
     (e, (a, newS)) <- lift $ selectElement cfg $ runStateT child s
     put newS
-    return (e, a)
+    pure (e, a)
   placeRawElement = lift . placeRawElement
   wrapRawElement e = lift . wrapRawElement e
 

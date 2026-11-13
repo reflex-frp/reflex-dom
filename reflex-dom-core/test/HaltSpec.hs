@@ -1,16 +1,18 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 import Control.Monad.IO.Class
 import Data.Foldable
 import GHCJS.DOM
-import qualified Graphics.UI.Gtk as Gtk
+import Graphics.UI.Gtk qualified as Gtk
 import Reflex.Dom
 import Reflex.Spider.Internal (SpiderHostFrame)
 
 main :: IO ()
 main = do
-  getFirstEventAndHalt return
+  getFirstEventAndHalt pure
   putStrLn "stopped once"
 
-  forM_ [1 .. 1000] $ \i -> getFirstEventAndHalt return
+  for_ [1 .. 1000] $ \i -> getFirstEventAndHalt pure
   putStrLn "stopped many times"
 
 type SpiderM = Widget Spider (Gui Spider (WithWebView SpiderHost) SpiderHostFrame)
@@ -22,4 +24,4 @@ getFirstEventAndHalt action = mainWidget $ do
   webView <- askWebView
   quit <- getQuitWidget
   performEvent_ (quit <$ event)
-  return ()
+  pure ()

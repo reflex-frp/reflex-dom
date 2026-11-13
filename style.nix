@@ -24,7 +24,7 @@ let style = inputs."style.hs";
       '';
 
     fourmolu-check = check "fourmolu-check" fourmolu "fourmolu --mode check --config ${fourmoluConfig}";
-    hlint-check = check "hlint-check" hlint "hlint --with-group=generalise";
+    hlint-check = check "hlint-check" hlint "hlint --with-group=generalise -XNoTransformListComp";
 
     fourmoluAdditions = ''
       fixities:

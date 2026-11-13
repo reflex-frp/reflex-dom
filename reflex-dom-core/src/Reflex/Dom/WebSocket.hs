@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Reflex.Dom.WebSocket
@@ -17,6 +16,7 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.Default
+import Data.Foldable (for_)
 import Data.IORef
 import Data.JSString.Text
 import Data.Maybe (isJust)
@@ -25,7 +25,7 @@ import Data.Text.Encoding
 import GHCJS.DOM.Types (JSM, MonadJSM, askJSM, liftJSM, runJSM)
 import GHCJS.DOM.WebSocket (getReadyState)
 import GHCJS.Marshal
-import qualified Language.Javascript.JSaddle.Monad as JS (catch)
+import Language.Javascript.JSaddle.Monad qualified as JS (catch)
 import Reflex.Class
 import Reflex.PerformEvent.Class
 import Reflex.PostBuild.Class
@@ -88,14 +88,14 @@ webSocket' url config onRawMessage = do
       start = do
         ws <- newWebSocket url (_webSocketConfig_protocols config) (onRawMessage >=> liftIO . onMessage) (liftIO onOpen) (liftIO onError) onClose
         liftIO $ writeIORef currentSocketRef $ Just ws
-        return ()
+        pure ()
   performEvent_ . (liftJSM start <$) =<< getPostBuild
-  performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> forM_ payloads $ \payload ->
+  performEvent_ $ ffor (_webSocketConfig_send config) $ \payloads -> for_ payloads $ \payload ->
     liftIO $ atomically $ writeTQueue payloadQueue payload
   performEvent_ $ ffor (_webSocketConfig_close config) $ \(code, reason) -> liftJSM $ do
     mws <- liftIO $ readIORef currentSocketRef
     case mws of
-      Nothing -> return ()
+      Nothing -> pure ()
       Just ws -> closeWebSocket ws code reason
 
   ctx <- askJSM
@@ -103,26 +103,26 @@ webSocket' url config onRawMessage = do
     payload <- atomically $ do
       pl <- readTQueue payloadQueue
       open <- tryReadTMVar isOpen
-      if isJust open then return pl else retry
+      if isJust open then pure pl else retry
 
     mws <- liftIO $ readIORef currentSocketRef
     success <- case mws of
-      Nothing -> return False
+      Nothing -> pure False
       Just ws -> flip runJSM ctx $ do
         rs <- getReadyState $ unWebSocket ws
         if rs == 1
-          then (webSocketSend ws payload >> return True) `JS.catch` (\(_ :: SomeException) -> return False)
-          else return False
+          then (webSocketSend ws payload >> pure True) `JS.catch` (\(_ :: SomeException) -> pure False)
+          else pure False
     unless success $ atomically $ unGetTQueue payloadQueue payload
-  return $ RawWebSocket eRecv eOpen eError eClose
+  pure $ RawWebSocket eRecv eOpen eError eClose
 
 textWebSocket :: (IsWebSocketMessage a, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t Text)
-textWebSocket url cfg = webSocket' url cfg (either (return . decodeUtf8) fromJSValUnchecked)
+textWebSocket url cfg = webSocket' url cfg (either (pure . decodeUtf8Lenient) fromJSValUnchecked)
 
 jsonWebSocket :: (ToJSON a, FromJSON b, MonadJSM m, MonadJSM (Performable m), PostBuild t m, TriggerEvent t m, PerformEvent t m) => Text -> WebSocketConfig t a -> m (RawWebSocket t (Maybe b))
 jsonWebSocket url cfg = do
-  ws <- textWebSocket url $ cfg {_webSocketConfig_send = fmap (decodeUtf8 . toStrict . encode) <$> _webSocketConfig_send cfg}
-  return ws {_webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws}
+  ws <- textWebSocket url $ cfg {_webSocketConfig_send = fmap (decodeUtf8Lenient . toStrict . encode) <$> _webSocketConfig_send cfg}
+  pure ws {_webSocket_recv = jsonDecode . textToJSString <$> _webSocket_recv ws}
 
 forkJSM :: JSM () -> JSM ()
 forkJSM a = do

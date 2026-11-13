@@ -9,7 +9,7 @@ import Control.Monad.Ref
 import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Coerce
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 #ifndef ghcjs_HOST_OS
 import GHCJS.DOM.Types (MonadJSM (..))
 #endif

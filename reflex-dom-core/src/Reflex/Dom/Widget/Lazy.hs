@@ -3,9 +3,9 @@ module Reflex.Dom.Widget.Lazy where
 import Control.Monad.Fix
 import Data.Fixed
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import GHCJS.DOM.Element
 import GHCJS.DOM.Types (MonadJSM)
 import Reflex.Class
@@ -57,8 +57,8 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
         let currentTop = fmap (listWrapperStyle . fst) window
         (_, lis) <- elDynAttr "div" totalHeightStyle $ tagWrapper listTag listAttrs currentTop $ selectViewListWithKey_ selected itemsInWindow $ \k v s -> do
           (li, _) <- tagWrapper rowTag rowAttrs (constDyn $ toHeightStyle rowPx) $ itemBuilder k v s
-          return $ fmap (const k) (domEvent Click li)
-        return lis
+          pure $ fmap (const k) (domEvent Click li)
+        pure lis
       selected <- holdDyn (indexToKey i0) sel
       pb <- getPostBuild
       scrollPosition <-
@@ -68,12 +68,12 @@ virtualListWithSelection heightPx rowPx maxIndex i0 setI listTag listAttrs rowTa
             , fmap (const (i0 * rowPx)) pb
             ]
       let window = zipDynWith (findWindow rowPx) heightPx scrollPosition
-          itemsInWindow = zipDynWith (\(_, (idx, num)) is -> Map.fromList $ map (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
+          itemsInWindow = zipDynWith (\(_, (idx, num)) is -> Map.fromList $ fmap (\i -> let ix = indexToKey i in (ix, Map.lookup ix is)) [idx .. idx + num]) window items
   postBuild <- getPostBuild
   performEvent_ $ ffor (leftmost [setI, i0 <$ postBuild]) $ \i ->
     setScrollTop (_element_raw container) (i * rowPx)
   let indexAndLength = fmap snd window
-  return (indexAndLength, sel)
+  pure (indexAndLength, sel)
   where
     toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     toViewport h =
@@ -142,7 +142,7 @@ virtualList heightPx rowPx maxIndex i0 setI keyToIndex items0 itemsUpdate itemBu
   performEvent_ $ ffor (leftmost [setI, i0 <$ pb]) $ \i ->
     setScrollTop (_element_raw viewport) (i * rowPx)
   uniqWindow <- holdUniqDyn window
-  return (uniqWindow, result)
+  pure (uniqWindow, result)
   where
     toStyleAttr m = "style" =: Map.foldrWithKey (\k v s -> k <> ":" <> v <> ";" <> s) "" m
     mkViewport h =
@@ -202,4 +202,4 @@ virtualListBuffered buffer heightPx rowPx maxIndex i0 setI keyToIndex items0 ite
             [ winHitEdge
             , attachPromptlyDynWith (\(x, y) _ -> extendWin x y) win pb
             ]
-  return (updated winBuffered, m)
+  pure (updated winBuffered, m)

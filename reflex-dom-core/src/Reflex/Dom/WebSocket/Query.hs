@@ -22,7 +22,7 @@ runWebSocketQuery app url = do
   rec ws <- jsonWebSocket url $ def {_webSocketConfig_send = pure <$> updatedRequest}
       (a, request) <- cropQueryT app $ fromMaybe mempty <$> _webSocket_recv ws
       let updatedRequest = leftmost [updated request, tag (current request) postBuild]
-  return a
+  pure a
 
 cropQueryT
   :: (Reflex t, MonadHold t m, MonadFix m, Query q, Commutative q, Group q, Eq q)
@@ -33,7 +33,7 @@ cropQueryT app result = do
   rec (a, requestPatch) <- runQueryT app croppedResult
       requestUniq <- holdUniqDyn $ incrementalToDynamic requestPatch
       croppedResult <- cropDyn requestUniq result
-  return (a, requestUniq)
+  pure (a, requestUniq)
 
 cropDyn :: (Query q, MonadHold t m, Reflex t, MonadFix m) => Dynamic t q -> Event t (QueryResult q) -> m (Dynamic t (QueryResult q))
-cropDyn q = foldDyn (\(q', qr) v -> crop q' (qr `mappend` v)) mempty . attach (current q)
+cropDyn q = foldDyn (\(q', qr) v -> crop q' (qr <> v)) mempty . attach (current q)

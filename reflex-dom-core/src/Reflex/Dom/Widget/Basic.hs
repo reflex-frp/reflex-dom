@@ -51,16 +51,17 @@ import Control.Lens hiding (children, element)
 import Control.Monad.Fix
 import Data.Align
 import Data.Default
+import Data.Foldable (toList, traverse_)
 import Data.Functor (void)
 import Data.Kind (Type)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Map.Misc
 import Data.Maybe
 import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.Set qualified as Set
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.These
 import Reflex.Adjustable.Class
 import Reflex.Class
@@ -84,9 +85,7 @@ partitionMapBySetLT s m0 = Map.fromDistinctAscList $ go (Set.toAscList s) m0
   where
     go :: [k] -> Map k v -> [(Either k (), Map k v)]
     go [] m =
-      if Map.null m
-        then []
-        else [(Right (), m)]
+      [(Right (), m) | not (Map.null m)]
     go (h : t) m =
       let (lt, eq, gt) = Map.splitLookup h m
           geq = maybe id (Map.insert h) eq gt
@@ -135,7 +134,7 @@ display = dynText . fmap (T.pack . show)
 button :: DomBuilder t m => Text -> m (Event t ())
 button t = do
   (e, _) <- element "button" def $ text t
-  return $ domEvent Click e
+  pure $ domEvent Click e
 
 -- TODO: Should this be renamed to 'widgetView' for consistency with 'widgetHold'?
 
@@ -179,7 +178,7 @@ elAttr elementTag attrs child = snd <$> elAttr' elementTag attrs child
 
 -- | Create a DOM element with classes
 --
--- >>> elClass "div" "row" (return ())
+-- >>> elClass "div" "row" (pure ())
 -- <div class="row"></div>
 {-# INLINEABLE elClass #-}
 elClass :: forall t m a. DomBuilder t m => Text -> Text -> m a -> m a
@@ -187,7 +186,7 @@ elClass elementTag c child = snd <$> elClass' elementTag c child
 
 -- | Create a DOM element with Dynamic Attributes
 --
--- >>> elClass "div" (constDyn ("class" =: "row")) (return ())
+-- >>> elClass "div" (constDyn ("class" =: "row")) (pure ())
 -- <div class="row"></div>
 {-# INLINEABLE elDynAttr #-}
 elDynAttr :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t (Map Text Text) -> m a -> m a
@@ -195,7 +194,7 @@ elDynAttr elementTag attrs child = snd <$> elDynAttr' elementTag attrs child
 
 -- | Create a DOM element with a Dynamic Class
 --
--- >>> elDynClass "div" (constDyn "row") (return ())
+-- >>> elDynClass "div" (constDyn "row") (pure ())
 -- <div class="row"></div>
 {-# INLINEABLE elDynClass #-}
 elDynClass :: forall t m a. (DomBuilder t m, PostBuild t m) => Text -> Dynamic t Text -> m a -> m a
@@ -205,7 +204,7 @@ elDynClass elementTag c child = snd <$> elDynClass' elementTag c child
 --
 -- @
 --  do (e, _) <- el' "div" (text "Click")
---     return $ domEvent Click e
+--     pure $ domEvent Click e
 -- @
 {-# INLINEABLE el' #-}
 el' :: forall t m a. DomBuilder t m => Text -> m a -> m (Element EventResult (DomBuilderSpace m) t, a)
@@ -245,11 +244,11 @@ elDynAttrNS' mns elementTag attrs child = do
   result <- element elementTag cfg child
   postBuild <- getPostBuild
   notReadyUntil postBuild
-  return result
+  pure result
 
 {-# INLINEABLE elDynAttrNS #-}
 elDynAttrNS :: forall t m a. (DomBuilder t m, PostBuild t m) => Maybe Text -> Text -> Dynamic t (Map Text Text) -> m a -> m a
-elDynAttrNS mns elementTag attrs child = fmap snd $ elDynAttrNS' mns elementTag attrs child
+elDynAttrNS mns elementTag attrs child = snd <$> elDynAttrNS' mns elementTag attrs child
 
 dynamicAttributesToModifyAttributes :: (Ord k, PostBuild t m) => Dynamic t (Map k Text) -> m (Event t (Map k (Maybe Text)))
 dynamicAttributesToModifyAttributes = dynamicAttributesToModifyAttributesWithInitial mempty
@@ -261,13 +260,13 @@ dynamicAttributesToModifyAttributesWithInitial attrs0 d = do
         p <- case x of
           This () -> do
             new <- sample $ current d
-            return $ diffMap attrs0 new
-          These () new -> return $ diffMap attrs0 new
+            pure $ diffMap attrs0 new
+          These () new -> pure $ diffMap attrs0 new
           That new -> do
             old <- sample $ current d
-            return $ diffMap old new
-        return $ if Map.null p then Nothing else Just p
-  return modificationsNeeded
+            pure $ diffMap old new
+        pure $ if Map.null p then Nothing else Just p
+  pure modificationsNeeded
 
 newtype Link t
   = Link
@@ -277,7 +276,7 @@ newtype Link t
 linkClass :: DomBuilder t m => Text -> Text -> m (Link t)
 linkClass s c = do
   (l, _) <- elAttr' "a" ("class" =: c) $ text s
-  return $ Link $ domEvent Click l
+  pure $ Link $ domEvent Click l
 
 link :: DomBuilder t m => Text -> m (Link t)
 link s = linkClass s ""
@@ -291,7 +290,7 @@ dtdd h w = do
   el "dd" w
 
 blank :: forall m. Monad m => m ()
-blank = return ()
+blank = pure ()
 
 -- TODO: Move to an example project.
 
@@ -313,13 +312,13 @@ tableDynAttr klass cols dRows rowAttrs = elAttr "div" (Map.singleton "style" "zo
   elAttr "table" (Map.singleton "class" klass) $ do
     el "thead"
       $ el "tr"
-      $ mapM_ (\(h, _) -> el "th" $ text h) cols
+      $ traverse_ (\(h, _) -> el "th" $ text h) cols
     el "tbody" $
       listWithKey
         dRows
         ( \k r -> do
             dAttrs <- rowAttrs k
-            elDynAttr' "tr" dAttrs $ mapM (\x -> el "td" $ snd x k r) cols
+            elDynAttr' "tr" dAttrs $ traverse (\x -> el "td" $ snd x k r) cols
         )
 
 -- TODO: Move to an example project.
@@ -340,7 +339,7 @@ tabDisplay
 tabDisplay ulClass activeClass tabItems = do
   let t0 = listToMaybe $ Map.keys tabItems
   rec currentTab :: Demux t (Maybe k) <- elAttr "ul" ("class" =: ulClass) $ do
-        tabClicksList :: [Event t k] <- Map.elems <$> imapM (\k (s, _) -> headerBarLink s k $ demuxed currentTab (Just k)) tabItems
+        tabClicksList :: [Event t k] <- toList <$> imapM (\k (s, _) -> headerBarLink s k $ demuxed currentTab (Just k)) tabItems
         let eTabClicks :: Event t k = leftmost tabClicksList
         fmap demux $ holdDyn t0 $ fmap Just eTabClicks
   el "div" $ do
@@ -348,14 +347,14 @@ tabDisplay ulClass activeClass tabItems = do
       let isSelected = demuxed currentTab $ Just k
           attrs = ffor isSelected $ \s -> if s then Map.empty else Map.singleton "style" "display:none;"
       elDynAttr "div" attrs w
-    return ()
+    pure ()
   where
     headerBarLink :: Text -> k -> Dynamic t Bool -> m (Event t k)
     headerBarLink x k isSelected = do
       let attrs = fmap (\b -> if b then Map.singleton "class" activeClass else Map.empty) isSelected
       elDynAttr "li" attrs $ do
         a <- link x
-        return $ fmap (const k) (_link_clicked a)
+        pure $ fmap (const k) (_link_clicked a)
 
 class HasAttributes a where
   type Attrs a :: Type

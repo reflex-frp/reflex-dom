@@ -36,6 +36,7 @@ common common
     FunctionalDependencies
     GADTs
     GeneralizedNewtypeDeriving
+    ImportQualifiedPost
     LambdaCase
     MultiParamTypeClasses
     NoMonomorphismRestriction
@@ -109,7 +110,7 @@ library
     process,
     reflex-dom-core,
     silently,
-    text >= 1.2 && < 2.2,
+    text >= 2.0 && < 2.2,
     wai,
     warp,
     webdriver < 0.13,

@@ -8,28 +8,28 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import qualified Data.Bimap as Bimap
+import Data.Bimap qualified as Bimap
 import Data.Default
 import Data.Dependent.Map (DMap)
-import qualified Data.Dependent.Map as DMap
+import Data.Dependent.Map qualified as DMap
 import Data.Functor.Misc
 import Data.Kind (Type)
 import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map qualified as Map
 import Data.Maybe
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified GHCJS.DOM.Event as Event
+import Data.Text qualified as T
+import GHCJS.DOM.Event qualified as Event
 import GHCJS.DOM.HTMLInputElement (HTMLInputElement)
-import qualified GHCJS.DOM.HTMLInputElement as Input
+import GHCJS.DOM.HTMLInputElement qualified as Input
 import GHCJS.DOM.HTMLTextAreaElement (HTMLTextAreaElement)
 import GHCJS.DOM.Types (File, uncheckedCastTo)
-import qualified GHCJS.DOM.Types as DOM (EventTarget (..), HTMLElement (..))
+import GHCJS.DOM.Types qualified as DOM (EventTarget (..), HTMLElement (..))
 import Reflex.Class
 import Reflex.Collection
 import Reflex.Dynamic
 import Reflex.PostBuild.Class
-import qualified Text.Read as T
+import Text.Read qualified as T
 import Prelude
 
 import Reflex.Dom.Builder.Class
@@ -85,7 +85,7 @@ textInput (TextInputConfig inputType initial eSetValue dAttrs) = do
         & inputElementConfig_initialValue .~ initial
         & inputElementConfig_setValue .~ eSetValue
         & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-  return $
+  pure $
     TextInput
       { _textInput_value = _inputElement_value i
       , _textInput_input = _inputElement_input i
@@ -150,10 +150,10 @@ rangeInput (RangeInputConfig initial eSetValue dAttrs) = do
         & inputElementConfig_initialValue .~ (T.pack . show $ initial)
         & inputElementConfig_setValue .~ (T.pack . show <$> eSetValue)
         & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-  return $
+  pure $
     RangeInput
-      { _rangeInput_value = read . T.unpack <$> _inputElement_value i
-      , _rangeInput_input = read . T.unpack <$> _inputElement_input i
+      { _rangeInput_value = fromMaybe 0 . T.readMaybe . T.unpack <$> _inputElement_value i
+      , _rangeInput_input = fromMaybe 0 . T.readMaybe . T.unpack <$> _inputElement_input i
       , _rangeInput_mouseup = domEvent Mouseup i
       , _rangeInput_hasFocus = _inputElement_hasFocus i
       , _rangeInput_element = _inputElement_raw i
@@ -195,7 +195,7 @@ textArea (TextAreaConfig initial eSet attrs) = do
         & textAreaElementConfig_initialValue .~ initial
         & textAreaElementConfig_setValue .~ eSet
         & textAreaElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-  return $
+  pure $
     TextArea
       { _textArea_value = _textAreaElement_value i
       , _textArea_input = _textAreaElement_input i
@@ -240,7 +240,7 @@ checkbox checked config = do
         & inputElementConfig_setChecked .~ _checkboxConfig_setValue config
         & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ Map.mapKeys (AttributeName Nothing) permanentAttrs
         & inputElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
-  return $
+  pure $
     Checkbox
       { _checkbox_value = _inputElement_checked i
       , _checkbox_change = _inputElement_checkedChange i
@@ -312,7 +312,7 @@ checkboxView dAttrs dValue = do
       filters = DMap.singleton Click $ GhcjsEventFilter $ \(GhcjsDomEvent evt) -> do
         t <- Event.getTargetUnchecked evt
         b <- Input.getChecked $ uncheckedCastTo Input.HTMLInputElement t
-        return $ (,) preventDefault $ return $ Just $ CheckboxViewEventResult b
+        pure $ (,) preventDefault $ pure $ Just $ CheckboxViewEventResult b
       elementConfig :: ElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
       elementConfig =
         (def :: ElementConfig EventResult t (DomBuilderSpace m))
@@ -327,7 +327,7 @@ checkboxView dAttrs dValue = do
                       e :: DOM.EventTarget <- withIsEvent en $ Event.getTargetUnchecked evt
                       let myElement = uncheckedCastTo DOM.HTMLElement e
                       mr <- runReaderT (defaultDomEventHandler myElement en) evt
-                      return $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
+                      pure $ ffor mr $ \(EventResult r) -> CheckboxViewEventResult $ regularToCheckboxViewEventType en r
                 }
           }
       inputElementConfig :: InputElementConfig CheckboxViewEventResult t (DomBuilderSpace m)
@@ -336,7 +336,7 @@ checkboxView dAttrs dValue = do
           & inputElementConfig_setChecked .~ leftmost [updated dValue, tag (current dValue) postBuild]
           & inputElementConfig_elementConfig .~ elementConfig
   i <- inputElement inputElementConfig
-  return $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
+  pure $ unCheckboxViewEventResult <$> select (_element_events $ _inputElement_element i) (WrapArg Click)
 
 {-# DEPRECATED FileInput, FileInputConfig, fileInput "Use 'inputElement' directly" #-}
 data FileInput d t
@@ -365,14 +365,14 @@ fileInput config = do
       dAttrs = insertType <$> _fileInputConfig_attributes config
   modifyAttrs <- dynamicAttributesToModifyAttributes dAttrs
   let filters = DMap.singleton Change . GhcjsEventFilter $ \_ -> do
-        return . (,) mempty $ return . Just $ EventResult ()
+        pure . (,) mempty $ pure . Just $ EventResult ()
       elCfg =
         (def :: ElementConfig EventResult t (DomBuilderSpace m))
           & modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
           & elementConfig_eventSpec . ghcjsEventSpec_filters .~ filters
       cfg = (def :: InputElementConfig EventResult t (DomBuilderSpace m)) & inputElementConfig_elementConfig .~ elCfg
   input <- inputElement cfg
-  return $
+  pure $
     FileInput
       { _fileInput_value = _inputElement_files input
       , _fileInput_element = _inputElement_raw input
@@ -462,7 +462,7 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   defaultKey <- holdDyn k0 setK
   let (indexedOptions, ixKeys) = splitDynPure $ ffor optionsWithAddedKeys $ \os ->
         let xs = fmap (\(ix, (k, v)) -> ((ix, k), ((ix, k), v))) $ zip [0 :: Int ..] $ Map.toList os
-        in (Map.fromList $ map snd xs, Bimap.fromList $ map fst xs)
+        in (Map.fromList $ fmap snd xs, Bimap.fromList $ fmap fst xs)
   modifyAttrs <- dynamicAttributesToModifyAttributes attrs
   postBuild <- getPostBuild
   let setSelection =
@@ -482,9 +482,9 @@ dropdown k0 options (DropdownConfig setK attrs) = do
   let readKey keys mk = fromMaybe k0 $ do
         k <- mk
         guard $ Bimap.memberR k keys
-        return k
+        pure k
   dValue <- fmap (zipDynWith readKey ixKeys) $ holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
-  return $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange)
+  pure $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange)
 
 #ifdef USE_TEMPLATE_HASKELL
 concat <$> mapM makeLenses
@@ -602,7 +602,7 @@ fileInput_value :: Lens
     (FileInput d t2)
     (Dynamic t1 [File])
     (Dynamic t2 [File])
-fileInput_value f (FileInput x1 x2) = (\y -> FileInput y x2) <$> f x1
+fileInput_value f (FileInput x1 x2) = (`FileInput` x2) <$> f x1
 {-# INLINE fileInput_value #-}
 dropdownConfig_attributes :: Lens' (DropdownConfig t k) (Dynamic t (Map Text Text))
 dropdownConfig_attributes f (DropdownConfig x1 x2) = (\y -> DropdownConfig x1 y) <$> f x2
@@ -612,25 +612,25 @@ dropdownConfig_setValue :: Lens
     (DropdownConfig t k2)
     (Event t k1)
     (Event t k2)
-dropdownConfig_setValue f (DropdownConfig x1 x2) = (\y -> DropdownConfig y x2) <$> f x1
+dropdownConfig_setValue f (DropdownConfig x1 x2) = (`DropdownConfig` x2) <$> f x1
 {-# INLINE dropdownConfig_setValue #-}
 dropdown_change :: Lens' (Dropdown t k) (Event t k)
 dropdown_change f (Dropdown x1 x2) = (\y -> Dropdown x1 y) <$> f x2
 {-# INLINE dropdown_change #-}
 dropdown_value :: Lens' (Dropdown t k) (Dynamic t k)
-dropdown_value f (Dropdown x1 x2) = (\y -> Dropdown y x2) <$> f x1
+dropdown_value f (Dropdown x1 x2) = (`Dropdown` x2) <$> f x1
 {-# INLINE dropdown_value #-}
 checkboxConfig_attributes :: Lens' (CheckboxConfig t) (Dynamic t (Map Text Text))
 checkboxConfig_attributes f (CheckboxConfig x1 x2) = (\y -> CheckboxConfig x1 y) <$> f x2
 {-# INLINE checkboxConfig_attributes #-}
 checkboxConfig_setValue :: Lens' (CheckboxConfig t) (Event t Bool)
-checkboxConfig_setValue f (CheckboxConfig x1 x2) = (\y -> CheckboxConfig y x2) <$> f x1
+checkboxConfig_setValue f (CheckboxConfig x1 x2) = (`CheckboxConfig` x2) <$> f x1
 {-# INLINE checkboxConfig_setValue #-}
 checkbox_change :: Lens' (Checkbox t) (Event t Bool)
 checkbox_change f (Checkbox x1 x2) = (\y -> Checkbox x1 y) <$> f x2
 {-# INLINE checkbox_change #-}
 checkbox_value :: Lens' (Checkbox t) (Dynamic t Bool)
-checkbox_value f (Checkbox x1 x2) = (\y -> Checkbox y x2) <$> f x1
+checkbox_value f (Checkbox x1 x2) = (`Checkbox` x2) <$> f x1
 {-# INLINE checkbox_value #-}
 #endif
 

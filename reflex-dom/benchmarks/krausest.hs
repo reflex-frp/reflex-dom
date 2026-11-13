@@ -5,12 +5,15 @@ import Data.FastMutableIntMap
 import Data.IntMap (IntMap, assocs, elems, empty, fromList, singleton, size)
 import Data.Monoid
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Vector (Vector)
-import qualified Data.Vector as Vector
+import Data.Vector qualified as Vector
 import System.Random
 
 import Reflex.Dom
+
+-- Benchmark code, not shipped in the library.
+{- HLINT ignore "Avoid restricted function" -}
 
 type RNG = StdGen
 type Entropy = Int
@@ -24,7 +27,7 @@ type TableDiff = PatchIntMap Row
 main :: IO ()
 main = do
   seed <- randomIO
-  mainWidgetWithHead' (\_ -> headW, \_ -> bodyW seed)
+  mainWidgetWithHead' (const headW, \_ -> bodyW seed)
 
 titleW :: DomBuilder t m => m ()
 titleW = text "Reflex-dom keyed"
@@ -45,7 +48,7 @@ bodyW seed = divClass "main" $ divClass "container" $ mdo
         , buttonW "runlots" "Create 10,000 rows" $ resetRows 10000
         , buttonW "add" "Append 1,000 rows" $ appendRows 1000
         , buttonW "update" "Update every 10th row" $ updateRows (\i -> mod i 10 == 0) (<> " !!!")
-        , buttonW "clear" "Clear" $ clearRows
+        , buttonW "clear" "Clear" clearRows
         , buttonW "swaprows" "Swap Rows" $ swapRows (1, 998)
         ]
 
@@ -86,9 +89,9 @@ tableW :: (MonadHold t m, DomBuilder t m) => Event t TableDiff -> m (Event t (In
 tableW diff = do
   elClass "table" "table table-hover table-striped test-data" $ do
     el "tbody" $ do
-      (v0, v') <- traverseIntMapWithKeyWithAdjust (\_ -> rowW) empty diff
+      (v0, v') <- traverseIntMapWithKeyWithAdjust (const rowW) empty diff
       rowEvents <- holdIncremental v0 v'
-      return $ mergeIntIncremental rowEvents
+      pure $ mergeIntIncremental rowEvents
 
 rowW :: DomBuilder t m => Row -> m (Event t Step)
 rowW row = elClass "tr" (if selected row then "danger" else "") $
@@ -100,7 +103,7 @@ rowW row = elClass "tr" (if selected row then "danger" else "") $
     elClass "td" "col-md-6" blank
     pure . leftmost $ zipWith tagClick [selectRow, deleteRow] [sel, del]
   where
-    tagClick f el = f row <$ (domEvent Click el)
+    tagClick f el = f row <$ domEvent Click el
 
 deleteW :: DomBuilder t m => m ()
 deleteW = el "a" $ elAttr "span" ("aria-hidden" =: "true" <> "class" =: "glyphicon glyphicon-remove") blank
@@ -113,10 +116,10 @@ updateRows :: (RowIndex -> Bool) -> (Text -> Text) -> (Model, Table) -> (Model, 
 updateRows p f (m, t) = (m, PatchIntMap $ Just . update <$> targets)
   where
     targets = fromList . filterByIndex p . assocs $ t
-    update = \r -> r {txt = f $ txt r}
+    update r = r {txt = f $ txt r}
 
 filterByIndex :: (Int -> Bool) -> [a] -> [a]
-filterByIndex p = map snd . filter (\(i, _) -> p i) . zip [0 ..]
+filterByIndex p = fmap snd . filter (\(i, _) -> p i) . zip [0 ..]
 
 swapRows :: (RowIndex, RowIndex) -> (Model, Table) -> (Model, TableDiff)
 swapRows (a, b) (m, t) = (m, PatchIntMap $ if max a b < length t then swap else empty)
