@@ -3,6 +3,7 @@
 ## Unreleased
 
 * Use the patched JSaddle-Warp sender in repository test builds.
+* Fix hydration of keyed collections (`traverseDMapWithKeyWithAdjust`, `traverseIntMapWithKeyWithAdjust`, `traverseDMapWithKeyWithAdjustWithMove`, and so `listWithKey`, `listHoldWithKey`, `simpleList`, etc.) that are patched before switchover, for example at `postBuild`. Their server-rendered children were deleted after hydration whenever the DOM update for such a patch ran after the hydration pass, which always happens with the wasm and JavaScript backends.
 
 ## 0.8.1.4
 * Support hashable 1.5 in JS backend
