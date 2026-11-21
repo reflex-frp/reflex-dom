@@ -1914,12 +1914,32 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
     else do
       modifyIORef' parentUnreadyChildren succ
       writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
+  let applyPatch p = do
+        (oldUnready, oldP) <- liftIO $ readIORef pendingChange
+        newUnready <- liftIO $ updateChildUnreadiness p oldUnready
+        let !newP = p <> oldP
+        liftIO $ writeIORef pendingChange (newUnready, newP)
+        when (DMap.null newUnready) $ do
+          applyDomUpdate newP
   getHydrationMode >>= \case
-    HydrationMode_Hydrating -> addHydrationStepWithSetup (holdIncremental children0 children') $ \children -> do
-      dm :: DMap k (Compose (TraverseChild t m (Some k)) v') <- sample $ currentIncremental children
-      phs <- sequenceA $ weakenDMapWith (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode . getCompose) dm
-      liftIO $ writeIORef placeholders $! phs
-      insertAfterPreviousNode lastPlaceholder
+    HydrationMode_Hydrating -> do
+      -- The hydration step below hydrates whatever children exist when it runs,
+      -- so it already accounts for every patch that fired before it. The DOM
+      -- updates requested for those patches run in an animation frame, which may
+      -- come before or after the step, and must then do nothing: applying them
+      -- again would delete the nodes that were just hydrated. We number the
+      -- patches and record the last one the step has seen to tell them apart.
+      numberedChildren' <- numberOccurrences children'
+      hydratedThrough :: IORef (Maybe Int) <- liftIO $ newIORef Nothing -- Nothing until the hydration step has run
+      addHydrationStepWithSetup ((,) <$> holdIncremental children0 children' <*> hold (-1) (fst <$> numberedChildren')) $ \(children, latestPatch) -> do
+        dm :: DMap k (Compose (TraverseChild t m (Some k)) v') <- sample $ currentIncremental children
+        liftIO . writeIORef hydratedThrough . Just =<< sample latestPatch
+        phs <- sequenceA $ weakenDMapWith (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode . getCompose) dm
+        liftIO $ writeIORef placeholders $! phs
+        insertAfterPreviousNode lastPlaceholder
+      requestDomAction_ $ ffor numberedChildren' $ \(n, p) -> liftIO (readIORef hydratedThrough) >>= \case
+        Just h | n > h -> applyPatch p
+        _ -> pure ()
     HydrationMode_Immediate -> do
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
@@ -1927,13 +1947,7 @@ hoistTraverseWithKeyWithAdjust base mapPatch updateChildUnreadiness applyDomUpda
       phs <- sequenceA $ weakenDMapWith (either (error "impossible") activate . _traverseChild_mode . getCompose) children0
       liftIO $ writeIORef placeholders $! phs
       append $ toNode lastPlaceholder
-  requestDomAction_ $ ffor children' $ \p -> do
-    (oldUnready, oldP) <- liftIO $ readIORef pendingChange
-    newUnready <- liftIO $ updateChildUnreadiness p oldUnready
-    let !newP = p <> oldP
-    liftIO $ writeIORef pendingChange (newUnready, newP)
-    when (DMap.null newUnready) $ do
-      applyDomUpdate newP
+      requestDomAction_ $ applyPatch <$> children'
   let result0 = DMap.map (_traverseChild_result . getCompose) children0
       result' = ffor children' $ mapPatch $ _traverseChild_result . getCompose
   return (result0, result')
@@ -2020,12 +2034,27 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
     else do
       modifyIORef' parentUnreadyChildren succ
       writeIORef pendingChange (initialUnready, mempty) -- The patch is always empty because it got applied implicitly when we ran the children the first time
+  let applyPatch p = do
+        (oldUnready, oldP) <- liftIO $ readIORef pendingChange
+        newUnready <- liftIO $ updateChildUnreadiness p oldUnready
+        let !newP = p <> oldP
+        liftIO $ writeIORef pendingChange (newUnready, newP)
+        when (IntMap.null newUnready) $ do
+          applyDomUpdate newP
   getHydrationMode >>= \case
-    HydrationMode_Hydrating -> addHydrationStepWithSetup (holdIncremental children0 children') $ \children -> do
-      dm :: IntMap (TraverseChild t m Int v') <- sample $ currentIncremental children
-      phs <- traverse (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode) dm
-      liftIO $ writeIORef placeholders $! phs
-      insertAfterPreviousNode lastPlaceholder
+    HydrationMode_Hydrating -> do
+      -- See the comment in 'hoistTraverseWithKeyWithAdjust'
+      numberedChildren' <- numberOccurrences children'
+      hydratedThrough :: IORef (Maybe Int) <- liftIO $ newIORef Nothing -- Nothing until the hydration step has run
+      addHydrationStepWithSetup ((,) <$> holdIncremental children0 children' <*> hold (-1) (fst <$> numberedChildren')) $ \(children, latestPatch) -> do
+        dm :: IntMap (TraverseChild t m Int v') <- sample $ currentIncremental children
+        liftIO . writeIORef hydratedThrough . Just =<< sample latestPatch
+        phs <- traverse (either _traverseChildHydration_delayed (pure . _traverseChildImmediate_placeholder) . _traverseChild_mode) dm
+        liftIO $ writeIORef placeholders $! phs
+        insertAfterPreviousNode lastPlaceholder
+      requestDomAction_ $ ffor numberedChildren' $ \(n, p) -> liftIO (readIORef hydratedThrough) >>= \case
+        Just h | n > h -> applyPatch p
+        _ -> pure ()
     HydrationMode_Immediate -> do
       let activate i = do
             append $ toNode $ _traverseChildImmediate_fragment i
@@ -2033,13 +2062,7 @@ hoistTraverseIntMapWithKeyWithAdjust base updateChildUnreadiness applyDomUpdate_
       phs <- traverse (either (error "impossible") activate . _traverseChild_mode) children0
       liftIO $ writeIORef placeholders $! phs
       append $ toNode lastPlaceholder
-  requestDomAction_ $ ffor children' $ \p -> do
-    (oldUnready, oldP) <- liftIO $ readIORef pendingChange
-    newUnready <- liftIO $ updateChildUnreadiness p oldUnready
-    let !newP = p <> oldP
-    liftIO $ writeIORef pendingChange (newUnready, newP)
-    when (IntMap.null newUnready) $ do
-      applyDomUpdate newP
+      requestDomAction_ $ applyPatch <$> children'
   let result0 = IntMap.map _traverseChild_result children0
       result' = ffor children' $ fmap $ _traverseChild_result
   return (result0, result')
