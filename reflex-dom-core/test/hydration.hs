@@ -1368,6 +1368,26 @@ tests withDebugging wdConfig caps _selenium = do
         replace <- triggerEventWithChan chan
         (dmap, _evt) <- traverseDMapWithKeyWithAdjust widget keyMap $ leftmost [postBuildPatch <$ pb, replace]
         liftIO $ dmap `H.shouldBe` keyMap
+    it "keeps items patched at postBuild when their DOM updates run after switchover" $ runWD $ do
+      chan <- liftIO newChan
+      let expected = applyAlways postBuildPatch keyMap
+          preSwitchover = do
+            xs <- getAndCheckInitialItems expected
+            holdAnimationFrames
+            pure xs
+          check xs = do
+            releaseAnimationFrames
+            -- DOM updates run in the order they were requested, so once this
+            -- one is visible, the ones requested at postBuild have run too
+            liftIO $ writeChan chan ()
+            checkTextInId "flushed" "yes"
+            checkInitialItems expected xs
+            checkInitialItems expected =<< WD.findElems (WD.ByTag "li")
+      testWidget' preSwitchover check $ void $ do
+        pb <- getPostBuild
+        flushed <- triggerEventWithChan chan
+        _ <- traverseDMapWithKeyWithAdjust widget keyMap $ postBuildPatch <$ pb
+        divId "flushed" $ dynText =<< holdDyn "no" ("yes" <$ flushed)
     it "can delete/update/insert when built in prerender" $ runWD $ do
       chan <- liftIO newChan
       let check = do
@@ -1451,6 +1471,27 @@ tests withDebugging wdConfig caps _selenium = do
           e <- findElemWithRetry (WD.ById $ textKeyInt k)
           checkItem e (textKeyInt k) v
         postBuildPatch = PatchIntMap $ IntMap.fromList [(2, Nothing), (3, Just "trois"), (4, Just "four")]
+    -- This must stay the first test of the session: see the note about 'xit' at the top of this file
+    it "keeps items patched at postBuild when their DOM updates run after switchover" $ runWD $ do
+      chan <- liftIO newChan
+      let expected = applyAlways postBuildPatch intMap
+          preSwitchover = do
+            xs <- getAndCheckInitialItems expected
+            holdAnimationFrames
+            pure xs
+          check xs = do
+            releaseAnimationFrames
+            -- DOM updates run in the order they were requested, so once this
+            -- one is visible, the ones requested at postBuild have run too
+            liftIO $ writeChan chan ()
+            checkTextInId "flushed" "yes"
+            checkInitialItems expected xs
+            checkInitialItems expected =<< WD.findElems (WD.ByTag "li")
+      testWidget' preSwitchover check $ void $ do
+        pb <- getPostBuild
+        flushed <- triggerEventWithChan chan
+        _ <- traverseIntMapWithKeyWithAdjust widget intMap $ postBuildPatch <$ pb
+        divId "flushed" $ dynText =<< holdDyn "no" ("yes" <$ flushed)
     xit "doesn't replace elements at switchover, can delete/update/insert" $ runWD $ do
       chan <- liftIO newChan
       let preSwitchover = getAndCheckInitialItems intMap
@@ -1562,6 +1603,31 @@ tests withDebugging wdConfig caps _selenium = do
 --            shouldContainText (T.strip $ T.unlines ["i11","i44"]) body
 --            liftIO $ writeChan chan (insertDMapKey (Key2_Int 2) 2) -- this step will fail if the above caused an exception, thus works as a proxy for detecting the exception given we can't catch it
 --            shouldContainText (T.strip $ T.unlines ["i11","i22","i44"]) body
+        -- Patch the collection at postBuild, hold the resulting DOM updates
+        -- until after switchover, and check that the statically rendered
+        -- items are neither replaced nor reordered when the updates run
+        postBuildSpec name initMap patch expectedItems = it name $ runWD $ do
+          chan <- liftIO newChan
+          let expected = T.strip $ T.unlines expectedItems
+              preSwitchover = do
+                shouldContainText expected =<< findElemWithRetry (WD.ByTag "ul")
+                xs <- WD.findElems (WD.ByTag "li")
+                holdAnimationFrames
+                pure xs
+              check xs = do
+                releaseAnimationFrames
+                -- DOM updates run in the order they were requested, so once this
+                -- one is visible, the ones requested at postBuild have run too
+                liftIO $ writeChan chan ()
+                checkTextInId "flushed" "yes"
+                xs' <- WD.findElems (WD.ByTag "li")
+                assertBool "Items were replaced or reordered" $ xs == xs'
+                shouldContainText expected =<< findElemWithRetry (WD.ByTag "ul")
+          testWidget' preSwitchover check $ void $ do
+            pb <- getPostBuild
+            flushed <- triggerEventWithChan chan
+            _ <- el "ul" $ traverseDMapWithKeyWithAdjustWithMove widget initMap $ patch <$ pb
+            divId "flushed" $ dynText =<< holdDyn "no" ("yes" <$ flushed)
 
     describe "hydration" $ moveSpec $ \initMap test -> do
       chan <- liftIO newChan
@@ -1593,6 +1659,16 @@ tests withDebugging wdConfig caps _selenium = do
           performEvent_ $ liftIO (putMVar lock ()) <$ pb
           (dmap, _evt) <- traverseDMapWithKeyWithAdjustWithMove widget initMap =<< triggerEventWithChan chan
           liftIO $ assertEqual "DMap" initMap dmap
+
+    describe "patched at postBuild, with the DOM updates running after switchover" $ do
+      postBuildSpec "keeps an inserted item"
+        (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 3 ==> 3])
+        (insertDMapKey (Key2_Int 2) 2)
+        ["i11","i22","i33"]
+      postBuildSpec "keeps swapped items in their new order"
+        (DMap.fromList [Key2_Int 1 ==> 1, Key2_Int 2 ==> 2, Key2_Int 3 ==> 3])
+        (swapDMapKey (Key2_Int 1) (Key2_Int 3))
+        ["i33","i22","i11"]
 
   session' "hydrating invalid HTML" $ do
     xit "can hydrate list in paragraph" $ runWD $ do
@@ -1681,6 +1757,33 @@ shouldBeWithRetryM m expected = withRetry $ do
 
 assertAttr :: WD.Element -> Text -> Maybe Text -> WD ()
 assertAttr e k v = liftIO . assertEqual "Incorrect attribute value" v =<< WD.attr e k
+
+-- | Make the page keep animation frame callbacks instead of running them, until
+-- 'releaseAnimationFrames' is called. DOM updates requested by the widget run in
+-- animation frames, so this lets a test decide that the updates requested
+-- before switchover only run after it. Whether they do is otherwise up to the
+-- scheduling of the runtime: under jsaddle-warp they usually run first.
+holdAnimationFrames :: WD ()
+holdAnimationFrames = do
+  _ :: Bool <- WD.executeJS [] $ T.unwords
+    [ "window.reflexDomTestHeldFrames = [];"
+    , "window.reflexDomTestRequestAnimationFrame = window.requestAnimationFrame;"
+    , "window.requestAnimationFrame = function(f) { window.reflexDomTestHeldFrames.push(f); return 0; };"
+    , "return true;"
+    ]
+  pure ()
+
+-- | Undo 'holdAnimationFrames' and schedule the callbacks it kept.
+releaseAnimationFrames :: WD ()
+releaseAnimationFrames = do
+  _ :: Bool <- WD.executeJS [] $ T.unwords
+    [ "var held = window.reflexDomTestHeldFrames;"
+    , "window.reflexDomTestHeldFrames = [];"
+    , "window.requestAnimationFrame = window.reflexDomTestRequestAnimationFrame;"
+    , "held.forEach(function(f) { window.requestAnimationFrame(f); });"
+    , "return true;"
+    ]
+  pure ()
 
 elementShouldBeRemoved :: WD.Element -> WD ()
 elementShouldBeRemoved e = withRetry $ do
