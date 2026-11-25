@@ -266,7 +266,7 @@ newXMLHttpRequestWithError req cb = do
       readyState <- xmlHttpRequestGetReadyState xhr
       status <- xmlHttpRequestGetStatus xhr
       statusText <- xmlHttpRequestGetStatusText xhr
-      when (readyState == 4) $ do
+      when (readyState == 4 && status /= 0) $ do
         t <- if rt == Just XhrResponseType_Text || isNothing rt
              then xmlHttpRequestGetResponseText xhr
              else return Nothing
